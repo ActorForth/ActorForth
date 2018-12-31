@@ -19,7 +19,7 @@ class Parser:
         self.content : List[str] = []
         return self
 
-    def open(self, filename: str):
+    def open(self, filename: str) -> "Parser":
         self.reset()
         self.filename = filename
         self.file_handle : Optional[TextIO] = open(filename)
