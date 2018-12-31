@@ -1,0 +1,11 @@
+elm-stuff
+index.html
+__pycache__
+
+.coverage
+.pytest_cache
+htmlcov
+
+.mypy_cache
+
+credentials.txt

@@ -1,0 +1,16 @@
+
+fib : nat -> nat.
+    fib : 0 : 0.
+    fib : 1 : 1.
+    fib : _ :
+        dup
+        1 -
+        fib
+        swap
+        2 - 
+        fib
+        +.
+
+
+
+
