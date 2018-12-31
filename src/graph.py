@@ -1,12 +1,7 @@
+#
+#   graph.py    - Call graph/AST for our language.
+#
 from enum import Enum
-
-
-class Type(Enum):
-    Unknown = 0
-    Function = 1
-    Constant = 2
-    Expression = 3
-
 
 class Location:
 
@@ -16,10 +11,17 @@ class Location:
         self.column = column
 
 class Symbol:
+
+    class Type(Enum):
+        Unknown = 0
+        Function = 1
+        Constant = 2
+        Expression = 3
+
     def __init__(self, name: str, location: Location = None) -> None: 
         self.name = name
         self.size = len(name)
-        self.type = Type.Unknown
+        self.type = Symbol.Type.Unknown
         self.location = location
         if not location:
             self.location = Location()

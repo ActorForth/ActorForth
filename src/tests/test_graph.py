@@ -22,6 +22,7 @@ class TestSymbol(unittest.TestCase):
         s = Symbol("fib")
         assert s.name is "fib"
         assert s.size is 3
+        assert s.type is Symbol.Type.Unknown
         assert s.location.filename is "Unknown"
 
 
