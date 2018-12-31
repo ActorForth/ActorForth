@@ -7,8 +7,16 @@ class Type(Enum):
     Constant = 2
     Expression = 3
 
+
+class Location:
+
+    def __init__(self, filename = "Unknown", linenum: int = 0, column: int = 0) -> None:
+        self.filename = filename
+        self.linenum = linenum
+        self.column = column
+
 class Symbol:
-    def __init__(self, name, location ): 
+    def __init__(self, name: str, location: Location = None) -> None: 
         self.name = name
         self.size = len(name)
         self.type = Type.Unknown
@@ -17,10 +25,5 @@ class Symbol:
             self.location = Location()
 
 
-class Location:
 
-    def __init__(self, filename = "Unknown", linenum = 0, column = 0):
-        self.filename = filename
-        self.linenum = linenum
-        self.column = column
 
