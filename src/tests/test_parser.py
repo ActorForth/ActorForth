@@ -11,8 +11,7 @@ class TestParser(unittest.TestCase):
         assert p.linenum is 0
 
     def test_open_file(self) -> None:
-        p = Parser(test_file_name).lines()
-        o = open(test_file_name).readlines()
-        for x,y in zip(p,o):
-            assert x == y
+        p = Parser(test_file_name)
+        o = open(test_file_name)
+
 

@@ -1,4 +1,3 @@
-
 fib : nat -> nat.
     fib : 0 : 0.
     fib : 1 : 1.

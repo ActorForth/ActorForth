@@ -16,18 +16,14 @@ class Parser:
         self.column = 0
         self.filename = str("")
         self.file_handle : Optional[TextIO] = None
-        self.content : List[str] = []
         return self
 
     def open(self, filename: str) -> "Parser":
         self.reset()
         self.filename = filename
         self.file_handle : Optional[TextIO] = open(filename)
-        self.content = self.file_handle.readlines()
         return self
 
-    def lines(self) -> List[str]:
-        return self.content
 
 
 
