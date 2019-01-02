@@ -80,13 +80,3 @@ class Parser:
             if token:
                 yield (token, linenum, token_column)
             break
-
-
-
-
-
-
-
-
-
-
