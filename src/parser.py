@@ -37,43 +37,47 @@ class Parser:
         token_column = 0
         linenum = 1
         column = 1
-        white_space = False
+        white_space = True
         while True:
             for char in get_char():
+
+                if char is ' ' or char is '\t' or char is '\n':
+                    column += 1 # \n will reset column later.
+                    # Tabs are assumed to occur on every 4th character.
+                    if char is '\t': column += 4 - (column % 4)
+                    white_space = True
+
+                # Punctuation doesn't need whitespace!
+                elif char is '.' or char is ':':
+                    white_space = False
+
+                    if token:
+                        # Flush out the previous token.
+                        yield (token, linenum, token_column)
+                    # Start a new token
+                    token = "".join(char)
+                    token_column = column
+                    column += 1
+
+                else:
+                    if white_space:
+                        token_column = column
+                    column += 1
+                    token += char
+                    white_space = False
+                    
+                if token and white_space:
+                    yield (token, linenum, token_column)
+                    token = ""
+
                 if char is '\n':
                     linenum += 1
                     column = 1
                     white_space = True
 
-                elif char is ' ' or char is '\t':
-                    column += 1
-                    white_space = True
-
-                # Punctuation doesn't need whitespace!
-                elif char is '.' or char is ':':
-                    column += 1
-                    white_space = False
-
-                    if token:
-                        # Flush out the previous token.
-                        yield token
-                    # Start a new token
-                    token = "".join(char)
-                    token_column = column
-
-                else:
-                    column += 1
-                    if white_space:
-                        token_column = column
-                    token += char
-                    white_space = False
-                    
-
-                if token and white_space:
-                    yield token
-                    token = ""
+            # Handle any incremental token that may be left over.
             if token:
-                yield token
+                yield (token, linenum, token_column)
             break
 
 

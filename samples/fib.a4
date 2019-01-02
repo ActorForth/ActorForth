@@ -10,6 +10,3 @@ fib : nat -> nat.
         fib
         +.
 
-
-
-
