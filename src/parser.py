@@ -24,6 +24,62 @@ class Parser:
         self.file_handle : Optional[TextIO] = open(filename)
         return self
 
+    def tokens(self):
+
+        def get_char():
+            while True:
+                last_char = self.file_handle.read(1)
+                if not last_char:
+                    break
+                yield last_char
+
+        token = ""
+        token_column = 0
+        linenum = 1
+        column = 1
+        white_space = False
+        while True:
+            for char in get_char():
+                if char is '\n':
+                    linenum += 1
+                    column = 1
+                    white_space = True
+
+                elif char is ' ' or char is '\t':
+                    column += 1
+                    white_space = True
+
+                # Punctuation doesn't need whitespace!
+                elif char is '.' or char is ':':
+                    column += 1
+                    white_space = False
+
+                    if token:
+                        # Flush out the previous token.
+                        yield token
+                    # Start a new token
+                    token = "".join(char)
+                    token_column = column
+
+                else:
+                    column += 1
+                    if white_space:
+                        token_column = column
+                    token += char
+                    white_space = False
+                    
+
+                if token and white_space:
+                    yield token
+                    token = ""
+            if token:
+                yield token
+            break
+
+
+
+
+
 
 
 
