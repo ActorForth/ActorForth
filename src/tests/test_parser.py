@@ -8,7 +8,7 @@ class TestParser(unittest.TestCase):
 
     def test_default_parser(self) -> None:
         p = Parser()
-        assert p.linenum is 0
+        assert p.filename is ''
 
     def test_open_file(self) -> None:
         p = Parser(test_file_name)

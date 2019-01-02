@@ -7,14 +7,15 @@ from typing import List, TextIO, Optional
 class Parser:
 
     def __init__(self, filename: str = None) -> None:
+        self.file_handle : Optional[TextIO] = None
         self.reset()
         if filename:
             self.open(filename)
 
     def reset(self) -> "Parser":
-        self.linenum = 0
-        self.column = 0
         self.filename = str("")
+        if self.file_handle:
+            self.file_handle.close()
         self.file_handle : Optional[TextIO] = None
         return self
 
