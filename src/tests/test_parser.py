@@ -57,3 +57,8 @@ class TestParser(unittest.TestCase):
         for a,b in results:
             assert a==b     
 
+    def test_parse_file_with_ending_white_space(self) -> None:
+        p = Parser("samples/square.a4")
+        [t for t in p.tokens()]
+        assert p.filename is "samples/square.a4"
+

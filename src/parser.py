@@ -77,5 +77,5 @@ class Parser:
 
             # Handle any incremental token that may be left over.
             if token:
-                yield (token, linenum, token_column)
+                yield (token, linenum, token_column)              
             break
