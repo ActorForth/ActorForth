@@ -73,7 +73,7 @@ class Parser:
 
                 if char is '\n':
                     linenum += 1
-                    column = 1  # reset the column as promised.R
+                    column = 1  # reset the column as promised.
 
             # Handle any incremental token that may be left over.
             if token:

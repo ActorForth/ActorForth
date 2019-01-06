@@ -30,7 +30,3 @@ class Symbol:
         self.location = location
         if not location:
             self.location = Location()
-
-
-
-

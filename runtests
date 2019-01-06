@@ -1,4 +1,4 @@
 # pytest -v --cov-report term-missing --cov=. --cov-config .coveragerc
 export PYTHONPATH=$(pwd)/src:$PYTHONPATH
 mypy --ignore-missing-imports src/*.py
-pytest -v --cov-report html --cov-report term-missing  --cov=.
+pytest -v --cov-report html --cov-branch --cov-report term-missing  --cov=.
