@@ -1,7 +1,7 @@
 fib : nat -> nat.
-    fib : 0 : 0.
-    fib : 1 : 1.
-    fib : _ :
+    fib : 0 -> 0.
+    fib : 1 -> 1.
+    fib : _ -> nat; 
         dup
         1 -
         fib

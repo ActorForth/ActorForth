@@ -1,6 +1,7 @@
 #
 #   graph.py    - Call graph/AST for our language.
 #
+from typing import Dict
 from enum import Enum
 
 class Location:
@@ -13,6 +14,8 @@ class Location:
             self.filename = "Unknown"
 
 class Symbol:
+
+    Globals : Dict[str, "Symbol"] = {}
 
     class Type(Enum):
         Unknown = 0

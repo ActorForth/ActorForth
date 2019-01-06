@@ -49,7 +49,7 @@ class Parser:
                     white_space = True
 
                 # Punctuation doesn't need whitespace!
-                elif char is '.' or char is ':':
+                elif char is '.' or char is ':' or char is ';':
                     white_space = False
 
                     if token:
@@ -73,8 +73,7 @@ class Parser:
 
                 if char is '\n':
                     linenum += 1
-                    column = 1
-                    white_space = True
+                    column = 1  # reset the column as promised.R
 
             # Handle any incremental token that may be left over.
             if token:
