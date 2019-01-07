@@ -1,0 +1,4 @@
+square : nat -> nat;
+    dup *.
+
+
