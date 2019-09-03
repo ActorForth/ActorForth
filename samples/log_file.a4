@@ -1,0 +1,6 @@
+actor LogFile
+
+    fs::create && fs::write && fs::size as permissions
+
+    create_result 
+    create : fs::create string -> 

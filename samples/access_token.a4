@@ -1,0 +1,121 @@
+//
+//  read capability should default to public?
+//
+//  For a state machine, local state variables should be present
+//  only when in the particular state in which they are declared.
+//  This could be implemented as a Union type for the actors 
+//  state variables. References to such data when the state machine
+//  is in a state that it is not present returns invalid. Because of this
+//  state variable names must be unique across the entire state machine.
+//  
+//  Any expression surrounded by parenthesis is a pure lambda function.
+//  If we want an impure lambda perhaps have it surrounded by curly braces.    
+//
+
+extern TokenCall, Auction.
+
+actor AccessToken
+
+    // state variables are accessible only via state machine events
+    // declared for them in the state machine. state machine events
+    // are prefixed by the Role of the calling Actor.
+    state vars
+        owner type address :  
+            create AO:mintToken,
+            read public,
+            update B:buyToken, TCO:finalize;
+
+        id type nat (0 >) :     // How to declare this as unique and in sequence? Declare a new type?
+            create AO:mintToken,
+            read public;
+
+        token_call type address :
+            create AO:mintToken,
+            read public,
+            update TO:applyToken, TO:removeToken, TCO:userRejected;
+
+        //
+        //  Consider that this option struct should ONLY exist
+        //  when the AccessToken is in the Optioned state. REDO!
+        //
+        option struct :
+            buyer type address | nil :
+                create AO:mintToken,    // probably TO:sellToken instead
+                read public,
+                update TO:sellToken, B:buyToken;
+            currency type address (ERC20_address or 0 ==),
+            price type nat,
+            expires type datetime | nil;
+                :
+                    create AO:mintToken, // probably TO:sellToken instead
+                    read public,
+                    update TO:sellToken, B:buyToken.
+
+
+    is_invalid_option : AccessToken -> bool;
+        try ->option 
+            case invalid -> true;
+            case ->expires datetime::now < -> true;
+            otherwise -> false.
+
+    // An Actor may only be in one state at a time. Not only must the
+    // predicates defined after the state name be true, but all the
+    // remaining predicates for the other states must resolve to false
+    // in order for the Actor to be in a valid state.
+    states
+        Available (->token_call 0 == and ->owner 0 != and is_invalid_option)
+
+            event TO:applyToken : address (0 !=) -> EAPApplied;
+                token_call swap = . // token_call is a word in the local AccessToken vocabulary
+
+            event TO:sellToken : option (->buyer 0 != and ->expires datetime::now <) -> Optioned;
+                option swap = .
+
+        EAPApplied (->token_call 0 !=)
+
+            event TO:removeToken : -> Available;
+                token_call 0 = .
+
+            event TCO:userRejected : -> Available;
+                token_call 0 = .
+
+            event TCO:docsSubmitted : -> EAPProcessing.
+
+        EAPProcessing (with ->token_call as TokenCall id select ->dataSubmitted true ==)
+
+            event TO:removeToken : -> Available;
+                token_call 0 = .
+
+            event TCO:userRejected : -> Available;
+                token_call 0 = .
+
+            event TCO:userQualified : -> EAPApproved.
+
+        EAPApproved (with ->token_call as TokenCall id select ->userQualified true ==)
+
+            event TO:removeToken : -> Available;
+                token_call 0 = .
+
+            event TCO:userRejected : -> Available;
+                token_call 0 = .
+
+            event TCO:finalize : -> Burned;
+                owner 0 = .
+
+        Optioned (is_invalid_option not)
+
+            event B:buyToken : -> Available;
+                ->owner ETH::sender != finalize
+                try option->currency
+                    case 0 -> ETH::wei option->price < fail; // Make sure adequate wei was sent.
+                    case ERC20_address -> 
+                        option->price       // requested qty
+                        option->currency    // ERC20 contract address
+                        ETH::withdrawl      // call withdrawl function
+                            option->price < fail. // did we get enough?
+
+                option->buyer 0 =               // These should not be necessary if option
+                option->expires datetime::now = // data does not exist outside of this state.
+                owner ETH::sender = .
+
+        Burned (owner 0 ==).
