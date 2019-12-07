@@ -1,0 +1,42 @@
+module primitives
+
+vocab core
+    :
+    find
+    const
+    struct
+
+vocab parser
+    //
+
+
+vocab stack
+    dup
+    swap
+
+vocab lambda
+    (
+    )
+
+vocab number
+    vocab math
+        +
+        -
+        *
+        /
+        mod
+    vocab cmp
+        <
+        ==
+        !=
+        >
+        <=
+        >=
+
+type
+    :
+    ->
+    ;
+    .
+    _
+

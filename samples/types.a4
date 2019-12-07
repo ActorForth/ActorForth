@@ -1,0 +1,16 @@
+module types
+
+integer type number ( max <= and min >= ):
+    vocab limits
+        min : number -999999999 const
+        max : number  999999999 const.
+
+nat type integer : 
+    vocab limits
+        min type integer : 0 const.    // this presumes we "recompile" integer to take the overloaded limit.
+
+seq type nat :
+    last_seq
+
+
+
