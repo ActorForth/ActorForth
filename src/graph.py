@@ -5,15 +5,14 @@ from typing import Dict
 from enum import Enum
 from dataclasses import dataclass
 
-@dataclass
+@dataclass(frozen = True)
 class Location:
     filename : str = "Unknown"
     linenum : int = 0
     column : int = 0
 
-@dataclass
+@dataclass(frozen = True)
 class Symbol:
-
     class Type(Enum):
         Unknown = 0
         Function = 1

@@ -31,6 +31,8 @@ class KStack:
         def pop(self, stack):
             if len(self._data):
                 return self._data.pop()
+                
+            # Stack is empty if we get this far.
             stack._stack = KStack.Empty()
             return KStack.Empty
     
