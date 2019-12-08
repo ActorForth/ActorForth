@@ -14,9 +14,11 @@ class Nat:
         else:            
             raise ValueError("'%s' is not a valid instance of the Nat type. Nats are positive integers only 0..Inf." % value)
 
+    @staticmethod
     def isa( value : Any ) -> bool:
         return isinstance(value, int) and value >= 0
 
+    @staticmethod
     def is_constexpr() -> bool:
         return False
 
@@ -28,8 +30,10 @@ class Literal:
         else: 
             raise ValueError("'%s' is not a valid instance of the Literal type. Literals are const strings or numbers only." % value)
 
+    @staticmethod
     def isa( value : Any ) -> bool:
         return isinstance(value,  int) or isinstance(value, str)
 
+    @staticmethod
     def is_constexpr() -> bool:
         return True        

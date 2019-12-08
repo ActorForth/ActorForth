@@ -16,13 +16,15 @@ class Parser:
         self.filename = str("")
         if self.file_handle:
             self.file_handle.close()
-        self.file_handle : Optional[TextIO] = None
+        #self.file_handle : Optional[TextIO] = None
+        self.file_handle = None
         return self
 
     def open(self, filename: str) -> "Parser":
         self.reset()
         self.filename = filename
-        self.file_handle : Optional[TextIO] = open(filename)
+        #self.file_handle : Optional[TextIO] = open(filename)
+        self.file_handle = open(filename)
         return self
 
     def tokens(self):
