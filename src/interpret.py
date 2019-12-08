@@ -31,9 +31,9 @@ def op_print(s: Stack, name: str) -> None:
 
 forth_dict = []
 
-forth_dict.append(('int',op_int))
-forth_dict.append(('+',op_plus))
-forth_dict.append(('print',op_print))
+forth_dict.insert(0,('int',op_int))
+forth_dict.insert(0,('+',op_plus))
+forth_dict.insert(0,('print',op_print))
 
 def find_atom(s: str) -> Callable[[Stack, str], None]:
     for atom in forth_dict:
