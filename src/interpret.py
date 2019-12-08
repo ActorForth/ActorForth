@@ -49,9 +49,17 @@ p = Parser("samples/fundamentals01.a4")
 
 for token in p.tokens():
     symbol = Symbol(token[0], Location(p.filename,token[1],token[2]))
+    print(symbol)
     op = find_atom(symbol.name)
     print("Stack = %s : " % stack.contents())
-    op(stack, symbol.name)
+    try:
+        op(stack, symbol.name)
+    except Exception as x:
+        print("Exception %s" % x)
+        print("Interpreting symbol %s" % symbol)
+        print("Exception Stack = %s : " % stack.contents())
+        break
+
 
 print(stack.contents())
 print("Stack max_depth = %s" % stack.max_depth())
