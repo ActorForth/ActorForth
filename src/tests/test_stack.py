@@ -28,7 +28,7 @@ class StackTests(unittest.TestCase):
         #import pdb; pdb.set_trace()
         self.assertEqual(s.history_depth_count(0),1)
         self.assertTrue(s.is_empty())
-        self.assertEqual(s.content(),[])
+        self.assertEqual(s.contents(),[])
 
         for i, v in enumerate(self.init_list):
             s.push(v)
@@ -38,7 +38,7 @@ class StackTests(unittest.TestCase):
                 self.assertEqual(s.history_depth_count(depth),expected[depth])
 
         depth_count = s.history_depth_count()
-        self.assertEqual(s.content(), [x for x in reversed(self.init_list)])
+        self.assertEqual(s.contents(), [x for x in self.init_list])
         self.assertEqual(s.tos(),self.init_list[-1])
         self.assertEqual(depth_count,[(0,1),(1,1),(2,1),(3,1),(4,1),(5,1)])
 
