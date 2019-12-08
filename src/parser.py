@@ -2,7 +2,7 @@
 #   parser.py   -   Parser for our language.
 #
 #from __future__ import annotations
-from typing import List, TextIO, Optional
+from typing import List, TextIO, Optional, Iterator, Tuple
 
 class Parser:
 
@@ -16,18 +16,21 @@ class Parser:
         self.filename = str("")
         if self.file_handle:
             self.file_handle.close()
-        #self.file_handle : Optional[TextIO] = None
+
         self.file_handle = None
         return self
 
     def open(self, filename: str) -> "Parser":
         self.reset()
         self.filename = filename
-        #self.file_handle : Optional[TextIO] = open(filename)
         self.file_handle = open(filename)
         return self
 
-    def tokens(self):
+    def tokens(self) -> Iterator[Tuple[str, int, int]]:
+        """
+        Generator yielding tuples of 
+          (token : str, linenum : int, token_column : int)
+        """
 
         def get_char():
             while True:
@@ -46,7 +49,8 @@ class Parser:
 
                 if char is ' ' or char is '\t' or char is '\n':
                     column += 1 # \n will reset column later.
-                    # Tabs are assumed to occur on every 4th character.
+                    # Tabs are assumed to occur on every 4th character
+                    # for purposes of column counting.
                     if char is '\t': column += 4 - (column % 4)
                     white_space = True
 
