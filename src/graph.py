@@ -27,3 +27,8 @@ class Symbol:
     def size(self):
         return len(self.name)
 
+    def __eq__(self, name = None, symbol = None):
+        if name:
+            return name == self.name
+        return symbol.name == self.name
+

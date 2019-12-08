@@ -113,12 +113,13 @@ class Stack(KStack):
     def is_empty(self):
         return self.depth() == 0
 
-    def content(self):
+    def contents(self):
         """
         Returns the contents of the stack. Leftmost is oldest. Rightmost is top of stack.
         """
         if isinstance(self._stack, KStack.NonEmpty):
-            return [x for x in reversed(self._stack._data)]
+            return [x for x in self._stack._data]
+            #return [x for x in reversed(self._stack._data)]
         return []
 
     def push(self, item):
