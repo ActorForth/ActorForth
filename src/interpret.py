@@ -33,14 +33,21 @@ def op_print(s: Stack, s_id: str) -> None:
 forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
 forth_dict.insert(0,('int',op_int))
-forth_dict.insert(0,('+',op_plus))
 forth_dict.insert(0,('print',op_print))
 
-def find_atom(s: str) -> Callable[[Stack, str], None]:
+Int.forth_dict.insert(0,('+',op_plus))
+
+def find_atom(s: str) -> [Callable[[Stack, str], None], bool]:
     for atom in forth_dict:
-        if atom[0] == s: return atom[1]
+        if atom[0] == s: return atom[1], True
     # Not found.
-    return op_atom
+    return op_atom, False
+
+def find_type_atom(type: Type, s: str) -> [Callable[[Stack, str], None], bool]:
+    for atom in type.forth_dict:
+        if atom[0] == s: return atom[1], True
+    # Not found.
+    return op_atom, False 
 
 print("forth_dict = %s" % forth_dict)
 
@@ -51,7 +58,13 @@ p = Parser("samples/fundamentals01.a4")
 for token in p.tokens():
     symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), Atom)
     print(symbol)
-    op = find_atom(symbol.s_id)
+    tos = stack.tos()
+    if tos is not Stack.Empty:
+        op, found = find_type_atom(tos.type,symbol.s_id)
+        if not found:
+            op, found = find_atom(symbol.s_id)
+    else:
+        op, found = find_atom(symbol.s_id)
     print("Stack = %s : " % stack.contents())
     try:
         op(stack, symbol.s_id)

@@ -1,9 +1,11 @@
 #
 #   graph.py    - Call graph/AST for our language.
 #
-from typing import Dict
+from typing import Dict, List, Tuple, Callable
 from enum import Enum
 from dataclasses import dataclass
+
+from stack import Stack
 
 @dataclass(frozen = True)
 class Location:
@@ -15,13 +17,13 @@ class Location:
 class Type:    
     name: str
 
-@dataclass(frozen = True, order = True)
-class Atom(Type):
-    pass
 
-@dataclass(frozen = True, order = True)
+class Atom(Type):
+    forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
+
+
 class Int(Type):
-    pass
+    forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
 
 @dataclass(order = True)
