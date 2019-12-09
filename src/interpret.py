@@ -1,6 +1,6 @@
 from typing import Callable, List, Tuple
 
-from graph import Symbol, Location 
+from graph import Symbol, Location, Type
 from parser import Parser
 from stack import Stack
 
@@ -48,7 +48,7 @@ stack = Stack()
 p = Parser("samples/fundamentals01.a4")
 
 for token in p.tokens():
-    symbol = Symbol(token[0], Location(p.filename,token[1],token[2]))
+    symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), Type("Unknown"))
     print(symbol)
     op = find_atom(symbol.name)
     print("Stack = %s : " % stack.contents())

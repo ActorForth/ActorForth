@@ -11,17 +11,15 @@ class Location:
     linenum : int = 0
     column : int = 0
 
+@dataclass(frozen = True, order = True)
+class Type:    
+    name: str
+
 @dataclass(frozen = True)
 class Symbol:
-    class Type(Enum):
-        Unknown = 0
-        Function = 1
-        Constant = 2
-        Expression = 3
-
     name : str
-    location : Location = Location()
-    type : Type = Type.Unknown
+    location : Location # = Location()
+    type : Type 
     
     @property
     def size(self):
