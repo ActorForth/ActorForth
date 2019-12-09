@@ -25,8 +25,8 @@ class Symbol:
     def size(self):
         return len(self.s_id)
 
-    def __eq__(self, name = None, symbol = None):
-        if name:
-            return name == self.s_id
-        return symbol.name == self.s_id
+    def __eq__(self, symbol = None):
+        if type(symbol) is Symbol:
+            return symbol.s_id == self.s_id
+        return symbol == self.s_id
 

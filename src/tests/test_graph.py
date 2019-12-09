@@ -25,6 +25,10 @@ class TestSymbol(unittest.TestCase):
         assert s.type == Type("Unknown")
         assert s.location.filename is "Unknown"
 
+        x = Symbol("fib", Location(), Type("SomethingElse"))
+        assert s == "fib"
+        assert s == x
+
     def test_normal_symbol_with_location(self) -> None:
         l = Location("fib.a4", linenum=10, column=4)    
         s = Symbol("fib", l, Type("Unknown"))
