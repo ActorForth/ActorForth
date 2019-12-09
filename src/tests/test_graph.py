@@ -20,7 +20,7 @@ class TestSymbol(unittest.TestCase):
 
     def test_normal_symbol_without_location(self) -> None:
         s = Symbol("fib", Location(), Type("Unknown"))
-        assert s.name is "fib"
+        assert s.s_id is "fib"
         assert s.size is 3
         assert s.type == Type("Unknown")
         assert s.location.filename is "Unknown"

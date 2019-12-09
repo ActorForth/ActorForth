@@ -6,26 +6,26 @@ from stack import Stack
 
 #@dataclass
 #class DictNode:
-#    name: str
+#    s_id: str
 #    interpret: 
 
-def op_int(s: Stack, name: str) -> None:
-    print("op_int(name = '%s')\n" % name )
+def op_int(s: Stack, s_id: str) -> None:
+    print("op_int(s_id = '%s')\n" % s_id )
     i = int(s.pop())
     s.push(i)
 
-def op_atom(s: Stack, name: str) -> None:
-    print("op_atom(name = '%s')\n" % name) 
-    s.push(name)
+def op_atom(s: Stack, s_id: str) -> None:
+    print("op_atom(s_id = '%s')\n" % s_id) 
+    s.push(s_id)
 
-def op_plus(s: Stack, name: str) -> None:
-    print("op_plus(name = '%s')\n" % name) 
+def op_plus(s: Stack, s_id: str) -> None:
+    print("op_plus(s_id = '%s')\n" % s_id) 
     op1 = s.pop()
     op2 = s.pop()
     s.push(op1+op2)
 
-def op_print(s: Stack, name: str) -> None:
-    print("op_print(name = '%s')\n" % name) 
+def op_print(s: Stack, s_id: str) -> None:
+    print("op_print(s_id = '%s')\n" % s_id) 
     op1 = s.pop()
     print("'%s'" % op1)
 
@@ -37,8 +37,8 @@ forth_dict.insert(0,('print',op_print))
 
 def find_atom(s: str) -> Callable[[Stack, str], None]:
     for atom in forth_dict:
-        
         if atom[0] == s: return atom[1]
+    # Not found.
     return op_atom
 
 print("forth_dict = %s" % forth_dict)
@@ -50,10 +50,10 @@ p = Parser("samples/fundamentals01.a4")
 for token in p.tokens():
     symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), Type("Unknown"))
     print(symbol)
-    op = find_atom(symbol.name)
+    op = find_atom(symbol.s_id)
     print("Stack = %s : " % stack.contents())
     try:
-        op(stack, symbol.name)
+        op(stack, symbol.s_id)
     except Exception as x:
         print("Exception %s" % x)
         print("Interpreting symbol %s" % symbol)

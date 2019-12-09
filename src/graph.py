@@ -15,18 +15,18 @@ class Location:
 class Type:    
     name: str
 
-@dataclass(frozen = True)
+@dataclass(order = True)
 class Symbol:
-    name : str
-    location : Location # = Location()
+    s_id : str
+    location : Location 
     type : Type 
     
     @property
     def size(self):
-        return len(self.name)
+        return len(self.s_id)
 
     def __eq__(self, name = None, symbol = None):
         if name:
-            return name == self.name
-        return symbol.name == self.name
+            return name == self.s_id
+        return symbol.name == self.s_id
 
