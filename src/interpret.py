@@ -1,32 +1,33 @@
-from typing import Callable, List, Tuple
+from dataclasses import dataclass
+from typing import Callable, List, Tuple, Any
 
-from graph import Symbol, Location, Type
+from graph import Symbol, Location, Type, Atom, Int
 from parser import Parser
 from stack import Stack
 
-#@dataclass
-#class DictNode:
-#    s_id: str
-#    interpret: 
+@dataclass
+class StackObject:
+    value: Any
+    type: Type 
 
 def op_int(s: Stack, s_id: str) -> None:
     print("op_int(s_id = '%s')\n" % s_id )
-    i = int(s.pop())
-    s.push(i)
+    i = int(s.pop().value)
+    s.push(StackObject(i,Int))
 
 def op_atom(s: Stack, s_id: str) -> None:
     print("op_atom(s_id = '%s')\n" % s_id) 
-    s.push(s_id)
+    s.push(StackObject(s_id,Atom))
 
 def op_plus(s: Stack, s_id: str) -> None:
     print("op_plus(s_id = '%s')\n" % s_id) 
-    op1 = s.pop()
-    op2 = s.pop()
-    s.push(op1+op2)
+    op1 = s.pop().value
+    op2 = s.pop().value
+    s.push(StackObject(op1+op2,Int))
 
 def op_print(s: Stack, s_id: str) -> None:
     print("op_print(s_id = '%s')\n" % s_id) 
-    op1 = s.pop()
+    op1 = s.pop().value
     print("'%s'" % op1)
 
 forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
@@ -48,7 +49,7 @@ stack = Stack()
 p = Parser("samples/fundamentals01.a4")
 
 for token in p.tokens():
-    symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), Type("Unknown"))
+    symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), Atom)
     print(symbol)
     op = find_atom(symbol.s_id)
     print("Stack = %s : " % stack.contents())

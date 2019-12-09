@@ -15,6 +15,15 @@ class Location:
 class Type:    
     name: str
 
+@dataclass(frozen = True, order = True)
+class Atom(Type):
+    pass
+
+@dataclass(frozen = True, order = True)
+class Int(Type):
+    pass
+
+
 @dataclass(order = True)
 class Symbol:
     s_id : str
