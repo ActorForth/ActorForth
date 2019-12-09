@@ -1,4 +1,4 @@
-from typing import Callable
+from typing import Callable, List, Tuple
 
 from graph import Symbol, Location 
 from parser import Parser
@@ -29,7 +29,7 @@ def op_print(s: Stack, name: str) -> None:
     op1 = s.pop()
     print("'%s'" % op1)
 
-forth_dict = []
+forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
 forth_dict.insert(0,('int',op_int))
 forth_dict.insert(0,('+',op_plus))
