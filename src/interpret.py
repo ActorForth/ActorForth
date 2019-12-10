@@ -54,6 +54,7 @@ print("forth_dict = %s" % forth_dict)
 stack = Stack()
 
 p = Parser("samples/fundamentals01.a4")
+#p = Parser("samples/fib.a4")
 
 for token in p.tokens():
     symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), Type("Atom"))

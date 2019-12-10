@@ -2,7 +2,7 @@
 #   graph.py    - Call graph/AST for our language.
 #
 
-from typing import Dict, List, Tuple, Callable
+from typing import Dict, List, Tuple, Callable, Any
 from enum import Enum
 from dataclasses import dataclass
 
@@ -39,6 +39,22 @@ class Type:
 
     def __repr__(self) -> str:
         return self.__str__()
+
+@dataclass
+class StackObject:
+    value: Any
+    type: Type 
+
+@dataclass
+class TypeSignature:
+    stack_in : List[Type]
+    stack_out : List[Type]
+
+    def match_in(self, types: List[Type]) -> bool:
+        return True
+
+    def match_out(self, types: List[Type]) -> bool:
+        return True
 
 
 @dataclass(order = True)
