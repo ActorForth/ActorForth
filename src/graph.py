@@ -40,6 +40,10 @@ class Type:
     def __repr__(self) -> str:
         return self.__str__()
 
+TAtom = Type("Atom")
+TInt = Type("Int")
+
+
 @dataclass
 class StackObject:
     value: Any

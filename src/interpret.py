@@ -1,41 +1,43 @@
 from dataclasses import dataclass
 from typing import Callable, List, Tuple, Any
 
-from graph import Symbol, Location, Type
+from graph import Symbol, Location, Type, TAtom, TInt, Stack, StackObject, TypeSignature
 from parser import Parser
-from stack import Stack
+#from stack import Stack
 
-@dataclass
-class StackObject:
-    value: Any
-    type: Type 
+
 
 def op_int(s: Stack, s_id: str) -> None:
     print("op_int(s_id = '%s')\n" % s_id )
     i = int(s.pop().value)
-    s.push(StackObject(i,Type("Int")))
+    s.push(StackObject(i,TInt))
+op_int.sig=TypeSignature([TAtom],[TAtom])
 
 def op_atom(s: Stack, s_id: str) -> None:
     print("op_atom(s_id = '%s')\n" % s_id) 
-    s.push(StackObject(s_id,Type("Atom")))
+    s.push(StackObject(s_id,TAtom))
+op_atom.sig=TypeSignature([TAtom],[TAtom])
 
 def op_plus(s: Stack, s_id: str) -> None:
     print("op_plus(s_id = '%s')\n" % s_id) 
     op1 = s.pop().value
     op2 = s.pop().value
-    s.push(StackObject(op1+op2,Type("Int")))
+    s.push(StackObject(op1+op2,TInt))
+op_plus.sig=TypeSignature([TInt,TInt],[TInt])    
 
 def op_print(s: Stack, s_id: str) -> None:
     print("op_print(s_id = '%s')\n" % s_id) 
     op1 = s.pop().value
     print("'%s'" % op1)
+op_print.sig=TypeSignature([TInt],[])
+
 
 forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
 forth_dict.insert(0,('int',op_int))
 forth_dict.insert(0,('print',op_print))
 
-Type("Int").forth_dict.insert(0,('+',op_plus))
+TInt.forth_dict.insert(0,('+',op_plus))
 
 def find_atom(s: str) -> Tuple[Callable[[Stack, str], None], bool]:
     for atom in forth_dict:
@@ -56,8 +58,14 @@ stack = Stack()
 p = Parser("samples/fundamentals01.a4")
 #p = Parser("samples/fib.a4")
 
+def check_input_type_sig(stack: Stack, op:Callable[[Stack, str],None]) -> bool:
+        return True
+
+def check_output_type_sig(stack: Stack, op:Callable[[Stack, str],None]) -> bool:
+        return True        
+
 for token in p.tokens():
-    symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), Type("Atom"))
+    symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), TAtom)
     print(symbol)
     tos = stack.tos()
     if tos is not Stack.Empty:
