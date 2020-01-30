@@ -3,8 +3,6 @@ from typing import Callable, List, Tuple, Any
 
 from graph import Symbol, Location, Type, TAtom, TInt, Stack, StackObject, TypeSignature
 from parser import Parser
-#from stack import Stack
-
 
 
 def op_int(s: Stack, s_id: str) -> None:
