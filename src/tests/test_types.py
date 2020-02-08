@@ -1,6 +1,6 @@
 import unittest
 
-from graph import Symbol, Location, Type
+from af_types import Symbol, Location, Type
 
 class TestLocation(unittest.TestCase):
 

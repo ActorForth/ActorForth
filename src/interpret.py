@@ -1,41 +1,12 @@
 from dataclasses import dataclass
 from typing import Callable, List, Tuple, Any
 
-from graph import Symbol, Location, Type, TAtom, TInt, Stack, StackObject, TypeSignature
+#from graph import Symbol, Location, Type, TAtom, TInt, Stack, StackObject, TypeSignature
 from parser import Parser
 
+from af_types import forth_dict, Type, Symbol, Location, TAtom, op_atom
 
-def op_int(s: Stack, s_id: str) -> None:
-    print("op_int(s_id = '%s')\n" % s_id )
-    i = int(s.pop().value)
-    s.push(StackObject(i,TInt))
-op_int.sig=TypeSignature([TAtom],[TInt])
-
-def op_atom(s: Stack, s_id: str) -> None:
-    print("op_atom(s_id = '%s')\n" % s_id) 
-    s.push(StackObject(s_id,TAtom))
-op_atom.sig=TypeSignature([],[TAtom])
-
-def op_plus(s: Stack, s_id: str) -> None:
-    print("op_plus(s_id = '%s')\n" % s_id) 
-    op1 = s.pop().value
-    op2 = s.pop().value
-    s.push(StackObject(op1+op2,TInt))
-op_plus.sig=TypeSignature([TInt,TInt],[TInt])    
-
-def op_print(s: Stack, s_id: str) -> None:
-    print("op_print(s_id = '%s')\n" % s_id) 
-    op1 = s.pop().value
-    print("'%s'" % op1)
-op_print.sig=TypeSignature([TInt],[])
-
-
-forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
-
-forth_dict.insert(0,('int',op_int))
-forth_dict.insert(0,('print',op_print))
-
-TInt.forth_dict.insert(0,('+',op_plus))
+from stack import Stack
 
 def find_atom(s: str) -> Tuple[Callable[[Stack, str], None], bool]:
     for atom in forth_dict:
