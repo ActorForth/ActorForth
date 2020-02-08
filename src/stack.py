@@ -26,7 +26,12 @@ class KStack:
             self._data.append(value)            
 
         def tos(self,stack):
-            return self._data[-1]
+            if len(self._data):
+                return self._data[-1]
+
+            # Stack is empty if we get this far.
+            stack._stack = KStack.Empty()
+            return KStack.Empty                
         
         def pop(self, stack):
             if len(self._data):
