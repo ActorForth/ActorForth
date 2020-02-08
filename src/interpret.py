@@ -38,9 +38,17 @@ if __name__ == "__main__":
         if not len(in_types) : return True
         #stack_types = [s.type for s in reversed(stack.contents()[:len(in_types)]) ]
         stack_types = [s.type for s in stack.contents()[len(in_types)*-1:] ]
+
         print("in_types = %s" % in_types)
         print("stack_types = %s" % stack_types)
-        return in_types == stack_types
+        #return in_types == stack_types
+        for type in reversed(in_types):
+            in_type = in_types.pop()
+            if type != in_type:
+                print("Stack type %s doesn't match input arg type %s." % (type,in_type))
+                return False
+        return True
+
         
 
     def check_output_type_sig(stack: Stack, op: Callable[[Stack, str],None]) -> bool:

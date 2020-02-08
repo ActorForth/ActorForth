@@ -29,12 +29,12 @@ class Type:
         return Type.types[self.name]
 
     def __eq__(self, type: object):
+        print("equality check for %s" % self.name)
         if isinstance(type, Type):
             return self.name == type.name
         return False
 
     def __str__(self) -> str:
-        #return "Type('%s')" % self.name
         return self.name
 
     def __repr__(self) -> str:
@@ -42,6 +42,11 @@ class Type:
 
 TAtom = Type("Atom")
 TInt = Type("Int")
+TAny = Type("Any")
+#def TAny_eq(self, type: object):
+#    print("Special equality check for Any")
+#    return True
+#TAny.__eq__ = TAny_eq
 
 
 @dataclass
@@ -101,10 +106,35 @@ def op_print(s: Stack, s_id: str) -> None:
     print("'%s'" % op1)
 op_print.sig=TypeSignature([TInt],[])
 
+def op_dup(s: Stack, s_id: str) -> None:
+    print("op_dup(s_id = '%s')\n" % s_id) 
+    op1 = s.tos()
+    s.push(op1)
+    print("'%s'" % op1)
+op_dup.sig=TypeSignature([TAny],[TAny, TAny])
+
+def op_swap(s: Stack, s_id: str) -> None:
+    print("op_swap(s_id = '%s')\n" % s_id) 
+    op1 = s.pop()
+    op2 = s.pop()
+    s.push(op1)
+    s.push(op2)
+    print("'%s','%s'" % (op1,op2))
+op_swap.sig=TypeSignature([TAny, TAny],[TAny, TAny])
+
+def op_drop(s: Stack, s_id: str) -> None:
+    print("op_drop(s_id = '%s')\n" % s_id) 
+    op1 = s.pop()
+    print("'%s'" % op1)
+op_drop.sig=TypeSignature([TAny],[])
+
 
 forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
 forth_dict.insert(0,('int',op_int))
 forth_dict.insert(0,('print',op_print))
+forth_dict.insert(0,('dup',op_dup))
+forth_dict.insert(0,('swap',op_swap))
+forth_dict.insert(0,('drop',op_drop))
 
 TInt.forth_dict.insert(0,('+',op_plus))
