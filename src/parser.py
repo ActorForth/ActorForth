@@ -27,7 +27,7 @@ class Parser:
         self.file_handle = open(filename)
         return self
 
-    def open_handle(self, handle : StringIO, filename: str = None) -> "Parser":
+    def open_handle(self, handle : TextIO, filename: str = None) -> "Parser":
         self.reset()
         self.filename = filename or "Unknown"
         self.file_handle = handle
