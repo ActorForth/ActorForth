@@ -4,7 +4,7 @@ from typing import Callable, List, Tuple, Any
 #from graph import Symbol, Location, Type, TAtom, TInt, Stack, StackObject, TypeSignature
 from parser import Parser
 
-from af_types import forth_dict, Type, Symbol, Location, TAtom, op_atom
+from af_types import forth_dict, Type, Symbol, Location, TAtom, op_atom, TAny
 
 from stack import Stack
 
@@ -42,9 +42,13 @@ if __name__ == "__main__":
         print("in_types = %s" % in_types)
         print("stack_types = %s" % stack_types)
         #return in_types == stack_types
-        for type in reversed(in_types):
-            in_type = in_types.pop()
-            if type != in_type:
+        for in_type in reversed(in_types):
+            if in_type is TAny: continue
+            stack_type = stack_types.pop()
+            # BROKE - have to hack the check above.
+            ## in_type MUST come first in this comparison
+            ## in order to support generic type matching.
+            if in_type != stack_type:
                 print("Stack type %s doesn't match input arg type %s." % (type,in_type))
                 return False
         return True

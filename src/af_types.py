@@ -2,6 +2,7 @@
 #   af_types.py     - Types for our language.
 #
 
+import types
 from typing import Dict, List, Tuple, Callable, Any
 from enum import Enum
 from dataclasses import dataclass
@@ -29,7 +30,7 @@ class Type:
         return Type.types[self.name]
 
     def __eq__(self, type: object):
-        print("equality check for %s" % self.name)
+        print("equality check for %s against %s" % (self.name,type))
         if isinstance(type, Type):
             return self.name == type.name
         return False
@@ -46,7 +47,8 @@ TAny = Type("Any")
 #def TAny_eq(self, type: object):
 #    print("Special equality check for Any")
 #    return True
-#TAny.__eq__ = TAny_eq
+#TAny.__eq__ = types.MethodType(TAny_eq,TAny)
+#TAny.__class__.__eq__ = types.MethodType(TAny_eq,TAny)
 
 
 @dataclass
@@ -106,6 +108,11 @@ def op_print(s: Stack, s_id: str) -> None:
     print("'%s'" % op1)
 op_print.sig=TypeSignature([TInt],[])
 
+#
+#   Should dup, swap, drop and any other generic stack operators 
+#   dynamically determine the actual stack types on the stack and
+#   create dynamic type signatures based on what are found?
+#
 def op_dup(s: Stack, s_id: str) -> None:
     print("op_dup(s_id = '%s')\n" % s_id) 
     op1 = s.tos()
@@ -133,6 +140,7 @@ forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
 forth_dict.insert(0,('int',op_int))
 forth_dict.insert(0,('print',op_print))
+
 forth_dict.insert(0,('dup',op_dup))
 forth_dict.insert(0,('swap',op_swap))
 forth_dict.insert(0,('drop',op_drop))
