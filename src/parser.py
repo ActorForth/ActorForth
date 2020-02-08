@@ -3,6 +3,7 @@
 #
 #from __future__ import annotations
 from typing import List, TextIO, Optional, Iterator, Tuple
+from io import StringIO
 
 class Parser:
 
@@ -24,6 +25,12 @@ class Parser:
         self.reset()
         self.filename = filename
         self.file_handle = open(filename)
+        return self
+
+    def open_handle(self, handle : StringIO, filename: str = None) -> "Parser":
+        self.reset()
+        self.filename = filename or "Unknown"
+        self.file_handle = handle
         return self
 
     def tokens(self) -> Iterator[Tuple[str, int, int]]:
