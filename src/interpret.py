@@ -46,29 +46,34 @@ if __name__ == "__main__":
     def check_output_type_sig(stack: Stack, op: Callable[[Stack, str],None]) -> bool:
             return True        
 
-    for token in p.tokens():
-        symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), TAtom)
-        print(symbol)
-        tos = stack.tos()
-        print("\nStack = %s" % stack.contents())
-        if tos is not Stack.Empty:
-            op, found = find_type_atom(tos.type,symbol.s_id)
-            if not found:
-                op, found = find_atom(symbol.s_id)
-        else:
-            op, found = find_atom(symbol.s_id)
-        
-        try:
-            if check_input_type_sig(stack, op):
-                op(stack, symbol.s_id)
-                print("Stack = %s\n" % stack.contents())
+    try:
+
+        for token in p.tokens():
+            symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), TAtom)
+            print(token[0])
+            tos = stack.tos()
+            #print("\nStack = %s" % stack.contents())
+            if tos is not Stack.Empty:
+                op, found = find_type_atom(tos.type,symbol.s_id)
+                if not found:
+                    op, found = find_atom(symbol.s_id)
             else:
-                raise Exception("Stack content doesn't match Op TypeSignature.")
-        except Exception as x:
-            print("Exception %s" % x)
-            print("Interpreting symbol %s" % symbol)
-            print("Exception Stack = %s : " % stack.contents())
-            break
+                op, found = find_atom(symbol.s_id)
+            
+            try:
+                if check_input_type_sig(stack, op):
+                    op(stack, symbol.s_id)
+                    print("Stack = %s\n" % stack.contents())
+                else:
+                    raise Exception("Stack content doesn't match Op %s." % op.sig)
+            except Exception as x:
+                print("Exception %s" % x)
+                print("Interpreting symbol %s" % symbol)
+                print("Exception Stack = %s : " % stack.contents())
+                break
+
+    except KeyboardInterrupt as x:
+        print("\nend of line...")
 
 
     print(stack.contents())
