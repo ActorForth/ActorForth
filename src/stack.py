@@ -103,7 +103,9 @@ class Stack(KStack):
         up to 'history_limit' (if specified) or 'Stack.DEPTH_HISTORY' 
         operations whichever is smaller.
         """
-        return max(self.depth_history(history_limit))
+        if self.depth_history(history_limit):
+            return max(self.depth_history(history_limit))
+        return 0
 
     def depth(self):
         return self._push_count - self._pop_count
