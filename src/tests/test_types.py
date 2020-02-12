@@ -1,6 +1,7 @@
 import unittest
 
-from af_types import Symbol, Location, Type
+from parser import Symbol, Location, Type
+#from af_types import Type
 
 class TestLocation(unittest.TestCase):
 

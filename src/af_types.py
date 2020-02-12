@@ -9,15 +9,12 @@ from dataclasses import dataclass
 
 from stack import Stack
 
-@dataclass(frozen = True)
-class Location:
-    filename : str = "Unknown"
-    linenum : int = 0
-    column : int = 0
 
 
 class Type:
 
+    # Types is a dictionary of Type names to their respective
+    # custom dictionaries.
     types : Dict[str, List[Tuple[str,Callable[[Stack, str],None]]]] = {}
 
     def __init__(self, typename: str = "Unknown"):
@@ -66,22 +63,6 @@ class TypeSignature:
 
     def match_out(self, types: List[Type]) -> bool:
         return True
-
-
-@dataclass(order = True)
-class Symbol:
-    s_id : str
-    location : Location 
-    type : Type 
-    
-    @property
-    def size(self):
-        return len(self.s_id)
-
-    def __eq__(self, symbol = None):
-        if type(symbol) is Symbol:
-            return symbol.s_id == self.s_id
-        return symbol == self.s_id
 
 
 def op_int(s: Stack, s_id: str) -> None:

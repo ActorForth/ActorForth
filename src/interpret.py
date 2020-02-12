@@ -2,9 +2,9 @@ from dataclasses import dataclass
 from typing import Callable, List, Tuple, Any
 
 #from graph import Symbol, Location, Type, TAtom, TInt, Stack, StackObject, TypeSignature
-from parser import Parser
+from parser import Parser, Location, Symbol
 
-from af_types import forth_dict, Type, Symbol, Location, TAtom, op_atom, TAny
+from af_types import forth_dict, Type, TAtom, op_atom, TAny
 
 from stack import Stack
 
