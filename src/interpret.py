@@ -28,12 +28,33 @@ if __name__ == "__main__":
 
     stack = Stack()
 
+    handle = sys.stdin
+    print("len(sys.argv)==%s, sys.argv='%s'" % (len(sys.argv),sys.argv))
+    if len(sys.argv) >= 2:
+        #print("Is there a file: '%s'?" % filename)
+    
+        filename = sys.argv[1]
+        handle = open(filename)
+
+        print("Interpreting file: '%s'." % sys.argv[1])
+    else:
+        print("Interpreting from stdin.")
+        filename = "stdin"
+
+
+
     #p = Parser("samples/fundamentals01.a4")
     #p = Parser("samples/fib.a4")
     p = Parser()
-    p.open_handle(sys.stdin,"stdin")
+    p.open_handle(handle, filename)
 
     def check_input_type_sig(stack: Stack, op: Callable[[Stack, str],None]) -> bool:
+        """
+        Eventually this needs to not only check the last items on the stack
+        for a match, but also cooperate with check_output_type_sig to determine
+        that the updated size of the stack also matches the expected
+        outcome so there won't be false positive matches for stack pictures.
+        """
         in_types = op.sig.stack_in
         if not len(in_types) : return True
         #stack_types = [s.type for s in reversed(stack.contents()[:len(in_types)]) ]
@@ -44,6 +65,10 @@ if __name__ == "__main__":
         #return in_types == stack_types
         for in_type in reversed(in_types):
             if in_type is TAny: continue
+            """
+            Should probably have TAny types transform to the discovered type
+            so that manipulations across generics are still completely type safe.
+            """
             stack_type = stack_types.pop()
             # BROKE - have to hack the check above.
             ## in_type MUST come first in this comparison
