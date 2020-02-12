@@ -24,12 +24,18 @@ def find_type_atom(type: Type, s: str) -> Tuple[Callable[[Stack, str], None], bo
 
 if __name__ == "__main__":
 
-    print("forth_dict = %s" % forth_dict)
+    print("ActorForth demo interpreter. ^C to exit.")
+    print("Global Dictionary : %s" % forth_dict)
+    for type in Type.types.keys():
+        ops = Type.types.get(type)
+        if len(ops):
+            print("\n%s Dictionary : %s" % (type,ops))
 
     stack = Stack()
 
     handle = sys.stdin
-    print("len(sys.argv)==%s, sys.argv='%s'" % (len(sys.argv),sys.argv))
+    filename = "stdin"
+    #print("len(sys.argv)==%s, sys.argv='%s'" % (len(sys.argv),sys.argv))
     if len(sys.argv) >= 2:
         #print("Is there a file: '%s'?" % filename)
     
@@ -37,10 +43,7 @@ if __name__ == "__main__":
         handle = open(filename)
 
         print("Interpreting file: '%s'." % sys.argv[1])
-    else:
-        print("Interpreting from stdin.")
-        filename = "stdin"
-
+    
 
 
     #p = Parser("samples/fundamentals01.a4")
@@ -91,10 +94,13 @@ if __name__ == "__main__":
             tos = stack.tos()
             #print("\nStack = %s" % stack.contents())
             if tos is not Stack.Empty:
+                # We first look for an atom specialized for the type/value on TOS.
                 op, found = find_type_atom(tos.type,symbol.s_id)
                 if not found:
+                    # If not specialized atom exists then search the global dictionary.
                     op, found = find_atom(symbol.s_id)
             else:
+                # Stack's empty so search the global dictionary.
                 op, found = find_atom(symbol.s_id)
             
             try:
@@ -107,7 +113,9 @@ if __name__ == "__main__":
                 print("Exception %s" % x)
                 print("Interpreting symbol %s" % symbol)
                 print("Exception Stack = %s : " % stack.contents())
-                break
+                
+                # See what happens if we just keep going...
+                #break
 
     except KeyboardInterrupt as x:
         print("\nend of line...")

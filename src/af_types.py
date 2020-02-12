@@ -135,7 +135,11 @@ def op_drop(s: Stack, s_id: str) -> None:
     print("'%s'" % op1)
 op_drop.sig=TypeSignature([TAny],[])
 
+#
+#   Forth dictionary of primitive operations is created here.
+#
 
+#   Global dictionary
 forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
 forth_dict.insert(0,('int',op_int))
@@ -145,4 +149,5 @@ forth_dict.insert(0,('dup',op_dup))
 forth_dict.insert(0,('swap',op_swap))
 forth_dict.insert(0,('drop',op_drop))
 
+#   Int dictionary
 TInt.forth_dict.insert(0,('+',op_plus))
