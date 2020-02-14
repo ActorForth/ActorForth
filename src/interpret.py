@@ -1,55 +1,16 @@
 from dataclasses import dataclass
 from typing import Callable, List, Tuple, Any
 
-#from graph import Symbol, Location, Type, TAtom, TInt, Stack, StackObject, TypeSignature
 from parser import Parser, Location, Symbol
 
-from af_types import forth_dict, Type, TAtom, op_atom, TAny
+from af_types import forth_dict, Type, TAtom, op_atom, TAny, find_atom, find_type_atom
 
 from stack import Stack
 
 import sys
 
-def find_atom(s: str) -> Tuple[Callable[[Stack, str], None], bool]:
-    for atom in forth_dict:
-        if atom[0] == s: return atom[1], True
-    # Not found.
-    return op_atom, False
-
-def find_type_atom(type: Type, s: str) -> Tuple[Callable[[Stack, str], None], bool]:
-    for atom in type.forth_dict:
-        if atom[0] == s: return atom[1], True
-    # Not found.
-    return op_atom, False 
-
 if __name__ == "__main__":
 
-    print("ActorForth demo interpreter. ^C to exit.")
-    print("Global Dictionary : %s" % forth_dict)
-    for type in Type.types.keys():
-        ops = Type.types.get(type)
-        if len(ops):
-            print("\n%s Dictionary : %s" % (type,ops))
-
-    stack = Stack()
-
-    handle = sys.stdin
-    filename = "stdin"
-    #print("len(sys.argv)==%s, sys.argv='%s'" % (len(sys.argv),sys.argv))
-    if len(sys.argv) >= 2:
-        #print("Is there a file: '%s'?" % filename)
-    
-        filename = sys.argv[1]
-        handle = open(filename)
-
-        print("Interpreting file: '%s'." % sys.argv[1])
-    
-
-
-    #p = Parser("samples/fundamentals01.a4")
-    #p = Parser("samples/fib.a4")
-    p = Parser()
-    p.open_handle(handle, filename)
 
     def check_input_type_sig(stack: Stack, op: Callable[[Stack, str],None]) -> bool:
         """
@@ -81,10 +42,29 @@ if __name__ == "__main__":
                 return False
         return True
 
-        
 
-    def check_output_type_sig(stack: Stack, op: Callable[[Stack, str],None]) -> bool:
-            return True        
+    print("ActorForth demo interpreter. ^C to exit.")
+    print("Global Dictionary : %s" % forth_dict)
+    for type in Type.types.keys():
+        ops = Type.types.get(type)
+        if len(ops):
+            print("\n%s Dictionary : %s" % (type,ops))
+
+    stack = Stack()
+
+    handle = sys.stdin
+    filename = "stdin"
+    #print("len(sys.argv)==%s, sys.argv='%s'" % (len(sys.argv),sys.argv))
+    if len(sys.argv) >= 2:
+        #print("Is there a file: '%s'?" % filename)
+    
+        filename = sys.argv[1]
+        handle = open(filename)
+
+        print("Interpreting file: '%s'." % sys.argv[1])
+    
+    p = Parser()
+    p.open_handle(handle, filename)
 
     try:
 
@@ -112,7 +92,7 @@ if __name__ == "__main__":
             except Exception as x:
                 print("Exception %s" % x)
                 print("Interpreting symbol %s" % symbol)
-                print("Exception Stack = %s : " % stack.contents())
+                print("Stack = %s : " % stack.contents())
                 
                 # See what happens if we just keep going...
                 #break

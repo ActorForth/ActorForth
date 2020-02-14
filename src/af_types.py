@@ -158,3 +158,17 @@ forth_dict.insert(0,('drop',op_drop))
 forth_dict.insert(0,('int',op_int))
 TInt.forth_dict.insert(0,('+',op_plus))
 TInt.forth_dict.insert(0,('-',op_minus))
+
+
+
+def find_atom(s: str) -> Tuple[Callable[[Stack, str], None], bool]:
+    for atom in forth_dict:
+        if atom[0] == s: return atom[1], True
+    # Not found.
+    return op_atom, False
+
+def find_type_atom(type: Type, s: str) -> Tuple[Callable[[Stack, str], None], bool]:
+    for atom in type.forth_dict:
+        if atom[0] == s: return atom[1], True
+    # Not found.
+    return op_atom, False 
