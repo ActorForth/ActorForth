@@ -127,7 +127,7 @@ def op_plus(s: Stack, s_id: str) -> None:
     # Guarantee output is valid and not overflow.
     assert int(result) - op2 == op1, "python math error"
     s.push(StackObject(result,TInt))
-    op_int(s,s_id)
+    op_int(s,s_id) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
 op_plus.sig=TypeSignature([TInt,TInt],[TInt])   
 
 def op_minus(s: Stack, s_id: str) -> None:
@@ -138,7 +138,7 @@ def op_minus(s: Stack, s_id: str) -> None:
     # Guarantee output is valid and not overflow.
     assert int(result) + op1 == op2, "python math error"
     s.push(StackObject(result,TInt))
-    op_int(s,s_id)
+    op_int(s,s_id) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
 op_minus.sig=TypeSignature([TInt,TInt],[TInt])  
 
 #
@@ -148,7 +148,6 @@ op_minus.sig=TypeSignature([TInt,TInt],[TInt])
 #   Global dictionary
 forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
-forth_dict.insert(0,('int',op_int))
 forth_dict.insert(0,('print',op_print))
 
 forth_dict.insert(0,('dup',op_dup))
@@ -156,5 +155,6 @@ forth_dict.insert(0,('swap',op_swap))
 forth_dict.insert(0,('drop',op_drop))
 
 #   Int dictionary
+forth_dict.insert(0,('int',op_int))
 TInt.forth_dict.insert(0,('+',op_plus))
 TInt.forth_dict.insert(0,('-',op_minus))
