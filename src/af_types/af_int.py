@@ -2,6 +2,8 @@
 
 from . import *
 
+TInt = Type("Int")
+
 #
 #   Integer handling
 #
@@ -35,3 +37,8 @@ def op_minus(s: Stack, s_id: str) -> None:
     s.push(StackObject(result,TInt))
     op_int(s,s_id) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
 op_minus.sig=TypeSignature([TInt,TInt],[TInt])
+
+#   Int dictionary
+forth_dict.insert(0,('int',op_int))
+TInt.forth_dict.insert(0,('+',op_plus))
+TInt.forth_dict.insert(0,('-',op_minus))

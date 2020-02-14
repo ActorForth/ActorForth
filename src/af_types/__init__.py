@@ -38,8 +38,6 @@ class Type:
         return self.__str__()
 
 
-
-
 @dataclass
 class StackObject:
     value: Any
@@ -60,14 +58,6 @@ class TypeSignature:
 TAtom = Type("Atom")
 
 TAny = Type("Any")
-
-TInt = Type("Int")
-#def TAny_eq(self, type: object):
-#    print("Special equality check for Any")
-#    return True
-#TAny.__eq__ = types.MethodType(TAny_eq,TAny)
-#TAny.__class__.__eq__ = types.MethodType(TAny_eq,TAny)
-
 
 #
 #   Generic operations
@@ -112,9 +102,6 @@ def op_drop(s: Stack, s_id: str) -> None:
 op_drop.sig=TypeSignature([TAny],[])
 
 
-
-
-
 #
 #   Forth dictionary of primitive operations is created here.
 #
@@ -127,9 +114,6 @@ forth_dict.insert(0,('print',op_print))
 forth_dict.insert(0,('dup',op_dup))
 forth_dict.insert(0,('swap',op_swap))
 forth_dict.insert(0,('drop',op_drop))
-
-
-
 
 
 def find_atom(s: str) -> Tuple[Callable[[Stack, str], None], bool]:
