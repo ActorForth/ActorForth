@@ -65,46 +65,20 @@ class TypeSignature:
         return True
 
 
-def op_int(s: Stack, s_id: str) -> None:
-    print("op_int(s_id = '%s')\n" % s_id )
-    i = int(s.pop().value)
-    assert i <  999999999999, "int overflow > 999999999999"
-    assert i > -999999999999, "int underflow < -999999999999"
-    s.push(StackObject(i,TInt))
-op_int.sig=TypeSignature([TAtom],[TInt])
+#
+#   Generic operations
+#
 
 def op_atom(s: Stack, s_id: str) -> None:
     print("op_atom(s_id = '%s')\n" % s_id) 
     s.push(StackObject(s_id,TAtom))
 op_atom.sig=TypeSignature([],[TAtom])
 
-def op_plus(s: Stack, s_id: str) -> None:
-    print("op_plus(s_id = '%s')\n" % s_id) 
-    op1 = s.pop().value
-    op2 = s.pop().value
-    result = op1+op2
-    # Guarantee output is valid and not overflow.
-    assert int(result) - op2 == op1, "python math error"
-    s.push(StackObject(result,TInt))
-    op_int(s,s_id)
-op_plus.sig=TypeSignature([TInt,TInt],[TInt])   
-
-def op_minus(s: Stack, s_id: str) -> None:
-    print("op_minus(s_id = '%s')\n" % s_id) 
-    op1 = s.pop().value
-    op2 = s.pop().value
-    result = op2-op1
-    # Guarantee output is valid and not overflow.
-    assert int(result) + op1 == op2, "python math error"
-    s.push(StackObject(result,TInt))
-    op_int(s,s_id)
-op_minus.sig=TypeSignature([TInt,TInt],[TInt])   
-
 def op_print(s: Stack, s_id: str) -> None:
     print("op_print(s_id = '%s')\n" % s_id) 
     op1 = s.pop().value
     print("'%s'" % op1)
-op_print.sig=TypeSignature([TInt],[])
+op_print.sig=TypeSignature([TAny],[])
 
 #
 #   Should dup, swap, drop and any other generic stack operators 
@@ -132,6 +106,40 @@ def op_drop(s: Stack, s_id: str) -> None:
     op1 = s.pop()
     print("'%s'" % op1)
 op_drop.sig=TypeSignature([TAny],[])
+
+#
+#   Integer handling
+#
+
+def op_int(s: Stack, s_id: str) -> None:
+    print("op_int(s_id = '%s')\n" % s_id )
+    i = int(s.pop().value)
+    assert i <  999999999999, "int overflow > 999999999999"
+    assert i > -999999999999, "int underflow < -999999999999"
+    s.push(StackObject(i,TInt))
+op_int.sig=TypeSignature([TAtom],[TInt])
+
+def op_plus(s: Stack, s_id: str) -> None:
+    print("op_plus(s_id = '%s')\n" % s_id) 
+    op1 = s.pop().value
+    op2 = s.pop().value
+    result = op1+op2
+    # Guarantee output is valid and not overflow.
+    assert int(result) - op2 == op1, "python math error"
+    s.push(StackObject(result,TInt))
+    op_int(s,s_id)
+op_plus.sig=TypeSignature([TInt,TInt],[TInt])   
+
+def op_minus(s: Stack, s_id: str) -> None:
+    print("op_minus(s_id = '%s')\n" % s_id) 
+    op1 = s.pop().value
+    op2 = s.pop().value
+    result = op2-op1
+    # Guarantee output is valid and not overflow.
+    assert int(result) + op1 == op2, "python math error"
+    s.push(StackObject(result,TInt))
+    op_int(s,s_id)
+op_minus.sig=TypeSignature([TInt,TInt],[TInt])  
 
 #
 #   Forth dictionary of primitive operations is created here.
