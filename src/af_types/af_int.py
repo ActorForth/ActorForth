@@ -39,7 +39,7 @@ def op_minus(s: Stack, s_id: str) -> None:
 op_minus.sig=TypeSignature([TInt,TInt],[TInt])
 
 def op_multiply(s: Stack, s_id: str) -> None:
-    print("op_minus(s_id = '%s')\n" % s_id) 
+    print("op_multiply(s_id = '%s')\n" % s_id) 
     op1 = s.pop().value
     op2 = s.pop().value
     result = op2*op1
@@ -49,8 +49,20 @@ def op_multiply(s: Stack, s_id: str) -> None:
     op_int(s,s_id) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
 op_multiply.sig=TypeSignature([TInt,TInt],[TInt])
 
+def op_divide(s: Stack, s_id: str) -> None:
+    print("op_divide(s_id = '%s')\n" % s_id) 
+    assert s.tos().value != 0, "int division by zero error."
+    op1 = s.pop().value
+    op2 = s.pop().value
+    result = int(op2/op1)
+    remainder = op2 - (result * op1)
+    s.push(StackObject(result, TInt))
+    s.push(StackObject(remainder, TInt))
+op_divide.sig=TypeSignature([TInt,TInt],[TInt,TInt])
+
 #   Int dictionary
 forth_dict.insert(0,('int',op_int))
 TInt.forth_dict.insert(0,('+',op_plus))
 TInt.forth_dict.insert(0,('-',op_minus))
 TInt.forth_dict.insert(0,('*',op_multiply))
+TInt.forth_dict.insert(0,('/',op_divide))
