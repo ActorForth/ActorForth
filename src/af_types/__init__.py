@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from stack import Stack
 
 
-
 class Type:
 
     # Types is a dictionary of Type names to their respective
@@ -38,15 +37,6 @@ class Type:
     def __repr__(self) -> str:
         return self.__str__()
 
-TAtom = Type("Atom")
-TInt = Type("Int")
-TAny = Type("Any")
-#def TAny_eq(self, type: object):
-#    print("Special equality check for Any")
-#    return True
-#TAny.__eq__ = types.MethodType(TAny_eq,TAny)
-#TAny.__class__.__eq__ = types.MethodType(TAny_eq,TAny)
-
 
 @dataclass
 class StackObject:
@@ -65,29 +55,24 @@ class TypeSignature:
         return True
 
 
-def op_int(s: Stack, s_id: str) -> None:
-    print("op_int(s_id = '%s')\n" % s_id )
-    i = int(s.pop().value)
-    s.push(StackObject(i,TInt))
-op_int.sig=TypeSignature([TAtom],[TInt])
+TAtom = Type("Atom")
+
+TAny = Type("Any")
+
+#
+#   Generic operations
+#
 
 def op_atom(s: Stack, s_id: str) -> None:
     print("op_atom(s_id = '%s')\n" % s_id) 
     s.push(StackObject(s_id,TAtom))
 op_atom.sig=TypeSignature([],[TAtom])
 
-def op_plus(s: Stack, s_id: str) -> None:
-    print("op_plus(s_id = '%s')\n" % s_id) 
-    op1 = s.pop().value
-    op2 = s.pop().value
-    s.push(StackObject(op1+op2,TInt))
-op_plus.sig=TypeSignature([TInt,TInt],[TInt])    
-
 def op_print(s: Stack, s_id: str) -> None:
     print("op_print(s_id = '%s')\n" % s_id) 
     op1 = s.pop().value
     print("'%s'" % op1)
-op_print.sig=TypeSignature([TInt],[])
+op_print.sig=TypeSignature([TAny],[])
 
 #
 #   Should dup, swap, drop and any other generic stack operators 
@@ -116,6 +101,7 @@ def op_drop(s: Stack, s_id: str) -> None:
     print("'%s'" % op1)
 op_drop.sig=TypeSignature([TAny],[])
 
+
 #
 #   Forth dictionary of primitive operations is created here.
 #
@@ -123,12 +109,24 @@ op_drop.sig=TypeSignature([TAny],[])
 #   Global dictionary
 forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
-forth_dict.insert(0,('int',op_int))
+# NOTE that atom is not a dictionary word but is the default behavior of
+# our find atom functions.
+
 forth_dict.insert(0,('print',op_print))
 
 forth_dict.insert(0,('dup',op_dup))
 forth_dict.insert(0,('swap',op_swap))
 forth_dict.insert(0,('drop',op_drop))
 
-#   Int dictionary
-TInt.forth_dict.insert(0,('+',op_plus))
+
+def find_atom(s: str) -> Tuple[Callable[[Stack, str], None], bool]:
+    for atom in forth_dict:
+        if atom[0] == s: return atom[1], True
+    # Not found.
+    return op_atom, False
+
+def find_type_atom(type: Type, s: str) -> Tuple[Callable[[Stack, str], None], bool]:
+    for atom in type.forth_dict:
+        if atom[0] == s: return atom[1], True
+    # Not found.
+    return op_atom, False 
