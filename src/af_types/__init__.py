@@ -109,6 +109,9 @@ op_drop.sig=TypeSignature([TAny],[])
 #   Global dictionary
 forth_dict : List[Tuple[str,Callable[[Stack, str],None]]] = []
 
+# NOTE that atom is not a dictionary word but is the default behavior of
+# our find atom functions.
+
 forth_dict.insert(0,('print',op_print))
 
 forth_dict.insert(0,('dup',op_dup))
