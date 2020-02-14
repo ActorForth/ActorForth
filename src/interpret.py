@@ -3,11 +3,19 @@ from typing import Callable, List, Tuple, Any
 
 from parser import Parser, Location, Symbol
 
-from af_types import forth_dict, Type, TAtom, op_atom, TAny, find_atom, find_type_atom
+from af_types import forth_dict, Type, TypeSignature, TAtom, op_atom, TAny, find_atom, find_type_atom
 
 from stack import Stack
 
 import sys
+
+
+from af_types.af_int import *
+
+#   Int dictionary
+forth_dict.insert(0,('int',op_int))
+TInt.forth_dict.insert(0,('+',op_plus))
+TInt.forth_dict.insert(0,('-',op_minus))
 
 if __name__ == "__main__":
 
