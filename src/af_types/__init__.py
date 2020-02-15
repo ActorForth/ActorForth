@@ -13,17 +13,45 @@ from stack import Stack
 Op_name = str
 Operation = Callable[[Stack],None]
 Type_name = str
+Op_list = List[Tuple[Op_name, Operation]]
+
+
+#   Global dictionary
+forth_dict : List[Tuple[Op_name,Operation]] = []
+
+
+
 
 class Type:
 
     # Types is a dictionary of Type names to their respective
-    # custom dictionaries.  
-    types : Dict[Type_name, List[Tuple[Op_name,Operation]]] = {}
+    # custom dictionaries.   
+
+    types : Dict[Type_name, Op_list] = {}
+
+    types["Any"] = [] # Global dictionary. Should it be "Any"/TAny? Probably.
 
     def __init__(self, typename: Type_name = "Unknown"):
         self.name = typename
         if not Type.types.get(self.name):
             Type.types[self.name] = []
+
+    # Inserts a new operations for the given type name (or global for None).
+    @staticmethod
+    def add_op(name: Op_name, op: Operation, type: Type_name = "") -> None:
+        type_list = Type.types.get(type,[])
+        assert type_list, "No type '%s' found." % type
+        type_list.insert(0,(name, op))
+
+    # Returns the first operation for this named type.
+    @staticmethod
+    def op(self, name: Op_name, type: Type_name = "") -> Tuple[Operation, bool]:
+        type_list = Type.types.get(type,[])
+        assert type_list, "No type '%s' found." % type
+        for atom in type_list:
+            if atom[0] == type: return atom[1], True
+        # Not found.
+        return op_atom, False
 
     @property
     def forth_dict(self) -> List[Tuple[Op_name,Operation]]:
@@ -59,6 +87,7 @@ class TypeSignature:
         return True
 
 
+
 TAtom = Type("Atom")
 
 TAny = Type("Any")
@@ -66,11 +95,11 @@ TAny = Type("Any")
 #
 #   Generic operations
 #
-
 # Atom needs to take the symbol name to push on the stack.
 def op_atom(s: Stack, s_id: Op_name = "Unknown") -> None:
     s.push(StackObject(s_id,TAtom))
 op_atom.sig=TypeSignature([],[TAtom])
+
 
 def op_print(s: Stack) -> None:
     op1 = s.pop().value
@@ -106,8 +135,6 @@ op_drop.sig=TypeSignature([TAny],[])
 #   Forth dictionary of primitive operations is created here.
 #
 
-#   Global dictionary
-forth_dict : List[Tuple[Op_name,Operation]] = []
 
 # NOTE that atom is not a dictionary word but is the default behavior of
 # our find atom functions.

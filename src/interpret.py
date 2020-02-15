@@ -43,11 +43,11 @@ if __name__ == "__main__":
 
 
     print("ActorForth demo interpreter. ^C to exit.")
-    print("Global Dictionary : %s" % ["%s," % op[0] for op in forth_dict])
+    print("Global Dictionary : %s" % [op[0] for op in forth_dict])
     for type in Type.types.keys():
         ops = Type.types.get(type,[])
         if len(ops):
-            print("%s Dictionary : %s" % (type,["%s," % op[0] for op in ops]))
+            print("%s Dictionary : %s" % (type,[op[0] for op in ops]))
 
     stack = Stack()
 
