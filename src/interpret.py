@@ -11,18 +11,18 @@ from af_types.af_int import *
 if __name__ == "__main__":
 
 
-    def check_input_type_sig(stack: Stack, op: Operation) -> bool:
+    def check_input_type_sig(stack: Stack, op_name: Op_name) -> bool:
         """
         Eventually this needs to not only check the last items on the stack
         for a match, but also cooperate with check_output_type_sig to determine
         that the updated size of the stack also matches the expected
         outcome so there won't be false positive matches for stack pictures.
         """
-        in_types = op.sig.stack_in
+        in_types = Type.op(op_name) # sig.stack_in
         if not len(in_types) : return True
         stack_types = [s.type for s in stack.contents()[len(in_types)*-1:] ]
 
-        print("in_types = %s" % in_types)
+        print("in_types = %s" % (in_types))
         print("stack_types = %s" % stack_types)
         for in_type in reversed(in_types):
             if in_type is TAny: continue
@@ -69,15 +69,15 @@ if __name__ == "__main__":
             #print("\nStack = %s" % stack.contents())
             if tos is not Stack.Empty:
                 # We first look for an atom specialized for the type/value on TOS.
-                op, found = Type.op(symbol.s_id,tos.type.name)
+                op, sig, found = Type.op(symbol.s_id,tos.type.name)
 
             if not found:
                 # If Stack is empty or no specialized atom exists then search the global dictionary.
                 # (find_atom returns the op_atom by default if not found)
-                op, found = Type.op(symbol.s_id)
+                op, sig, found = Type.op(symbol.s_id)
             
             try:
-                if check_input_type_sig(stack, op):
+                if True: #### HERE!! check_input_type_sig(stack, op):
                     if found:
                         op(stack)
                     else:

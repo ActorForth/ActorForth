@@ -13,7 +13,22 @@ from stack import Stack
 Op_name = str
 Operation = Callable[[Stack],None]
 Type_name = str
-Op_list = List[Tuple[Op_name, Operation]]
+
+
+@dataclass
+class TypeSignature:
+    stack_in : List["Type"]
+    stack_out : List["Type"]
+
+    def match_in(self, types: List["Type"]) -> bool:
+        return True
+
+    def match_out(self, types: List["Type"]) -> bool:
+        return True
+
+Op_list = List[Tuple[Op_name, Operation, TypeSignature]]
+
+
 
 class Type:
 
@@ -31,20 +46,25 @@ class Type:
 
     # Inserts a new operations for the given type name (or global for None).
     @staticmethod
-    def add_op(name: Op_name, op: Operation, type: Type_name = "Any") -> None:
+    def add_op(name: Op_name, op: Operation, sig: TypeSignature, type: Type_name = "Any") -> None:
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         type_list = Type.types.get(type,[])        
-        type_list.insert(0,(name, op))
+        type_list.insert(0,(name, op, sig))
 
     # Returns the first operation for this named type.
     @staticmethod
-    def op(name: Op_name, type: Type_name = "Any") -> Tuple[Operation, bool]:
+    def op(name: Op_name, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
+        #print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         type_list = Type.types.get(type,[])  
+        #print("\ttype_list = %s" % type_list)
         for atom in type_list:
-            if atom[0] == type: return atom[1], True
+            if atom[0] == name:
+                #print("Found! Returning %s, %s, %s" % (atom[1],atom[2],True))
+                return atom[1], atom[2], True
         # Not found.
-        return op_atom, False
+        #print ("Not found!")
+        return op_atom, TypeSignature([],[TAtom]), False
 
     def __eq__(self, type: object) -> bool:
         if isinstance(type, Type):
@@ -63,16 +83,7 @@ class StackObject:
     value: Any
     type: Type 
 
-@dataclass
-class TypeSignature:
-    stack_in : List[Type]
-    stack_out : List[Type]
 
-    def match_in(self, types: List[Type]) -> bool:
-        return True
-
-    def match_out(self, types: List[Type]) -> bool:
-        return True
 
 TAtom = Type("Atom")
 
@@ -84,13 +95,13 @@ TAny = Type("Any")
 # Atom needs to take the symbol name to push on the stack.
 def op_atom(s: Stack, s_id: Op_name = "Unknown") -> None:
     s.push(StackObject(s_id,TAtom))
-op_atom.sig=TypeSignature([],[TAtom])
+#op_atom.sig=TypeSignature([],[TAtom])
 
 
 def op_print(s: Stack) -> None:
     op1 = s.pop().value
     print("'%s'" % op1)
-op_print.sig=TypeSignature([TAny],[])
+#op_print.sig=TypeSignature([TAny],[])
 
 #
 #   Should dup, swap, drop and any other generic stack operators 
@@ -101,7 +112,7 @@ def op_dup(s: Stack) -> None:
     op1 = s.tos()
     s.push(op1)
     print("'%s'" % op1)
-op_dup.sig=TypeSignature([TAny],[TAny, TAny])
+#op_dup.sig=TypeSignature([TAny],[TAny, TAny])
 
 def op_swap(s: Stack) -> None:
     op1 = s.pop()
@@ -109,19 +120,19 @@ def op_swap(s: Stack) -> None:
     s.push(op1)
     s.push(op2)
     print("'%s','%s'" % (op1,op2))
-op_swap.sig=TypeSignature([TAny, TAny],[TAny, TAny])
+#op_swap.sig=TypeSignature([TAny, TAny],[TAny, TAny])
 
 def op_drop(s: Stack) -> None:
     op1 = s.pop()
     print("'%s'" % op1)
-op_drop.sig=TypeSignature([TAny],[])
+#op_drop.sig=TypeSignature([TAny],[])
 
 
 #
 #   Forth dictionary of primitive operations is created here.
 #
 
-Type.add_op('print', op_print)
-Type.add_op('dup', op_dup)
-Type.add_op('swap', op_swap)
-Type.add_op('drop', op_drop)
+Type.add_op('print', op_print, TypeSignature([TAny],[]))
+Type.add_op('dup', op_dup, TypeSignature([TAny],[TAny, TAny]))
+Type.add_op('swap', op_swap, TypeSignature([TAny, TAny],[TAny, TAny]))
+Type.add_op('drop', op_drop, TypeSignature([TAny],[]))
