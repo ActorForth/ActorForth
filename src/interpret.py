@@ -49,15 +49,15 @@ if __name__ == "__main__":
                 op, sig, found = Type.op(symbol.s_id)
             
             try:
-                if sig.match_in(stack): # match stack types with type signature.
-                    if found:
+                if found:
+                    if sig.match_in(stack): # match stack types with type signature.
                         op(stack)
+                        print("Stack = %s\n" % stack.contents())
                     else:
-                        # No idea what this is so make an atom on the stack.
-                        make_atom(stack, symbol.s_id)
-                    print("Stack = %s\n" % stack.contents())
+                        raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
                 else:
-                    raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
+                    # No idea what this is so make an atom on the stack.
+                    make_atom(stack, symbol.s_id)
             except Exception as x:
                 print("Exception %s" % x)
                 print("Interpreting symbol %s" % symbol)
