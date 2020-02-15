@@ -69,7 +69,7 @@ TAny = Type("Any")
 #
 
 # Atom needs to take the symbol name to push on the stack.
-def op_atom(s: Stack, s_id: Op_name) -> None:
+def op_atom(s: Stack, s_id: Op_name = "Unknown") -> None:
     s.push(StackObject(s_id,TAtom))
 op_atom.sig=TypeSignature([],[TAtom])
 

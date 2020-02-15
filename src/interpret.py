@@ -71,23 +71,23 @@ if __name__ == "__main__":
             symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), TAtom)
             print(token[0])
             tos = stack.tos()
+            found = False
             #print("\nStack = %s" % stack.contents())
             if tos is not Stack.Empty:
                 # We first look for an atom specialized for the type/value on TOS.
                 op, found = find_type_atom(tos.type,symbol.s_id)
-                if not found:
-                    # If not specialized atom exists then search the global dictionary.
-                    op, found = find_atom(symbol.s_id)
-            else:
-                # Stack's empty so search the global dictionary.
+
+            if not found:
+                # If Stack is empty or no specialized atom exists then search the global dictionary.
+                # (find_atom returns the op_atom by default if not found)
                 op, found = find_atom(symbol.s_id)
             
             try:
                 if check_input_type_sig(stack, op):
-                    #op(stack, symbol.s_id)
                     if found:
                         op(stack)
                     else:
+                        # No idea what this is so make an atom on the stack.
                         op(stack, symbol.s_id)
                     print("Stack = %s\n" % stack.contents())
                 else:
