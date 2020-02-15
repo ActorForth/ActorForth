@@ -45,7 +45,7 @@ if __name__ == "__main__":
     print("ActorForth demo interpreter. ^C to exit.")
     print("Global Dictionary : %s" % forth_dict)
     for type in Type.types.keys():
-        ops = Type.types.get(type)
+        ops = Type.types.get(type,[])
         if len(ops):
             print("\n%s Dictionary : %s" % (type,ops))
 
@@ -88,7 +88,7 @@ if __name__ == "__main__":
                         op(stack)
                     else:
                         # No idea what this is so make an atom on the stack.
-                        op(stack, symbol.s_id)
+                        op_atom(stack, symbol.s_id)
                     print("Stack = %s\n" % stack.contents())
                 else:
                     raise Exception("Stack content doesn't match Op %s." % op.sig)

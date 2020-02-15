@@ -22,10 +22,10 @@ class Symbol:
     type : Type 
     
     @property
-    def size(self):
+    def size(self) -> int:
         return len(self.s_id)
 
-    def __eq__(self, symbol = None):
+    def __eq__(self, symbol = None) -> bool:
         if type(symbol) is Symbol:
             return symbol.s_id == self.s_id
         return symbol == self.s_id    
