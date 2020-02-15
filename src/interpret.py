@@ -4,14 +4,14 @@ from typing import Callable, List, Tuple, Any
 
 from parser import Parser, Location, Symbol
 
-from af_types import forth_dict, Type, TypeSignature, TAtom, op_atom, TAny, find_atom, find_type_atom
+from af_types import Operation, forth_dict, Type, TypeSignature, TAtom, op_atom, TAny, find_atom, find_type_atom
 
 from af_types.af_int import *
 
 if __name__ == "__main__":
 
 
-    def check_input_type_sig(stack: Stack, op: Callable[[Stack, str],None]) -> bool:
+    def check_input_type_sig(stack: Stack, op: Operation) -> bool:
         """
         Eventually this needs to not only check the last items on the stack
         for a match, but also cooperate with check_output_type_sig to determine
@@ -84,7 +84,11 @@ if __name__ == "__main__":
             
             try:
                 if check_input_type_sig(stack, op):
-                    op(stack, symbol.s_id)
+                    #op(stack, symbol.s_id)
+                    if found:
+                        op(stack)
+                    else:
+                        op(stack, symbol.s_id)
                     print("Stack = %s\n" % stack.contents())
                 else:
                     raise Exception("Stack content doesn't match Op %s." % op.sig)
@@ -95,6 +99,7 @@ if __name__ == "__main__":
                 
                 # See what happens if we just keep going...
                 #break
+                #raise
 
     except KeyboardInterrupt as x:
         print("\nend of line...")

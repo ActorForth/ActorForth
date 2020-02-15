@@ -9,18 +9,16 @@ from dataclasses import dataclass
 
 from stack import Stack
 
-# An operation takes a stack instance, the operator name
-# and returns nothing.
+# An operation takes a stack instance and returns nothing.
 Op_name = str
-Operation = Callable[[Stack, Op_name],None]
-
+Operation = Callable[[Stack],None]
+Type_name = str
 
 class Type:
 
     # Types is a dictionary of Type names to their respective
     # custom dictionaries.
-    #types : Dict[str, List[Tuple[str,Callable[[Stack, str],None]]]] = {}
-    Type_name = str
+    #types : Dict[str, List[Tuple[str,Callable[[Stack, str],None]]]] = {}    
     types : Dict[Type_name, List[Tuple[str,Operation]]] = {}
 
     def __init__(self, typename: Type_name = "Unknown"):
@@ -70,13 +68,12 @@ TAny = Type("Any")
 #   Generic operations
 #
 
+# Atom needs to take the symbol name to push on the stack.
 def op_atom(s: Stack, s_id: Op_name) -> None:
-    print("op_atom(s_id = '%s')\n" % s_id) 
     s.push(StackObject(s_id,TAtom))
 op_atom.sig=TypeSignature([],[TAtom])
 
-def op_print(s: Stack, s_id: Op_name) -> None:
-    print("op_print(s_id = '%s')\n" % s_id) 
+def op_print(s: Stack) -> None:
     op1 = s.pop().value
     print("'%s'" % op1)
 op_print.sig=TypeSignature([TAny],[])
@@ -86,15 +83,13 @@ op_print.sig=TypeSignature([TAny],[])
 #   dynamically determine the actual stack types on the stack and
 #   create dynamic type signatures based on what are found?
 #
-def op_dup(s: Stack, s_id: Op_name) -> None:
-    print("op_dup(s_id = '%s')\n" % s_id) 
+def op_dup(s: Stack) -> None:
     op1 = s.tos()
     s.push(op1)
     print("'%s'" % op1)
 op_dup.sig=TypeSignature([TAny],[TAny, TAny])
 
-def op_swap(s: Stack, s_id: Op_name) -> None:
-    print("op_swap(s_id = '%s')\n" % s_id) 
+def op_swap(s: Stack) -> None:
     op1 = s.pop()
     op2 = s.pop()
     s.push(op1)
@@ -102,8 +97,7 @@ def op_swap(s: Stack, s_id: Op_name) -> None:
     print("'%s','%s'" % (op1,op2))
 op_swap.sig=TypeSignature([TAny, TAny],[TAny, TAny])
 
-def op_drop(s: Stack, s_id: Op_name) -> None:
-    print("op_drop(s_id = '%s')\n" % s_id) 
+def op_drop(s: Stack) -> None:
     op1 = s.pop()
     print("'%s'" % op1)
 op_drop.sig=TypeSignature([TAny],[])
