@@ -20,10 +20,28 @@ class TypeSignature:
     stack_in : List["Type"]
     stack_out : List["Type"]
 
-    def match_in(self, types: List["Type"]) -> bool:
+    def match_in(self, stack: Stack) -> bool:
+        if not len(self.stack_in): return True
+        stack_types = [s.type for s in stack.contents()[len(self.stack_in)*-1:] ]
+
+        print("in_types = %s" % (self.stack_in))
+        print("stack_types = %s" % stack_types)
+        for in_type in reversed(self.stack_in):
+            if in_type is TAny: continue
+            """
+            Should probably have TAny types transform to the discovered type
+            so that manipulations across generics are still completely type safe.
+            """
+            stack_type = stack_types.pop()
+            if in_type != stack_type:
+                print("Stack type %s doesn't match input arg type %s." % (type,in_type))
+                return False
         return True
 
-    def match_out(self, types: List["Type"]) -> bool:
+
+
+
+    def match_out(self, on_stack_types: List["Type"]) -> bool:
         return True
 
 Op_list = List[Tuple[Op_name, Operation, TypeSignature]]
