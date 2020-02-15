@@ -56,8 +56,13 @@ def op_divide(s: Stack) -> None:
 op_divide.sig=TypeSignature([TInt,TInt],[TInt,TInt])
 
 #   Int dictionary
-forth_dict.insert(0,('int',op_int))
-TInt.forth_dict.insert(0,('+',op_plus))
-TInt.forth_dict.insert(0,('-',op_minus))
-TInt.forth_dict.insert(0,('*',op_multiply))
-TInt.forth_dict.insert(0,('/',op_divide))
+#forth_dict.insert(0,('int',op_int))
+#TInt.forth_dict.insert(0,('+',op_plus))
+#TInt.forth_dict.insert(0,('-',op_minus))
+#TInt.forth_dict.insert(0,('*',op_multiply))
+#TInt.forth_dict.insert(0,('/',op_divide))
+Type.add_op('int', op_int)
+Type.add_op('+', op_plus, "Int")
+Type.add_op('-', op_minus, "Int")
+Type.add_op('*', op_multiply, "Int")
+Type.add_op('/', op_divide, "Int")

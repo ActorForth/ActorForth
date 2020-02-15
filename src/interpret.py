@@ -4,7 +4,7 @@ from typing import Callable, List, Tuple, Any
 
 from parser import Parser, Location, Symbol
 
-from af_types import Operation, forth_dict, Type, TypeSignature, TAtom, op_atom, TAny, find_atom, find_type_atom
+from af_types import Operation, forth_dict, Type, TypeSignature, TAtom, op_atom, TAny 
 
 from af_types.af_int import *
 
@@ -20,12 +20,10 @@ if __name__ == "__main__":
         """
         in_types = op.sig.stack_in
         if not len(in_types) : return True
-        #stack_types = [s.type for s in reversed(stack.contents()[:len(in_types)]) ]
         stack_types = [s.type for s in stack.contents()[len(in_types)*-1:] ]
 
         print("in_types = %s" % in_types)
         print("stack_types = %s" % stack_types)
-        #return in_types == stack_types
         for in_type in reversed(in_types):
             if in_type is TAny: continue
             """
@@ -33,9 +31,6 @@ if __name__ == "__main__":
             so that manipulations across generics are still completely type safe.
             """
             stack_type = stack_types.pop()
-            # BROKE - have to hack the check above.
-            ## in_type MUST come first in this comparison
-            ## in order to support generic type matching.
             if in_type != stack_type:
                 print("Stack type %s doesn't match input arg type %s." % (type,in_type))
                 return False
@@ -53,10 +48,8 @@ if __name__ == "__main__":
 
     handle = sys.stdin
     filename = "stdin"
-    #print("len(sys.argv)==%s, sys.argv='%s'" % (len(sys.argv),sys.argv))
     if len(sys.argv) >= 2:
-        #print("Is there a file: '%s'?" % filename)
-    
+  
         filename = sys.argv[1]
         handle = open(filename)
 
@@ -75,12 +68,12 @@ if __name__ == "__main__":
             #print("\nStack = %s" % stack.contents())
             if tos is not Stack.Empty:
                 # We first look for an atom specialized for the type/value on TOS.
-                op, found = find_type_atom(tos.type,symbol.s_id)
+                op, found = Type.op(symbol.s_id,tos.type.name)
 
             if not found:
                 # If Stack is empty or no specialized atom exists then search the global dictionary.
                 # (find_atom returns the op_atom by default if not found)
-                op, found = find_atom(symbol.s_id)
+                op, found = Type.op(symbol.s_id)
             
             try:
                 if check_input_type_sig(stack, op):

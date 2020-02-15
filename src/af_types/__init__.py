@@ -20,8 +20,6 @@ Op_list = List[Tuple[Op_name, Operation]]
 forth_dict : List[Tuple[Op_name,Operation]] = []
 
 
-
-
 class Type:
 
     # Types is a dictionary of Type names to their respective
@@ -31,23 +29,23 @@ class Type:
 
     types["Any"] = [] # Global dictionary. Should it be "Any"/TAny? Probably.
 
-    def __init__(self, typename: Type_name = "Unknown"):
+    def __init__(self, typename: Type_name):
         self.name = typename
         if not Type.types.get(self.name):
             Type.types[self.name] = []
 
     # Inserts a new operations for the given type name (or global for None).
     @staticmethod
-    def add_op(name: Op_name, op: Operation, type: Type_name = "") -> None:
-        type_list = Type.types.get(type,[])
-        assert type_list, "No type '%s' found." % type
+    def add_op(name: Op_name, op: Operation, type: Type_name = "Any") -> None:
+        assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
+        type_list = Type.types.get(type,[])        
         type_list.insert(0,(name, op))
 
     # Returns the first operation for this named type.
     @staticmethod
-    def op(self, name: Op_name, type: Type_name = "") -> Tuple[Operation, bool]:
-        type_list = Type.types.get(type,[])
-        assert type_list, "No type '%s' found." % type
+    def op(name: Op_name, type: Type_name = "Any") -> Tuple[Operation, bool]:
+        assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
+        type_list = Type.types.get(type,[])  
         for atom in type_list:
             if atom[0] == type: return atom[1], True
         # Not found.
@@ -58,7 +56,6 @@ class Type:
         return Type.types[self.name]
 
     def __eq__(self, type: object) -> bool:
-        #print("equality check for %s against %s" % (self.name,type))
         if isinstance(type, Type):
             return self.name == type.name
         return False
@@ -85,8 +82,6 @@ class TypeSignature:
 
     def match_out(self, types: List[Type]) -> bool:
         return True
-
-
 
 TAtom = Type("Atom")
 
@@ -135,25 +130,7 @@ op_drop.sig=TypeSignature([TAny],[])
 #   Forth dictionary of primitive operations is created here.
 #
 
-
-# NOTE that atom is not a dictionary word but is the default behavior of
-# our find atom functions.
-
-forth_dict.insert(0,('print',op_print))
-
-forth_dict.insert(0,('dup',op_dup))
-forth_dict.insert(0,('swap',op_swap))
-forth_dict.insert(0,('drop',op_drop))
-
-
-def find_atom(s: Op_name) -> Tuple[Operation, bool]:
-    for atom in forth_dict:
-        if atom[0] == s: return atom[1], True
-    # Not found.
-    return op_atom, False
-
-def find_type_atom(type: Type, s: Op_name) -> Tuple[Operation, bool]:
-    for atom in type.forth_dict:
-        if atom[0] == s: return atom[1], True
-    # Not found.
-    return op_atom, False 
+Type.add_op('print', op_print)
+Type.add_op('dup', op_dup)
+Type.add_op('swap', op_swap)
+Type.add_op('drop', op_drop)
