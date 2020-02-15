@@ -17,9 +17,8 @@ Type_name = str
 class Type:
 
     # Types is a dictionary of Type names to their respective
-    # custom dictionaries.
-    #types : Dict[str, List[Tuple[str,Callable[[Stack, str],None]]]] = {}    
-    types : Dict[Type_name, List[Tuple[str,Operation]]] = {}
+    # custom dictionaries.  
+    types : Dict[Type_name, List[Tuple[Op_name,Operation]]] = {}
 
     def __init__(self, typename: Type_name = "Unknown"):
         self.name = typename
@@ -31,7 +30,7 @@ class Type:
         return Type.types[self.name]
 
     def __eq__(self, type: object) -> bool:
-        print("equality check for %s against %s" % (self.name,type))
+        #print("equality check for %s against %s" % (self.name,type))
         if isinstance(type, Type):
             return self.name == type.name
         return False
