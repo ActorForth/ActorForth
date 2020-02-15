@@ -4,7 +4,7 @@ from typing import Callable, List, Tuple, Any
 
 from parser import Parser, Location, Symbol
 
-from af_types import Operation, forth_dict, Type, TypeSignature, TAtom, op_atom, TAny 
+from af_types import Operation, Type, TypeSignature, TAtom, op_atom, TAny 
 
 from af_types.af_int import *
 
@@ -38,11 +38,12 @@ if __name__ == "__main__":
 
 
     print("ActorForth demo interpreter. ^C to exit.")
-    print("Global Dictionary : %s" % [op[0] for op in forth_dict])
+    print("Global Dictionary : %s" % [op[0] for op in Type.types["Any"]])
     for type in Type.types.keys():
-        ops = Type.types.get(type,[])
-        if len(ops):
-            print("%s Dictionary : %s" % (type,[op[0] for op in ops]))
+        if type != "Any":
+            ops = Type.types.get(type,[])
+            if len(ops):
+                print("%s Dictionary : %s" % (type,[op[0] for op in ops]))
 
     stack = Stack()
 

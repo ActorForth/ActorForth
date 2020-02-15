@@ -15,11 +15,6 @@ Operation = Callable[[Stack],None]
 Type_name = str
 Op_list = List[Tuple[Op_name, Operation]]
 
-
-#   Global dictionary
-forth_dict : List[Tuple[Op_name,Operation]] = []
-
-
 class Type:
 
     # Types is a dictionary of Type names to their respective
@@ -50,10 +45,6 @@ class Type:
             if atom[0] == type: return atom[1], True
         # Not found.
         return op_atom, False
-
-    @property
-    def forth_dict(self) -> List[Tuple[Op_name,Operation]]:
-        return Type.types[self.name]
 
     def __eq__(self, type: object) -> bool:
         if isinstance(type, Type):
