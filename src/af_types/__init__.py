@@ -64,7 +64,7 @@ class Type:
                 return atom[1], atom[2], True
         # Not found.
         #print ("Not found!")
-        return op_atom, TypeSignature([],[TAtom]), False
+        return make_atom, TypeSignature([],[TAtom]), False
 
     def __eq__(self, type: object) -> bool:
         if isinstance(type, Type):
@@ -93,15 +93,12 @@ TAny = Type("Any")
 #   Generic operations
 #
 # Atom needs to take the symbol name to push on the stack.
-def op_atom(s: Stack, s_id: Op_name = "Unknown") -> None:
+def make_atom(s: Stack, s_id: Op_name = "Unknown") -> None:
     s.push(StackObject(s_id,TAtom))
-#op_atom.sig=TypeSignature([],[TAtom])
-
 
 def op_print(s: Stack) -> None:
     op1 = s.pop().value
     print("'%s'" % op1)
-#op_print.sig=TypeSignature([TAny],[])
 
 #
 #   Should dup, swap, drop and any other generic stack operators 
@@ -112,7 +109,6 @@ def op_dup(s: Stack) -> None:
     op1 = s.tos()
     s.push(op1)
     print("'%s'" % op1)
-#op_dup.sig=TypeSignature([TAny],[TAny, TAny])
 
 def op_swap(s: Stack) -> None:
     op1 = s.pop()
@@ -120,12 +116,10 @@ def op_swap(s: Stack) -> None:
     s.push(op1)
     s.push(op2)
     print("'%s','%s'" % (op1,op2))
-#op_swap.sig=TypeSignature([TAny, TAny],[TAny, TAny])
 
 def op_drop(s: Stack) -> None:
     op1 = s.pop()
     print("'%s'" % op1)
-#op_drop.sig=TypeSignature([TAny],[])
 
 
 #

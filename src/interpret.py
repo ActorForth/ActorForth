@@ -4,7 +4,7 @@ from typing import Callable, List, Tuple, Any
 
 from parser import Parser, Location, Symbol
 
-from af_types import Operation, Type, TypeSignature, TAtom, op_atom, TAny 
+from af_types import Operation, Type, TypeSignature, TAtom, make_atom, TAny 
 
 from af_types.af_int import *
 
@@ -73,7 +73,6 @@ if __name__ == "__main__":
 
             if not found:
                 # If Stack is empty or no specialized atom exists then search the global dictionary.
-                # (find_atom returns the op_atom by default if not found)
                 op, sig, found = Type.op(symbol.s_id)
             
             try:
@@ -82,7 +81,7 @@ if __name__ == "__main__":
                         op(stack)
                     else:
                         # No idea what this is so make an atom on the stack.
-                        op_atom(stack, symbol.s_id)
+                        make_atom(stack, symbol.s_id)
                     print("Stack = %s\n" % stack.contents())
                 else:
                     raise Exception("Stack content doesn't match Op %s." % op.sig)
