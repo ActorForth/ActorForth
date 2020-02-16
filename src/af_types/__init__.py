@@ -126,18 +126,15 @@ def op_print(s: Stack) -> None:
 def op_dup(s: Stack) -> None:
     op1 = s.tos()
     s.push(op1)
-    print("'%s'" % op1)
 
 def op_swap(s: Stack) -> None:
     op1 = s.pop()
     op2 = s.pop()
     s.push(op1)
     s.push(op2)
-    print("'%s','%s'" % (op1,op2))
 
 def op_drop(s: Stack) -> None:
     op1 = s.pop()
-    print("'%s'" % op1)
 
 
 #

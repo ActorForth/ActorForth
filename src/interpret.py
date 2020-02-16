@@ -36,7 +36,8 @@ if __name__ == "__main__":
 
         for token in p.tokens():
             symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), TAtom)
-            print(token[0])
+            if p.filename != "stdin":
+                print(token[0])
             tos = stack.tos()
             found = False
             #print("\nStack = %s" % stack.contents())
@@ -58,6 +59,7 @@ if __name__ == "__main__":
                 else:
                     # No idea what this is so make an atom on the stack.
                     make_atom(stack, symbol.s_id)
+                    print("Stack = %s\n" % stack.contents())
             except Exception as x:
                 print("Exception %s" % x)
                 print("Interpreting symbol %s" % symbol)
@@ -68,10 +70,11 @@ if __name__ == "__main__":
                 #raise
 
     except KeyboardInterrupt as x:
-        print("\nend of line...")
+        print(" key interrupt.")
 
 
     print(stack.contents())
     print("Stack max_depth = %s" % stack.max_depth())
     print("Stack depth_history = %s" % stack.depth_history())
     print("Stack total operations = %s" % stack.total_operations())
+    print("\nend of line...")
