@@ -46,6 +46,8 @@ class TypeSignature:
 
 Op_list = List[Tuple[Op_name, Operation, TypeSignature]]
 
+Op_map = List[Tuple[List["Type"],Operation]]
+
 
 
 class Type:
@@ -57,10 +59,22 @@ class Type:
 
     types["Any"] = [] # Global dictionary. Should it be "Any"/TAny? Probably.
 
+
     def __init__(self, typename: Type_name):
         self.name = typename
+        self.ctors : Op_map = []
         if not Type.types.get(self.name):
             Type.types[self.name] = []
+
+    def register_ctor(self, name: Op_name, op: Operation, sig: List["Type"]) -> None:
+        # Ctors only have TypeSignatures that return their own Type.
+        # Register the ctor in the Global dictionary.
+        Type.add_op(name, op, TypeSignature(sig,[self]))
+
+        # Append this ctor to our list of valid ctors.
+        self.ctors.append((sig,op))
+
+    
 
     # Inserts a new operations for the given type name (or global for None).
     @staticmethod
