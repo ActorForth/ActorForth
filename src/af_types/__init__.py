@@ -74,7 +74,32 @@ class Type:
         # Append this ctor to our list of valid ctors.
         self.ctors.append((sig,op))
 
-    
+    def find_ctor(self, inputs : List["Type"]) -> Operation:
+        # Given a stack of input types, find the first matching ctor.
+        for type_sig in self.ctors:
+            matching = False
+            types = inputs.copy()
+            try:
+                for ctor_type in type_sig[0]:
+                    in_type = types.pop(0)
+                    if in_type.name == "Any" or ctor_type == "Any":
+                        matching = True
+                        continue
+                    if in_type == ctor_type:
+                        matching = True
+                    else:
+                        matching = False
+                        break
+            except IndexError:
+                # wasn't enough on the stack to match
+                matching = False
+                break
+
+            if matching == True:
+                return type_sig[1]
+        return None
+                
+
 
     # Inserts a new operations for the given type name (or global for None).
     @staticmethod
