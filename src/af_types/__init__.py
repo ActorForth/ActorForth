@@ -38,15 +38,17 @@ class TypeSignature:
                 return False
         return True
 
-
-
-
     def match_out(self, on_stack_types: List["Type"]) -> bool:
         return True
 
-Op_list = List[Tuple[Op_name, Operation, TypeSignature]]
+@dataclass
+class WordFlags:
+    immediate : bool = False
+
+Op_list = List[Tuple[Op_name, Operation, TypeSignature, WordFlags]]
 
 Op_map = List[Tuple[List["Type"],Operation]]
+
 
 
 
@@ -103,14 +105,16 @@ class Type:
 
     # Inserts a new operations for the given type name (or global for None).
     @staticmethod
-    def add_op(name: Op_name, op: Operation, sig: TypeSignature, type: Type_name = "Any") -> None:
+    def add_op(name: Op_name, op: Operation, sig: TypeSignature, flags: WordFlags = None, type: Type_name = "Any") -> None:
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
+        if not flags:
+            flags = WordFlags()
         type_list = Type.types.get(type,[])        
-        type_list.insert(0,(name, op, sig))
+        type_list.insert(0,(name, op, sig, flags))
 
     # Returns the first operation for this named type.
     @staticmethod
-    def op(name: Op_name, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
+    def op(name: Op_name, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
         #print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         type_list = Type.types.get(type,[])  
@@ -118,10 +122,10 @@ class Type:
         for atom in type_list:
             if atom[0] == name:
                 #print("Found! Returning %s, %s, %s" % (atom[1],atom[2],True))
-                return atom[1], atom[2], True
+                return atom[1], atom[2], atom[3], True
         # Not found.
         #print ("Not found!")
-        return make_atom, TypeSignature([],[TAtom]), False
+        return make_atom, TypeSignature([],[TAtom]), WordFlags(), False
 
     def __eq__(self, type: object) -> bool:
         if isinstance(type, Type):

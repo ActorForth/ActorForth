@@ -54,7 +54,8 @@ def op_divide(s: Stack) -> None:
 TInt.register_ctor('int',op_int,[TAtom])
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
-Type.add_op('+', op_plus, TypeSignature([TInt,TInt],[TInt]), "Int")
-Type.add_op('-', op_minus, TypeSignature([TInt,TInt],[TInt]), "Int")
-Type.add_op('*', op_multiply, TypeSignature([TInt,TInt],[TInt]), "Int")
-Type.add_op('/', op_divide, TypeSignature([TInt,TInt],[TInt,TInt]), "Int")
+flags = WordFlags()
+Type.add_op('+', op_plus, TypeSignature([TInt,TInt],[TInt]), flags, "Int")
+Type.add_op('-', op_minus, TypeSignature([TInt,TInt],[TInt]), flags, "Int")
+Type.add_op('*', op_multiply, TypeSignature([TInt,TInt],[TInt]), flags, "Int")
+Type.add_op('/', op_divide, TypeSignature([TInt,TInt],[TInt,TInt]), flags, "Int")

@@ -43,11 +43,11 @@ if __name__ == "__main__":
             #print("\nStack = %s" % stack.contents())
             if tos is not Stack.Empty:
                 # We first look for an atom specialized for the type/value on TOS.
-                op, sig, found = Type.op(symbol.s_id,tos.type.name)
+                op, sig, flags, found = Type.op(symbol.s_id,tos.type.name)
 
             if not found:
                 # If Stack is empty or no specialized atom exists then search the global dictionary.
-                op, sig, found = Type.op(symbol.s_id)
+                op, sig, flags, found = Type.op(symbol.s_id)
             
             try:
                 if found:
