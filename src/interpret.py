@@ -32,6 +32,8 @@ if __name__ == "__main__":
     p = Parser()
     p.open_handle(handle, filename)
 
+    interpret_mode = True
+
     try:
 
         for token in p.tokens():
@@ -51,11 +53,14 @@ if __name__ == "__main__":
             
             try:
                 if found:
-                    if sig.match_in(stack): # match stack types with type signature.
-                        op(stack)
-                        print("Stack = %s\n" % stack.contents())
-                    else:
-                        raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
+                    if interpret_mode or flags.immediate:
+                        if sig.match_in(stack): # match stack types with type signature.
+                            op(stack)
+                            print("Stack = %s\n" % stack.contents())
+                        else:
+                            raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
+                    else: # Compile mode!
+                        pass
                 else:
                     # No idea what this is so make an atom on the stack.
                     make_atom(stack, symbol.s_id)
