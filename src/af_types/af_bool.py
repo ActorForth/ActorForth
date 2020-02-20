@@ -29,7 +29,8 @@ def op_bool(s: Stack) -> None:
     
     s.push(result)
 
-def op_equals(s: Stack) -> None:
+
+def optionally_infer_type_from_atom(s: Stack) -> StackObject:
     sobj1 = s.pop()
     sobj2 = s.tos()
 
@@ -43,6 +44,13 @@ def op_equals(s: Stack) -> None:
         assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.type, sobj1)
         # Call the ctor and put its result on the stack.
         ctor(s)
+    
+    return sobj1
+
+
+def op_equals(s: Stack) -> None:
+    sobj1 = optionally_infer_type_from_atom(s)
+    sobj2 = s.pop()
     # Now we pop off whatever is the ultimate object that's 
     # possibly been inferred.
     sobj2 = s.pop()
