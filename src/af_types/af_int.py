@@ -8,11 +8,15 @@ TInt = Type("Int")
 #   Integer handling
 #
 
+# Constructors
 def op_int(s: Stack) -> None:
     i = int(s.pop().value)
     assert i <  999999999999, "int overflow > 999999999999"
     assert i > -999999999999, "int underflow < -999999999999"
     s.push(StackObject(i,TInt))
+
+
+# Operations
 
 def op_plus(s: Stack) -> None:
     op1 = s.pop().value
