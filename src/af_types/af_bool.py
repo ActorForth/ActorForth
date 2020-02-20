@@ -24,14 +24,30 @@ def op_bool(s: Stack) -> None:
         if  stack_object.value == "False":
             print ("Found a False Atom")
             result.value = False
-    else:
-        print("Wasn't an Atom")
-
-    #if result.value is None:
 
     assert result.value is not None, "%s is not a valid Boolean value." % stack_object.value
     
     s.push(result)
+
+def op_equals(s: Stack) -> None:
+    sobj1 = s.pop()
+    sobj2 = s.tos()
+
+    # If the top item is an Atom but the second item
+    # is not, then automatically infer the top item's
+    # type from the second item then perform the comparison.
+    if sobj1.type is TAtom and sobj2 is not TAtom:
+        # Pass along the entire list of types from the stack
+        # in case the type's ctor takes multiple parameters.
+        ctor = sobj2.type.find_ctor([o.type for o in s.contents()])
+        assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.type, sobj1)
+        # Call the ctor and put its result on the stack.
+        ctor(s)
+    # Now we pop off whatever is the ultimate object that's 
+    # possibly been inferred.
+    sobj2 = s.pop()
+    s.push(StackObject(sobj1 == sobj2, TBool))
+
 
 #def op_plus(s: Stack) -> None:
 #    op1 = s.pop().value
@@ -45,7 +61,7 @@ def op_bool(s: Stack) -> None:
 
 #   Int dictionary
 TBool.register_ctor('bool',op_bool,[TAtom])
-#TBool.register_ctor('bool',op_bool,[TBool])
+TBool.register_ctor('==',op_equals,[TAny])
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
 flags = WordFlags()
