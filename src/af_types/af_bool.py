@@ -48,6 +48,11 @@ def op_equals(s: Stack) -> None:
     sobj2 = s.pop()
     s.push(StackObject(sobj1 == sobj2, TBool))
 
+def op_not_equals(s: Stack) -> None:
+    op_equals(s)
+    result = s.tos()
+    result.value = not result.value
+
 
 #def op_plus(s: Stack) -> None:
 #    op1 = s.pop().value
@@ -62,6 +67,7 @@ def op_equals(s: Stack) -> None:
 #   Int dictionary
 TBool.register_ctor('bool',op_bool,[TAtom])
 TBool.register_ctor('==',op_equals,[TAny])
+TBool.register_ctor('!=',op_not_equals,[TAny])
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
 flags = WordFlags()
