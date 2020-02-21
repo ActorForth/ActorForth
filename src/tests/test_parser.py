@@ -1,4 +1,5 @@
 import unittest
+import sys
 
 from parser import Parser, Symbol, Location, Type
 
@@ -48,6 +49,18 @@ class TestParser(unittest.TestCase):
     def test_open_file(self) -> None:
         p = Parser(test_file_name)
         assert p.filename is test_file_name
+        p.reset()
+        assert not p.filename
+
+    def test_open_handle(self) -> None:
+        handle = sys.stdin
+        filename = "stdin"
+
+        p = Parser()
+        p.open_handle(handle, filename)
+
+        assert p.filename == filename
+        assert p.file_handle == handle 
         p.reset()
         assert not p.filename
 
