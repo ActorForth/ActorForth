@@ -4,8 +4,11 @@ from af_types import Stack, StackObject, Type, TypeSignature
 
 TTest = Type("Test")
 TParm1 = Type("Parm1")
+TAny = Type("Any")
 
-TTest.register_ctor("nop",lambda stack : stack, [TParm1] )
+TOp = lambda stack : stack
+
+TTest.register_ctor("nop", TOp, [TParm1])
 
 class TestTypeSignature(unittest.TestCase):
 
@@ -30,3 +33,17 @@ class TestTypeSignature(unittest.TestCase):
         s.push(StackObject(None, TParm1))
 
         assert sig.match_out(s)
+
+    def test_find_ctor(self) -> None:
+        l = [TParm1]
+        assert TTest.find_ctor(l) == TOp
+
+        l = [TAny]
+        assert TTest.find_ctor(l) == TOp
+
+        l = [TTest]
+        assert TTest.find_ctor(l) == None
+
+        l = []
+        assert TTest.find_ctor(l) == None
+
