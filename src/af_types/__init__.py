@@ -3,7 +3,7 @@
 #
 
 import types
-from typing import Dict, List, Tuple, Callable, Any
+from typing import Dict, List, Tuple, Callable, Any, Optional
 from enum import Enum
 from dataclasses import dataclass
 
@@ -76,7 +76,7 @@ class Type:
         # Append this ctor to our list of valid ctors.
         self.ctors.append((sig,op))
 
-    def find_ctor(self, inputs : List["Type"]) -> Operation:
+    def find_ctor(self, inputs : List["Type"]) -> Optional[Operation]:
         # Given a stack of input types, find the first matching ctor.
         #print("Attempting to find a ctor for Type '%s' using the following input types: %s." % (self.name, inputs))
         #print("Type '%s' has the following ctors: %s." % (self.name, self.ctors))
