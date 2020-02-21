@@ -47,3 +47,15 @@ class TestTypeSignature(unittest.TestCase):
         l = []
         assert TTest.find_ctor(l) == None
 
+    def test_op(self) -> None:
+       Type.add_op("test", lambda stack: 42, TypeSignature([TParm1],[]) ) #, "Test")
+
+       op, sig, flag, found = Type.op("test" ) #, "Test")
+
+       assert found
+       assert op(None) == 42
+       assert sig == TypeSignature([TParm1],[])
+       assert flag.immediate == False
+
+       op, sig, flag, found = Type.op("not found")
+       assert not found
