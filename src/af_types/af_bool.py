@@ -43,8 +43,11 @@ def optionally_infer_type_from_atom(s: Stack) -> StackObject:
         ctor = sobj2.type.find_ctor([o.type for o in s.contents()])
         assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.type, sobj1)
         # Call the ctor and put its result on the stack.
+        s.push(sobj1)
         ctor(s)
-        print("Converted from %s to %s." % (sobj1,s.tos()))
+        sobj1 = s.pop()
+        print("Converted from %s to %s." % (sobj1,s.tos().type))
+        print("New stack is %s." % s.contents())
     
     return sobj1
 
@@ -65,6 +68,7 @@ def op_not_equals(s: Stack) -> None:
 def op_less_than(s: Stack) -> None:
     sobj1 = optionally_infer_type_from_atom(s)
     sobj2 = s.pop()
+    print("is %s (%s) < %s (%s)?" % (sobj2.value, type(sobj2.value), sobj1.value, type(sobj1.value)))
     s.push(StackObject(sobj2.value < sobj1.value, TBool))
 
 def op_greater_than(s: Stack) -> None:

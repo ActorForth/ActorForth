@@ -78,22 +78,29 @@ class Type:
 
     def find_ctor(self, inputs : List["Type"]) -> Operation:
         # Given a stack of input types, find the first matching ctor.
+        print("Attempting to find a ctor for Type '%s' using the following input types: %s." % (self.name, inputs))
+        print("Type '%s' has the following ctors: %s." % (self.name, self.ctors))
         for type_sig in self.ctors:
+
             matching = False
             types = inputs.copy()
             try:
                 for ctor_type in type_sig[0]:
                     in_type = types.pop(0)
                     if in_type.name == "Any" or ctor_type == "Any":
+                        print("Matching ctor for Any type.")
                         matching = True
                         continue
                     if in_type == ctor_type:
+                        print("Matching ctor for specific %s type." % in_type)
                         matching = True
                     else:
+                        print("Failed match for %s and %s types." % (in_type, ctor_type))
                         matching = False
                         break
             except IndexError:
                 # wasn't enough on the stack to match
+                print("Ran out of inputs to match a ctor for %s type." % self.name)
                 matching = False
                 break
 
@@ -115,16 +122,16 @@ class Type:
     # Returns the first operation for this named type.
     @staticmethod
     def op(name: Op_name, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
-        #print("Searching for op:'%s' in type: '%s'." % (name,type))
+        print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         type_list = Type.types.get(type,[])  
-        #print("\ttype_list = %s" % type_list)
+        print("\ttype_list = %s" % type_list)
         for atom in type_list:
             if atom[0] == name:
-                #print("Found! Returning %s, %s, %s" % (atom[1],atom[2],True))
+                print("Found! Returning %s, %s, %s" % (atom[1],atom[2],True))
                 return atom[1], atom[2], atom[3], True
         # Not found.
-        #print ("Not found!")
+        print ("Not found!")
         return make_atom, TypeSignature([],[TAtom]), WordFlags(), False
 
     def __eq__(self, type: object) -> bool:
