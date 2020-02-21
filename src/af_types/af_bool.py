@@ -44,6 +44,7 @@ def optionally_infer_type_from_atom(s: Stack) -> StackObject:
         assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.type, sobj1)
         # Call the ctor and put its result on the stack.
         ctor(s)
+        print("Converted from %s to %s." % (sobj1,s.tos()))
     
     return sobj1
 
@@ -61,22 +62,40 @@ def op_not_equals(s: Stack) -> None:
     result = s.tos()
     result.value = not result.value
 
+def op_less_than(s: Stack) -> None:
+    sobj1 = optionally_infer_type_from_atom(s)
+    sobj2 = s.pop()
+    s.push(StackObject(sobj2.value < sobj1.value, TBool))
 
-#def op_plus(s: Stack) -> None:
-#    op1 = s.pop().value
-#    op2 = s.pop().value
-#    result = op1+op2
-#    # Guarantee output is valid and not overflow.
-#    assert int(result) - op2 == op1, "python math error"
-#    s.push(StackObject(result,TInt))
-#    op_int(s) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
+def op_greater_than(s: Stack) -> None:
+    sobj1 = optionally_infer_type_from_atom(s)
+    sobj2 = s.pop()
+    s.push(StackObject(sobj2.value > sobj1.value, TBool))    
 
+def op_less_than_or_equal_to(s: Stack) -> None:
+    sobj1 = optionally_infer_type_from_atom(s)
+    sobj2 = s.pop()
+    s.push(StackObject(sobj2.value <= sobj1.value, TBool))
+
+def op_greater_than_or_equal_to(s: Stack) -> None:
+    sobj1 = optionally_infer_type_from_atom(s)
+    sobj2 = s.pop()
+    s.push(StackObject(sobj2.value >= sobj1.value, TBool))
+
+
+def op_not(s: Stack) -> None:
+    # Restrict to only workong on Bools!
+    op1 = s.tos().value = not s.tos().value
 
 #   Int dictionary
 TBool.register_ctor('bool',op_bool,[TAtom])
 TBool.register_ctor('==',op_equals,[TAny])
 TBool.register_ctor('!=',op_not_equals,[TAny])
+TBool.register_ctor('<',op_less_than,[TAny])
+TBool.register_ctor('>',op_greater_than,[TAny])
+TBool.register_ctor('<=',op_less_than_or_equal_to,[TAny])
+TBool.register_ctor('>=',op_greater_than_or_equal_to,[TAny])
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
 flags = WordFlags()
-#Type.add_op('+', op_plus, TypeSignature([TInt,TInt],[TInt]), flags, "Int")
+Type.add_op('not', op_not, TypeSignature([TBool],[TBool]), flags, "Bool")
