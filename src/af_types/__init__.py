@@ -179,6 +179,14 @@ def op_swap(s: Stack) -> None:
 def op_drop(s: Stack) -> None:
     op1 = s.pop()
 
+def op_2dup(s: Stack) -> None:
+    op1 = s.tos()
+    op_swap(s)
+    op2 = s.tos()
+    op_swap(s)
+    s.push(op2)
+    s.push(op1)
+
 
 #
 #   Forth dictionary of primitive operations is created here.
@@ -188,3 +196,5 @@ Type.add_op('print', op_print, TypeSignature([TAny],[]))
 Type.add_op('dup', op_dup, TypeSignature([TAny],[TAny, TAny]))
 Type.add_op('swap', op_swap, TypeSignature([TAny, TAny],[TAny, TAny]))
 Type.add_op('drop', op_drop, TypeSignature([TAny],[]))
+Type.add_op('2dup', op_2dup, TypeSignature([TAny, TAny],[TAny, TAny]))
+
