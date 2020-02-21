@@ -46,15 +46,14 @@ def optionally_infer_type_from_atom(s: Stack) -> StackObject:
         s.push(sobj1)
         ctor(s)
         sobj1 = s.pop()
-        print("Converted from %s to %s." % (sobj1,s.tos().type))
-        print("New stack is %s." % s.contents())
+        #print("Converted from %s to %s." % (sobj1,s.tos().type))
+        #print("New stack is %s." % s.contents())
     
     return sobj1
 
 
 def op_equals(s: Stack) -> None:
     sobj1 = optionally_infer_type_from_atom(s)
-    sobj2 = s.pop()
     # Now we pop off whatever is the ultimate object that's 
     # possibly been inferred.
     sobj2 = s.pop()

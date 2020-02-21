@@ -57,7 +57,7 @@ if __name__ == "__main__":
                     if interpret_mode or flags.immediate:
                         if sig.match_in(stack): # match stack types with type signature.
                             op(stack)
-                            print("Stack = %s\n" % stack.contents())
+                            print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
                         else:
                             raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
                     else: # Compile mode!
@@ -65,11 +65,11 @@ if __name__ == "__main__":
                 else:
                     # No idea what this is so make an atom on the stack.
                     make_atom(stack, symbol.s_id)
-                    print("Stack = %s\n" % stack.contents())
+                    print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
             except Exception as x:
                 print("Exception %s" % x)
                 print("Interpreting symbol %s" % symbol)
-                print("Stack = %s : " % stack.contents())
+                print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
                 
                 # See what happens if we just keep going...
                 #break
