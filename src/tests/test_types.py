@@ -4,6 +4,9 @@ from af_types import Stack, StackObject, Type, TypeSignature, \
                     make_atom, TAtom, op_print, op_dup, op_swap, \
                     op_drop, op_2dup
 
+from af_types.af_int import *
+from af_types.af_bool import *
+
 TTest = Type("Test")
 TParm1 = Type("Parm1")
 TAny = Type("Any")
