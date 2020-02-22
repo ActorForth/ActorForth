@@ -25,7 +25,7 @@ class KStack:
             self._data = []
             self._data.append(value)            
 
-        def tos(self,stack):
+        def tos(self, stack):
             if len(self._data):
                 return self._data[-1]
 

@@ -1,6 +1,8 @@
 import unittest
 
-from af_types import Stack, StackObject, Type, TypeSignature
+from af_types import Stack, StackObject, Type, TypeSignature, \
+                    make_atom, TAtom, op_print, op_dup, op_swap, \
+                    op_drop, op_2dup
 
 TTest = Type("Test")
 TParm1 = Type("Parm1")
@@ -59,3 +61,57 @@ class TestTypeSignature(unittest.TestCase):
 
        op, sig, flag, found = Type.op("not found")
        assert not found
+
+class TestGenericTypeStuff(unittest.TestCase):       
+
+    def setUp(self) -> None:
+        self.s = Stack()
+
+
+    def test_make_atom(self) -> None:
+        op_name = "test"
+        make_atom(self.s, op_name)
+        item = self.s.pop()
+        assert item.value == op_name
+        assert item.type == TAtom 
+
+    def test_op_print(self) -> None:
+        self.s.push(StackObject("test", TAtom))
+        op_print(self.s)
+        assert self.s.depth() == 0
+
+    def test_op_dup(self) -> None:
+        self.test_make_atom()
+        op_dup(self.s)
+        item1 = self.s.pop()
+        item2 = self.s.pop()
+        assert item1 == item2
+        
+    def test_op_swap(self) -> None:
+        make_atom(self.s, "first")
+        make_atom(self.s, "second")
+        op_swap(self.s)
+        item1 = self.s.pop()
+        item2 = self.s.pop()
+        assert item1.value == "first"
+        assert item2.value == "second"
+
+    def test_op_drop(self) -> None:
+        self.s.push(StackObject("test", TAtom))
+        op_drop(self.s)
+        assert self.s.depth() == 0
+
+    def test_op_2dup(self) -> None:
+        make_atom(self.s, "first")
+        make_atom(self.s, "second")
+        op_2dup(self.s)
+        assert self.s.depth() == 4
+        item1 = self.s.pop()
+        item2 = self.s.pop()
+        item3 = self.s.pop()
+        item4 = self.s.pop()
+        assert item1.value == item3.value
+        assert item2.value == item4.value
+        assert item1.value != item2.value
+        assert self.s.depth() == 0
+
