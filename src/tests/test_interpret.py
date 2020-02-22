@@ -24,10 +24,17 @@ class TestInterpreter(unittest.TestCase):
         stack = interpret(self.stack, io.StringIO(code), "stdin")
         assert stack.depth() == 4
 
-    def testSomeSimpleOps(self) -> None:
+    def testInterpretIntOps(self) -> None:
         code = "14 int 28 int +"
         stack = interpret(self.stack, io.StringIO(code))
         assert stack.tos().value == 42
+        stack = interpret(stack, io.StringIO("17 int -"))
+        assert stack.tos().value == 25
+        stack = interpret(stack, io.StringIO("5 int /"))
+        assert stack.pop().value == 0 # Our remainder
+        assert stack.tos().value == 5
+        stack = interpret(stack, io.StringIO("3 int *"))
+        assert stack.tos().value == 15
 
     def testInterpretBoolOps(self) -> None:
         code = "14 int 28 int 2dup <"
@@ -47,7 +54,7 @@ class TestInterpreter(unittest.TestCase):
         assert stack.pop().value is True
         stack = interpret(stack, io.StringIO("dup dup !="))
         assert stack.pop().value is False
-        stack = interpret(stack, io.StringIO("True bool dup"))
+        stack = interpret(stack, io.StringIO("True bool"))
         assert stack.pop().value is True
 
     # Got a code problem here...
