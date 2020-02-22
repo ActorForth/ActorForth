@@ -9,16 +9,7 @@ from af_types import Operation, Type, TypeSignature, TAtom, make_atom, TAny
 from af_types.af_int import *
 from af_types.af_bool import *
 
-if __name__ == "__main__":
-
-    print("ActorForth demo interpreter. ^C to exit.")
-    print("Global Dictionary : %s" % [op[0] for op in Type.types["Any"]])
-    for type in Type.types.keys():
-        if type != "Any":
-            ops = Type.types.get(type,[])
-            if len(ops):
-                print("%s Dictionary : %s" % (type,[op[0] for op in ops]))
-
+def interpret() -> Stack:
     stack = Stack()
 
     handle = sys.stdin
@@ -78,6 +69,20 @@ if __name__ == "__main__":
     except KeyboardInterrupt as x:
         print(" key interrupt.")
 
+    return stack
+
+
+if __name__ == "__main__":
+
+    print("ActorForth demo interpreter. ^C to exit.")
+    print("Global Dictionary : %s" % [op[0] for op in Type.types["Any"]])
+    for type in Type.types.keys():
+        if type != "Any":
+            ops = Type.types.get(type,[])
+            if len(ops):
+                print("%s Dictionary : %s" % (type,[op[0] for op in ops]))
+
+    stack = interpret()
 
     print(stack.contents())
     print("Stack max_depth = %s" % stack.max_depth())

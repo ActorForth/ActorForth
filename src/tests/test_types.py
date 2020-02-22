@@ -70,7 +70,6 @@ class TestGenericTypeStuff(unittest.TestCase):
     def setUp(self) -> None:
         self.s = Stack()
 
-
     def test_make_atom(self) -> None:
         op_name = "test"
         make_atom(self.s, op_name)
