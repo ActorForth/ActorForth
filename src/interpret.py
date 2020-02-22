@@ -15,48 +15,45 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
 
     interpret_mode = True
 
-    try:
 
-        for token in p.tokens():
-            symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), TAtom)
-            if p.filename != "stdin":
-                print(token[0])
-            tos = stack.tos()
-            found = False
-            #print("\nStack = %s" % stack.contents())
-            if tos is not Stack.Empty:
-                # We first look for an atom specialized for the type/value on TOS.
-                op, sig, flags, found = Type.op(symbol.s_id,tos.type.name)
+    for token in p.tokens():
+        symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), TAtom)
+        if p.filename != "stdin":
+            print(token[0])
+        tos = stack.tos()
+        found = False
+        #print("\nStack = %s" % stack.contents())
+        if tos is not Stack.Empty:
+            # We first look for an atom specialized for the type/value on TOS.
+            op, sig, flags, found = Type.op(symbol.s_id,tos.type.name)
 
-            if not found:
-                # If Stack is empty or no specialized atom exists then search the global dictionary.
-                op, sig, flags, found = Type.op(symbol.s_id)
-            
-            try:
-                if found:
-                    if interpret_mode or flags.immediate:
-                        if sig.match_in(stack): # match stack types with type signature.
-                            op(stack)
-                            print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
-                        else:
-                            raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
-                    else: # Compile mode!
-                        pass
-                else:
-                    # No idea what this is so make an atom on the stack.
-                    make_atom(stack, symbol.s_id)
-                    print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
-            except Exception as x:
-                print("Exception %s" % x)
-                print("Interpreting symbol %s" % symbol)
+        if not found:
+            # If Stack is empty or no specialized atom exists then search the global dictionary.
+            op, sig, flags, found = Type.op(symbol.s_id)
+        
+        try:
+            if found:
+                if interpret_mode or flags.immediate:
+                    if sig.match_in(stack): # match stack types with type signature.
+                        op(stack)
+                        print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
+                    else:
+                        raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
+                else: # Compile mode!
+                    pass
+            else:
+                # No idea what this is so make an atom on the stack.
+                make_atom(stack, symbol.s_id)
                 print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
-                
-                # See what happens if we just keep going...
-                #break
-                #raise
+        except Exception as x:
+            print("Exception %s" % x)
+            print("Interpreting symbol %s" % symbol)
+            print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
+            
+            # See what happens if we just keep going...
+            #break
+            raise
 
-    except KeyboardInterrupt as x:
-        print(" key interrupt.")
 
     return stack
 
@@ -81,8 +78,16 @@ if __name__ == "__main__":
         print("Interpreting file: '%s'." % sys.argv[1])
 
 
-    empty_stack = Stack()
-    stack = interpret(empty_stack, handle, filename)
+    stack = Stack()
+
+
+    try:
+
+        stack = interpret(stack, handle, filename)
+
+
+    except KeyboardInterrupt as x:
+        print(" key interrupt.")
 
     print(stack.contents())
     print("Stack max_depth = %s" % stack.max_depth())
