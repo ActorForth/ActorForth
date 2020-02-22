@@ -1,6 +1,6 @@
 import sys
 from dataclasses import dataclass
-from typing import Callable, List, Tuple, Any
+from typing import Callable, List, Tuple, Any, TextIO
 
 from parser import Parser, Location, Symbol
 
@@ -9,20 +9,9 @@ from af_types import Operation, Type, TypeSignature, TAtom, make_atom, TAny
 from af_types.af_int import *
 from af_types.af_bool import *
 
-def interpret() -> Stack:
-    stack = Stack()
-
-    handle = sys.stdin
-    filename = "stdin"
-    if len(sys.argv) >= 2:
-  
-        filename = sys.argv[1]
-        handle = open(filename)
-
-        print("Interpreting file: '%s'." % sys.argv[1])
-    
+def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None) -> Stack:    
     p = Parser()
-    p.open_handle(handle, filename)
+    p.open_handle(input_stream, filename)
 
     interpret_mode = True
 
@@ -82,7 +71,18 @@ if __name__ == "__main__":
             if len(ops):
                 print("%s Dictionary : %s" % (type,[op[0] for op in ops]))
 
-    stack = interpret()
+    handle = sys.stdin
+    filename = "stdin"
+    if len(sys.argv) >= 2:
+  
+        filename = sys.argv[1]
+        handle = open(filename)
+
+        print("Interpreting file: '%s'." % sys.argv[1])
+
+
+    empty_stack = Stack()
+    stack = interpret(empty_stack, handle, filename)
 
     print(stack.contents())
     print("Stack max_depth = %s" % stack.max_depth())
