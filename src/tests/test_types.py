@@ -42,7 +42,7 @@ class TestTypeSignature(unittest.TestCase):
     def test_find_ctor(self) -> None:
         l = [TParm1]
         assert TTest.find_ctor(l) == TOp
-        
+
         # Execute the lambda so we get full code coverage.
         assert TOp("fake_stack") == "fake_stack"
 
@@ -56,27 +56,29 @@ class TestTypeSignature(unittest.TestCase):
         assert TTest.find_ctor(l) == None
 
     def test_op_with_type_signature(self) -> None:
-       Type.add_op("test", lambda stack: 42, TypeSignature([TParm1],[]) ) #, "Test")
 
-       op, sig, flag, found = Type.op("test" ) #, "Test")
+        Type.add_op("test", lambda stack: 42, TypeSignature([TParm1],[]) ) #, "Test")
 
-       assert found
-       assert op(None) == 42
-       assert sig == TypeSignature([TParm1],[])
-       assert flag.immediate == False
+        op, sig, flag, found = Type.op("test" ) #, "Test")
 
-       op, sig, flag, found = Type.op("not found")
-       assert not found
+        assert found
+        assert op(None) == 42
+        assert sig == TypeSignature([TParm1],[])
+        assert flag.immediate == False
+
+        op, sig, flag, found = Type.op("not found")
+        assert not found
 
     def test_op_with_no_type_signature(self) -> None:
-       Type.add_op("test", lambda stack: 42, TypeSignature([],[]) ) 
+        # DEBUG - This isn't hitting the match_in empty sig case we were expecting for some reason.
+        Type.add_op("test", lambda stack: 42, TypeSignature([],[]) ) 
 
-       op, sig, flag, found = Type.op("test")
+        op, sig, flag, found = Type.op("test")
 
-       assert found
-       assert op(None) == 42
-       assert sig == TypeSignature([],[])
-       assert flag.immediate == False
+        assert found
+        assert op(None) == 42
+        assert sig == TypeSignature([],[])
+        assert flag.immediate == False
 
 
 class TestGenericTypeStuff(unittest.TestCase):       

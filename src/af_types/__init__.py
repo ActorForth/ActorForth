@@ -21,6 +21,7 @@ class TypeSignature:
     stack_out : List["Type"]
 
     def match_in(self, stack: Stack) -> bool:
+        # DEBUG TestTypeSignature.test_op_with_no_type_signature isn't hitting this line for some reason!
         if not len(self.stack_in): return True
         stack_types = [s.type for s in stack.contents()[len(self.stack_in)*-1:] ]
 
@@ -48,8 +49,6 @@ class WordFlags:
 Op_list = List[Tuple[Op_name, Operation, TypeSignature, WordFlags]]
 
 Op_map = List[Tuple[List["Type"],Operation]]
-
-
 
 
 class Type:
