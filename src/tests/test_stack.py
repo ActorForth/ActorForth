@@ -13,6 +13,12 @@ class StackTests(unittest.TestCase):
         self.depth_count_history = [x for x in zip(self.depth_history,repeat(1))]
         self.max_depth = len(self.init_list)
 
+
+    def test_no_max_depth_in_a_fresh_stack(self) -> None:
+        s = Stack()
+        self.assertEqual(s.max_depth(), 0)
+
+
     def test_history_depth_limit(self):
         s = Stack()
         [s.push('X') for n in range(Stack.DEPTH_HISTORY * 2)]
@@ -99,8 +105,6 @@ class KevlinsStackTest(unittest.TestCase):
     def push_some_data(self, list_of_data):
         [self.stack.push(x) for x in list_of_data]        
 
-
-
     def test_while_empty_pop_returns_empty(self):
         self.assertEqual(self.stack.pop(), KStack.Empty)
 
@@ -128,3 +132,14 @@ class KevlinsStackTest(unittest.TestCase):
 
         self.assertEqual(self.stack.pop(), KStack.Empty)
         self.assertEqual(self.stack.tos(), KStack.Empty)
+
+    def test_tos(self) -> None:
+        self.assertEqual(self.stack.tos(), KStack.Empty)
+        data = ['a', 'b']
+        self.push_some_data(data)
+        self.assertEqual(self.stack.tos(), 'b')
+        self.stack.pop()
+        self.assertEqual(self.stack.tos(), 'a')
+        self.stack.pop()
+        self.assertEqual(self.stack.tos(), KStack.Empty)
+        
