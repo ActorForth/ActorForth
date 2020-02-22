@@ -13,7 +13,7 @@ def op_bool(s: Stack) -> None:
     print("op_bool stack_object = %s" % stack_object)
 
     result = StackObject(None, TBool)
-    if stack_object.type == "Bool":
+    if stack_object.type == TBool:
         print ("Got a Bool")
         result.value = stack_object.value
     if stack_object.type == TAtom:
