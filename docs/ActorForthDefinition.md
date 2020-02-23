@@ -167,21 +167,26 @@ manipulate generic stack items like dup and swap.
 The following generic stack manipulation operators are presently available:
 
 dup : Any -> Any, Any
+
     Takes one input and copies it twice onto the stack.
 
 swap : Any1, Any2 -> Any2, Any1
+
     Takes two inputs and switches their order on the stack.
 
 drop : Any -> 
+
     Removes the top object from the stack.
 
 2dup : Any1, Any2 -> Any1, Any2, Any1, Any2
+
     Takes the two top objects and duplicates them onto the stack.
 
 print : Any1 -> 
+
     Removes whatever is on top of the stack and prints it to stdout.
 
-    
+
 **Generic type-idependent stack manipulations:**
 ```
 ok: 17 42
