@@ -4,7 +4,6 @@
 
 import types
 from typing import Dict, List, Tuple, Callable, Any, Optional
-from enum import Enum
 from dataclasses import dataclass
 
 from stack import Stack
