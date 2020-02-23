@@ -123,7 +123,17 @@ All operations in ActorForth have a name and a stack signature. The stack signat
 specifies what are the legal inputs present on the stack, in order for the operation
 to be matched and invoked as well as what outputs will be left on the stack as a
 result of the operation's invocation. To invoke an operation, both its name and input
-stack signature must be matched. 
+stack signature must be matched.
+
+### Tokens
+
+Tokens are any combination of printable characters separated by whitespace except for 
+a few special punctuation characters which don't need whitespace to be tokenized. 
+White space consists of space: ' ' , tab: '\t', or newline: '\n'. The special
+punctuation characters are period: '.', colon: ':', and semi-colon: ';'. ANY token 
+will be treated as a lookup request for an operation or, if not found, will be 
+converted to an **Atom** on the stack. See [parser.py[(../src/parser.py)] for details
+of how the parser is implemented.
 
 ### Atoms
 
