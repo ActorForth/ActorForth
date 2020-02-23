@@ -158,7 +158,7 @@ ok: Stack(4) = [StackObject(value='This', type=Atom), StackObject(value='is', ty
 ok: Stack(5) = [StackObject(value='This', type=Atom), StackObject(value='is', type=Atom), StackObject(value='5', type=Atom), StackObject(value='atoms', type=Atom), StackObject(value='.', type=Atom)] 
 ```
 
-### Any Type
+### The 'Any' Type
 
 There is also one more special type, ***Any***. It is used for generic matching in stack
 type signatures and will match any type. This is critical for operations like those that 
@@ -192,7 +192,7 @@ ActorForth will attempt to apply a **ctor** against the **Atom** on the top of t
 before matching and invoking the operator. *Right now this is only implemented for Bool
 operators that take two inputs.*
 
-**Constructing an integer then performing implicit type conversion for the > operator:**
+**Constructing an integer, an Atom, then performing implicit type conversion for the > operator:**
 ```
 ok: 42
 Stack(1) = [StackObject(value='42', type=Atom)] 

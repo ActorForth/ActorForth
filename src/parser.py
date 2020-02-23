@@ -1,7 +1,7 @@
 #
 #   parser.py   -   Parser for our language.
 #
-#from __future__ import annotations
+
 from typing import List, TextIO, Optional, Iterator, Tuple
 from io import StringIO
 
