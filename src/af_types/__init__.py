@@ -24,19 +24,19 @@ class TypeSignature:
         if not len(self.stack_in): return True
         stack_types = [s.type for s in stack.contents()[len(self.stack_in)*-1:] ]
 
-        print("in_types = %s" % (self.stack_in))
-        print("stack_types = %s" % stack_types)
+        print("match_in: in_types = %s" % (self.stack_in))
+        print("match_in: stack_types = %s" % stack_types)
         for in_type in reversed(self.stack_in):
-            if in_type is TAny: continue
+            if in_type == TAny: continue
             """
             Should probably have TAny types transform to the discovered type
             so that manipulations across generics are still completely type safe.
             """
             stack_type = stack_types.pop()
             if in_type != stack_type:
-                #print("Stack type %s doesn't match input arg type %s." % (type,in_type))
+                print("match_in: Stack type %s doesn't match input arg type %s." % (type,in_type))
                 return False
-        #print("Found matching type for stack_in: %s" % self.stack_in)
+        #print("match_in: Found matching type for stack_in: %s" % self.stack_in)
         return True
 
     def match_out(self, on_stack_types: List["Type"]) -> bool:
@@ -77,8 +77,8 @@ class Type:
 
     def find_ctor(self, inputs : List["Type"]) -> Optional[Operation]:
         # Given a stack of input types, find the first matching ctor.
-        #print("Attempting to find a ctor for Type '%s' using the following input types: %s." % (self.name, inputs))
-        #print("Type '%s' has the following ctors: %s." % (self.name, self.ctors))
+        print("Attempting to find a ctor for Type '%s' using the following input types: %s." % (self.name, inputs))
+        print("Type '%s' has the following ctors: %s." % (self.name, self.ctors))
         for type_sig in self.ctors:
 
             matching = False

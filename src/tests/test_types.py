@@ -87,12 +87,6 @@ class TestTypeSignature(unittest.TestCase):
         with self.assertRaises( Exception ):
             Type.op("test", stack)
             # Never get here -> print("op='%s', sig='%s', flag='%s', found='%s'" % (op,sig,flag,found))
-
-#        except Exception:
-#            pass
-#        else:
-#            assert False
-
         
     def test_op_with_no_type_signature(self) -> None:
         Type.add_op("test", lambda stack: 42, TypeSignature([],[]) ) 

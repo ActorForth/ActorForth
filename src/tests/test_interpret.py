@@ -1,5 +1,6 @@
 import unittest
 import io
+from copy import deepcopy
 
 from stack import Stack
 from interpret import *
@@ -8,7 +9,11 @@ class TestInterpreter(unittest.TestCase):
 
     def setUp(self) -> None:
         self.stack = Stack()
+        self.save_types = deepcopy(Type.types)
 
+
+    def tearDown(self) -> None:
+        Type.types = deepcopy(self.save_types)
 
     def testMakeAtom(self) -> None:
         code = """
@@ -55,17 +60,27 @@ class TestInterpreter(unittest.TestCase):
         stack = interpret(stack, io.StringIO("dup dup !="))
         assert stack.pop().value is False
         stack = interpret(stack, io.StringIO("True bool"))
-        assert stack.pop().value is True
+        assert stack.tos().value is True
+        stack = interpret(stack, io.StringIO("not"))
+        assert stack.pop().value is False
 
-    # DEBUG - Got a code problem here...
+    def testInterpretInferenceBoolOps(self) -> None:
+        stack = interpret(self.stack, io.StringIO("False bool"))
+        assert stack.tos().value is False
+        stack = interpret(stack, io.StringIO("False =="))
+        assert stack.tos().value is True
+
+
+
+
     def testOverloadingBoolCtor(self) -> None:
         TBool.register_ctor('bool',op_bool,[TBool])
         stack = interpret(self.stack, io.StringIO("True bool"))
-    #    assert stack.tos().type == TBool
-    #     assert stack.pop().value is True
-    #     stack = interpret(stack, io.StringIO("bool"))
-    #     assert stack.tos().type == TBool
-    #     assert stack.pop().value is True
+        assert stack.tos().type == TBool
+        assert stack.tos().value is True
+        stack = interpret(stack, io.StringIO("bool"))
+        assert stack.tos().type == TBool
+        assert stack.pop().value is True
 
 
 
