@@ -85,29 +85,35 @@ ActorForth demo interpreter. ^C to exit.
 Global Dictionary : ['>=', '<=', '>', '<', '!=', '==', 'bool', 'bool', 'int', 'int', '2dup', 'drop', 'swap', 'dup', 'print']
 Int Dictionary : ['/', '*', '-', '+']
 Bool Dictionary : ['not']
-10 int 20 int * print
+ok: 10
 Stack(1) = [StackObject(value='10', type=Atom)] 
+ok: int
 match_in: in_types = [Atom]
 match_in: stack_types = [Atom]
 Stack(1) = [StackObject(value=10, type=Int)] 
+ok: 20
 Stack(2) = [StackObject(value=10, type=Int), StackObject(value='20', type=Atom)] 
+ok: int
 match_in: in_types = [Atom]
 match_in: stack_types = [Atom]
 Stack(2) = [StackObject(value=10, type=Int), StackObject(value=20, type=Int)] 
+ok: *
 match_in: in_types = [Int, Int]
 match_in: stack_types = [Int, Int]
 Stack(1) = [StackObject(value=200, type=Int)] 
+ok: print
 match_in: in_types = [Any]
 match_in: stack_types = [Int]
 '200'
 Stack(0) = [] 
-^C key interrupt.
+ok: ^C key interrupt.
 []
 Stack max_depth = 2
 Stack depth_history = [1, 0, 1, 2, 1, 2, 1, 0, 1, 0, 1, 0]
 Stack total operations = 12
 
 end of line...
+
 ```
 
 

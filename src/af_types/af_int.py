@@ -41,7 +41,9 @@ def op_multiply(s: Stack) -> None:
     op2 = s.pop().value
     result = op2*op1
     # Guarantee output is valid and not overflow.
-    assert int(result) / op1 == op2, "python math error"
+    if op1 != 0: # Protect against divide by zero error on check.
+        assert int(result) / op1 == op2, "python math error"
+
     s.push(StackObject(result,TInt))
     op_int(s) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
 
