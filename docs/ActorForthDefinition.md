@@ -16,6 +16,101 @@ type-specific operators are applied to these Atoms to manipulate them into type
 instance data, new operators, and create new syntax upon which to build more 
 powerful programs and systems.
 
+ActorForth's development environment may be invoked as an interpreter by running
+interpret and passing a file name to it, or it may be run as a simple repl taking
+input from stdin if no file name is passed to it.
+
+**Running an ActorForth script:**
+```
+./interpret samples/fundamentals01.a4 
+ActorForth demo interpreter. ^C to exit.
+Global Dictionary : ['>=', '<=', '>', '<', '!=', '==', 'bool', 'bool', 'int', 'int', '2dup', 'drop', 'swap', 'dup', 'print']
+Int Dictionary : ['/', '*', '-', '+']
+Bool Dictionary : ['not']
+Interpreting file: 'samples/fundamentals01.a4'.
+junk
+Stack(1) = [StackObject(value='junk', type=Atom)] 
+40
+Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value='40', type=Atom)] 
+int
+match_in: in_types = [Atom]
+match_in: stack_types = [Atom]
+Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value=40, type=Int)] 
+2
+Stack(3) = [StackObject(value='junk', type=Atom), StackObject(value=40, type=Int), StackObject(value='2', type=Atom)] 
+int
+match_in: in_types = [Atom]
+match_in: stack_types = [Atom]
+Stack(3) = [StackObject(value='junk', type=Atom), StackObject(value=40, type=Int), StackObject(value=2, type=Int)] 
++
+match_in: in_types = [Int, Int]
+match_in: stack_types = [Int, Int]
+Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value=42, type=Int)] 
+print
+match_in: in_types = [Any]
+match_in: stack_types = [Int]
+'42'
+Stack(1) = [StackObject(value='junk', type=Atom)] 
+True
+Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value='True', type=Atom)] 
+bool
+match_in: in_types = [Bool]
+match_in: stack_types = [Atom]
+match_in: Stack type <class 'type'> doesn't match input arg type Bool.
+match_in: in_types = [Atom]
+match_in: stack_types = [Atom]
+Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value=True, type=Bool)] 
+False
+Stack(3) = [StackObject(value='junk', type=Atom), StackObject(value=True, type=Bool), StackObject(value='False', type=Atom)] 
+bool
+match_in: in_types = [Bool]
+match_in: stack_types = [Atom]
+match_in: Stack type <class 'type'> doesn't match input arg type Bool.
+match_in: in_types = [Atom]
+match_in: stack_types = [Atom]
+Stack(3) = [StackObject(value='junk', type=Atom), StackObject(value=True, type=Bool), StackObject(value=False, type=Bool)] 
+[StackObject(value='junk', type=Atom), StackObject(value=True, type=Bool), StackObject(value=False, type=Bool)]
+Stack max_depth = 3
+Stack depth_history = [1, 2, 1, 2, 3, 2, 3, 2, 1, 2, 1, 2, 1, 2, 1, 2, 3, 2, 3]
+Stack total operations = 19
+
+end of line...
+
+```
+
+**Invoking ActorForth as a REPL**
+```
+./interpret 
+ActorForth demo interpreter. ^C to exit.
+Global Dictionary : ['>=', '<=', '>', '<', '!=', '==', 'bool', 'bool', 'int', 'int', '2dup', 'drop', 'swap', 'dup', 'print']
+Int Dictionary : ['/', '*', '-', '+']
+Bool Dictionary : ['not']
+10 int 20 int * print
+Stack(1) = [StackObject(value='10', type=Atom)] 
+match_in: in_types = [Atom]
+match_in: stack_types = [Atom]
+Stack(1) = [StackObject(value=10, type=Int)] 
+Stack(2) = [StackObject(value=10, type=Int), StackObject(value='20', type=Atom)] 
+match_in: in_types = [Atom]
+match_in: stack_types = [Atom]
+Stack(2) = [StackObject(value=10, type=Int), StackObject(value=20, type=Int)] 
+match_in: in_types = [Int, Int]
+match_in: stack_types = [Int, Int]
+Stack(1) = [StackObject(value=200, type=Int)] 
+match_in: in_types = [Any]
+match_in: stack_types = [Int]
+'200'
+Stack(0) = [] 
+^C key interrupt.
+[]
+Stack max_depth = 2
+Stack depth_history = [1, 0, 1, 2, 1, 2, 1, 0, 1, 0, 1, 0]
+Stack total operations = 12
+
+end of line...
+```
+
+
 ## Primitives
 
 All operations in ActorForth have a name and a stack signature. The stack signature
