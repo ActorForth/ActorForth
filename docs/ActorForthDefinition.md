@@ -164,6 +164,24 @@ There is also one more special type, ***Any***. It is used for generic matching 
 type signatures and will match any type. This is critical for operations like those that 
 manipulate generic stack items like dup and swap. 
 
+The following generic stack manipulation operators are presently available:
+
+dup : Any -> Any, Any
+    Takes one input and copies it twice onto the stack.
+
+swap : Any1, Any2 -> Any2, Any1
+    Takes two inputs and switches their order on the stack.
+
+drop : Any -> 
+    Removes the top object from the stack.
+
+2dup : Any1, Any2 -> Any1, Any2, Any1, Any2
+    Takes the two top objects and duplicates them onto the stack.
+
+print : Any1 -> 
+    Removes whatever is on top of the stack and prints it to stdout.
+
+    
 **Generic type-idependent stack manipulations:**
 ```
 ok: 17 42
@@ -178,6 +196,7 @@ match_in: in_types = [Any]
 match_in: stack_types = [Atom]
 Stack(3) = [StackObject(value='42', type=Atom), StackObject(value='17', type=Atom), StackObject(value='17', type=Atom)] 
 ```
+
 
 ### Constructors
 Types have a special form of operator called a constructor (**ctor**). A **ctor** is an
