@@ -11,7 +11,7 @@ The execution environment is a concatenative, stack based, strongly typed langua
 that can be safely extended to build domain specific languages (DSLs).
 
 All human/computer interaction starts via the interpreter/compiler REPL. From 
-entries initially appearing as Atoms in the input stream, global operators and 
+entries initially appearing as **Atoms** in the input stream, global operators and 
 type-specific operators are applied to these Atoms to manipulate them into type
 instance data, new operators, and create new syntax upon which to build more 
 powerful programs and systems.
@@ -24,7 +24,21 @@ to be matched and invoked as well as what outputs will be left on the stack as a
 result of the operation's invocation. To invoke an operation, both its name and input
 stack signature must be matched. 
 
-Types have a special form of operator called a constructor (ctor). A ctor is an
+### Atoms
+
+Text input coming into the interpreter is first tokenized and tested against existing
+operations. Any token that does not match an operation name is automatically converted
+into an instance of the **Atom** type and placed on the stack. This means that there
+aren't any actual syntax errors in ActorForth, only type errors. A TypeError occurs when
+an operation is invoked without a valid input stack signature match or there is some 
+kind of invariant violation when trying to construct a type instance or as a result of
+applying an operation onto a type instance. **Atoms** can be compared by applying the 
+**Bool** type operators as if they were strings but otherwise have no operations of
+their own. They are intended to be the building blocks by which they get converted to
+new operations, types, or data items.
+
+### Constructors
+Types have a special form of operator called a constructor (**ctor**). A **ctor** is an
 operation that takes one or more input type signatures and only leaves an item of
 its type on the stack.
 
