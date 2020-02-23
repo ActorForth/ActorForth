@@ -169,6 +169,14 @@ The following generic stack manipulation operators are presently available:
 dup : Any -> Any, Any
 
     Takes one input and copies it twice onto the stack.
+    ```
+    ok: 1    
+    Stack(1) = [StackObject(value='1', type=Atom)] 
+    ok: dup
+    match_in: in_types = [Any]
+    match_in: stack_types = [Atom]
+    Stack(2) = [StackObject(value='1', type=Atom), StackObject(value='1', type=Atom)] 
+    ```
 
 swap : Any1, Any2 -> Any2, Any1
 
