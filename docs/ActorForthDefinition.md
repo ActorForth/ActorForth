@@ -132,7 +132,7 @@ a few special punctuation characters which don't need whitespace to be tokenized
 White space consists of space: ' ' , tab: '\t', or newline: '\n'. The special
 punctuation characters are period: '.', colon: ':', and semi-colon: ';'. ANY token 
 will be treated as a lookup request for an operation or, if not found, will be 
-converted to an **Atom** on the stack. See [parser.py[(../src/parser.py)] for details
+converted to an **Atom** on the stack. See [parser.py](../src/parser.py)] for details
 of how the parser is implemented.
 
 ### Atoms
