@@ -169,31 +169,61 @@ The following generic stack manipulation operators are presently available:
 dup : Any -> Any, Any
 
     Takes one input and copies it twice onto the stack.
-    ```
+    
     ok: 1    
     Stack(1) = [StackObject(value='1', type=Atom)] 
     ok: dup
     match_in: in_types = [Any]
     match_in: stack_types = [Atom]
     Stack(2) = [StackObject(value='1', type=Atom), StackObject(value='1', type=Atom)] 
-    ```
+    
 
 swap : Any1, Any2 -> Any2, Any1
 
     Takes two inputs and switches their order on the stack.
 
+    ok: 1 2
+    Stack(1) = [StackObject(value='1', type=Atom)] 
+    ok: Stack(2) = [StackObject(value='1', type=Atom), StackObject(value='2', type=Atom)] 
+    ok: swap
+    match_in: in_types = [Any, Any]
+    match_in: stack_types = [Atom, Atom]
+    Stack(2) = [StackObject(value='2', type=Atom), StackObject(value='1', type=Atom)]
+
 drop : Any -> 
 
     Removes the top object from the stack.
+
+    ok: 1
+    Stack(1) = [StackObject(value='1', type=Atom)] 
+    ok: drop
+    match_in: in_types = [Any]
+    match_in: stack_types = [Atom]
+    Stack(0) = []
 
 2dup : Any1, Any2 -> Any1, Any2, Any1, Any2
 
     Takes the two top objects and duplicates them onto the stack.
 
+    ok: 1 2
+    Stack(1) = [StackObject(value='1', type=Atom)] 
+    ok: Stack(2) = [StackObject(value='1', type=Atom), StackObject(value='2', type=Atom)] 
+    ok: 2dup
+    match_in: in_types = [Any, Any]
+    match_in: stack_types = [Atom, Atom]
+    Stack(4) = [StackObject(value='1', type=Atom), StackObject(value='2', type=Atom), StackObject(value='1', type=Atom), StackObject(value='2', type=Atom)] 
+
 print : Any1 -> 
 
     Removes whatever is on top of the stack and prints it to stdout.
 
+    ok: 1
+    Stack(1) = [StackObject(value='1', type=Atom)] 
+    ok: print
+    match_in: in_types = [Any]
+    match_in: stack_types = [Atom]
+    '1'
+    Stack(0) = []
 
 **Generic type-idependent stack manipulations:**
 ```
