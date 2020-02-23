@@ -24,7 +24,7 @@ if __name__ == "__main__":
     stack = Stack()
 
     try:
-        stack = interpret(stack, handle, filename)
+        stack = interpret(stack, handle, filename, prompt="ok: ")
 
     except KeyboardInterrupt as x:
         print(" key interrupt.")

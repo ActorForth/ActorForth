@@ -7,13 +7,13 @@ from af_types import Operation, Type, TypeSignature, TAtom, make_atom, TAny
 from af_types.af_int import *
 from af_types.af_bool import *
 
-def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None) -> Stack:    
+def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Stack:    
     p = Parser()
     p.open_handle(input_stream, filename)
 
     interpret_mode = True
 
-
+    if prompt: print(prompt,end='',flush=True)    
     for token in p.tokens():
         symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), TAtom)
         if p.filename != "stdin":
@@ -54,5 +54,6 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
             # See what happens if we just keep going...
             #break
             raise
+        if prompt: print(prompt,end='',flush=True)    
 
     return stack
