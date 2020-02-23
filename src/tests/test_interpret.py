@@ -11,7 +11,6 @@ class TestInterpreter(unittest.TestCase):
         self.stack = Stack()
         self.save_types = deepcopy(Type.types)
 
-
     def tearDown(self) -> None:
         Type.types = deepcopy(self.save_types)
 
@@ -69,9 +68,6 @@ class TestInterpreter(unittest.TestCase):
         assert stack.tos().value is False
         stack = interpret(stack, io.StringIO("False =="))
         assert stack.tos().value is True
-
-
-
 
     def testOverloadingBoolCtor(self) -> None:
         TBool.register_ctor('bool',op_bool,[TBool])

@@ -1,1 +1,1 @@
-python src/interpret.py $1
+python src/repl.py $1

@@ -1,6 +1,4 @@
-import sys
-from dataclasses import dataclass
-from typing import Callable, List, Tuple, Any, TextIO
+from typing import TextIO
 
 from parser import Parser, Location, Symbol
 
@@ -57,43 +55,4 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
             #break
             raise
 
-
     return stack
-
-
-if __name__ == "__main__":
-
-    print("ActorForth demo interpreter. ^C to exit.")
-    print("Global Dictionary : %s" % [op[0] for op in Type.types["Any"]])
-    for type in Type.types.keys():
-        if type != "Any":
-            ops = Type.types.get(type,[])
-            if len(ops):
-                print("%s Dictionary : %s" % (type,[op[0] for op in ops]))
-
-    handle = sys.stdin
-    filename = "stdin"
-    if len(sys.argv) >= 2:
-  
-        filename = sys.argv[1]
-        handle = open(filename)
-
-        print("Interpreting file: '%s'." % sys.argv[1])
-
-
-    stack = Stack()
-
-
-    try:
-
-        stack = interpret(stack, handle, filename)
-
-
-    except KeyboardInterrupt as x:
-        print(" key interrupt.")
-
-    print(stack.contents())
-    print("Stack max_depth = %s" % stack.max_depth())
-    print("Stack depth_history = %s" % stack.depth_history())
-    print("Stack total operations = %s" % stack.total_operations())
-    print("\nend of line...")
