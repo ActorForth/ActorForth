@@ -25,22 +25,23 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
         #print("\nStack = %s" % stack.contents())
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
-            op, sig, flags, found = Type.op(symbol.s_id,tos.type.name)
+            op, sig, flags, found = Type.op(symbol.s_id, stack, tos.type.name)
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
-            op, sig, flags, found = Type.op(symbol.s_id)
+            op, sig, flags, found = Type.op(symbol.s_id, stack)
         
         try:
             if found:
-                if interpret_mode or flags.immediate:
-                    if sig.match_in(stack): # match stack types with type signature.
-                        op(stack)
-                        print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
-                    else:
-                        raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
-                else: # Compile mode!
-                    pass
+                op(stack)
+                # if interpret_mode or flags.immediate:
+                #     if sig.match_in(stack): # match stack types with type signature.
+                #         op(stack)
+                #         print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
+                #     else:
+                #         raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
+                # else: # Compile mode!
+                #     pass
             else:
                 # No idea what this is so make an atom on the stack.
                 make_atom(stack, symbol.s_id)

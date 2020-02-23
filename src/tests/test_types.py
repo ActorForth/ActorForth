@@ -17,8 +17,15 @@ TTest.register_ctor("nop", TOp, [TParm1])
 
 class TestTypeSignature(unittest.TestCase):
 
+    def setUp(self) -> None:
+        Type.types = {}
+        Type.types["Any"] = [] 
+
     def test_match_in(self) -> None:
+        empty_sig = TypeSignature([],[])
         s = Stack()
+        assert empty_sig.match_in(s)
+
         s.push(StackObject(None, TParm1))
         sig = TypeSignature([TParm1],[])
 
@@ -57,23 +64,40 @@ class TestTypeSignature(unittest.TestCase):
 
     def test_op_with_type_signature(self) -> None:
 
+        stack = Stack()
+        stack.push(StackObject("tparm", TParm1))
         Type.add_op("test", lambda stack: 42, TypeSignature([TParm1],[]) ) #, "Test")
 
-        op, sig, flag, found = Type.op("test" ) #, "Test")
+        op, sig, flag, found = Type.op("test", stack ) #, "Test")
 
         assert found
         assert op(None) == 42
         assert sig == TypeSignature([TParm1],[])
         assert flag.immediate == False
 
-        op, sig, flag, found = Type.op("not found")
+        op, sig, flag, found = Type.op("not found", stack)
         assert not found
 
+    def test_op_with_wrong_type_signature(self) -> None:
+        stack = Stack()
+        stack.push(StackObject("tparm", TTest))
+
+        Type.add_op("test", op_print, TypeSignature([TParm1],[]))
+
+        with self.assertRaises( Exception ):
+            Type.op("test", stack)
+            # Never get here -> print("op='%s', sig='%s', flag='%s', found='%s'" % (op,sig,flag,found))
+
+#        except Exception:
+#            pass
+#        else:
+#            assert False
+
+        
     def test_op_with_no_type_signature(self) -> None:
-        # DEBUG - This isn't hitting the match_in empty sig case we were expecting for some reason.
         Type.add_op("test", lambda stack: 42, TypeSignature([],[]) ) 
 
-        op, sig, flag, found = Type.op("test")
+        op, sig, flag, found = Type.op("test", Stack())
 
         assert found
         assert op(None) == 42

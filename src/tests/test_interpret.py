@@ -58,10 +58,10 @@ class TestInterpreter(unittest.TestCase):
         assert stack.pop().value is True
 
     # DEBUG - Got a code problem here...
-    # def testOverloadingBoolCtor(self) -> None:
-    #     TBool.register_ctor('bool',op_bool,[TBool])
-    #     stack = interpret(self.stack, io.StringIO("True bool"))
-    #     assert stack.tos().type == TBool
+    def testOverloadingBoolCtor(self) -> None:
+        TBool.register_ctor('bool',op_bool,[TBool])
+        stack = interpret(self.stack, io.StringIO("True bool"))
+    #    assert stack.tos().type == TBool
     #     assert stack.pop().value is True
     #     stack = interpret(stack, io.StringIO("bool"))
     #     assert stack.tos().type == TBool

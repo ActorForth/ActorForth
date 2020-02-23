@@ -21,7 +21,6 @@ class TypeSignature:
     stack_out : List["Type"]
 
     def match_in(self, stack: Stack) -> bool:
-        # DEBUG TestTypeSignature.test_op_with_no_type_signature isn't hitting this line for some reason!
         if not len(self.stack_in): return True
         stack_types = [s.type for s in stack.contents()[len(self.stack_in)*-1:] ]
 
@@ -37,6 +36,7 @@ class TypeSignature:
             if in_type != stack_type:
                 print("Stack type %s doesn't match input arg type %s." % (type,in_type))
                 return False
+        print("Found matching type for stack_in: %s" % self.stack_in)
         return True
 
     def match_out(self, on_stack_types: List["Type"]) -> bool:
@@ -118,19 +118,30 @@ class Type:
         type_list = Type.types.get(type,[])        
         type_list.insert(0,(name, op, sig, flags))
 
-    # Returns the first operation for this named type.
+    # Returns the first matching operation for this named type.
     @staticmethod
-    def op(name: Op_name, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
+    def op(name: Op_name, stack: Stack, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
         #print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
-        type_list = Type.types.get(type,[])  
-        #print("\ttype_list = %s" % type_list)
-        for atom in type_list:
-            if atom[0] == name:
-                #print("Found! Returning %s, %s, %s" % (atom[1],atom[2],True))
-                return atom[1], atom[2], atom[3], True
+        name_found = False
+        op_list = Type.types.get(type,[])  
+        print("\top_list = %s" % [(name,sig.stack_in) for (name, op, sig, flags) in op_list])
+        for op_name, op, sig, flags in op_list:
+            if op_name == name:
+                name_found = True
+                # Now try to match the input stack...
+                # Should it be an exception to match the name but not the 
+                # stack input signature? Probably so.
+                if sig.match_in(stack):
+
+                    print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
+                    return op, sig, flags, True
         # Not found.
+        if name_found:
+            raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
+
         #print ("Not found!")
+        # This is redundant for what interpret already does by default.
         return make_atom, TypeSignature([],[TAtom]), WordFlags(), False
 
     def __eq__(self, type: object) -> bool:
