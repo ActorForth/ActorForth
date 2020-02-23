@@ -34,9 +34,9 @@ class TypeSignature:
             """
             stack_type = stack_types.pop()
             if in_type != stack_type:
-                print("Stack type %s doesn't match input arg type %s." % (type,in_type))
+                #print("Stack type %s doesn't match input arg type %s." % (type,in_type))
                 return False
-        print("Found matching type for stack_in: %s" % self.stack_in)
+        #print("Found matching type for stack_in: %s" % self.stack_in)
         return True
 
     def match_out(self, on_stack_types: List["Type"]) -> bool:
@@ -125,7 +125,7 @@ class Type:
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
         op_list = Type.types.get(type,[])  
-        print("\top_list = %s" % [(name,sig.stack_in) for (name, op, sig, flags) in op_list])
+        #print("\top_list = %s" % [(name,sig.stack_in) for (name, op, sig, flags) in op_list])
         for op_name, op, sig, flags in op_list:
             if op_name == name:
                 name_found = True
@@ -134,7 +134,7 @@ class Type:
                 # stack input signature? Probably so.
                 if sig.match_in(stack):
 
-                    print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
+                    #print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
                     return op, sig, flags, True
         # Not found.
         if name_found:

@@ -34,6 +34,8 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
         try:
             if found:
                 op(stack)
+                print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
+                #     else:
                 # if interpret_mode or flags.immediate:
                 #     if sig.match_in(stack): # match stack types with type signature.
                 #         op(stack)
