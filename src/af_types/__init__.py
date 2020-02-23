@@ -76,8 +76,8 @@ class Type:
 
     def find_ctor(self, inputs : List["Type"]) -> Optional[Operation]:
         # Given a stack of input types, find the first matching ctor.
-        print("Attempting to find a ctor for Type '%s' using the following input types: %s." % (self.name, inputs))
-        print("Type '%s' has the following ctors: %s." % (self.name, self.ctors))
+        #print("Attempting to find a ctor for Type '%s' using the following input types: %s." % (self.name, inputs))
+        #print("Type '%s' has the following ctors: %s." % (self.name, self.ctors))
         for type_sig in self.ctors:
 
             matching = False

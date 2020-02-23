@@ -129,11 +129,11 @@ stack signature must be matched.
 
 Tokens are any combination of printable characters separated by whitespace except for 
 a few special punctuation characters which don't need whitespace to be tokenized. 
-White space consists of space: ' ' , tab: '\t', or newline: '\n'. The special
-punctuation characters are period: '.', colon: ':', and semi-colon: ';'. ANY token 
-will be treated as a lookup request for an operation or, if not found, will be 
-converted to an **Atom** on the stack. See [parser.py](../src/parser.py)] for details
-of how the parser is implemented.
+White space consists of **space: ' '** , **tab: '\t'**, or **newline: '\n'**. The 
+special punctuation characters are **period: '.'**, **colon: ':'**, and **semi-colon:
+ ';'**. Any token will be treated as a lookup request for an operation or, if not 
+found, will be converted to an **Atom** on the stack. See [parser.py](../src/parser.py)
+for details of how the parser is implemented.
 
 ### Atoms
 
@@ -148,8 +148,63 @@ applying an operation onto a type instance. **Atoms** can be compared by applyin
 their own. They are intended to be the building blocks by which they get converted to
 new operations, types, or data items.
 
+**Parsing tokens as Atoms:**
+```
+ok: This is 5 atoms.
+Stack(1) = [StackObject(value='This', type=Atom)] 
+ok: Stack(2) = [StackObject(value='This', type=Atom), StackObject(value='is', type=Atom)] 
+ok: Stack(3) = [StackObject(value='This', type=Atom), StackObject(value='is', type=Atom), StackObject(value='5', type=Atom)] 
+ok: Stack(4) = [StackObject(value='This', type=Atom), StackObject(value='is', type=Atom), StackObject(value='5', type=Atom), StackObject(value='atoms', type=Atom)] 
+ok: Stack(5) = [StackObject(value='This', type=Atom), StackObject(value='is', type=Atom), StackObject(value='5', type=Atom), StackObject(value='atoms', type=Atom), StackObject(value='.', type=Atom)] 
+```
+
+### Any Type
+
+There is also one more special type, ***Any***. It is used for generic matching in stack
+type signatures and will match any type. This is critical for operations like those that 
+manipulate generic stack items like dup and swap. 
+
+**Generic type-idependent stack manipulations:**
+```
+ok: 17 42
+Stack(1) = [StackObject(value='17', type=Atom)] 
+ok: Stack(2) = [StackObject(value='17', type=Atom), StackObject(value='42', type=Atom)] 
+ok: swap
+match_in: in_types = [Any, Any]
+match_in: stack_types = [Atom, Atom]
+Stack(2) = [StackObject(value='42', type=Atom), StackObject(value='17', type=Atom)] 
+ok: dup
+match_in: in_types = [Any]
+match_in: stack_types = [Atom]
+Stack(3) = [StackObject(value='42', type=Atom), StackObject(value='17', type=Atom), StackObject(value='17', type=Atom)] 
+```
+
 ### Constructors
 Types have a special form of operator called a constructor (**ctor**). A **ctor** is an
 operation that takes one or more input type signatures and only leaves an item of
-its type on the stack.
+its type on the stack. It's generally considered good form to have a constructor that is
+the same name as the type (in lower case) that takes an **Atom** as a stack input. But any
+operation that converts from one type to a new type can be a **ctor**. 
+
+There is even a form of type inference for operations that take multiple inputs from the
+stack. If the top input is an **Atom** but the next item on the stack is some other type,
+ActorForth will attempt to apply a **ctor** against the **Atom** on the top of the stack 
+before matching and invoking the operator. *Right now this is only implemented for Bool
+operators that take two inputs.*
+
+**Constructing an integer then performing implicit type conversion for the > operator:**
+```
+ok: 42
+Stack(1) = [StackObject(value='42', type=Atom)] 
+ok: int
+match_in: in_types = [Atom]
+match_in: stack_types = [Atom]
+Stack(1) = [StackObject(value=42, type=Int)] 
+ok: 17
+Stack(2) = [StackObject(value=42, type=Int), StackObject(value='17', type=Atom)] 
+ok: >
+match_in: in_types = [Any, Any]
+match_in: stack_types = [Int, Atom]
+Stack(1) = [StackObject(value=True, type=Bool)]
+```
 

@@ -38,7 +38,7 @@ def optionally_infer_type_from_atom(s: Stack) -> StackObject:
     # is not, then automatically infer the top item's
     # type from the second item then perform the comparison.
     if sobj1.type is TAtom and sobj2 is not TAtom:
-        print("Trying to infer %s type from %s given the following: %s." % (sobj2.type, sobj1, [o.type for o in s.contents()]))
+        #print("Trying to infer %s type from %s given the following: %s." % (sobj2.type, sobj1, [o.type for o in s.contents()]))
         # Pass along the entire list of types from the stack
         # in case the type's ctor takes multiple parameters.
         ctor = sobj2.type.find_ctor([o.type for o in s.contents()])
