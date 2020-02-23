@@ -91,15 +91,15 @@ def op_not(s: Stack) -> None:
     # Restrict to only workong on Bools!
     op1 = s.tos().value = not s.tos().value
 
-#   Int dictionary
+#   Bool dictionary
 TBool.register_ctor('bool',op_bool,[TAtom])
 TBool.register_ctor('bool',op_bool,[TBool])
-TBool.register_ctor('==',op_equals,[TAny])
-TBool.register_ctor('!=',op_not_equals,[TAny])
-TBool.register_ctor('<',op_less_than,[TAny])
-TBool.register_ctor('>',op_greater_than,[TAny])
-TBool.register_ctor('<=',op_less_than_or_equal_to,[TAny])
-TBool.register_ctor('>=',op_greater_than_or_equal_to,[TAny])
+TBool.register_ctor('==',op_equals,[TAny,TAny])
+TBool.register_ctor('!=',op_not_equals,[TAny,TAny])
+TBool.register_ctor('<',op_less_than,[TAny,TAny])
+TBool.register_ctor('>',op_greater_than,[TAny,TAny])
+TBool.register_ctor('<=',op_less_than_or_equal_to,[TAny,TAny])
+TBool.register_ctor('>=',op_greater_than_or_equal_to,[TAny,TAny])
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
 flags = WordFlags()
