@@ -1,4 +1,4 @@
-square : nat -> nat;
+square : Int -> Int;
     dup *.
 
 

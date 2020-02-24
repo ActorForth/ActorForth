@@ -71,7 +71,7 @@ Type.add_op(';', op_start_code_compile, TypeSignature([TOutputTypeSignature],[TC
 Type.add_op(';', op_skip_to_code_compile, TypeSignature([TWordDefinition],[TCodeCompile]), WordFlags(), "WordDefinition")
 
 
-
+# Register every type name in order to be able to express Type Signatures at compile time.
 for type_name in Type.types.keys():
     Type.add_op(type_name, op_start_input_sig, TypeSignature([TWordDefinition],[TWordDefinition,TInputTypeSignature]), WordFlags(), "WordDefinition")
     Type.add_op(type_name, op_continue_input_sig, TypeSignature([TInputTypeSignature],[TInputTypeSignature]), WordFlags(), "InputTypeSignature")  
