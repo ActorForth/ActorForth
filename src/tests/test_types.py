@@ -13,7 +13,7 @@ TAny = Type("Any")
 
 TOp = lambda stack : stack
 
-TTest.register_ctor("nop", TOp, [TParm1])
+Type.register_ctor("Test","nop", TOp, [TParm1])
 
 class TestTypeSignature(unittest.TestCase):
 
@@ -48,19 +48,19 @@ class TestTypeSignature(unittest.TestCase):
 
     def test_find_ctor(self) -> None:
         l = [TParm1]
-        assert TTest.find_ctor(l) == TOp
+        assert Type.find_ctor("Test",l) == TOp
 
         # Execute the lambda so we get full code coverage.
         assert TOp("fake_stack") == "fake_stack"
 
         l = [TAny]
-        assert TTest.find_ctor(l) == TOp
+        assert Type.find_ctor("Test",l) == TOp
 
         l = [TTest]
-        assert TTest.find_ctor(l) == None
+        assert Type.find_ctor("Test",l) == None
 
         l = []
-        assert TTest.find_ctor(l) == None
+        assert Type.find_ctor("Test",l) == None
 
     def test_op_with_type_signature(self) -> None:
 

@@ -2,7 +2,6 @@
 #   af_types.py     - Types for our language.
 #
 
-import types
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
@@ -59,26 +58,33 @@ class Type:
 
     types["Any"] = [] # Global dictionary. Should it be "Any"/TAny? Probably.
 
+    ctors : Dict[Type_name, Op_map] = {}
+
 
     def __init__(self, typename: Type_name):
         self.name = typename
-        self.ctors : Op_map = []
-        if not Type.types.get(self.name):
+        if not Type.ctors.get(self.name, False):
+            Type.ctors[self.name] = []
+        if not Type.types.get(self.name, False):
             Type.types[self.name] = []
 
-    def register_ctor(self, name: Op_name, op: Operation, sig: List["Type"]) -> None:
+    @staticmethod
+    def register_ctor(name: Type_name, op_name: Op_name, op: Operation, sig: List["Type"]) -> None:
         # Ctors only have TypeSignatures that return their own Type.
         # Register the ctor in the Global dictionary.
-        Type.add_op(name, op, TypeSignature(sig,[self]))
+        Type.add_op(op_name, op, TypeSignature(sig,[Type("Any")]))
 
         # Append this ctor to our list of valid ctors.
-        self.ctors.append((sig,op))
+        op_map = Type.ctors.get(name, None)
+        assert op_map is not None, ("No ctor map for type %s found.\n\tCtors exist for the following types: %s." % (name, Type.ctors.keys()))
+        op_map.append((sig,op))
 
-    def find_ctor(self, inputs : List["Type"]) -> Optional[Operation]:
+    @staticmethod
+    def find_ctor(name: Type_name, inputs : List["Type"]) -> Optional[Operation]:
         # Given a stack of input types, find the first matching ctor.
         #print("Attempting to find a ctor for Type '%s' using the following input types: %s." % (self.name, inputs))
         #print("Type '%s' has the following ctors: %s." % (self.name, self.ctors))
-        for type_sig in self.ctors:
+        for type_sig in Type.ctors.get(name,[]):
 
             matching = False
             types = inputs.copy()

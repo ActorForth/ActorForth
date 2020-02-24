@@ -41,7 +41,8 @@ def optionally_infer_type_from_atom(s: Stack) -> StackObject:
         #print("Trying to infer %s type from %s given the following: %s." % (sobj2.type, sobj1, [o.type for o in s.contents()]))
         # Pass along the entire list of types from the stack
         # in case the type's ctor takes multiple parameters.
-        ctor = sobj2.type.find_ctor([o.type for o in s.contents()])
+        ##ctor = sobj2.type.find_ctor([o.type for o in s.contents()])
+        ctor = Type.find_ctor( (sobj2.type.name), [o.type for o in s.contents()] )
         assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.type, sobj1)
         # Call the ctor and put its result on the stack.
         s.push(sobj1)
@@ -92,14 +93,14 @@ def op_not(s: Stack) -> None:
     op1 = s.tos().value = not s.tos().value
 
 #   Bool dictionary
-TBool.register_ctor('bool',op_bool,[TAtom])
-TBool.register_ctor('bool',op_bool,[TBool])
-TBool.register_ctor('==',op_equals,[TAny,TAny])
-TBool.register_ctor('!=',op_not_equals,[TAny,TAny])
-TBool.register_ctor('<',op_less_than,[TAny,TAny])
-TBool.register_ctor('>',op_greater_than,[TAny,TAny])
-TBool.register_ctor('<=',op_less_than_or_equal_to,[TAny,TAny])
-TBool.register_ctor('>=',op_greater_than_or_equal_to,[TAny,TAny])
+Type.register_ctor('Bool','bool',op_bool,[TAtom])
+Type.register_ctor('Bool','bool',op_bool,[TBool])
+Type.register_ctor('Bool','==',op_equals,[TAny,TAny])
+Type.register_ctor('Bool','!=',op_not_equals,[TAny,TAny])
+Type.register_ctor('Bool','<',op_less_than,[TAny,TAny])
+Type.register_ctor('Bool','>',op_greater_than,[TAny,TAny])
+Type.register_ctor('Bool','<=',op_less_than_or_equal_to,[TAny,TAny])
+Type.register_ctor('Bool','>=',op_greater_than_or_equal_to,[TAny,TAny])
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
 flags = WordFlags()
