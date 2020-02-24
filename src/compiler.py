@@ -43,6 +43,10 @@ def op_continue_input_sig(s: Stack, s_id: Op_name) -> None:
 def op_switch_to_output_sig(s: Stack, s_id: Op_name) -> None:
     s.tos().type = TOutputTypeSignature
 
+def op_skip_to_output_sig(s: Stack, s_id: Op_name) -> None:
+    sig = TypeSignature([],[])
+    s.push(StackObject(sig,TOutputTypeSignature))
+
 def op_output_sig(s: Stack, s_id: Op_name) -> None:
     # Works only there's an InputTypeSignaure followed by the -> operator.
     # Takes the existing TypeSignature, adds the first item to the 
@@ -54,10 +58,18 @@ def op_start_code_compile(s: Stack, s_id: Op_name) -> None:
     print("I'M COMPILING!!!")
     s.tos().type = TCodeCompile
 
+def op_skip_to_code_compile(s: Stack, s_id: Op_name) -> None:
+    sig = TypeSignature([],[])
+    s.push(StackObject(sig,TCodeCompile))  
+    op_start_code_compile(s, s_id)
+
 Type.add_op(':', op_new_word, TypeSignature([TAtom],[TWordDefinition]))
-Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
+# Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
 Type.add_op('->', op_switch_to_output_sig, TypeSignature([TInputTypeSignature],[TOutputTypeSignature]), WordFlags(), "InputTypeSignature")
+Type.add_op('->', op_skip_to_output_sig, TypeSignature([TWordDefinition],[TOutputTypeSignature]), WordFlags(), "WordDefinition")
 Type.add_op(';', op_start_code_compile, TypeSignature([TOutputTypeSignature],[TCodeCompile]), WordFlags(), "OutputTypeSignature")
+Type.add_op(';', op_skip_to_code_compile, TypeSignature([TWordDefinition],[TCodeCompile]), WordFlags(), "WordDefinition")
+
 
 
 for type_name in Type.types.keys():
