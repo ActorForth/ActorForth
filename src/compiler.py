@@ -7,16 +7,10 @@ from dataclasses import dataclass
 
 from af_types import *
 
-
-# class TWordDefinition(Type):
-
-#     def __init__(self, name: str) -> None:
-#         self.sigs : List[ Tuple[TypeSignature, Operation] ] = []
-#         self.complete : bool = False
-#         super(TWordDefinition, self).__init__(name)
 TWordDefinition = Type("WordDefinition")
 TInputTypeSignature = Type("InputTypeSignature")
 TOutputTypeSignature = Type("OutputTypeSignature")
+TCodeCompile = Type("CodeCompile")
 
 
 def op_new_word(s: Stack, s_id: Op_name) -> None:
@@ -39,7 +33,7 @@ def op_start_input_sig(s: Stack, s_id: Op_name) -> None:
     # Does NOT consume the WordDefinition.
     assert Type.types.get(s_id, False) is not False, \
         "%s is not a valid type name.\nValid types are: %s." % (s_id, [n for n in Type.types.keys()])
-    print("Got valid type: %s" % s_id)
+    #print("Got valid type: %s" % s_id)
     sig = TypeSignature([Type(s_id)],[])
     s.push(StackObject(sig,TInputTypeSignature))
 
@@ -56,12 +50,14 @@ def op_output_sig(s: Stack, s_id: Op_name) -> None:
     # Does NOT consume the TypeSignature.
     s.tos().value.stack_out.append(Type(s_id))
 
-
-
+def op_start_code_compile(s: Stack, s_id: Op_name) -> None:
+    print("I'M COMPILING!!!")
+    s.tos().type = TCodeCompile
 
 Type.add_op(':', op_new_word, TypeSignature([TAtom],[TWordDefinition]))
 Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
 Type.add_op('->', op_switch_to_output_sig, TypeSignature([TInputTypeSignature],[TOutputTypeSignature]), WordFlags(), "InputTypeSignature")
+Type.add_op(';', op_start_code_compile, TypeSignature([TOutputTypeSignature],[TCodeCompile]), WordFlags(), "OutputTypeSignature")
 
 
 for type_name in Type.types.keys():
