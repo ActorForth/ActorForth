@@ -7,7 +7,7 @@ from af_types import Operation, Type, TypeSignature, TAtom, make_atom, TAny
 from af_types.af_int import *
 from af_types.af_bool import *
 
-#from compiler import *
+from compiler import *
 
 def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Stack:    
     p = Parser()
@@ -55,7 +55,7 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
             
             # See what happens if we just keep going...
             #break
-            raise
+            #raise
         if prompt: print(prompt,end='',flush=True)    
 
     return stack

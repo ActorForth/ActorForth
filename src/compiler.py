@@ -8,12 +8,13 @@ from dataclasses import dataclass
 from af_types import *
 
 
-class TWordDefinition(Type):
+# class TWordDefinition(Type):
 
-    def __init__(self, name: str) -> None:
-        self.sigs : List[ Tuple[TypeSignature, Operation] ] = []
-        self.complete : bool = False
-        super(TWordDefinition, self).__init__(name)
+#     def __init__(self, name: str) -> None:
+#         self.sigs : List[ Tuple[TypeSignature, Operation] ] = []
+#         self.complete : bool = False
+#         super(TWordDefinition, self).__init__(name)
+TWordDefinition = Type("WordDefinition")
 
 
 def op_new_word(s: Stack) -> None:
@@ -24,10 +25,10 @@ def op_new_word(s: Stack) -> None:
         "New words must be atoms or new word definitions. %s is a %s." % (s.tos().value, itype)
 
     op, sig, flags, found = Type.op(s.tos().value, s)
-    assert not found, "%s is an existing op."
+    assert not found, "Can't redefine an existing op." 
 
     if itype == TAtom:
-        s.tos().type = TWordDefinition(name=s.tos().value)
+        s.tos().type = TWordDefinition
 
-#Type.add_op(':', op_new_word, TypeSignature([TAtom],[TWordDefinition]))
-#Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
+Type.add_op(':', op_new_word, TypeSignature([TAtom],[TWordDefinition]))
+Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))

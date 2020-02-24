@@ -143,7 +143,8 @@ class Type:
                     return op, sig, flags, True
         # Not found.
         if name_found:
-            raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
+            pass # Is this what we want to do?
+            #raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
 
         #print ("Not found!")
         # This is redundant for what interpret already does by default.
