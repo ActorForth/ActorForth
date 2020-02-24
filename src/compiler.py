@@ -37,12 +37,14 @@ def op_start_input_sig(s: Stack, s_id: Op_name) -> None:
     # Creates a new TypeSignature, adds the first item
     # and pushes it to the stack.
     # Does NOT consume the WordDefinition.
-    type_name = s.pop().value
-    assert Type.types.get(type_name, False) is not False, \
-        "%s is not a valid type name.\nValid types are: %s." % (type_name, [n for n in Type.types.keys()])
-    print("Got valid type: %s" % type_name)
-    sig = TypeSignature([Type(type_name)],[])
-    s.push((sig,TInputTypeSignature))
+    assert Type.types.get(s_id, False) is not False, \
+        "%s is not a valid type name.\nValid types are: %s." % (s_id, [n for n in Type.types.keys()])
+    print("Got valid type: %s" % s_id)
+    sig = TypeSignature([Type(s_id)],[])
+    s.push(StackObject(sig,TInputTypeSignature))
+
+def op_continue_input_sig(s: Stack, s_id: Op_name) -> None:
+    s.tos().value.stack_in.append(Type(s_id))
 
 
 Type.add_op(':', op_new_word, TypeSignature([TAtom],[TWordDefinition]))
@@ -50,6 +52,7 @@ Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition])
 
 for type_name in Type.types.keys():
     Type.add_op(type_name, op_start_input_sig, TypeSignature([TWordDefinition],[TWordDefinition,TInputTypeSignature]), WordFlags(), "WordDefinition")
+    Type.add_op(type_name, op_continue_input_sig, TypeSignature([TInputTypeSignature],[TInputTypeSignature]), WordFlags(), "InputTypeSignature")    
 
 
 
