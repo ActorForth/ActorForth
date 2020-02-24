@@ -5,12 +5,12 @@ from interpret import *
 if __name__ == "__main__":
 
     print("ActorForth demo interpreter. ^C to exit.")
-    print("Global Dictionary : %s" % [op[0] for op in Type.types["Any"]])
+    print("Global Dictionary : %s" % list(set([op[0] for op in Type.types["Any"]])) )
     for type in Type.types.keys():
         if type != "Any":
             ops = Type.types.get(type,[])
             if len(ops):
-                print("%s Dictionary : %s" % (type,[op[0] for op in ops]))
+                print("%s Dictionary : %s" % (type,list(set([op[0] for op in ops]))) )
 
     handle = sys.stdin
     filename = "stdin"
