@@ -46,13 +46,28 @@ def op_start_input_sig(s: Stack, s_id: Op_name) -> None:
 def op_continue_input_sig(s: Stack, s_id: Op_name) -> None:
     s.tos().value.stack_in.append(Type(s_id))
 
+def op_switch_to_output_sig(s: Stack, s_id: Op_name) -> None:
+    s.tos().type = TOutputTypeSignature
+
+def op_output_sig(s: Stack, s_id: Op_name) -> None:
+    # Works only there's an InputTypeSignaure followed by the -> operator.
+    # Takes the existing TypeSignature, adds the first item to the 
+    # output signature. 
+    # Does NOT consume the TypeSignature.
+    s.tos().value.stack_out.append(Type(s_id))
+
+
+
 
 Type.add_op(':', op_new_word, TypeSignature([TAtom],[TWordDefinition]))
 Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
+Type.add_op('->', op_switch_to_output_sig, TypeSignature([TInputTypeSignature],[TOutputTypeSignature]), WordFlags(), "InputTypeSignature")
+
 
 for type_name in Type.types.keys():
     Type.add_op(type_name, op_start_input_sig, TypeSignature([TWordDefinition],[TWordDefinition,TInputTypeSignature]), WordFlags(), "WordDefinition")
-    Type.add_op(type_name, op_continue_input_sig, TypeSignature([TInputTypeSignature],[TInputTypeSignature]), WordFlags(), "InputTypeSignature")    
+    Type.add_op(type_name, op_continue_input_sig, TypeSignature([TInputTypeSignature],[TInputTypeSignature]), WordFlags(), "InputTypeSignature")  
+    Type.add_op(type_name, op_output_sig, TypeSignature([TOutputTypeSignature],[TOutputTypeSignature]), WordFlags(), "OutputTypeSignature")          
 
 
 
