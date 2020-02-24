@@ -39,6 +39,8 @@ class TestInterpreter(unittest.TestCase):
         assert stack.tos().value == 5
         stack = interpret(stack, io.StringIO("3 int *"))
         assert stack.tos().value == 15
+        stack = interpret(stack, io.StringIO("0 int *"))
+        assert stack.tos().value == 0
 
     def testInterpretBoolOps(self) -> None:
         code = "14 int 28 int 2dup <"
