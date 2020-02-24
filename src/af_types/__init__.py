@@ -9,7 +9,7 @@ from stack import Stack
 
 # An operation takes a stack instance and returns nothing.
 Op_name = str
-Operation = Callable[[Stack],None]
+Operation = Callable[[Stack, Op_name],None]
 Type_name = str
 
 
@@ -180,7 +180,7 @@ TAny = Type("Any")
 def make_atom(s: Stack, s_id: Op_name = "Unknown") -> None:
     s.push(StackObject(s_id,TAtom))
 
-def op_print(s: Stack) -> None:
+def op_print(s: Stack, s_id: Op_name = None) -> None:
     op1 = s.pop().value
     print("'%s'" % op1)
 
@@ -189,24 +189,24 @@ def op_print(s: Stack) -> None:
 #   dynamically determine the actual stack types on the stack and
 #   create dynamic type signatures based on what are found?
 #
-def op_dup(s: Stack) -> None:
+def op_dup(s: Stack, s_id: Op_name) -> None:
     op1 = s.tos()
     s.push(op1)
 
-def op_swap(s: Stack) -> None:
+def op_swap(s: Stack, s_id: Op_name) -> None:
     op1 = s.pop()
     op2 = s.pop()
     s.push(op1)
     s.push(op2)
 
-def op_drop(s: Stack) -> None:
+def op_drop(s: Stack, s_id: Op_name) -> None:
     op1 = s.pop()
 
-def op_2dup(s: Stack) -> None:
+def op_2dup(s: Stack, s_id: Op_name) -> None:
     op1 = s.tos()
-    op_swap(s)
+    op_swap(s, s_id)
     op2 = s.tos()
-    op_swap(s)
+    op_swap(s, s_id)
     s.push(op2)
     s.push(op1)
 

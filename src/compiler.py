@@ -19,7 +19,7 @@ TInputTypeSignature = Type("InputTypeSignature")
 TOutputTypeSignature = Type("OutputTypeSignature")
 
 
-def op_new_word(s: Stack) -> None:
+def op_new_word(s: Stack, s_id: Op_name) -> None:
     # Take an Atom, confirm that it's not already an active op,
     # and turn it into a new WordDefinition.
     itype = s.tos().type
@@ -32,7 +32,7 @@ def op_new_word(s: Stack) -> None:
     if itype == TAtom:
         s.tos().type = TWordDefinition
 
-def op_start_input_sig(s: Stack) -> None:
+def op_start_input_sig(s: Stack, s_id: Op_name) -> None:
     # Works only there's a WordDefinition followed by an Atom on tos.
     # Creates a new TypeSignature, adds the first item
     # and pushes it to the stack.

@@ -8,7 +8,7 @@ TBool = Type("Bool")
 #   Boolean algebra handling
 #
 
-def op_bool(s: Stack) -> None:
+def op_bool(s: Stack, s_id: Op_name) -> None:
     stack_object = s.pop()
     #print("op_bool stack_object = %s" % stack_object)
 
@@ -30,7 +30,7 @@ def op_bool(s: Stack) -> None:
     s.push(result)
 
 
-def optionally_infer_type_from_atom(s: Stack) -> StackObject:
+def optionally_infer_type_from_atom(s: Stack, s_id: Op_name) -> StackObject:
     sobj1 = s.pop()
     sobj2 = s.tos()
 
@@ -46,7 +46,7 @@ def optionally_infer_type_from_atom(s: Stack) -> StackObject:
         assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.type, sobj1)
         # Call the ctor and put its result on the stack.
         s.push(sobj1)
-        ctor(s)
+        ctor(s, s_id)
         sobj1 = s.pop()
         #print("Converted from %s to %s." % (sobj1,s.tos().type))
         #print("New stack is %s." % s.contents())
@@ -54,41 +54,41 @@ def optionally_infer_type_from_atom(s: Stack) -> StackObject:
     return sobj1
 
 
-def op_equals(s: Stack) -> None:
-    sobj1 = optionally_infer_type_from_atom(s)
+def op_equals(s: Stack, s_id: Op_name) -> None:
+    sobj1 = optionally_infer_type_from_atom(s, s_id)
     # Now we pop off whatever is the ultimate object that's 
     # possibly been inferred.
     sobj2 = s.pop()
     s.push(StackObject(sobj1 == sobj2, TBool))
 
-def op_not_equals(s: Stack) -> None:
-    op_equals(s)
+def op_not_equals(s: Stack, s_id: Op_name) -> None:
+    op_equals(s, s_id)
     result = s.tos()
     result.value = not result.value
 
-def op_less_than(s: Stack) -> None:
-    sobj1 = optionally_infer_type_from_atom(s)
+def op_less_than(s: Stack, s_id: Op_name) -> None:
+    sobj1 = optionally_infer_type_from_atom(s, s_id)
     sobj2 = s.pop()
     print("is %s (%s) < %s (%s)?" % (sobj2.value, type(sobj2.value), sobj1.value, type(sobj1.value)))
     s.push(StackObject(sobj2.value < sobj1.value, TBool))
 
-def op_greater_than(s: Stack) -> None:
-    sobj1 = optionally_infer_type_from_atom(s)
+def op_greater_than(s: Stack, s_id: Op_name) -> None:
+    sobj1 = optionally_infer_type_from_atom(s, s_id)
     sobj2 = s.pop()
     s.push(StackObject(sobj2.value > sobj1.value, TBool))    
 
-def op_less_than_or_equal_to(s: Stack) -> None:
-    sobj1 = optionally_infer_type_from_atom(s)
+def op_less_than_or_equal_to(s: Stack, s_id: Op_name) -> None:
+    sobj1 = optionally_infer_type_from_atom(s, s_id)
     sobj2 = s.pop()
     s.push(StackObject(sobj2.value <= sobj1.value, TBool))
 
-def op_greater_than_or_equal_to(s: Stack) -> None:
-    sobj1 = optionally_infer_type_from_atom(s)
+def op_greater_than_or_equal_to(s: Stack, s_id: Op_name) -> None:
+    sobj1 = optionally_infer_type_from_atom(s, s_id)
     sobj2 = s.pop()
     s.push(StackObject(sobj2.value >= sobj1.value, TBool))
 
 
-def op_not(s: Stack) -> None:
+def op_not(s: Stack, s_id: Op_name) -> None:
     # Restrict to only workong on Bools!
     op1 = s.tos().value = not s.tos().value
 
