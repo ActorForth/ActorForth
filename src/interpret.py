@@ -55,7 +55,7 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
             
             # See what happens if we just keep going...
             #break
-            #raise
+            raise
         if prompt: print(prompt,end='',flush=True)    
 
     return stack
