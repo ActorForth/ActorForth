@@ -63,19 +63,19 @@ def op_skip_to_code_compile(s: Stack, s_id: Op_name) -> None:
     s.push(StackObject(sig,TCodeCompile))  
     op_start_code_compile(s, s_id)
 
-Type.add_op(':', op_new_word, TypeSignature([TAtom],[TWordDefinition]))
+Type.add_op(':', Operation(op_new_word), TypeSignature([TAtom],[TWordDefinition]))
 # Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
-Type.add_op('->', op_switch_to_output_sig, TypeSignature([TInputTypeSignature],[TOutputTypeSignature]), WordFlags(), "InputTypeSignature")
-Type.add_op('->', op_skip_to_output_sig, TypeSignature([TWordDefinition],[TOutputTypeSignature]), WordFlags(), "WordDefinition")
-Type.add_op(';', op_start_code_compile, TypeSignature([TOutputTypeSignature],[TCodeCompile]), WordFlags(), "OutputTypeSignature")
-Type.add_op(';', op_skip_to_code_compile, TypeSignature([TWordDefinition],[TCodeCompile]), WordFlags(), "WordDefinition")
+Type.add_op('->', Operation(op_switch_to_output_sig), TypeSignature([TInputTypeSignature],[TOutputTypeSignature]), WordFlags(), "InputTypeSignature")
+Type.add_op('->', Operation(op_skip_to_output_sig), TypeSignature([TWordDefinition],[TOutputTypeSignature]), WordFlags(), "WordDefinition")
+Type.add_op(';', Operation(op_start_code_compile), TypeSignature([TOutputTypeSignature],[TCodeCompile]), WordFlags(), "OutputTypeSignature")
+Type.add_op(';', Operation(op_skip_to_code_compile), TypeSignature([TWordDefinition],[TCodeCompile]), WordFlags(), "WordDefinition")
 
 
 # Register every type name in order to be able to express Type Signatures at compile time.
 for type_name in Type.types.keys():
-    Type.add_op(type_name, op_start_input_sig, TypeSignature([TWordDefinition],[TWordDefinition,TInputTypeSignature]), WordFlags(), "WordDefinition")
-    Type.add_op(type_name, op_continue_input_sig, TypeSignature([TInputTypeSignature],[TInputTypeSignature]), WordFlags(), "InputTypeSignature")  
-    Type.add_op(type_name, op_output_sig, TypeSignature([TOutputTypeSignature],[TOutputTypeSignature]), WordFlags(), "OutputTypeSignature")          
+    Type.add_op(type_name, Operation(op_start_input_sig), TypeSignature([TWordDefinition],[TWordDefinition,TInputTypeSignature]), WordFlags(), "WordDefinition")
+    Type.add_op(type_name, Operation(op_continue_input_sig), TypeSignature([TInputTypeSignature],[TInputTypeSignature]), WordFlags(), "InputTypeSignature")  
+    Type.add_op(type_name, Operation(op_output_sig), TypeSignature([TOutputTypeSignature],[TOutputTypeSignature]), WordFlags(), "OutputTypeSignature")          
 
 
 

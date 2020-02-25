@@ -93,15 +93,15 @@ def op_not(s: Stack, s_id: Op_name) -> None:
     op1 = s.tos().value = not s.tos().value
 
 #   Bool dictionary
-Type.register_ctor('Bool','bool',op_bool,[TAtom])
-Type.register_ctor('Bool','bool',op_bool,[TBool])
-Type.register_ctor('Bool','==',op_equals,[TAny,TAny])
-Type.register_ctor('Bool','!=',op_not_equals,[TAny,TAny])
-Type.register_ctor('Bool','<',op_less_than,[TAny,TAny])
-Type.register_ctor('Bool','>',op_greater_than,[TAny,TAny])
-Type.register_ctor('Bool','<=',op_less_than_or_equal_to,[TAny,TAny])
-Type.register_ctor('Bool','>=',op_greater_than_or_equal_to,[TAny,TAny])
+Type.register_ctor('Bool','bool',Operation(op_bool),[TAtom])
+Type.register_ctor('Bool','bool',Operation(op_bool),[TBool])
+Type.register_ctor('Bool','==',Operation(op_equals),[TAny,TAny])
+Type.register_ctor('Bool','!=',Operation(op_not_equals),[TAny,TAny])
+Type.register_ctor('Bool','<',Operation(op_less_than),[TAny,TAny])
+Type.register_ctor('Bool','>',Operation(op_greater_than),[TAny,TAny])
+Type.register_ctor('Bool','<=',Operation(op_less_than_or_equal_to),[TAny,TAny])
+Type.register_ctor('Bool','>=',Operation(op_greater_than_or_equal_to),[TAny,TAny])
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
 flags = WordFlags()
-Type.add_op('not', op_not, TypeSignature([TBool],[TBool]), flags, "Bool")
+Type.add_op('not', Operation(op_not), TypeSignature([TBool],[TBool]), flags, "Bool")

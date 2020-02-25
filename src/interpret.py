@@ -25,7 +25,7 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
         #print("\nStack = %s" % stack.contents())
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
-            print("HACK tos = %s" % str(tos))
+            #print("HACK tos = %s" % str(tos))
             op, sig, flags, found = Type.op(symbol.s_id, stack, tos.type.name)
 
         if not found:

@@ -9,7 +9,17 @@ from stack import Stack
 
 # An operation takes a stack instance and returns nothing.
 Op_name = str
-Operation = Callable[[Stack, Op_name],None]
+Operation_def = Callable[[Stack, Op_name],None]
+
+class Operation:
+
+    def __init__(self, op: Operation_def) -> None:
+        self.op = op
+
+    def __call__(self, stack: Stack, name: Op_name) -> None:
+        self.op(stack, name)
+
+
 Type_name = str
 
 
@@ -148,7 +158,7 @@ class Type:
 
         #print ("Not found!")
         # This is redundant for what interpret already does by default.
-        return make_atom, TypeSignature([],[TAtom]), WordFlags(), False
+        return Operation(make_atom), TypeSignature([],[TAtom]), WordFlags(), False
 
     def __eq__(self, type: object) -> bool:
         if isinstance(type, Type):
@@ -215,9 +225,9 @@ def op_2dup(s: Stack, s_id: Op_name) -> None:
 #   Forth dictionary of primitive operations is created here.
 #
 
-Type.add_op('print', op_print, TypeSignature([TAny],[]))
-Type.add_op('dup', op_dup, TypeSignature([TAny],[TAny, TAny]))
-Type.add_op('swap', op_swap, TypeSignature([TAny, TAny],[TAny, TAny]))
-Type.add_op('drop', op_drop, TypeSignature([TAny],[]))
-Type.add_op('2dup', op_2dup, TypeSignature([TAny, TAny],[TAny, TAny]))
+Type.add_op('print', Operation(op_print), TypeSignature([TAny],[]))
+Type.add_op('dup', Operation(op_dup), TypeSignature([TAny],[TAny, TAny]))
+Type.add_op('swap', Operation(op_swap), TypeSignature([TAny, TAny],[TAny, TAny]))
+Type.add_op('drop', Operation(op_drop), TypeSignature([TAny],[]))
+Type.add_op('2dup', Operation(op_2dup), TypeSignature([TAny, TAny],[TAny, TAny]))
 
