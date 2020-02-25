@@ -13,8 +13,9 @@ Operation_def = Callable[[Stack, Op_name],None]
 
 class Operation:
 
-    def __init__(self, op: Operation_def) -> None:
-        self.op = op
+    def __init__(self, op: Operation_def, words: List[Operation_def] = None) -> None:
+        self.op : Operation_def = op
+        self.words : List[Operation_def] = words or []
 
     def __call__(self, stack: Stack, name: Op_name) -> None:
         self.op(stack, name)

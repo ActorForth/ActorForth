@@ -54,9 +54,14 @@ def op_output_sig(s: Stack, s_id: Op_name) -> None:
     # Does NOT consume the TypeSignature.
     s.tos().value.stack_out.append(Type(s_id))
 
+def op_execute_compiled_word(s: Stack, s_id: Op_name, words: Optional[List[Operation_def]] = None):
+    print("Executing words: %s" % words)
+
 def op_start_code_compile(s: Stack, s_id: Op_name) -> None:
     print("I'M COMPILING!!!")
-    s.tos().type = TCodeCompile
+    sig = s.pop().value # Later may need to copy and leave on the stack to support pattern matching.
+    op = Operation(op_execute_compiled_word, sig)
+    s.push( StackObject(op, TCodeCompile) )
 
 def op_skip_to_code_compile(s: Stack, s_id: Op_name) -> None:
     sig = TypeSignature([],[])
