@@ -10,7 +10,8 @@ from af_types import *
 TWordDefinition = Type("WordDefinition")
 TInputTypeSignature = Type("InputTypeSignature")
 TOutputTypeSignature = Type("OutputTypeSignature")
-TCodeCompile = Type("CodeCompile")
+
+# Declared in af_types/__init__.py TCodeCompile = Type("CodeCompile")
 
 
 def op_new_word(s: Stack, s_id: Op_name) -> None:

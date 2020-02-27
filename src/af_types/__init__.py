@@ -68,6 +68,7 @@ class Type:
     types : Dict[Type_name, Op_list] = {}
 
     types["Any"] = [] # Global dictionary. Should it be "Any"/TAny? Probably.
+    types["CodeCompile"] = []
 
     ctors : Dict[Type_name, Op_map] = {}
 
@@ -134,6 +135,12 @@ class Type:
         type_list = Type.types.get(type,[])        
         type_list.insert(0,(name, op, sig, flags))
 
+        # This is done so the compiler will recognize the operation and compile it. 
+        # THIS IS NOT EXECUTING THE OPERATION (Don't have compile time execution support yet.)
+        compile_type_list = Type.types.get("CodeCompile", None)
+        assert compile_type_list is not None, "Type.add_op CodeCompile type not found!!"
+        compile_type_list.insert(0,(name, op, TypeSignature([Type("CodeCompile")],[]), flags) )
+
     # Returns the first matching operation for this named type.
     @staticmethod
     def op(name: Op_name, stack: Stack, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
@@ -183,6 +190,8 @@ class StackObject:
 TAtom = Type("Atom")
 
 TAny = Type("Any")
+
+TCodeCompile = Type("CodeCompile")
 
 #
 #   Generic operations
