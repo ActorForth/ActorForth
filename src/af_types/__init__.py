@@ -13,10 +13,15 @@ Operation_def = Callable[[Stack,Op_name],None]
 
 class Operation:
 
-    def __init__(self, name: Op_name, op: Operation_def, words: List[Operation_def] = None) -> None:
+    def __init__(self, name: Op_name, op: Operation_def, words: List["Operation"] = None) -> None:
         self.name = name
         self.the_op : Operation_def = op
-        self.words : List[Operation_def] = words or []
+        self.words : List["Operation"] = words or []
+
+    def add_word(self, op: "Operation") -> bool:
+        # Should check for valid stack type signature.
+        self.words.append(op)
+        return True
 
     def __call__(self, stack: Stack, name: Op_name) -> None:
         self.the_op(stack, name)
@@ -31,7 +36,8 @@ class Operation:
 def op_compile_word(s: Stack, s_id: Op_name) -> None:
     # Given an Op_name, place it in the list of our Operation to be executed at runtime later.
     # TODO: Confirm Type Signatures in & out of found words to enforce type safety.
-    print("Compiling word:'%s'")
+    print("Compiling word:'%s'" % s_id)
+
 
 Type_name = str
 
