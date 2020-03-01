@@ -9,11 +9,12 @@ from stack import Stack
 
 # An operation takes a stack instance and returns nothing.
 Op_name = str
-Operation_def = Callable[[Stack, Op_name],None]
+Operation_def = Callable[[Stack,Optional[Op_name]],None]
 
 class Operation:
 
-    def __init__(self, op: Operation_def, words: List[Operation_def] = None) -> None:
+    def __init__(self, name: Op_name, op: Operation_def, words: List[Operation_def] = None) -> None:
+        self.name = name
         self.the_op : Operation_def = op
         self.words : List[Operation_def] = words or []
 
@@ -21,8 +22,11 @@ class Operation:
         self.the_op(stack, name)
 
     def __str__(self) -> str:
-        #result = "Op:%s" % self.the_op[0][1]
-        return "Operation"
+        result =  "Op: %s" % self.name
+        if len(self.words) == 0:
+            result += " (prim)"
+        return result
+
 
 def op_compile_word(s: Stack, s_id: Op_name) -> None:
     # Given an Op_name, place it in the list of our Operation to be executed at runtime later.
