@@ -66,7 +66,7 @@ class TestTypeSignature(unittest.TestCase):
 
         stack = Stack()
         stack.push(StackObject("tparm", TParm1))
-        Type.add_op("test", lambda stack: 42, TypeSignature([TParm1],[]) ) #, "Test")
+        Type.add_op(Operation("test", lambda stack: 42), TypeSignature([TParm1],[]) ) #, "Test")
 
         op, sig, flag, found = Type.op("test", stack ) #, "Test")
 
@@ -82,14 +82,14 @@ class TestTypeSignature(unittest.TestCase):
         stack = Stack()
         stack.push(StackObject("tparm", TTest))
 
-        Type.add_op("test", op_print, TypeSignature([TParm1],[]))
+        Type.add_op(Operation("test", op_print), TypeSignature([TParm1],[]))
 
         with self.assertRaises( Exception ):
             Type.op("test", stack)
             # Never get here -> print("op='%s', sig='%s', flag='%s', found='%s'" % (op,sig,flag,found))
         
     def test_op_with_no_type_signature(self) -> None:
-        Type.add_op("test", lambda stack: 42, TypeSignature([],[]) ) 
+        Type.add_op(Operation("test", lambda stack: 42), TypeSignature([],[]) ) 
 
         op, sig, flag, found = Type.op("test", Stack())
 
