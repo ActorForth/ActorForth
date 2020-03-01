@@ -5,30 +5,8 @@
 from typing import List, TextIO, Optional, Iterator, Tuple
 from io import StringIO
 
-from dataclasses import dataclass
 
-from af_types import Type
-
-@dataclass(frozen = True)
-class Location:
-    filename : str = "Unknown"
-    linenum : int = 0
-    column : int = 0
-
-@dataclass(order = True)
-class Symbol:
-    s_id : str
-    location : Location 
-    type : Type 
-    
-    @property
-    def size(self) -> int:
-        return len(self.s_id)
-
-    def __eq__(self, symbol = None) -> bool:
-        if type(symbol) is Symbol:
-            return symbol.s_id == self.s_id
-        return symbol == self.s_id    
+from af_types import Type 
 
 class Parser:
 

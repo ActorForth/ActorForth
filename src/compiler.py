@@ -69,6 +69,7 @@ def op_skip_to_code_compile(s: Stack, s_id: Op_name) -> None:
     s.push(StackObject(sig,TCodeCompile))  
     op_start_code_compile(s, s_id)
 
+
 Type.add_op(':', Operation(op_new_word), TypeSignature([TAtom],[TWordDefinition]))
 # Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
 Type.add_op('->', Operation(op_switch_to_output_sig), TypeSignature([TInputTypeSignature],[TOutputTypeSignature]), WordFlags(), "InputTypeSignature")

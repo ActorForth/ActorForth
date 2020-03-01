@@ -14,12 +14,20 @@ Operation_def = Callable[[Stack, Op_name],None]
 class Operation:
 
     def __init__(self, op: Operation_def, words: List[Operation_def] = None) -> None:
-        self.op : Operation_def = op
+        self.the_op : Operation_def = op
         self.words : List[Operation_def] = words or []
 
     def __call__(self, stack: Stack, name: Op_name) -> None:
-        self.op(stack, name)
+        self.the_op(stack, name)
 
+    def __str__(self) -> str:
+        #result = "Op:%s" % self.the_op[0][1]
+        return "Operation"
+
+def op_compile_word(s: Stack, s_id: Op_name) -> None:
+    # Given an Op_name, place it in the list of our Operation to be executed at runtime later.
+    # TODO: Confirm Type Signatures in & out of found words to enforce type safety.
+    print("Compiling word:'%s'")
 
 Type_name = str
 
@@ -139,7 +147,8 @@ class Type:
         # THIS IS NOT EXECUTING THE OPERATION (Don't have compile time execution support yet.)
         compile_type_list = Type.types.get("CodeCompile", None)
         assert compile_type_list is not None, "Type.add_op CodeCompile type not found!!"
-        compile_type_list.insert(0,(name, op, TypeSignature([Type("CodeCompile")],[]), flags) )
+        compiling_word : Operation_def = op.the_op        
+        compile_type_list.insert(0,(name, Operation(op_compile_word, [compiling_word]), TypeSignature([Type("CodeCompile")],[]), flags) )
 
     # Returns the first matching operation for this named type.
     @staticmethod

@@ -1,6 +1,8 @@
 from typing import TextIO
 
-from parser import Parser, Location, Symbol
+from dataclasses import dataclass
+
+from parser import Parser
 
 from af_types import Operation, Type, TypeSignature, TAtom, make_atom, TAny 
 
@@ -8,6 +10,28 @@ from af_types.af_int import *
 from af_types.af_bool import *
 
 from compiler import *
+
+
+@dataclass(frozen = True)
+class Location:
+    filename : str = "Unknown"
+    linenum : int = 0
+    column : int = 0
+
+@dataclass(order = True)
+class Symbol:
+    s_id : str
+    location : Location 
+    type : Type 
+    
+    @property
+    def size(self) -> int:
+        return len(self.s_id)
+
+    def __eq__(self, symbol = None) -> bool:
+        if type(symbol) is Symbol:
+            return symbol.s_id == self.s_id
+        return symbol == self.s_id   
 
 def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Stack:    
     p = Parser()
