@@ -13,7 +13,7 @@ TAny = Type("Any")
 
 TOp = lambda stack : stack
 
-Type.register_ctor("Test","nop", Operation('nop', TOp), [TParm1])
+Type.register_ctor("Test",Operation('nop', TOp), [TParm1])
 
 class TestTypeSignature(unittest.TestCase):
 

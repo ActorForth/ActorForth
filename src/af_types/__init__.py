@@ -99,7 +99,7 @@ class Type:
             Type.types[self.name] = []
 
     @staticmethod
-    def register_ctor(name: Type_name, op_name: Op_name, op: Operation, sig: List["Type"]) -> None:
+    def register_ctor(name: Type_name, op: Operation, sig: List["Type"]) -> None:
         # Ctors only have TypeSignatures that return their own Type.
         # Register the ctor in the Global dictionary.
         Type.add_op(op, TypeSignature(sig,[Type("Any")]))

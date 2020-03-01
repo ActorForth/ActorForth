@@ -72,7 +72,7 @@ class TestInterpreter(unittest.TestCase):
         assert stack.tos().value is True
 
     def testOverloadingBoolCtor(self) -> None:
-        Type.register_ctor('Bool','bool',Operation('bool',op_bool),[TBool])
+        Type.register_ctor('Bool',Operation('bool',op_bool),[TBool])
         stack = interpret(self.stack, io.StringIO("True bool"))
         assert stack.tos().type == TBool
         assert stack.tos().value is True

@@ -57,8 +57,8 @@ def op_divide(s: Stack, s_id: Op_name) -> None:
     s.push(StackObject(remainder, TInt))
 
 #   Int dictionary
-Type.register_ctor('Int', 'int', Operation('int',op_int), [TInt])
-Type.register_ctor('Int', 'int', Operation('int',op_int), [TAtom])
+Type.register_ctor('Int', Operation('int',op_int), [TInt])
+Type.register_ctor('Int', Operation('int',op_int), [TAtom])
 
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
