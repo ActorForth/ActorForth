@@ -9,7 +9,7 @@ from stack import Stack
 
 # An operation takes a stack instance and returns nothing.
 Op_name = str
-Operation_def = Callable[[Stack,Optional[Op_name]],None]
+Operation_def = Callable[[Stack,Op_name],None]
 
 class Operation:
 
@@ -152,7 +152,7 @@ class Type:
         compile_type_list = Type.types.get("CodeCompile", None)
         assert compile_type_list is not None, "Type.add_op CodeCompile type not found!!"
         compiling_word : Operation_def = op.the_op        
-        compile_type_list.insert(0,(name, Operation(op_compile_word, [compiling_word]), TypeSignature([Type("CodeCompile")],[]), flags) )
+        compile_type_list.insert(0,(name, Operation(op.name, op_compile_word, [compiling_word]), TypeSignature([Type("CodeCompile")],[]), flags) )
 
     # Returns the first matching operation for this named type.
     @staticmethod
@@ -179,7 +179,7 @@ class Type:
 
         #print ("Not found!")
         # This is redundant for what interpret already does by default.
-        return Operation(make_atom), TypeSignature([],[TAtom]), WordFlags(), False
+        return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), WordFlags(), False
 
     def __eq__(self, type: object) -> bool:
         if isinstance(type, Type):
@@ -248,9 +248,9 @@ def op_2dup(s: Stack, s_id: Op_name) -> None:
 #   Forth dictionary of primitive operations is created here.
 #
 
-Type.add_op('print', Operation(op_print), TypeSignature([TAny],[]))
-Type.add_op('dup', Operation(op_dup), TypeSignature([TAny],[TAny, TAny]))
-Type.add_op('swap', Operation(op_swap), TypeSignature([TAny, TAny],[TAny, TAny]))
-Type.add_op('drop', Operation(op_drop), TypeSignature([TAny],[]))
-Type.add_op('2dup', Operation(op_2dup), TypeSignature([TAny, TAny],[TAny, TAny]))
+Type.add_op('print', Operation("print", op_print), TypeSignature([TAny],[]))
+Type.add_op('dup', Operation("dup", op_dup), TypeSignature([TAny],[TAny, TAny]))
+Type.add_op('swap', Operation("swap", op_swap), TypeSignature([TAny, TAny],[TAny, TAny]))
+Type.add_op('drop', Operation("drop", op_drop), TypeSignature([TAny],[]))
+Type.add_op('2dup', Operation("2dup", op_2dup), TypeSignature([TAny, TAny],[TAny, TAny]))
 

@@ -57,13 +57,13 @@ def op_divide(s: Stack, s_id: Op_name) -> None:
     s.push(StackObject(remainder, TInt))
 
 #   Int dictionary
-Type.register_ctor('Int', 'int', Operation(op_int), [TInt])
-Type.register_ctor('Int', 'int', Operation(op_int), [TAtom])
+Type.register_ctor('Int', 'int', Operation('int',op_int), [TInt])
+Type.register_ctor('Int', 'int', Operation('int',op_int), [TAtom])
 
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
 flags = WordFlags()
-Type.add_op('+', Operation(op_plus), TypeSignature([TInt,TInt],[TInt]), flags, "Int")
-Type.add_op('-', Operation(op_minus), TypeSignature([TInt,TInt],[TInt]), flags, "Int")
-Type.add_op('*', Operation(op_multiply), TypeSignature([TInt,TInt],[TInt]), flags, "Int")
-Type.add_op('/', Operation(op_divide), TypeSignature([TInt,TInt],[TInt,TInt]), flags, "Int")
+Type.add_op('+', Operation('+',op_plus), TypeSignature([TInt,TInt],[TInt]), flags, "Int")
+Type.add_op('-', Operation('-',op_minus), TypeSignature([TInt,TInt],[TInt]), flags, "Int")
+Type.add_op('*', Operation('*',op_multiply), TypeSignature([TInt,TInt],[TInt]), flags, "Int")
+Type.add_op('/', Operation('/',op_divide), TypeSignature([TInt,TInt],[TInt,TInt]), flags, "Int")

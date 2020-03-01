@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from parser import Parser
 
-from af_types import Operation, Type, TypeSignature, TAtom, make_atom, TAny 
+from af_types import Type, TypeSignature, TAtom, make_atom, TAny 
 
 from af_types.af_int import *
 from af_types.af_bool import *
