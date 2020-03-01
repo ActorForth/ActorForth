@@ -40,10 +40,11 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
     interpret_mode = True
 
     if prompt: print(prompt,end='',flush=True)    
-    for token in p.tokens():
-        symbol = Symbol(token[0], Location(p.filename,token[1],token[2]), TAtom)
+    for s_id, linenum, column in p.tokens():
+        symbol = Symbol(s_id, Location(p.filename,linenum,column), TAtom)
+
         if p.filename != "stdin":
-            print(token[0])
+            print(s_id)
         tos = stack.tos()
         found = False
         #print("\nStack = %s" % stack.contents())
