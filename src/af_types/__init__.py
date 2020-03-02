@@ -9,7 +9,8 @@ from stack import Stack
 
 # An operation takes a stack instance and returns nothing.
 Op_name = str
-Operation_def = Callable[[Stack,Op_name],None]
+#Operation_def = Callable[[Stack,Op_name],None]
+Operation_def = Callable[[Stack],None]
 
 class Operation:
 
@@ -23,8 +24,9 @@ class Operation:
         self.words.append(op)
         return True
 
-    def __call__(self, stack: Stack, name: Op_name) -> None:
-        self.the_op(stack, name)
+    #def __call__(self, stack: Stack, name: Op_name) -> None:
+    def __call__(self, stack: Stack) -> None:
+        self.the_op(stack)
 
     def __str__(self) -> str:
         result =  "Op: %s" % self.name
@@ -73,7 +75,7 @@ class TypeSignature:
 class WordFlags:
     immediate : bool = False
 
-Op_list = List[Tuple[Op_name, Operation, TypeSignature, WordFlags]]
+Op_list = List[Tuple[Operation, TypeSignature, WordFlags]]
 
 Op_map = List[Tuple[List["Type"],Operation]]
 
@@ -151,14 +153,14 @@ class Type:
         if not flags:
             flags = WordFlags()
         type_list = Type.types.get(type,[])        
-        type_list.insert(0,(op.name, op, sig, flags))
+        type_list.insert(0,(op, sig, flags))
 
         # This is done so the compiler will recognize the operation and compile it. 
         # THIS IS NOT EXECUTING THE OPERATION (Don't have compile time execution support yet.)
-        compile_type_list = Type.types.get("CodeCompile", None)
+        compile_type_list : Op_list = Type.types.get("CodeCompile", None)
         assert compile_type_list is not None, "Type.add_op CodeCompile type not found!!"
         compiling_word : Operation_def = op.the_op        
-        compile_type_list.insert(0,(op.name, Operation(op.name, op_compile_word, [compiling_word]), TypeSignature([Type("CodeCompile")],[]), flags) )
+        compile_type_list.insert(0,(Operation(op.name, op_compile_word, [compiling_word]), TypeSignature([Type("CodeCompile")],[]), flags))
 
     # Returns the first matching operation for this named type.
     @staticmethod
@@ -168,8 +170,8 @@ class Type:
         name_found = False
         op_list = Type.types.get(type,[])  
         #print("\top_list = %s" % [(name,sig.stack_in) for (name, op, sig, flags) in op_list])
-        for op_name, op, sig, flags in op_list:
-            if op_name == name:
+        for op, sig, flags in op_list:
+            if op.name == name:
                 name_found = True
                 # Now try to match the input stack...
                 # Should it be an exception to match the name but not the 
@@ -219,7 +221,7 @@ TCodeCompile = Type("CodeCompile")
 def make_atom(s: Stack, s_id: Op_name = "Unknown") -> None:
     s.push(StackObject(s_id,TAtom))
 
-def op_print(s: Stack, s_id: Op_name = None) -> None:
+def op_print(s: Stack) -> None:
     op1 = s.pop().value
     print("'%s'" % op1)
 
@@ -228,24 +230,24 @@ def op_print(s: Stack, s_id: Op_name = None) -> None:
 #   dynamically determine the actual stack types on the stack and
 #   create dynamic type signatures based on what are found?
 #
-def op_dup(s: Stack, s_id: Op_name) -> None:
+def op_dup(s: Stack) -> None:
     op1 = s.tos()
     s.push(op1)
 
-def op_swap(s: Stack, s_id: Op_name) -> None:
+def op_swap(s: Stack) -> None:
     op1 = s.pop()
     op2 = s.pop()
     s.push(op1)
     s.push(op2)
 
-def op_drop(s: Stack, s_id: Op_name) -> None:
+def op_drop(s: Stack) -> None:
     op1 = s.pop()
 
-def op_2dup(s: Stack, s_id: Op_name) -> None:
+def op_2dup(s: Stack) -> None:
     op1 = s.tos()
-    op_swap(s, s_id)
+    op_swap(s)
     op2 = s.tos()
-    op_swap(s, s_id)
+    op_swap(s)
     s.push(op2)
     s.push(op1)
 

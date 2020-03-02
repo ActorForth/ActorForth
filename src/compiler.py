@@ -14,7 +14,7 @@ TOutputTypeSignature = Type("OutputTypeSignature")
 # Declared in af_types/__init__.py TCodeCompile = Type("CodeCompile")
 
 
-def op_new_word(s: Stack, s_id: Op_name) -> None:
+def op_new_word(s: Stack) -> None:
     # Take an Atom, confirm that it's not already an active op,
     # and turn it into a new WordDefinition.
     itype = s.tos().type
@@ -27,7 +27,7 @@ def op_new_word(s: Stack, s_id: Op_name) -> None:
     if itype == TAtom:
         s.tos().type = TWordDefinition
 
-def op_start_input_sig(s: Stack, s_id: Op_name) -> None:
+def op_start_input_sig(s: Stack) -> None:
     # Works only there's a WordDefinition followed by an Atom on tos.
     # Creates a new TypeSignature, adds the first item
     # and pushes it to the stack.
@@ -38,36 +38,36 @@ def op_start_input_sig(s: Stack, s_id: Op_name) -> None:
     sig = TypeSignature([Type(s_id)],[])
     s.push(StackObject(sig,TInputTypeSignature))
 
-def op_continue_input_sig(s: Stack, s_id: Op_name) -> None:
+def op_continue_input_sig(s: Stack) -> None:
     s.tos().value.stack_in.append(Type(s_id))
 
-def op_switch_to_output_sig(s: Stack, s_id: Op_name) -> None:
+def op_switch_to_output_sig(s: Stack) -> None:
     s.tos().type = TOutputTypeSignature
 
-def op_skip_to_output_sig(s: Stack, s_id: Op_name) -> None:
+def op_skip_to_output_sig(s: Stack) -> None:
     sig = TypeSignature([],[])
     s.push(StackObject(sig,TOutputTypeSignature))
 
-def op_output_sig(s: Stack, s_id: Op_name) -> None:
+def op_output_sig(s: Stack) -> None:
     # Works only there's an InputTypeSignaure followed by the -> operator.
     # Takes the existing TypeSignature, adds the first item to the 
     # output signature. 
     # Does NOT consume the TypeSignature.
     s.tos().value.stack_out.append(Type(s_id))
 
-def op_execute_compiled_word(s: Stack, s_id: Op_name, words: Optional[List[Operation_def]] = None):
+def op_execute_compiled_word(s: Stack, words: Optional[List[Operation]] = None):
     print("Executing words: %s" % words)
 
-def op_start_code_compile(s: Stack, s_id: Op_name) -> None:
+def op_start_code_compile(s: Stack) -> None:
     print("I'M COMPILING!!!")
     sig = s.pop().value # Later may need to copy and leave on the stack to support pattern matching.
-    op = Operation(op_execute_compiled_word, sig)
+    op = Operation(s_id, op_execute_compiled_word, sig)
     s.push( StackObject(op, TCodeCompile) )
 
-def op_skip_to_code_compile(s: Stack, s_id: Op_name) -> None:
+def op_skip_to_code_compile(s: Stack) -> None:
     sig = TypeSignature([],[])
     s.push(StackObject(sig,TCodeCompile))  
-    op_start_code_compile(s, s_id)
+    op_start_code_compile(s)
 
 
 Type.add_op(Operation(':',op_new_word), TypeSignature([TAtom],[TWordDefinition]))

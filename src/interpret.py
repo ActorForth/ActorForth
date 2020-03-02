@@ -59,7 +59,7 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
         
         try:
             if found:
-                op(stack, symbol.s_id)
+                op(stack)
                 print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
                 #     else:
                 # if interpret_mode or flags.immediate:

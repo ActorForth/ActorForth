@@ -118,7 +118,7 @@ class TestGenericTypeStuff(unittest.TestCase):
 
     def test_op_dup(self) -> None:
         self.test_make_atom()
-        op_dup(self.s, "test_op_dup")
+        op_dup(self.s)
         item1 = self.s.pop()
         item2 = self.s.pop()
         assert item1 == item2
@@ -126,7 +126,7 @@ class TestGenericTypeStuff(unittest.TestCase):
     def test_op_swap(self) -> None:
         make_atom(self.s, "first")
         make_atom(self.s, "second")
-        op_swap(self.s, "test_op_swap")
+        op_swap(self.s)
         item1 = self.s.pop()
         item2 = self.s.pop()
         assert item1.value == "first"
@@ -134,13 +134,13 @@ class TestGenericTypeStuff(unittest.TestCase):
 
     def test_op_drop(self) -> None:
         self.s.push(StackObject("test", TAtom))
-        op_drop(self.s, "test_op_drop")
+        op_drop(self.s)
         assert self.s.depth() == 0
 
     def test_op_2dup(self) -> None:
         make_atom(self.s, "first")
         make_atom(self.s, "second")
-        op_2dup(self.s,"test_op_2dup")
+        op_2dup(self.s)
         assert self.s.depth() == 4
         item1 = self.s.pop()
         item2 = self.s.pop()
