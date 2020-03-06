@@ -91,7 +91,7 @@ class Type:
 
     types : Dict[Type_name, Op_list] = {}
 
-    types["Any"] = [] # Global dictionary. Should it be "Any"/TAny? Probably.
+    types["Any"] = [] # Global dictionary. 
     types["CodeCompile"] = []
 
     ctors : Dict[Type_name, Op_map] = {}
@@ -158,14 +158,18 @@ class Type:
             flags = WordFlags()
         type_list = Type.types.get(type,[])        
         type_list.insert(0,(op, sig, flags))
+        #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
 
         # This is done so the compiler will recognize the operation and compile it. 
         # THIS IS NOT EXECUTING THE OPERATION (Don't have compile time execution support yet.)
-        compile_type_list : Optional[Op_list] = Type.types.get("CodeCompile", None)
-        assert compile_type_list is not None, "Type.add_op CodeCompile type not found!!"
-        ### ERR?? compiling_word : Operation_def = op.the_op        
-        new_op = Operation(op.name, op_compile_word, [op])
-        compile_type_list.insert(0,(new_op, TypeSignature([Type("CodeCompile")],[]), flags))
+        #compile_type_list : Optional[Op_list] = Type.types.get("CodeCompile", None)
+        assert Type.types.get("CodeCompile", None) is not None, "Type.add_op CodeCompile type not found!!"
+        
+        if op.name not in [o[0].name for o in Type.types["CodeCompile"]]:
+            new_op = (Operation(op.name, op_compile_word, [op]), TypeSignature([Type("CodeCompile")],[Type("CodeCompile")]), flags)
+            # WHY ON EARTH DOES THIS FAIL?!?!? compile_type_list.insert(0,(new_op, TypeSignature([Type("CodeCompile")],[]), flags))
+            Type.types["CodeCompile"].insert(0,new_op)
+            #print("Added Op:'%s' to CodeCompile context : %s." % (new_op,Type.types["CodeCompile"]))
 
     # Returns the first matching operation for this named type.
     @staticmethod
