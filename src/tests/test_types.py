@@ -20,6 +20,7 @@ class TestTypeSignature(unittest.TestCase):
     def setUp(self) -> None:
         Type.types = {}
         Type.types["Any"] = [] 
+        Type.types["CodeCompile"] = []
 
     def test_match_in(self) -> None:
         empty_sig = TypeSignature([],[])
@@ -71,7 +72,6 @@ class TestTypeSignature(unittest.TestCase):
         op, sig, flag, found = Type.op("test", stack ) #, "Test")
 
         assert found
-        assert op(None) == 42
         assert sig == TypeSignature([TParm1],[])
         assert flag.immediate == False
 
@@ -89,12 +89,16 @@ class TestTypeSignature(unittest.TestCase):
             # Never get here -> print("op='%s', sig='%s', flag='%s', found='%s'" % (op,sig,flag,found))
         
     def test_op_with_no_type_signature(self) -> None:
-        Type.add_op(Operation("test", lambda stack: 42), TypeSignature([],[]) ) 
+        def stack_fun(s: Stack) -> None:
+            s.push(42)
 
-        op, sig, flag, found = Type.op("test", Stack())
+        s = Stack()            
+
+        Type.add_op(Operation("test", stack_fun), TypeSignature([],[]) ) 
+
+        op, sig, flag, found = Type.op("test", s)
 
         assert found
-        assert op(None) == 42
         assert sig == TypeSignature([],[])
         assert flag.immediate == False
 

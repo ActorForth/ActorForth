@@ -13,7 +13,10 @@ TOutputTypeSignature = Type("OutputTypeSignature")
 
 # Declared in af_types/__init__.py TCodeCompile = Type("CodeCompile")
 global op_context
-op_context = Operation("nop",lambda x:x)
+def nop(s: Stack) -> None:
+    pass
+
+op_context = Operation("nop",nop)
 
 def op_new_word(s: Stack) -> None:
     # Take an Atom, confirm that it's not already an active op,

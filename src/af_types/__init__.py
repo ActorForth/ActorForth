@@ -39,10 +39,10 @@ class Operation:
         return self.__str__()
 
 
-def op_compile_word(s: Stack, s_id: Op_name) -> None:
+def op_compile_word(s: Stack) -> None:
     # Given an Op_name, place it in the list of our Operation to be executed at runtime later.
     # TODO: Confirm Type Signatures in & out of found words to enforce type safety.
-    print("Compiling word:'%s'" % s_id)
+    print("Compiling word!") #'%s'" % s_id)
 
 
 Type_name = str
@@ -163,8 +163,9 @@ class Type:
         # THIS IS NOT EXECUTING THE OPERATION (Don't have compile time execution support yet.)
         compile_type_list : Optional[Op_list] = Type.types.get("CodeCompile", None)
         assert compile_type_list is not None, "Type.add_op CodeCompile type not found!!"
-        compiling_word : Operation_def = op.the_op        
-        compile_type_list.insert(0,(Operation(op.name, op_compile_word, [compiling_word]), TypeSignature([Type("CodeCompile")],[]), flags))
+        ### ERR?? compiling_word : Operation_def = op.the_op        
+        new_op = Operation(op.name, op_compile_word, [op])
+        compile_type_list.insert(0,(new_op, TypeSignature([Type("CodeCompile")],[]), flags))
 
     # Returns the first matching operation for this named type.
     @staticmethod
