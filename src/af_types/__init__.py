@@ -29,10 +29,14 @@ class Operation:
         self.the_op(stack)
 
     def __str__(self) -> str:
-        result =  "Op: %s" % self.name
-        if len(self.words) == 0:
-            result += " (prim)"
-        return result
+        result =  "Op:'%s'" % self.name
+        #if len(self.words) == 0:
+        #    result += " (prim)"
+        #return result
+        return "'%s'" %self.name
+
+    def __repr__(self) -> str:
+        return self.__str__()
 
 
 def op_compile_word(s: Stack, s_id: Op_name) -> None:
@@ -157,7 +161,7 @@ class Type:
 
         # This is done so the compiler will recognize the operation and compile it. 
         # THIS IS NOT EXECUTING THE OPERATION (Don't have compile time execution support yet.)
-        compile_type_list : Op_list = Type.types.get("CodeCompile", None)
+        compile_type_list : Optional[Op_list] = Type.types.get("CodeCompile", None)
         assert compile_type_list is not None, "Type.add_op CodeCompile type not found!!"
         compiling_word : Operation_def = op.the_op        
         compile_type_list.insert(0,(Operation(op.name, op_compile_word, [compiling_word]), TypeSignature([Type("CodeCompile")],[]), flags))

@@ -10,6 +10,7 @@ from af_types.af_int import *
 from af_types.af_bool import *
 
 from compiler import *
+import compiler
 
 
 @dataclass(frozen = True)
@@ -37,6 +38,7 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
     p = Parser()
     p.open_handle(input_stream, filename)
 
+
     interpret_mode = True
 
     if prompt: print(prompt,end='',flush=True)    
@@ -51,15 +53,15 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
             #print("HACK tos = %s" % str(tos))
-            op, sig, flags, found = Type.op(symbol.s_id, stack, tos.type.name)
+            compiler.op_context, sig, flags, found = Type.op(symbol.s_id, stack, tos.type.name)
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
-            op, sig, flags, found = Type.op(symbol.s_id, stack)
+            compiler.op_context, sig, flags, found = Type.op(symbol.s_id, stack)
         
         try:
             if found:
-                op(stack)
+                compiler.op_context(stack)
                 print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
                 #     else:
                 # if interpret_mode or flags.immediate:
