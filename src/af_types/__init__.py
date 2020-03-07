@@ -33,7 +33,7 @@ class Operation:
         #if len(self.words) == 0:
         #    result += " (prim)"
         #return result
-        return "'%s'" %self.name
+        return "'%s':(%s)" % (self.name, self.the_op.__qualname__)
 
     def __repr__(self) -> str:
         return self.__str__()

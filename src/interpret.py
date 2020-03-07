@@ -61,6 +61,7 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
         
         try:
             if found:
+                print("Executing %s:" % compiler.op_context)
                 compiler.op_context(stack)
                 print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
                 #     else:
@@ -74,6 +75,7 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
                 #     pass
             else:
                 # No idea what this is so make an atom on the stack.
+                print("New Atom: '%s" % symbol.s_id)
                 make_atom(stack, symbol.s_id)
                 print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
         except Exception as x:
