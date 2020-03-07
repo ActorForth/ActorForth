@@ -75,7 +75,7 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
                 #     pass
             else:
                 # No idea what this is so make an atom on the stack.
-                print("New Atom: '%s" % symbol.s_id)
+                print("New Atom: '%s'" % symbol.s_id)
                 make_atom(stack, symbol.s_id)
                 print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
         except Exception as x:

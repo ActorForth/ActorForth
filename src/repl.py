@@ -2,6 +2,14 @@ import sys
 
 from interpret import *
 
+def print_stack_stats(stack):
+    print("")
+    print(stack.contents())
+    print("Stack max_depth = %s" % stack.max_depth())
+    print("Stack depth_history = %s" % stack.depth_history())
+    print("Stack total operations = %s" % stack.total_operations())
+
+
 if __name__ == "__main__":
 
     print("ActorForth demo interpreter. ^C to exit.")
@@ -23,14 +31,22 @@ if __name__ == "__main__":
 
     stack = Stack()
 
-    try:
-        stack = interpret(stack, handle, filename, prompt="ok: ")
+    while True:
 
-    except KeyboardInterrupt as x:
-        print(" key interrupt.")
+        try:
+            stack = interpret(stack, handle, filename, prompt="ok: ")
 
-    print(stack.contents())
-    print("Stack max_depth = %s" % stack.max_depth())
-    print("Stack depth_history = %s" % stack.depth_history())
-    print("Stack total operations = %s" % stack.total_operations())
+            if stack.tos().value == "resume":
+                handle = sys.stdin
+                filename = "stdin"
+                stack.pop()
+                print_stack_stats(stack)
+            else:
+                break
+        except KeyboardInterrupt as x:
+            print(" key interrupt.")
+            break
+
+    print_stack_stats(stack)
     print("\nend of line...")
+

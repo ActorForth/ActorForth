@@ -39,12 +39,6 @@ class Operation:
         return self.__str__()
 
 
-def op_compile_word(s: Stack) -> None:
-    # Given an Op_name, place it in the list of our Operation to be executed at runtime later.
-    # TODO: Confirm Type Signatures in & out of found words to enforce type safety.
-    print("Compiling word!") #'%s'" % s_id)
-
-
 Type_name = str
 
 
@@ -83,6 +77,22 @@ Op_list = List[Tuple[Operation, TypeSignature, WordFlags]]
 
 Op_map = List[Tuple[List["Type"],Operation]]
 
+
+#
+#
+#
+def op_compile_word(s: Stack) -> None:
+    """
+    WordDefinition(Op_name), CodeCompile(Operation) 
+        -> WordDefinition(Op_name), CodeCompile(Operation')
+
+    Given an Op_name, place it in the list of our Operation to be executed at runtime later.
+    TODO: Confirm Type Signatures in & out of found words to enforce type safety.
+    """
+
+    print("Compiling word!") #'%s'" % s_id)
+    tos = s.tos().value
+    print("Op: name=%s, op=%s, words=%s" % (tos.name, tos.the_op.__qualname__, tos.words))
 
 class Type:
 
@@ -166,7 +176,9 @@ class Type:
         assert Type.types.get("CodeCompile", None) is not None, "Type.add_op CodeCompile type not found!!"
         
         if op.name not in [o[0].name for o in Type.types["CodeCompile"]]:
-            new_op = (Operation(op.name, op_compile_word, [op]), TypeSignature([Type("CodeCompile")],[Type("CodeCompile")]), flags)
+            new_op = (Operation(op.name, op_compile_word, [op]), 
+                        TypeSignature([Type("WordDefinition"),Type("CodeCompile")],
+                            [Type("WordDefinition"),Type("CodeCompile")]), flags)
             # WHY ON EARTH DOES THIS FAIL?!?!? compile_type_list.insert(0,(new_op, TypeSignature([Type("CodeCompile")],[]), flags))
             Type.types["CodeCompile"].insert(0,new_op)
             #print("Added Op:'%s' to CodeCompile context : %s." % (new_op,Type.types["CodeCompile"]))
