@@ -1,6 +1,8 @@
 import unittest
 
-from af_types import Stack, StackObject, Type, TypeSignature, \
+from continuation import Continuation, Stack
+
+from af_types import StackObject, Type, TypeSignature, \
                     make_atom, TAtom, op_print, op_dup, op_swap, \
                     op_drop, op_2dup
 
@@ -13,13 +15,14 @@ TAny = Type("Any")
 
 TOp = lambda stack : stack
 
-Type.register_ctor("Test","nop", TOp, [TParm1])
+Type.register_ctor("Test",Operation('nop', TOp), [TParm1])
 
 class TestTypeSignature(unittest.TestCase):
 
     def setUp(self) -> None:
         Type.types = {}
         Type.types["Any"] = [] 
+        Type.types["CodeCompile"] = []
 
     def test_match_in(self) -> None:
         empty_sig = TypeSignature([],[])
@@ -48,13 +51,13 @@ class TestTypeSignature(unittest.TestCase):
 
     def test_find_ctor(self) -> None:
         l = [TParm1]
-        assert Type.find_ctor("Test",l) == TOp
+        assert Type.find_ctor("Test",l).the_op == TOp
 
         # Execute the lambda so we get full code coverage.
         assert TOp("fake_stack") == "fake_stack"
 
         l = [TAny]
-        assert Type.find_ctor("Test",l) == TOp
+        assert Type.find_ctor("Test",l).the_op == TOp
 
         l = [TTest]
         assert Type.find_ctor("Test",l) == None
@@ -65,36 +68,41 @@ class TestTypeSignature(unittest.TestCase):
     def test_op_with_type_signature(self) -> None:
 
         stack = Stack()
-        stack.push(StackObject("tparm", TParm1))
-        Type.add_op("test", lambda stack: 42, TypeSignature([TParm1],[]) ) #, "Test")
+        cont = Continuation(stack)
+        cont.stack.push(StackObject("tparm", TParm1))
+        Type.add_op(Operation("test", lambda cont: 42), TypeSignature([TParm1],[]) ) #, "Test")
 
-        op, sig, flag, found = Type.op("test", stack ) #, "Test")
+        op, sig, flag, found = Type.op("test", cont ) #, "Test")
 
         assert found
-        assert op(None) == 42
         assert sig == TypeSignature([TParm1],[])
         assert flag.immediate == False
 
-        op, sig, flag, found = Type.op("not found", stack)
+        op, sig, flag, found = Type.op("not found", cont)
         assert not found
 
     def test_op_with_wrong_type_signature(self) -> None:
         stack = Stack()
         stack.push(StackObject("tparm", TTest))
 
-        Type.add_op("test", op_print, TypeSignature([TParm1],[]))
+        Type.add_op(Operation("test", op_print), TypeSignature([TParm1],[]))
 
         with self.assertRaises( Exception ):
             Type.op("test", stack)
             # Never get here -> print("op='%s', sig='%s', flag='%s', found='%s'" % (op,sig,flag,found))
         
     def test_op_with_no_type_signature(self) -> None:
-        Type.add_op("test", lambda stack: 42, TypeSignature([],[]) ) 
+        def stack_fun(s: Stack) -> None:
+            s.push(42)
 
-        op, sig, flag, found = Type.op("test", Stack())
+        s = Stack()        
+        c = Continuation(s)    
+
+        Type.add_op(Operation("test", stack_fun), TypeSignature([],[]) ) 
+
+        op, sig, flag, found = Type.op("test", c)
 
         assert found
-        assert op(None) == 42
         assert sig == TypeSignature([],[])
         assert flag.immediate == False
 
@@ -103,51 +111,52 @@ class TestGenericTypeStuff(unittest.TestCase):
 
     def setUp(self) -> None:
         self.s = Stack()
+        self.c = Continuation(self.s)
 
     def test_make_atom(self) -> None:
         op_name = "test"
-        make_atom(self.s, op_name)
-        item = self.s.pop()
+        make_atom(self.c, op_name)
+        item = self.c.stack.pop()
         assert item.value == op_name
         assert item.type == TAtom 
 
     def test_op_print(self) -> None:
-        self.s.push(StackObject("test", TAtom))
-        op_print(self.s)
-        assert self.s.depth() == 0
+        self.c.stack.push(StackObject("test", TAtom))
+        op_print(self.c)
+        assert self.c.stack.depth() == 0
 
     def test_op_dup(self) -> None:
         self.test_make_atom()
-        op_dup(self.s, "test_op_dup")
-        item1 = self.s.pop()
-        item2 = self.s.pop()
+        op_dup(self.c)
+        item1 = self.c.stack.pop()
+        item2 = self.c.stack.pop()
         assert item1 == item2
         
     def test_op_swap(self) -> None:
-        make_atom(self.s, "first")
-        make_atom(self.s, "second")
-        op_swap(self.s, "test_op_swap")
-        item1 = self.s.pop()
-        item2 = self.s.pop()
+        make_atom(self.c, "first")
+        make_atom(self.c, "second")
+        op_swap(self.c)
+        item1 = self.c.stack.pop()
+        item2 = self.c.stack.pop()
         assert item1.value == "first"
         assert item2.value == "second"
 
     def test_op_drop(self) -> None:
         self.s.push(StackObject("test", TAtom))
-        op_drop(self.s, "test_op_drop")
-        assert self.s.depth() == 0
+        op_drop(self.c)
+        assert self.c.stack.depth() == 0
 
     def test_op_2dup(self) -> None:
-        make_atom(self.s, "first")
-        make_atom(self.s, "second")
-        op_2dup(self.s,"test_op_2dup")
-        assert self.s.depth() == 4
-        item1 = self.s.pop()
-        item2 = self.s.pop()
-        item3 = self.s.pop()
-        item4 = self.s.pop()
+        make_atom(self.c, "first")
+        make_atom(self.c, "second")
+        op_2dup(self.c)
+        assert self.c.stack.depth() == 4
+        item1 = self.c.stack.pop()
+        item2 = self.c.stack.pop()
+        item3 = self.c.stack.pop()
+        item4 = self.c.stack.pop()
         assert item1.value == item3.value
         assert item2.value == item4.value
         assert item1.value != item2.value
-        assert self.s.depth() == 0
+        assert self.c.stack.depth() == 0
 

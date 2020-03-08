@@ -5,11 +5,9 @@
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
-from stack import Stack
+from continuation import Continuation, Stack, Operation, Op_name, op_nop
 
-# An operation takes a stack instance and returns nothing.
-Op_name = str
-Operation = Callable[[Stack, Op_name],None]
+
 Type_name = str
 
 
@@ -44,9 +42,10 @@ class TypeSignature:
 class WordFlags:
     immediate : bool = False
 
-Op_list = List[Tuple[Op_name, Operation, TypeSignature, WordFlags]]
+Op_list = List[Tuple[Operation, TypeSignature, WordFlags]]
 
 Op_map = List[Tuple[List["Type"],Operation]]
+
 
 
 class Type:
@@ -56,7 +55,8 @@ class Type:
 
     types : Dict[Type_name, Op_list] = {}
 
-    types["Any"] = [] # Global dictionary. Should it be "Any"/TAny? Probably.
+    types["Any"] = [] # Global dictionary. 
+    types["CodeCompile"] = []
 
     ctors : Dict[Type_name, Op_map] = {}
 
@@ -69,10 +69,10 @@ class Type:
             Type.types[self.name] = []
 
     @staticmethod
-    def register_ctor(name: Type_name, op_name: Op_name, op: Operation, sig: List["Type"]) -> None:
+    def register_ctor(name: Type_name, op: Operation, sig: List["Type"]) -> None:
         # Ctors only have TypeSignatures that return their own Type.
         # Register the ctor in the Global dictionary.
-        Type.add_op(op_name, op, TypeSignature(sig,[Type("Any")]))
+        Type.add_op(op, TypeSignature(sig,[Type("Any")]))
 
         # Append this ctor to our list of valid ctors.
         op_map = Type.ctors.get(name, None)
@@ -116,39 +116,40 @@ class Type:
 
     # Inserts a new operations for the given type name (or global for None).
     @staticmethod
-    def add_op(name: Op_name, op: Operation, sig: TypeSignature, flags: WordFlags = None, type: Type_name = "Any") -> None:
+    def add_op(op: Operation, sig: TypeSignature, flags: WordFlags = None, type: Type_name = "Any") -> None:
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         if not flags:
             flags = WordFlags()
         type_list = Type.types.get(type,[])        
-        type_list.insert(0,(name, op, sig, flags))
+        type_list.insert(0,(op, sig, flags))
+        #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
 
     # Returns the first matching operation for this named type.
     @staticmethod
-    def op(name: Op_name, stack: Stack, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
+    def op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
         #print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
         op_list = Type.types.get(type,[])  
         #print("\top_list = %s" % [(name,sig.stack_in) for (name, op, sig, flags) in op_list])
-        for op_name, op, sig, flags in op_list:
-            if op_name == name:
+        for op, sig, flags in op_list:
+            if op.name == name:
                 name_found = True
                 # Now try to match the input stack...
                 # Should it be an exception to match the name but not the 
                 # stack input signature? Probably so.
-                if sig.match_in(stack):
+                if sig.match_in(cont.stack):
 
                     #print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
                     return op, sig, flags, True
         # Not found.
         if name_found:
             # Is this what we want to do?
-            raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
+            raise Exception("Continuation content doesn't match Op %s." % sig.stack_in)
 
         #print ("Not found!")
         # This is redundant for what interpret already does by default.
-        return make_atom, TypeSignature([],[TAtom]), WordFlags(), False
+        return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), WordFlags(), False
 
     def __eq__(self, type: object) -> bool:
         if isinstance(type, Type):
@@ -168,56 +169,58 @@ class StackObject:
     type: Type 
 
 
-
 TAtom = Type("Atom")
 
 TAny = Type("Any")
+
 
 #
 #   Generic operations
 #
 # Atom needs to take the symbol name to push on the stack.
-def make_atom(s: Stack, s_id: Op_name = "Unknown") -> None:
-    s.push(StackObject(s_id,TAtom))
+def make_atom(c: Continuation, s_id: Op_name = "Unknown") -> None:
+    c.stack.push(StackObject(s_id,TAtom))
 
-def op_print(s: Stack, s_id: Op_name = None) -> None:
-    op1 = s.pop().value
+
+# op_nop from continuation.
+Type.add_op(Operation('nop', op_nop), TypeSignature([],[]))
+
+
+def op_print(c: Continuation) -> None:
+    op1 = c.stack.pop().value
     print("'%s'" % op1)
+Type.add_op(Operation('print', op_print), TypeSignature([TAny],[]))
+
 
 #
 #   Should dup, swap, drop and any other generic stack operators 
 #   dynamically determine the actual stack types on the stack and
 #   create dynamic type signatures based on what are found?
 #
-def op_dup(s: Stack, s_id: Op_name) -> None:
-    op1 = s.tos()
-    s.push(op1)
-
-def op_swap(s: Stack, s_id: Op_name) -> None:
-    op1 = s.pop()
-    op2 = s.pop()
-    s.push(op1)
-    s.push(op2)
-
-def op_drop(s: Stack, s_id: Op_name) -> None:
-    op1 = s.pop()
-
-def op_2dup(s: Stack, s_id: Op_name) -> None:
-    op1 = s.tos()
-    op_swap(s, s_id)
-    op2 = s.tos()
-    op_swap(s, s_id)
-    s.push(op2)
-    s.push(op1)
+def op_dup(c: Continuation) -> None:
+    op1 = c.stack.tos()
+    c.stack.push(op1)
+Type.add_op(Operation('dup', op_dup), TypeSignature([TAny],[TAny, TAny]))
 
 
-#
-#   Forth dictionary of primitive operations is created here.
-#
+def op_swap(c: Continuation) -> None:
+    op1 = c.stack.pop()
+    op2 = c.stack.pop()
+    c.stack.push(op1)
+    c.stack.push(op2)
+Type.add_op(Operation('swap', op_swap), TypeSignature([TAny, TAny],[TAny, TAny]))
 
-Type.add_op('print', op_print, TypeSignature([TAny],[]))
-Type.add_op('dup', op_dup, TypeSignature([TAny],[TAny, TAny]))
-Type.add_op('swap', op_swap, TypeSignature([TAny, TAny],[TAny, TAny]))
-Type.add_op('drop', op_drop, TypeSignature([TAny],[]))
-Type.add_op('2dup', op_2dup, TypeSignature([TAny, TAny],[TAny, TAny]))
 
+def op_drop(c: Continuation) -> None:
+    op1 = c.stack.pop()
+Type.add_op(Operation('drop', op_drop), TypeSignature([TAny],[]))
+
+
+def op_2dup(c: Continuation) -> None:
+    op1 = c.stack.tos()
+    op_swap(c)
+    op2 = c.stack.tos()
+    op_swap(c)
+    c.stack.push(op2)
+    c.stack.push(op1)
+Type.add_op(Operation('2dup', op_2dup), TypeSignature([TAny, TAny],[TAny, TAny]))
