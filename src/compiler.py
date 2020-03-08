@@ -189,11 +189,20 @@ def op_finish_word_compilation(c: Continuation) -> None:
     op = c.stack.pop().value
     sig = c.stack.pop().value
     Type.add_op(op,sig)
-
-
 Type.add_op(Operation(';',op_finish_word_compilation), 
             TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[TWordDefinition]), 
             WordFlags(), "CodeCompile")
+
+def op_finish_word_definition(c: Continuation) -> None:
+    """
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
+        -> (empty)
+    """
+    op_finish_word_compilation(c)
+    c.stack.pop()
+Type.add_op(Operation('.',op_finish_word_definition), 
+            TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[]), 
+            WordFlags(), "CodeCompile")    
 
 
 def op_execute_compiled_word(c: Continuation):

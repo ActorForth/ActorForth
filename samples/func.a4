@@ -1,5 +1,12 @@
-asdf : Int -> Bool ;
-dup == ;
+samenum : Int -> Bool ;
+dup == .
 42 int
-asdf
+samenum
+
+
+
+double : Int -> Int ;
+dup *.
+
+42 int double
 resume
