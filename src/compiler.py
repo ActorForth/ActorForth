@@ -10,15 +10,41 @@ from af_types import *
 TWordDefinition = Type("WordDefinition")
 TInputTypeSignature = Type("InputTypeSignature")
 TOutputTypeSignature = Type("OutputTypeSignature")
+TCodeCompile = Type("CodeCompile")
 
-# ## This should all be replaced with the new Context being passed about...
-# # Declared in af_types/__init__.py TCodeCompile = Type("CodeCompile")
-# global c.op
-# def nop(c: Continuation) -> None:
-#     pass
 
-# # Just a place holder. c.op is updated by interpret.interpret.
-# c.op = Operation("nop",nop)
+##
+## Since we've imported all the built-in types (af_types), all the basic words will
+## exist for each Type. Let's go ahead and create compiler context words so these
+## built-in words can be used to construct other words in the compiler.
+##
+
+#
+#
+#
+def op_compile_word(c: Continuation) -> None:
+    """
+    WordDefinition(Op_name), CodeCompile(Operation) 
+        -> WordDefinition(Op_name), CodeCompile(Operation')
+
+    Given an Op_name, place it in the list of our Operation to be executed at runtime later.
+    TODO: Confirm Type Signatures in & out of found words to enforce type safety.
+    """
+
+    print("Compiling word!") #'%s'" % s_id)
+    tos = c.stack.tos().value
+    print("Op: name=%s, op=%s, words=%s" % (tos.name, tos.the_op.__qualname__, tos.words))
+
+
+for t in Type.types.keys():
+    if t == "CodeCompile": continue
+    t_words = Type.types.get(t,[])
+    for op, sig, flags in t_words:
+        new_op = Operation(op.name, op_compile_word, [op])
+        new_sig = TypeSignature([Type("WordDefinition"),Type("CodeCompile")],
+                        [Type("WordDefinition"),Type("CodeCompile")])
+        Type.types["CodeCompile"].insert(0, (new_op,new_sig,flags) )
+
 
 def op_new_word(c: Continuation) -> None:
     """
@@ -152,6 +178,10 @@ Type.add_op(Operation(';',op_skip_to_code_compile),
 
 def op_execute_compiled_word(c: Continuation, words: Optional[List[Operation]] = None):
     print("Executing words: %s" % words)
+
+
+
+
 
 
 

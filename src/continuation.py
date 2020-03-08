@@ -23,13 +23,11 @@ class Operation:
         self.words.append(op)
         return True
 
-    #def __call__(self, stack: Stack, name: Op_name) -> None:
     def __call__(self, cont: "Continuation") -> None:
         self.the_op(cont)
 
     def __str__(self) -> str:
         result = "Op{'%s':(%s)" % (self.name, self.the_op.__qualname__)
-        #if len(self.words)>0:
         result += str(self.words)
         result += "}"
         return result
@@ -38,16 +36,17 @@ class Operation:
         return self.__str__()
 
     def short_name(self) -> str:
-    	return self.name
+    	return self.name    	
 
-def nop(c: "Continuation") -> None:
-    pass
+
+def op_nop(c: "Continuation") -> None:
+    pass     
 
 
 @dataclass
 class Continuation:
 	stack : Stack
-	op : Operation = Operation("nop",nop)
+	op : Operation = Operation("nop",op_nop)
 
 	def __str__(self) -> str:
 		result = "Cont: %s" % self.op

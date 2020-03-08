@@ -8,8 +8,6 @@ from dataclasses import dataclass
 from continuation import Continuation, Stack, Operation, Op_name
 
 
-
-
 Type_name = str
 
 
@@ -49,21 +47,6 @@ Op_list = List[Tuple[Operation, TypeSignature, WordFlags]]
 Op_map = List[Tuple[List["Type"],Operation]]
 
 
-#
-#
-#
-def op_compile_word(c: Continuation) -> None:
-    """
-    WordDefinition(Op_name), CodeCompile(Operation) 
-        -> WordDefinition(Op_name), CodeCompile(Operation')
-
-    Given an Op_name, place it in the list of our Operation to be executed at runtime later.
-    TODO: Confirm Type Signatures in & out of found words to enforce type safety.
-    """
-
-    print("Compiling word!") #'%s'" % s_id)
-    tos = c.stack.tos().value
-    print("Op: name=%s, op=%s, words=%s" % (tos.name, tos.the_op.__qualname__, tos.words))
 
 class Type:
 
@@ -141,19 +124,6 @@ class Type:
         type_list.insert(0,(op, sig, flags))
         #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
 
-        # This is done so the compiler will recognize the operation and compile it. 
-        # THIS IS NOT EXECUTING THE OPERATION (Don't have compile time execution support yet.)
-        #compile_type_list : Optional[Op_list] = Type.types.get("CodeCompile", None)
-        assert Type.types.get("CodeCompile", None) is not None, "Type.add_op CodeCompile type not found!!"
-        
-        if op.name not in [o[0].name for o in Type.types["CodeCompile"]]:
-            new_op = (Operation(op.name, op_compile_word, [op]), 
-                        TypeSignature([Type("WordDefinition"),Type("CodeCompile")],
-                            [Type("WordDefinition"),Type("CodeCompile")]), flags)
-            # WHY ON EARTH DOES THIS FAIL?!?!? compile_type_list.insert(0,(new_op, TypeSignature([Type("CodeCompile")],[]), flags))
-            Type.types["CodeCompile"].insert(0,new_op)
-            #print("Added Op:'%s' to CodeCompile context : %s." % (new_op,Type.types["CodeCompile"]))
-
     # Returns the first matching operation for this named type.
     @staticmethod
     def op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
@@ -199,12 +169,10 @@ class StackObject:
     type: Type 
 
 
-
 TAtom = Type("Atom")
 
 TAny = Type("Any")
 
-TCodeCompile = Type("CodeCompile")
 
 #
 #   Generic operations
@@ -213,9 +181,12 @@ TCodeCompile = Type("CodeCompile")
 def make_atom(c: Continuation, s_id: Op_name = "Unknown") -> None:
     c.stack.push(StackObject(s_id,TAtom))
 
+
 def op_print(c: Continuation) -> None:
     op1 = c.stack.pop().value
     print("'%s'" % op1)
+Type.add_op(Operation('print', op_print), TypeSignature([TAny],[]))
+
 
 #
 #   Should dup, swap, drop and any other generic stack operators 
@@ -225,15 +196,21 @@ def op_print(c: Continuation) -> None:
 def op_dup(c: Continuation) -> None:
     op1 = c.stack.tos()
     c.stack.push(op1)
+Type.add_op(Operation('dup', op_dup), TypeSignature([TAny],[TAny, TAny]))
+
 
 def op_swap(c: Continuation) -> None:
     op1 = c.stack.pop()
     op2 = c.stack.pop()
     c.stack.push(op1)
     c.stack.push(op2)
+Type.add_op(Operation('swap', op_swap), TypeSignature([TAny, TAny],[TAny, TAny]))
+
 
 def op_drop(c: Continuation) -> None:
     op1 = c.stack.pop()
+Type.add_op(Operation('drop', op_drop), TypeSignature([TAny],[]))
+
 
 def op_2dup(c: Continuation) -> None:
     op1 = c.stack.tos()
@@ -242,15 +219,4 @@ def op_2dup(c: Continuation) -> None:
     op_swap(c)
     c.stack.push(op2)
     c.stack.push(op1)
-
-
-#
-#   Forth dictionary of primitive operations is created here.
-#
-
-Type.add_op(Operation('print', op_print), TypeSignature([TAny],[]))
-Type.add_op(Operation('dup', op_dup), TypeSignature([TAny],[TAny, TAny]))
-Type.add_op(Operation('swap', op_swap), TypeSignature([TAny, TAny],[TAny, TAny]))
-Type.add_op(Operation('drop', op_drop), TypeSignature([TAny],[]))
 Type.add_op(Operation('2dup', op_2dup), TypeSignature([TAny, TAny],[TAny, TAny]))
-
