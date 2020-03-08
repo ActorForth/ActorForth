@@ -11,13 +11,14 @@ TWordDefinition = Type("WordDefinition")
 TInputTypeSignature = Type("InputTypeSignature")
 TOutputTypeSignature = Type("OutputTypeSignature")
 
-# Declared in af_types/__init__.py TCodeCompile = Type("CodeCompile")
-global op_context
-def nop(c: Continuation) -> None:
-    pass
+# ## This should all be replaced with the new Context being passed about...
+# # Declared in af_types/__init__.py TCodeCompile = Type("CodeCompile")
+# global c.op
+# def nop(c: Continuation) -> None:
+#     pass
 
-# Just a place holder. op_context is updated by interpret.interpret.
-op_context = Operation("nop",nop)
+# # Just a place holder. c.op is updated by interpret.interpret.
+# c.op = Operation("nop",nop)
 
 def op_new_word(c: Continuation) -> None:
     """
@@ -48,11 +49,11 @@ def op_start_input_sig(c: Continuation) -> None:
     Creates a new TypeSignature, adds the first item and pushes it to the stack.
     Does NOT consume the WordDefinition.
     """
-    global op_context
-    assert Type.types.get(op_context.name, False) is not False, \
-        "%s is not a valid type name.\nValid types are: %s." % (op_context.name, [n for n in Type.types.keys()])
-    #print("Got valid type: %s" % op_context.name)
-    sig = TypeSignature([Type(op_context.name)],[])
+
+    assert Type.types.get(c.op.name, False) is not False, \
+        "%s is not a valid type name.\nValid types are: %s." % (c.op.name, [n for n in Type.types.keys()])
+    #print("Got valid type: %s" % c.op.name)
+    sig = TypeSignature([Type(c.op.name)],[])
     c.stack.push(StackObject(sig,TInputTypeSignature))
 
 def op_continue_input_sig(c: Continuation) -> None:
@@ -62,7 +63,7 @@ def op_continue_input_sig(c: Continuation) -> None:
 
     Adds another Type to the InputTypeSignature list.
     """
-    c.stack.tos().value.stack_in.append(Type(op_context.name))
+    c.stack.tos().value.stack_in.append(Type(c.op.name))
 
 def op_output_sig(c: Continuation) -> None:
     """
@@ -72,7 +73,7 @@ def op_output_sig(c: Continuation) -> None:
     Takes the existing TypeSignature, adds the first item to the output signature. 
     Does NOT consume the TypeSignature.
     """
-    c.stack.tos().value.stack_out.append(Type(op_context.name))
+    c.stack.tos().value.stack_out.append(Type(c.op.name))
 
 # Register every type name in order to be able to express Type Signatures at compile time.
 for type_name in Type.types.keys():

@@ -1,5 +1,6 @@
 import sys
 
+from continuation import *
 from interpret import *
 
 def print_stack_stats(stack):

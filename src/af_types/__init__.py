@@ -5,38 +5,9 @@
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
-from continuation import Continuation, Stack
+from continuation import Continuation, Stack, Operation, Op_name
 
-# An operation takes a stack instance and returns nothing.
-Op_name = str
-#Operation_def = Callable[[Stack,Op_name],None]
-Operation_def = Callable[[Continuation],None]
 
-class Operation:
-
-    def __init__(self, name: Op_name, op: Operation_def, words: List["Operation"] = None) -> None:
-        self.name = name
-        self.the_op : Operation_def = op
-        self.words : List["Operation"] = words or []
-
-    def add_word(self, op: "Operation") -> bool:
-        # Should check for valid stack type signature.
-        self.words.append(op)
-        return True
-
-    #def __call__(self, stack: Stack, name: Op_name) -> None:
-    def __call__(self, cont: Continuation) -> None:
-        self.the_op(cont)
-
-    def __str__(self) -> str:
-        result = "Op{'%s':(%s)" % (self.name, self.the_op.__qualname__)
-        #if len(self.words)>0:
-        result += str(self.words)
-        result += "}"
-        return result
-
-    def __repr__(self) -> str:
-        return self.__str__()
 
 
 Type_name = str

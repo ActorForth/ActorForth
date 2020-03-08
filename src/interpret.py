@@ -55,16 +55,16 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
             #print("HACK tos = %s" % str(tos))
-            compiler.op_context, sig, flags, found = Type.op(symbol.s_id, cont, tos.type.name)
+            cont.op, sig, flags, found = Type.op(symbol.s_id, cont, tos.type.name)
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
-            compiler.op_context, sig, flags, found = Type.op(symbol.s_id, cont)
+            cont.op, sig, flags, found = Type.op(symbol.s_id, cont)
         
         try:
             if found:
-                print("Executing %s:" % compiler.op_context)
-                compiler.op_context(cont)
+                print("Executing %s:" % cont.op)
+                cont.op(cont)
                 print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
                 #     else:
                 # if interpret_mode or flags.immediate:
