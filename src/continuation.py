@@ -2,7 +2,7 @@
 #	continuation.py		-	Continuation state of our environment.
 #
 
-from typing import Dict, List, Tuple, Callable, Any, Optional
+from typing import Callable, List
 
 from dataclasses import dataclass
 

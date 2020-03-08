@@ -24,16 +24,16 @@ TCodeCompile = Type("CodeCompile")
 #
 def op_compile_word(c: Continuation) -> None:
     """
-    WordDefinition(Op_name), CodeCompile(Operation) 
-        -> WordDefinition(Op_name), CodeCompile(Operation')
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation) 
+        -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
 
     Given an Op_name, place it in the list of our Operation to be executed at runtime later.
     TODO: Confirm Type Signatures in & out of found words to enforce type safety.
     """
-
-    print("Compiling word!") #'%s'" % s_id)
-    tos = c.stack.tos().value
-    print("Op: name=%s, op=%s, words=%s" % (tos.name, tos.the_op.__qualname__, tos.words))
+    # Take each word (should only be one) from the compiled word...
+    for op in c.op.words:
+        # And add it to our list of words to execute for the newly defined word.
+        c.stack.tos().value.add_word(op)
 
 
 for t in Type.types.keys():
@@ -41,8 +41,8 @@ for t in Type.types.keys():
     t_words = Type.types.get(t,[])
     for op, sig, flags in t_words:
         new_op = Operation(op.name, op_compile_word, [op])
-        new_sig = TypeSignature([Type("WordDefinition"),Type("CodeCompile")],
-                        [Type("WordDefinition"),Type("CodeCompile")])
+        new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
+                        [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
         Type.types["CodeCompile"].insert(0, (new_op,new_sig,flags) )
 
 
@@ -143,41 +143,64 @@ Type.add_op(Operation('->',op_skip_to_output_sig),
 def op_start_code_compile(c: Continuation) -> None:
     """
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature) 
-        -> WordDefinition(Op_name), CodeCompile(Operation).
+        -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation).
 
     Signifies the completion of the TypeSignature for the new word.
     Switches to start the definition of the word's behavior.
 
     Constructs a new Operation declaration from STUFF
     """
-    sig = c.stack.pop().value # Later may need to copy and leave on the stack to support pattern matching.
+    #sig_s = c.stack.pop() # Later need to copy and leave on the stack to support pattern matching.
+    #sig = sig.s.value
+    op_swap(c)
     op = Operation(c.stack.tos().value, op_execute_compiled_word)
+    op_swap(c)
+    #c.stack.push(sig_s)
     print("I'M COMPILING Op=%s!!!" % op)
     c.stack.push( StackObject(op, TCodeCompile) )
 Type.add_op(Operation(';',op_start_code_compile), 
-            TypeSignature([TWordDefinition, TOutputTypeSignature],[TWordDefinition, TCodeCompile]), 
+            TypeSignature([TWordDefinition, TOutputTypeSignature],[TWordDefinition, TOutputTypeSignature, TCodeCompile]), 
             WordFlags(), "OutputTypeSignature")
 
 
 def op_skip_to_code_compile(c: Continuation) -> None:
     """
-    WordDefinition(Op_name) -> WordDefinition(Op_name), CodeCompile(Operation).
+    WordDefinition(Op_name) -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation).
 
     Used if a new word definition is created but has no TypeSignature. 
     Creates the new empty TypeSignature, new Operation, and switches
     to start the definition of the word's behavior.
     """
     sig = TypeSignature([],[])
-    c.stack.push(StackObject(sig,TCodeCompile))  
+    c.stack.push(StackObject(sig,TOutputTypeSignature))  
     op_start_code_compile(c)
 # Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
 Type.add_op(Operation(';',op_skip_to_code_compile), 
-            TypeSignature([TWordDefinition],[TWordDefinition, TCodeCompile]), 
+            TypeSignature([TWordDefinition],[TWordDefinition, TOutputTypeSignature, TCodeCompile]), 
             WordFlags(), "WordDefinition")
 
 
-def op_execute_compiled_word(c: Continuation, words: Optional[List[Operation]] = None):
-    print("Executing words: %s" % words)
+def op_finish_word_compilation(c: Continuation) -> None:
+    """
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
+        -> WordDefinition
+    """
+    print("finishing word compilation!")
+    op = c.stack.pop().value
+    sig = c.stack.pop().value
+    Type.add_op(op,sig)
+
+
+Type.add_op(Operation(';',op_finish_word_compilation), 
+            TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[TWordDefinition]), 
+            WordFlags(), "CodeCompile")
+
+
+def op_execute_compiled_word(c: Continuation):
+    print("Executing words for %s." % c.op.name)
+    for word in c.op.words:
+        word(c)
+        
 
 
 

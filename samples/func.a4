@@ -1,2 +1,5 @@
 asdf : Int -> Bool ;
+dup == ;
+42 int
+asdf
 resume

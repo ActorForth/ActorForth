@@ -21,6 +21,7 @@ class Location:
     linenum : int = 0
     column : int = 0
 
+
 @dataclass(order = True)
 class Symbol:
     s_id : str
@@ -36,10 +37,10 @@ class Symbol:
             return symbol.s_id == self.s_id
         return symbol == self.s_id   
 
+
 def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Continuation:    
     p = Parser()
     p.open_handle(input_stream, filename)
-
 
     interpret_mode = True
 
@@ -51,10 +52,8 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             print(s_id)
         tos = cont.stack.tos()
         found = False
-        #print("\nStack = %s" % stack.contents())
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
-            #print("HACK tos = %s" % str(tos))
             cont.op, sig, flags, found = Type.op(symbol.s_id, cont, tos.type.name)
 
         if not found:
@@ -65,27 +64,16 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             if found:
                 print("Executing %s:" % cont.op)
                 cont.op(cont)
-                #print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
                 print(cont)
-                #     else:
-                # if interpret_mode or flags.immediate:
-                #     if sig.match_in(stack): # match stack types with type signature.
-                #         op(stack)
-                #         print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
-                #     else:
-                #         raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
-                # else: # Compile mode!
-                #     pass
             else:
                 # No idea what this is so make an atom on the stack.
                 print("New Atom: '%s'" % symbol.s_id)
                 make_atom(cont, symbol.s_id)
-                #print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
                 print(cont)
+                
         except Exception as x:
             print("Exception %s" % x)
             print("Interpreting symbol %s" % symbol)
-            #print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
             print(cont)
             
             # See what happens if we just keep going...

@@ -5,7 +5,7 @@
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
-from continuation import Continuation, Stack, Operation, Op_name
+from continuation import Continuation, Stack, Operation, Op_name, op_nop
 
 
 Type_name = str
@@ -180,6 +180,10 @@ TAny = Type("Any")
 # Atom needs to take the symbol name to push on the stack.
 def make_atom(c: Continuation, s_id: Op_name = "Unknown") -> None:
     c.stack.push(StackObject(s_id,TAtom))
+
+
+# op_nop from continuation.
+Type.add_op(Operation('nop', op_nop), TypeSignature([],[]))
 
 
 def op_print(c: Continuation) -> None:

@@ -1,4 +1,6 @@
 square : Int -> Int;
-    dup *.
+    dup *;
+
+resume    
 
 
