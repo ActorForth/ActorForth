@@ -5,12 +5,12 @@
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
-from stack import Stack
+from continuation import Continuation, Stack
 
 # An operation takes a stack instance and returns nothing.
 Op_name = str
 #Operation_def = Callable[[Stack,Op_name],None]
-Operation_def = Callable[[Stack],None]
+Operation_def = Callable[[Continuation],None]
 
 class Operation:
 
@@ -25,8 +25,8 @@ class Operation:
         return True
 
     #def __call__(self, stack: Stack, name: Op_name) -> None:
-    def __call__(self, stack: Stack) -> None:
-        self.the_op(stack)
+    def __call__(self, cont: Continuation) -> None:
+        self.the_op(cont)
 
     def __str__(self) -> str:
         result = "Op{'%s':(%s)" % (self.name, self.the_op.__qualname__)
@@ -81,7 +81,7 @@ Op_map = List[Tuple[List["Type"],Operation]]
 #
 #
 #
-def op_compile_word(s: Stack) -> None:
+def op_compile_word(c: Continuation) -> None:
     """
     WordDefinition(Op_name), CodeCompile(Operation) 
         -> WordDefinition(Op_name), CodeCompile(Operation')
@@ -91,7 +91,7 @@ def op_compile_word(s: Stack) -> None:
     """
 
     print("Compiling word!") #'%s'" % s_id)
-    tos = s.tos().value
+    tos = c.stack.tos().value
     print("Op: name=%s, op=%s, words=%s" % (tos.name, tos.the_op.__qualname__, tos.words))
 
 class Type:
@@ -185,7 +185,7 @@ class Type:
 
     # Returns the first matching operation for this named type.
     @staticmethod
-    def op(name: Op_name, stack: Stack, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
+    def op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
         #print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
@@ -197,14 +197,14 @@ class Type:
                 # Now try to match the input stack...
                 # Should it be an exception to match the name but not the 
                 # stack input signature? Probably so.
-                if sig.match_in(stack):
+                if sig.match_in(cont.stack):
 
                     #print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
                     return op, sig, flags, True
         # Not found.
         if name_found:
             # Is this what we want to do?
-            raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
+            raise Exception("Continuation content doesn't match Op %s." % sig.stack_in)
 
         #print ("Not found!")
         # This is redundant for what interpret already does by default.
@@ -239,11 +239,11 @@ TCodeCompile = Type("CodeCompile")
 #   Generic operations
 #
 # Atom needs to take the symbol name to push on the stack.
-def make_atom(s: Stack, s_id: Op_name = "Unknown") -> None:
-    s.push(StackObject(s_id,TAtom))
+def make_atom(c: Continuation, s_id: Op_name = "Unknown") -> None:
+    c.stack.push(StackObject(s_id,TAtom))
 
-def op_print(s: Stack) -> None:
-    op1 = s.pop().value
+def op_print(c: Continuation) -> None:
+    op1 = c.stack.pop().value
     print("'%s'" % op1)
 
 #
@@ -251,26 +251,26 @@ def op_print(s: Stack) -> None:
 #   dynamically determine the actual stack types on the stack and
 #   create dynamic type signatures based on what are found?
 #
-def op_dup(s: Stack) -> None:
-    op1 = s.tos()
-    s.push(op1)
+def op_dup(c: Continuation) -> None:
+    op1 = c.stack.tos()
+    c.stack.push(op1)
 
-def op_swap(s: Stack) -> None:
-    op1 = s.pop()
-    op2 = s.pop()
-    s.push(op1)
-    s.push(op2)
+def op_swap(c: Continuation) -> None:
+    op1 = c.stack.pop()
+    op2 = c.stack.pop()
+    c.stack.push(op1)
+    c.stack.push(op2)
 
-def op_drop(s: Stack) -> None:
-    op1 = s.pop()
+def op_drop(c: Continuation) -> None:
+    op1 = c.stack.pop()
 
-def op_2dup(s: Stack) -> None:
-    op1 = s.tos()
-    op_swap(s)
-    op2 = s.tos()
-    op_swap(s)
-    s.push(op2)
-    s.push(op1)
+def op_2dup(c: Continuation) -> None:
+    op1 = c.stack.tos()
+    op_swap(c)
+    op2 = c.stack.tos()
+    op_swap(c)
+    c.stack.push(op2)
+    c.stack.push(op1)
 
 
 #

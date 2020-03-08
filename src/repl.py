@@ -30,23 +30,24 @@ if __name__ == "__main__":
         print("Interpreting file: '%s'." % sys.argv[1])
 
     stack = Stack()
+    cont = Continuation(stack)
 
     while True:
 
         try:
-            stack = interpret(stack, handle, filename, prompt="ok: ")
+            cont = interpret(cont, handle, filename, prompt="ok: ")
 
-            if stack.tos().value == "resume":
+            if cont.stack.tos().value == "resume":
                 handle = sys.stdin
                 filename = "stdin"
-                stack.pop()
-                print_stack_stats(stack)
+                cont.stack.pop()
+                print_stack_stats(cont.stack)
             else:
                 break
         except KeyboardInterrupt as x:
             print(" key interrupt.")
             break
 
-    print_stack_stats(stack)
+    print_stack_stats(cont.stack)
     print("\nend of line...")
 

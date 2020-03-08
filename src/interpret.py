@@ -2,6 +2,8 @@ from typing import TextIO
 
 from dataclasses import dataclass
 
+from continuation import Continuation, Stack
+
 from parser import Parser
 
 from af_types import Type, TypeSignature, TAtom, make_atom, TAny 
@@ -34,7 +36,7 @@ class Symbol:
             return symbol.s_id == self.s_id
         return symbol == self.s_id   
 
-def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Stack:    
+def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Continuation:    
     p = Parser()
     p.open_handle(input_stream, filename)
 
@@ -47,28 +49,28 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
 
         if p.filename != "stdin":
             print(s_id)
-        tos = stack.tos()
+        tos = cont.stack.tos()
         found = False
         #print("\nStack = %s" % stack.contents())
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
             #print("HACK tos = %s" % str(tos))
-            compiler.op_context, sig, flags, found = Type.op(symbol.s_id, stack, tos.type.name)
+            compiler.op_context, sig, flags, found = Type.op(symbol.s_id, cont, tos.type.name)
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
-            compiler.op_context, sig, flags, found = Type.op(symbol.s_id, stack)
+            compiler.op_context, sig, flags, found = Type.op(symbol.s_id, cont)
         
         try:
             if found:
                 print("Executing %s:" % compiler.op_context)
-                compiler.op_context(stack)
-                print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
+                compiler.op_context(cont)
+                print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
                 #     else:
                 # if interpret_mode or flags.immediate:
                 #     if sig.match_in(stack): # match stack types with type signature.
                 #         op(stack)
-                #         print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
+                #         print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
                 #     else:
                 #         raise Exception("Stack content doesn't match Op %s." % sig.stack_in)
                 # else: # Compile mode!
@@ -76,16 +78,16 @@ def interpret(stack: Stack, input_stream: TextIO, filename: Optional[str] = None
             else:
                 # No idea what this is so make an atom on the stack.
                 print("New Atom: '%s'" % symbol.s_id)
-                make_atom(stack, symbol.s_id)
-                print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
+                make_atom(cont, symbol.s_id)
+                print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
         except Exception as x:
             print("Exception %s" % x)
             print("Interpreting symbol %s" % symbol)
-            print("Stack(%s) = %s " % (len(stack.contents()),stack.contents()))
+            print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
             
             # See what happens if we just keep going...
             #break
             raise
         if prompt: print(prompt,end='',flush=True)    
 
-    return stack
+    return cont

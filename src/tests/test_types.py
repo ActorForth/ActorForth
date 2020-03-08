@@ -1,6 +1,8 @@
 import unittest
 
-from af_types import Stack, StackObject, Type, TypeSignature, \
+from continuation import Continuation, Stack
+
+from af_types import StackObject, Type, TypeSignature, \
                     make_atom, TAtom, op_print, op_dup, op_swap, \
                     op_drop, op_2dup
 
@@ -66,16 +68,17 @@ class TestTypeSignature(unittest.TestCase):
     def test_op_with_type_signature(self) -> None:
 
         stack = Stack()
-        stack.push(StackObject("tparm", TParm1))
-        Type.add_op(Operation("test", lambda stack: 42), TypeSignature([TParm1],[]) ) #, "Test")
+        cont = Continuation(stack)
+        cont.stack.push(StackObject("tparm", TParm1))
+        Type.add_op(Operation("test", lambda cont: 42), TypeSignature([TParm1],[]) ) #, "Test")
 
-        op, sig, flag, found = Type.op("test", stack ) #, "Test")
+        op, sig, flag, found = Type.op("test", cont ) #, "Test")
 
         assert found
         assert sig == TypeSignature([TParm1],[])
         assert flag.immediate == False
 
-        op, sig, flag, found = Type.op("not found", stack)
+        op, sig, flag, found = Type.op("not found", cont)
         assert not found
 
     def test_op_with_wrong_type_signature(self) -> None:
@@ -92,11 +95,12 @@ class TestTypeSignature(unittest.TestCase):
         def stack_fun(s: Stack) -> None:
             s.push(42)
 
-        s = Stack()            
+        s = Stack()        
+        c = Continuation(s)    
 
         Type.add_op(Operation("test", stack_fun), TypeSignature([],[]) ) 
 
-        op, sig, flag, found = Type.op("test", s)
+        op, sig, flag, found = Type.op("test", c)
 
         assert found
         assert sig == TypeSignature([],[])
@@ -107,51 +111,52 @@ class TestGenericTypeStuff(unittest.TestCase):
 
     def setUp(self) -> None:
         self.s = Stack()
+        self.c = Continuation(self.s)
 
     def test_make_atom(self) -> None:
         op_name = "test"
-        make_atom(self.s, op_name)
-        item = self.s.pop()
+        make_atom(self.c, op_name)
+        item = self.c.stack.pop()
         assert item.value == op_name
         assert item.type == TAtom 
 
     def test_op_print(self) -> None:
-        self.s.push(StackObject("test", TAtom))
-        op_print(self.s)
-        assert self.s.depth() == 0
+        self.c.stack.push(StackObject("test", TAtom))
+        op_print(self.c)
+        assert self.c.stack.depth() == 0
 
     def test_op_dup(self) -> None:
         self.test_make_atom()
-        op_dup(self.s)
-        item1 = self.s.pop()
-        item2 = self.s.pop()
+        op_dup(self.c)
+        item1 = self.c.stack.pop()
+        item2 = self.c.stack.pop()
         assert item1 == item2
         
     def test_op_swap(self) -> None:
-        make_atom(self.s, "first")
-        make_atom(self.s, "second")
-        op_swap(self.s)
-        item1 = self.s.pop()
-        item2 = self.s.pop()
+        make_atom(self.c, "first")
+        make_atom(self.c, "second")
+        op_swap(self.c)
+        item1 = self.c.stack.pop()
+        item2 = self.c.stack.pop()
         assert item1.value == "first"
         assert item2.value == "second"
 
     def test_op_drop(self) -> None:
         self.s.push(StackObject("test", TAtom))
-        op_drop(self.s)
-        assert self.s.depth() == 0
+        op_drop(self.c)
+        assert self.c.stack.depth() == 0
 
     def test_op_2dup(self) -> None:
-        make_atom(self.s, "first")
-        make_atom(self.s, "second")
-        op_2dup(self.s)
-        assert self.s.depth() == 4
-        item1 = self.s.pop()
-        item2 = self.s.pop()
-        item3 = self.s.pop()
-        item4 = self.s.pop()
+        make_atom(self.c, "first")
+        make_atom(self.c, "second")
+        op_2dup(self.c)
+        assert self.c.stack.depth() == 4
+        item1 = self.c.stack.pop()
+        item2 = self.c.stack.pop()
+        item3 = self.c.stack.pop()
+        item4 = self.c.stack.pop()
         assert item1.value == item3.value
         assert item2.value == item4.value
         assert item1.value != item2.value
-        assert self.s.depth() == 0
+        assert self.c.stack.depth() == 0
 
