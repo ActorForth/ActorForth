@@ -1,12 +1,19 @@
 samenum : Int -> Bool ;
 dup == .
 42 int
+
 samenum
 
-
+drop
 
 double : Int -> Int ;
 dup *.
 
 42 int double
-resume
+
+
+combo : Int -> Bool;
+	double
+	samenum.
+
+resume	
