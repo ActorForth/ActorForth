@@ -124,7 +124,7 @@ def op_start_code_compile(s: Stack) -> None:
     Constructs a new Operation declaration from STUFF
     """
     sig = s.pop().value # Later may need to copy and leave on the stack to support pattern matching.
-    op = Operation(s.tos().value, op_execute_compiled_word, sig)
+    op = Operation(s.tos().value, op_execute_compiled_word)
     print("I'M COMPILING Op=%s!!!" % op)
     s.push( StackObject(op, TCodeCompile) )
 Type.add_op(Operation(';',op_start_code_compile), 

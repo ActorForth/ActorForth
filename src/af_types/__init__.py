@@ -29,11 +29,11 @@ class Operation:
         self.the_op(stack)
 
     def __str__(self) -> str:
-        result =  "Op:'%s'" % self.name
-        #if len(self.words) == 0:
-        #    result += " (prim)"
-        #return result
-        return "'%s':(%s)" % (self.name, self.the_op.__qualname__)
+        result = "Op{'%s':(%s)" % (self.name, self.the_op.__qualname__)
+        #if len(self.words)>0:
+        result += str(self.words)
+        result += "}"
+        return result
 
     def __repr__(self) -> str:
         return self.__str__()
