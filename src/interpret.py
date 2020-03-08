@@ -65,7 +65,8 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             if found:
                 print("Executing %s:" % cont.op)
                 cont.op(cont)
-                print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
+                #print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
+                print(cont)
                 #     else:
                 # if interpret_mode or flags.immediate:
                 #     if sig.match_in(stack): # match stack types with type signature.
@@ -79,11 +80,13 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
                 # No idea what this is so make an atom on the stack.
                 print("New Atom: '%s'" % symbol.s_id)
                 make_atom(cont, symbol.s_id)
-                print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
+                #print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
+                print(cont)
         except Exception as x:
             print("Exception %s" % x)
             print("Interpreting symbol %s" % symbol)
-            print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
+            #print("Stack(%s) = %s " % (len(cont.stack.contents()),cont.stack.contents()))
+            print(cont)
             
             # See what happens if we just keep going...
             #break
