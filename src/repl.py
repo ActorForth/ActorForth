@@ -14,7 +14,7 @@ def print_stack_stats(stack):
 if __name__ == "__main__":
 
     print("ActorForth demo interpreter. ^C to exit.")
-    op_words(None)
+    print_words()
     handle = sys.stdin
     filename = "stdin"
     if len(sys.argv) >= 2:
