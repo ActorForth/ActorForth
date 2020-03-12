@@ -192,6 +192,25 @@ def op_print(c: Continuation) -> None:
 Type.add_op(Operation('print', op_print), TypeSignature([TAny],[]))
 
 
+def op_stack(c: Continuation) -> None:
+    if c.stack.depth() == 0:
+        print("(stack empty)")
+    else:
+        [print('%s'%n) for n in reversed(c.stack.contents())]
+Type.add_op(Operation('stack', op_stack), TypeSignature([],[]))
+
+
+def op_words(c: Continuation) -> None:
+    print("Global Dictionary : %s" % list(set([op[0].short_name() for op in Type.types["Any"]])) )
+    for type in Type.types.keys():
+        if type != "Any":
+            ops = Type.types.get(type,[])
+            if len(ops):
+                print("%s Dictionary : %s" % (type,list(set([op[0].short_name() for op in ops]))) )
+Type.add_op(Operation('words', op_words), TypeSignature([],[]))
+
+
+
 #
 #   Should dup, swap, drop and any other generic stack operators 
 #   dynamically determine the actual stack types on the stack and

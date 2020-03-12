@@ -14,13 +14,7 @@ def print_stack_stats(stack):
 if __name__ == "__main__":
 
     print("ActorForth demo interpreter. ^C to exit.")
-    print("Global Dictionary : %s" % list(set([op[0].short_name() for op in Type.types["Any"]])) )
-    for type in Type.types.keys():
-        if type != "Any":
-            ops = Type.types.get(type,[])
-            if len(ops):
-                print("%s Dictionary : %s" % (type,list(set([op[0].short_name() for op in ops]))) )
-
+    op_words(None)
     handle = sys.stdin
     filename = "stdin"
     if len(sys.argv) >= 2:
