@@ -62,12 +62,12 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
         
         try:
             if found:
-                print("Executing %s:" % cont.op)
+                #print("Executing %s:" % cont.op)
                 cont.op(cont)
                 print(cont)
             else:
                 # No idea what this is so make an atom on the stack.
-                print("New Atom: '%s'" % symbol.s_id)
+                #print("New Atom: '%s'" % symbol.s_id)
                 make_atom(cont, symbol.s_id)
                 print(cont)
                 

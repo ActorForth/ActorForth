@@ -156,7 +156,7 @@ def op_start_code_compile(c: Continuation) -> None:
     op = Operation(c.stack.tos().value, op_execute_compiled_word)
     op_swap(c)
     #c.stack.push(sig_s)
-    print("I'M COMPILING Op=%s!!!" % op)
+    #print("I'M COMPILING Op=%s!!!" % op)
     c.stack.push( StackObject(op, TCodeCompile) )
 Type.add_op(Operation(';',op_start_code_compile), 
             TypeSignature([TWordDefinition, TOutputTypeSignature],[TWordDefinition, TOutputTypeSignature, TCodeCompile]), 
@@ -185,7 +185,7 @@ def op_finish_word_compilation(c: Continuation) -> None:
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
         -> WordDefinition
     """
-    print("finishing word compilation!")
+    #print("finishing word compilation!")
     op = c.stack.pop().value
     sig = c.stack.pop().value
     Type.add_op(op,sig)
@@ -196,6 +196,7 @@ def op_finish_word_compilation(c: Continuation) -> None:
 Type.add_op(Operation(';',op_finish_word_compilation), 
             TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[TWordDefinition]), 
             WordFlags(), "CodeCompile")
+
 
 def op_finish_word_definition(c: Continuation) -> None:
     """
@@ -210,7 +211,7 @@ Type.add_op(Operation('.',op_finish_word_definition),
 
 
 def op_execute_compiled_word(c: Continuation):
-    print("Executing words for %s." % c.op.name)
+    #print("Executing words for %s." % c.op.name)
     for word in c.op.words:
         word(c)
         
