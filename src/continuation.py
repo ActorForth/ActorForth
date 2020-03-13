@@ -2,11 +2,35 @@
 #	continuation.py		-	Continuation state of our environment.
 #
 
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 from dataclasses import dataclass
 
 from stack import Stack
+
+
+@dataclass(frozen = True)
+class Location:
+    filename : str = "Unknown"
+    linenum : int = 0
+    column : int = 0
+
+
+@dataclass(order = True)
+class Symbol:
+    s_id : str
+    location : Location 
+    #type : Type 
+    
+    @property
+    def size(self) -> int:
+        return len(self.s_id)
+
+    def __eq__(self, symbol = None) -> bool:
+        #if type(symbol) is Symbol:
+        #    return symbol.s_id == self.s_id
+        return symbol == self.s_id  
+
 
 Op_name = str
 Operation_def = Callable[["Continuation"],None]
@@ -45,13 +69,12 @@ def op_nop(c: "Continuation") -> None:
 
 @dataclass
 class Continuation:
-	stack : Stack
-	op : Operation = Operation("nop",op_nop)
+    stack : Stack
+    symbol : Optional[Symbol] = None
+    op : Operation = Operation("nop",op_nop)
 
-	def __str__(self) -> str:
-		result = "Cont: %s" % self.op
-		result += "\n      Stack(%s) = %s " \
-			% (len(self.stack.contents()),self.stack.contents())
-		return result			
-
-	
+    def __str__(self) -> str:
+        result = "Cont: %s" % self.op
+        result += "\n      Stack(%s) = %s " \
+            % (len(self.stack.contents()),self.stack.contents())
+        return result

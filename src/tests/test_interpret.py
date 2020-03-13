@@ -100,19 +100,18 @@ class TestLocation(unittest.TestCase):
 class TestSymbol(unittest.TestCase):
 
     def test_normal_symbol_without_location(self) -> None:
-        s = Symbol("fib", Location(), Type("Unknown"))
+        s = Symbol("fib", Location())
         assert s.s_id is "fib"
         assert s.size is 3
-        assert s.type == Type("Unknown")
         assert s.location.filename is "Unknown"
 
-        x = Symbol("fib", Location(), Type("SomethingElse"))
+        x = Symbol("fib", Location())
         assert s == "fib"
         assert s == x
 
     def test_normal_symbol_with_location(self) -> None:
         l = Location("fib.a4", linenum=10, column=4)    
-        s = Symbol("fib", l, Type("Unknown"))
+        s = Symbol("fib", l)
         assert s.location.filename is "fib.a4"
         assert s.location.linenum is 10
         assert s.location.column is 4

@@ -5,7 +5,7 @@
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
-from continuation import Continuation, Stack, Operation, Op_name, op_nop
+from continuation import Continuation, Stack, Symbol, Location, Operation, Op_name, op_nop
 
 
 Type_name = str
@@ -150,7 +150,7 @@ class Type:
             raise Exception("Continuation doesn't match Op %s with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
 
         print ("Not found!")
-        # This is redundant for what interpret already does by default.
+        # Default operation is to treat the symbol as an Atom and put it on the stack.
         return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), WordFlags(), False
 
     @staticmethod    
@@ -168,6 +168,13 @@ class Type:
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
             op, sig, flags, found = Type.find_op(name, cont)
+
+        if tos is not Stack.Empty and not found:
+            # There's no such operation by that 'name' in existence 
+            # so let's find the default op for this type or else from the global dict
+            # (as that's the make_atom op returned by default for Type.find_op.)
+            op, sig, flags, found = Type.find_op('_', cont, tos.type.name)           
+
 
         return op, sig, flags, found            
 
@@ -198,8 +205,10 @@ TAny = Type("Any")
 #   Generic operations
 #
 # Atom needs to take the symbol name to push on the stack.
-def make_atom(c: Continuation, s_id: Op_name = "Unknown") -> None:
-    c.stack.push(StackObject(s_id,TAtom))
+def make_atom(c: Continuation) -> None:
+    if c.symbol is None:
+        c.symbol = Symbol("Unknown", Location())
+    c.stack.push(StackObject(c.symbol.s_id,TAtom))
 
 
 # op_nop from continuation.

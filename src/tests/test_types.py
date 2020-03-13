@@ -113,13 +113,14 @@ class TestGenericTypeStuff(unittest.TestCase):
 
     def setUp(self) -> None:
         self.s = Stack()
-        self.c = Continuation(self.s)
+        self.c = Continuation(self.s, symbol = Symbol("Unknown", Location()))
 
     def test_make_atom(self) -> None:
-        op_name = "test"
-        make_atom(self.c, op_name)
+        self.c.symbol.s_id = "test"
+        #op_name = "test"
+        make_atom(self.c)
         item = self.c.stack.pop()
-        assert item.value == op_name
+        assert item.value == "test"
         assert item.type == TAtom 
 
     def test_op_print(self) -> None:
@@ -135,8 +136,10 @@ class TestGenericTypeStuff(unittest.TestCase):
         assert item1 == item2
         
     def test_op_swap(self) -> None:
-        make_atom(self.c, "first")
-        make_atom(self.c, "second")
+        self.c.symbol.s_id = "first"
+        make_atom(self.c)
+        self.c.symbol.s_id = "second"
+        make_atom(self.c)
         op_swap(self.c)
         item1 = self.c.stack.pop()
         item2 = self.c.stack.pop()
@@ -149,8 +152,10 @@ class TestGenericTypeStuff(unittest.TestCase):
         assert self.c.stack.depth() == 0
 
     def test_op_2dup(self) -> None:
-        make_atom(self.c, "first")
-        make_atom(self.c, "second")
+        self.c.symbol.s_id = "first"
+        make_atom(self.c)
+        self.c.symbol.s_id = "second"
+        make_atom(self.c)
         op_2dup(self.c)
         assert self.c.stack.depth() == 4
         item1 = self.c.stack.pop()
