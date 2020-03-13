@@ -211,7 +211,7 @@ Type.add_op(Operation('.',op_finish_word_definition),
 
 
 def op_execute_compiled_word(c: Continuation):
-    #print("Executing words for %s." % c.op.name)
+    print("Executing words for %s." % c.op.name)
     for word in c.op.words:
         word(c)
         

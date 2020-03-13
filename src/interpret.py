@@ -50,15 +50,18 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
 
         if p.filename != "stdin":
             print(s_id)
-        tos = cont.stack.tos()
-        found = False
-        if tos is not Stack.Empty:
-            # We first look for an atom specialized for the type/value on TOS.
-            cont.op, sig, flags, found = Type.op(symbol.s_id, cont, tos.type.name)
 
-        if not found:
-            # If Stack is empty or no specialized atom exists then search the global dictionary.
-            cont.op, sig, flags, found = Type.op(symbol.s_id, cont)
+        cont.op, sig, flags, found = Type.op(symbol.s_id, cont)
+
+        # tos = cont.stack.tos()
+        # found = False
+        # if tos is not Stack.Empty:
+        #     # We first look for an atom specialized for the type/value on TOS.
+        #     cont.op, sig, flags, found = Type.op(symbol.s_id, cont, tos.type.name)
+
+        # if not found:
+        #     # If Stack is empty or no specialized atom exists then search the global dictionary.
+        #     cont.op, sig, flags, found = Type.op(symbol.s_id, cont)
         
         try:
             if found:

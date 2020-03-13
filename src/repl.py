@@ -42,6 +42,9 @@ if __name__ == "__main__":
         except KeyboardInterrupt as x:
             print(" key interrupt.")
             break
+        except Exception as x:
+            print( x )
+            #raise
 
     print_stack_stats(cont.stack)
     print("\nend of line...")

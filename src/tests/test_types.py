@@ -23,6 +23,8 @@ class TestTypeSignature(unittest.TestCase):
         Type.types = {}
         Type.types["Any"] = [] 
         Type.types["CodeCompile"] = []
+        Type.types["Parm1"] = []
+        Type.types["Test"] = []
 
     def test_match_in(self) -> None:
         empty_sig = TypeSignature([],[])

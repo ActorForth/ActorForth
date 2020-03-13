@@ -30,7 +30,7 @@ class TypeSignature:
             """
             stack_type = stack_types.pop()
             if in_type != stack_type:
-                print("match_in: Stack type %s doesn't match input arg type %s." % (type,in_type))
+                #print("match_in: Stack type %s doesn't match input arg type %s." % (type,in_type))
                 return False
         #print("match_in: Found matching type for stack_in: %s" % self.stack_in)
         return True
@@ -126,30 +126,50 @@ class Type:
 
     # Returns the first matching operation for this named type.
     @staticmethod
-    def op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
-        #print("Searching for op:'%s' in type: '%s'." % (name,type))
+    def find_op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
+        print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
+        sigs_found : List[TypeSignature] = []
         op_list = Type.types.get(type,[])  
-        #print("\top_list = %s" % [(name,sig.stack_in) for (name, op, sig, flags) in op_list])
+        print("\top_list = %s" % [(name,sig.stack_in) for (name, sig, flags) in op_list])
         for op, sig, flags in op_list:
             if op.name == name:
                 name_found = True
+                sigs_found.append(sig)
                 # Now try to match the input stack...
                 # Should it be an exception to match the name but not the 
                 # stack input signature? Probably so.
                 if sig.match_in(cont.stack):
 
-                    #print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
+                    print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
                     return op, sig, flags, True
         # Not found.
         if name_found:
             # Is this what we want to do?
-            raise Exception("Continuation content doesn't match Op %s." % sig.stack_in)
+            raise Exception("Continuation doesn't match Op %s with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
 
-        #print ("Not found!")
+        print ("Not found!")
         # This is redundant for what interpret already does by default.
         return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), WordFlags(), False
+
+    @staticmethod    
+    def op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
+        tos = cont.stack.tos()        
+        op : Operation = Operation("make_atom", make_atom)
+        sig : TypeSignature = TypeSignature([],[])
+        flags : WordFlags = WordFlags()
+        found : bool = False
+
+        if tos is not Stack.Empty:
+            # We first look for an atom specialized for the type/value on TOS.
+            op, sig, flags, found = Type.find_op(name, cont, tos.type.name)
+
+        if not found:
+            # If Stack is empty or no specialized atom exists then search the global dictionary.
+            op, sig, flags, found = Type.find_op(name, cont)
+
+        return op, sig, flags, found            
 
     def __eq__(self, type: object) -> bool:
         if isinstance(type, Type):
