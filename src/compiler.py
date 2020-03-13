@@ -19,6 +19,20 @@ TCodeCompile = Type("CodeCompile")
 ## built-in words can be used to construct other words in the compiler.
 ##
 
+
+def op_compile_atom(c: Continuation) -> None:
+    if c.symbol is None:
+        c.symbol = Symbol("Unknown", Location())
+    #print("\n\nCompiling Atom: %s\n\n" % c.symbol.s_id)
+    new_op = Operation(c.symbol.s_id, make_atom)
+    c.stack.tos().value.add_word(new_op)
+
+new_op = Operation('_', op_compile_atom)
+new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
+                        [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
+Type.types["CodeCompile"].insert(0, (new_op,new_sig,WordFlags()) )
+
+
 #
 #
 #
@@ -211,9 +225,15 @@ Type.add_op(Operation('.',op_finish_word_definition),
 
 
 def op_execute_compiled_word(c: Continuation):
-    print("Executing words for %s." % c.op.name)
-    for word in c.op.words:
+    op = c.op
+    words = op.words
+    #print("Executing %s words for %s : %s." % (len(words), op.name, words))
+    for word in words:
+        #print("\n\tword: %s" % word)
+        c.op = word
         word(c)
+
+    c.op = op
         
 
 

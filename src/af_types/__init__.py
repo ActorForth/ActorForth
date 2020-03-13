@@ -127,12 +127,12 @@ class Type:
     # Returns the first matching operation for this named type.
     @staticmethod
     def find_op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
-        print("Searching for op:'%s' in type: '%s'." % (name,type))
+        #print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
         sigs_found : List[TypeSignature] = []
         op_list = Type.types.get(type,[])  
-        print("\top_list = %s" % [(name,sig.stack_in) for (name, sig, flags) in op_list])
+        #print("\top_list = %s" % [(name,sig.stack_in) for (name, sig, flags) in op_list])
         for op, sig, flags in op_list:
             if op.name == name:
                 name_found = True
@@ -142,21 +142,21 @@ class Type:
                 # stack input signature? Probably so.
                 if sig.match_in(cont.stack):
 
-                    print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
+                    #print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
                     return op, sig, flags, True
         # Not found.
         if name_found:
             # Is this what we want to do?
             raise Exception("Continuation doesn't match Op %s with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
 
-        print ("Not found!")
+        #print ("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
         return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), WordFlags(), False
 
     @staticmethod    
     def op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
         tos = cont.stack.tos()        
-        op : Operation = Operation("make_atom", make_atom)
+        op : Operation = Operation("invalid_result!", make_atom)
         sig : TypeSignature = TypeSignature([],[])
         flags : WordFlags = WordFlags()
         found : bool = False
@@ -173,9 +173,12 @@ class Type:
             # There's no such operation by that 'name' in existence 
             # so let's find the default op for this type or else from the global dict
             # (as that's the make_atom op returned by default for Type.find_op.)
-            op, sig, flags, found = Type.find_op('_', cont, tos.type.name)           
+            #print("Searching for default specialized for Type: %s." % tos.type.name)
+            op, sig, flags, found = Type.find_op('_', cont, tos.type.name)            
+            op.name = name
 
 
+        #print("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
         return op, sig, flags, found            
 
     def __eq__(self, type: object) -> bool:
@@ -209,6 +212,7 @@ def make_atom(c: Continuation) -> None:
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
     c.stack.push(StackObject(c.symbol.s_id,TAtom))
+#Type.add_op(Operation('_', make_atom), TypeSignature([],[TAtom]))
 
 
 # op_nop from continuation.
