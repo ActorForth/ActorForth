@@ -11,6 +11,7 @@ flags = WordFlags()
 
 # Constructors
 def op_int(c: Continuation) -> None:
+    #print("\nop_int c.stack.contents = %s." % c.stack.contents())
     i = int(c.stack.pop().value)
     assert i <  999999999999, "int overflow > 999999999999"
     assert i > -999999999999, "int underflow < -999999999999"

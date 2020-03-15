@@ -225,15 +225,20 @@ Type.add_op(Operation('.',op_finish_word_definition),
 
 
 def op_execute_compiled_word(c: Continuation):
+    #print("\nop_execute_compiled_word c.stack.contents = %s." % c.stack.contents())
     op = c.op
+    symbol = c.symbol
     words = op.words
-    #print("Executing %s words for %s : %s." % (len(words), op.name, words))
+    #print("\tExecuting %s words for %s : %s." % (len(words), op.name, words))
     for word in words:
-        #print("\n\tword: %s" % word)
+        #print("\n\t\tword: %s" % word)
         c.op = word
+        c.symbol = Symbol(word.name, Location())
         word(c)
+        #print("\n\t\t%s c.stack.contents = %s." % (word,c.stack.contents()))
 
     c.op = op
+    c.symbol = symbol
         
 
 

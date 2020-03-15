@@ -209,6 +209,7 @@ TAny = Type("Any")
 #
 # Atom needs to take the symbol name to push on the stack.
 def make_atom(c: Continuation) -> None:
+    #print("make_atom c.symbol = %s" % c.symbol)
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
     c.stack.push(StackObject(c.symbol.s_id,TAtom))
