@@ -224,18 +224,29 @@ Type.add_op(Operation('.',op_finish_word_definition),
             WordFlags(), "CodeCompile")    
 
 
-def op_execute_compiled_word(c: Continuation):
+def _indent(c: Continuation) -> None:
+    return ''.join(['\t' for n in range(c.ddepth)])  
+
+
+def op_execute_compiled_word(c: Continuation) -> None:
     #print("\nop_execute_compiled_word c.stack.contents = %s." % c.stack.contents())
     op = c.op
     symbol = c.symbol
     words = op.words
+    doutput = _indent(c) + op.name + " : "
     #print("\tExecuting %s words for %s : %s." % (len(words), op.name, words))
     for word in words:
+        c.ddepth += 1
+        doutput += "\n%s%s" % (_indent(c),word)
         #print("\n\t\tword: %s" % word)
         c.op = word
         c.symbol = Symbol(word.name, Location())
         word(c)
+        c.ddepth -= 1
         #print("\n\t\t%s c.stack.contents = %s." % (word,c.stack.contents()))
+    
+    if c.debug:
+        print(doutput)
 
     c.op = op
     c.symbol = symbol

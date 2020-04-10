@@ -7,7 +7,7 @@ samenum
 drop
 
 double : Int -> Int ;
-dup *.
+2 int *.
 
 42 int double
 

@@ -10,6 +10,7 @@ from af_types import Type, TypeSignature, TAtom, make_atom, TAny
 
 from af_types.af_int import *
 from af_types.af_bool import *
+from af_types.af_debug import *
 
 from compiler import *
 import compiler
