@@ -8,6 +8,10 @@ from dataclasses import dataclass
 
 from stack import Stack
 
+from aftype import AF_Type, AF_Continuation
+
+from operation import Operation
+
 
 @dataclass(frozen = True)
 class Location:
@@ -32,43 +36,15 @@ class Symbol:
         return symbol == self.s_id  
 
 
-Op_name = str
-Operation_def = Callable[["Continuation"],None]
-
-class Operation:
-
-    def __init__(self, name: Op_name, op: Operation_def, words: List["Operation"] = None) -> None:
-        self.name = name
-        self.the_op : Operation_def = op
-        self.words : List["Operation"] = words or []
-
-    def add_word(self, op: "Operation") -> bool:
-        # Should check for valid stack type signature.
-        self.words.append(op)
-        return True
-
-    def __call__(self, cont: "Continuation") -> None:
-        self.the_op(cont)
-
-    def __str__(self) -> str:
-        result = "Op{'%s':(%s)" % (self.name, self.the_op.__qualname__)
-        result += str(self.words)
-        result += "}"
-        return result
-
-    def __repr__(self) -> str:
-        return self.__str__()
-
-    def short_name(self) -> str:
-    	return self.name    	
 
 
-def op_nop(c: "Continuation") -> None:
+
+def op_nop(c: "AF_Continuation") -> None:
     pass     
 
 
 @dataclass
-class Continuation:
+class Continuation(AF_Continuation):
     stack : Stack
     symbol : Optional[Symbol] = None
     op : Operation = Operation("nop",op_nop)

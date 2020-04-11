@@ -5,47 +5,21 @@
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
-from continuation import Continuation, Stack, Symbol, Location, Operation, Op_name, op_nop
+from continuation import Continuation, Stack, Symbol, Location, Operation, op_nop
 
+
+from aftype import AF_Type
+
+from operation import Op_list, Op_map, Operation, TypeSignature
 
 Type_name = str
 
 
-@dataclass
-class TypeSignature:
-    stack_in : List["Type"]
-    stack_out : List["Type"]
-
-    def match_in(self, stack: Stack) -> bool:
-        if not len(self.stack_in): return True
-        stack_types = [s.type for s in stack.contents()[len(self.stack_in)*-1:] ]
-
-        print("match_in: in_types = %s" % (self.stack_in))
-        print("match_in: stack_types = %s" % stack_types)
-        for in_type in reversed(self.stack_in):
-            if in_type == TAny: continue
-            """
-            Should probably have TAny types transform to the discovered type
-            so that manipulations across generics are still completely type safe.
-            """
-            stack_type = stack_types.pop()
-            if in_type != stack_type:
-                #print("match_in: Stack type %s doesn't match input arg type %s." % (type,in_type))
-                return False
-        #print("match_in: Found matching type for stack_in: %s" % self.stack_in)
-        return True
-
-    def match_out(self, on_stack_types: List["Type"]) -> bool:
-        return True
-
-
-Op_list = List[Tuple[Operation, TypeSignature]]
-
-Op_map = List[Tuple[List["Type"],Operation]]
 
 
 
-class Type:
+
+class Type(AF_Type):
 
     # Types is a dictionary of Type names to their respective
     # custom dictionaries.   
@@ -64,6 +38,8 @@ class Type:
             Type.ctors[self.name] = []
         if not Type.types.get(self.name, False):
             Type.types[self.name] = []
+
+        ## Do we need this? super().__init__(self)            
 
     @staticmethod
     def register_ctor(name: Type_name, op: Operation, sig: List["Type"]) -> None:
@@ -176,9 +152,18 @@ class Type:
         return op, sig, found            
 
     def __eq__(self, type: object) -> bool:
+        if self.name == "Any":
+            return True
         if isinstance(type, Type):
             return self.name == type.name
         return False
+
+    def __ne__(self, type: object) -> bool:
+        if self.name == "Any":
+            return False
+        if isinstance(type, Type):
+            return self.name == type.name
+        return False        
 
     def __str__(self) -> Type_name:
         return self.name
@@ -194,6 +179,23 @@ class StackObject:
 
 
 TAtom = Type("Atom")
+
+# class AnyType(Type):
+
+#     def __init__(self, typename: Type_name):
+#         self.name = typename
+#         if not Type.ctors.get(self.name, False):
+#             Type.ctors[self.name] = []
+#         if not Type.types.get(self.name, False):
+#             Type.types[self.name] = []
+
+#         super().__init__(self)    
+
+#     def __ne__(self, other) -> bool:
+#         return False
+
+#     def __eq__(self, other) -> bool:
+#         return True
 
 TAny = Type("Any")
 
