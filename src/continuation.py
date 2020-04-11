@@ -8,19 +8,13 @@ from dataclasses import dataclass
 
 from stack import Stack
 
-from aftype import AF_Type, AF_Continuation, Symbol, Location
+#from aftype import AF_Type, AF_Continuation, Symbol, Location
+from af_types import *
 
 from operation import Operation
 
 
 
-
-
-
-
-
-def op_nop(c: "AF_Continuation") -> None:
-    pass     
 
 
 @dataclass

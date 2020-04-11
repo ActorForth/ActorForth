@@ -27,8 +27,7 @@ class Symbol:
 
 
 class AF_Type:
-    def __init__(self):
-        pass
+    pass
 
 @dataclass 
 class AF_Continuation:
@@ -38,7 +37,3 @@ class AF_Continuation:
 
     debug : bool = False
     ddepth : int = 0        # Depth of calls for debug tab output.
-
-    
-    def __init__(self):
-        pass

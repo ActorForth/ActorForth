@@ -5,12 +5,13 @@
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
-from continuation import Continuation, Stack, Operation, op_nop
+#from continuation import Continuation, Stack, Operation, op_nop
 
+from stack import Stack
 
 from aftype import AF_Type, AF_Continuation, Symbol, Location
 
-from operation import Op_list, Op_map, Op_name, Operation, TypeSignature
+from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
 
 Type_name = str
 
