@@ -9,7 +9,7 @@ TInt = Type("Int")
 #
 
 # Constructors
-def op_int(c: Continuation) -> None:
+def op_int(c: AF_Continuation) -> None:
     #print("\nop_int c.stack.contents = %s." % c.stack.contents())
     i = int(c.stack.pop().value)
     assert i <  999999999999, "int overflow > 999999999999"
@@ -21,7 +21,7 @@ Type.register_ctor('Int', Operation('int',op_int), [TAtom])
 
 # Operations
 
-def op_plus(c: Continuation) -> None:
+def op_plus(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
     op2 = c.stack.pop().value
     result = op1+op2
@@ -31,7 +31,7 @@ def op_plus(c: Continuation) -> None:
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
 Type.add_op(Operation('+',op_plus), TypeSignature([TInt,TInt],[TInt]), "Int")    
 
-def op_minus(c: Continuation) -> None:
+def op_minus(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
     op2 = c.stack.pop().value
     result = op2-op1
@@ -41,7 +41,7 @@ def op_minus(c: Continuation) -> None:
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
 Type.add_op(Operation('-',op_minus), TypeSignature([TInt,TInt],[TInt]), "Int")    
 
-def op_multiply(c: Continuation) -> None:
+def op_multiply(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
     op2 = c.stack.pop().value
     result = op2*op1
@@ -53,7 +53,7 @@ def op_multiply(c: Continuation) -> None:
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
 Type.add_op(Operation('*',op_multiply), TypeSignature([TInt,TInt],[TInt]), "Int")    
 
-def op_divide(c: Continuation) -> None: 
+def op_divide(c: AF_Continuation) -> None: 
     assert c.stack.tos().value != 0, "int division by zero error."
     op1 = c.stack.pop().value
     op2 = c.stack.pop().value

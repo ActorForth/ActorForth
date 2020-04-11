@@ -20,7 +20,7 @@ TCodeCompile = Type("CodeCompile")
 ##
 
 
-def op_compile_atom(c: Continuation) -> None:
+def op_compile_atom(c: AF_Continuation) -> None:
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
     #print("\n\nCompiling Atom: %s\n\n" % c.symbol.s_id)
@@ -36,7 +36,7 @@ Type.types["CodeCompile"].insert(0, (new_op,new_sig))
 #
 #
 #
-def op_compile_word(c: Continuation) -> None:
+def op_compile_word(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation) 
         -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
@@ -60,7 +60,7 @@ for t in Type.types.keys():
         Type.types["CodeCompile"].insert(0, (new_op,new_sig) )
 
 
-def op_new_word(c: Continuation) -> None:
+def op_new_word(c: AF_Continuation) -> None:
     """
     Atom -> WordDefinition(Op_name).
 
@@ -81,7 +81,7 @@ Type.add_op(Operation(':',op_new_word), TypeSignature([TAtom],[TWordDefinition])
 #
 # Next three ops are for taking type names for type signatures.
 #
-def op_start_input_sig(c: Continuation) -> None:
+def op_start_input_sig(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name) -> WordDefinition(Op_name), InputTypeSignature(TypeSignature).
 
@@ -96,7 +96,7 @@ def op_start_input_sig(c: Continuation) -> None:
     sig = TypeSignature([Type(c.op.name)],[])
     c.stack.push(StackObject(sig,TInputTypeSignature))
 
-def op_continue_input_sig(c: Continuation) -> None:
+def op_continue_input_sig(c: AF_Continuation) -> None:
     """
      WordDefinition(Op_name), InputTypeSignature(TypeSignature) 
         ->  WordDefinition(Op_name), InputTypeSignature(TypeSignature).
@@ -105,7 +105,7 @@ def op_continue_input_sig(c: Continuation) -> None:
     """
     c.stack.tos().value.stack_in.append(Type(c.op.name))
 
-def op_output_sig(c: Continuation) -> None:
+def op_output_sig(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name), OutputTypeSignature -> WordDefinition(Op_name), OutputTypeSignature.
 
@@ -127,7 +127,7 @@ for type_name in Type.types.keys():
                 TypeSignature([TWordDefinition, TOutputTypeSignature],[TWordDefinition, TOutputTypeSignature]), 
                 "OutputTypeSignature")          
 
-def op_switch_to_output_sig(c: Continuation) -> None:
+def op_switch_to_output_sig(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name), InputTypeSignature(TypeSignature) 
         -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature).
@@ -141,7 +141,7 @@ Type.add_op(Operation('->',op_switch_to_output_sig),
             "InputTypeSignature")
 
 
-def op_skip_to_output_sig(c: Continuation) -> None:
+def op_skip_to_output_sig(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name) -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature).
 
@@ -154,7 +154,7 @@ Type.add_op(Operation('->',op_skip_to_output_sig),
             "WordDefinition")
 
 
-def op_start_code_compile(c: Continuation) -> None:
+def op_start_code_compile(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature) 
         -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation).
@@ -177,7 +177,7 @@ Type.add_op(Operation(';',op_start_code_compile),
             "OutputTypeSignature")
 
 
-def op_skip_to_code_compile(c: Continuation) -> None:
+def op_skip_to_code_compile(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name) -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation).
 
@@ -194,7 +194,7 @@ Type.add_op(Operation(';',op_skip_to_code_compile),
             "WordDefinition")
 
 
-def op_finish_word_compilation(c: Continuation) -> None:
+def op_finish_word_compilation(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
         -> WordDefinition
@@ -212,7 +212,7 @@ Type.add_op(Operation(';',op_finish_word_compilation),
             "CodeCompile")
 
 
-def op_finish_word_definition(c: Continuation) -> None:
+def op_finish_word_definition(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
         -> (empty)
@@ -224,11 +224,11 @@ Type.add_op(Operation('.',op_finish_word_definition),
             "CodeCompile")    
 
 
-def _indent(c: Continuation) -> str:
+def _indent(c: AF_Continuation) -> str:
     return ''.join(['\t' for n in range(c.ddepth)])  
 
 
-def op_execute_compiled_word(c: Continuation) -> None:
+def op_execute_compiled_word(c: AF_Continuation) -> None:
     #print("\nop_execute_compiled_word c.stack.contents = %s." % c.stack.contents())
     op = c.op
     symbol = c.symbol

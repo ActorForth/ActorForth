@@ -5,12 +5,12 @@
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
-from continuation import Continuation, Stack, Symbol, Location, Operation, op_nop
+from continuation import Continuation, Stack, Operation, op_nop
 
 
-from aftype import AF_Type
+from aftype import AF_Type, AF_Continuation, Symbol, Location
 
-from operation import Op_list, Op_map, Operation, TypeSignature
+from operation import Op_list, Op_map, Op_name, Operation, TypeSignature
 
 Type_name = str
 
@@ -97,13 +97,13 @@ class Type(AF_Type):
 
     # Returns the first matching operation for this named type.
     @staticmethod
-    def find_op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
-        #print("Searching for op:'%s' in type: '%s'." % (name,type))
+    def find_op(name: Op_name, cont: AF_Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
+        print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
         sigs_found : List[TypeSignature] = []
         op_list = Type.types.get(type,[])  
-        #print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
+        print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
         for op, sig, in op_list:
             if op.name == name:
                 name_found = True
@@ -113,19 +113,19 @@ class Type(AF_Type):
                 # stack input signature? Probably so.
                 if sig.match_in(cont.stack):
 
-                    #print("Found! Returning %s, %s, %s, %s" % (op, sig, True))
+                    print("Found! Returning %s, %s, %s" % (op, sig, True))
                     return op, sig, True
         # Not found.
         if name_found:
             # Is this what we want to do?
-            raise Exception("Continuation doesn't match Op %s with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
+            raise Exception("Continuation doesn't match Op '%s' with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
 
-        #print ("Not found!")
+        print ("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
         return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), False
 
     @staticmethod    
-    def op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
+    def op(name: Op_name, cont: AF_Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
         tos = cont.stack.tos()        
         op : Operation = Operation("invalid_result!", make_atom)
         sig : TypeSignature = TypeSignature([],[])
@@ -162,7 +162,7 @@ class Type(AF_Type):
         if self.name == "Any":
             return False
         if isinstance(type, Type):
-            return self.name == type.name
+            return self.name != type.name
         return False        
 
     def __str__(self) -> Type_name:
@@ -204,7 +204,7 @@ TAny = Type("Any")
 #   Generic operations
 #
 # Atom needs to take the symbol name to push on the stack.
-def make_atom(c: Continuation) -> None:
+def make_atom(c: AF_Continuation) -> None:
     #print("make_atom c.symbol = %s" % c.symbol)
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
@@ -216,13 +216,13 @@ def make_atom(c: Continuation) -> None:
 Type.add_op(Operation('nop', op_nop), TypeSignature([],[]))
 
 
-def op_print(c: Continuation) -> None:
+def op_print(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
     print("'%s'" % op1)
 Type.add_op(Operation('print', op_print), TypeSignature([TAny],[]))
 
 
-def op_stack(c: Continuation) -> None:
+def op_stack(c: AF_Continuation) -> None:
     if c.stack.depth() == 0:
         print("(stack empty)")
     else:
@@ -240,7 +240,7 @@ def print_words() -> None:
             if len(ops):
                 print("%s Dictionary : %s" % (type,list(set([op[0].short_name() for op in ops]))) )
 
-def op_words(c: Continuation) -> None:                
+def op_words(c: AF_Continuation) -> None:                
     print_words()
 Type.add_op(Operation('words', op_words), TypeSignature([],[]))
 
@@ -251,13 +251,13 @@ Type.add_op(Operation('words', op_words), TypeSignature([],[]))
 #   dynamically determine the actual stack types on the stack and
 #   create dynamic type signatures based on what are found?
 #
-def op_dup(c: Continuation) -> None:
+def op_dup(c: AF_Continuation) -> None:
     op1 = c.stack.tos()
     c.stack.push(op1)
 Type.add_op(Operation('dup', op_dup), TypeSignature([TAny],[TAny, TAny]))
 
 
-def op_swap(c: Continuation) -> None:
+def op_swap(c: AF_Continuation) -> None:
     op1 = c.stack.pop()
     op2 = c.stack.pop()
     c.stack.push(op1)
@@ -265,12 +265,12 @@ def op_swap(c: Continuation) -> None:
 Type.add_op(Operation('swap', op_swap), TypeSignature([TAny, TAny],[TAny, TAny]))
 
 
-def op_drop(c: Continuation) -> None:
+def op_drop(c: AF_Continuation) -> None:
     op1 = c.stack.pop()
 Type.add_op(Operation('drop', op_drop), TypeSignature([TAny],[]))
 
 
-def op_2dup(c: Continuation) -> None:
+def op_2dup(c: AF_Continuation) -> None:
     op1 = c.stack.tos()
     op_swap(c)
     op2 = c.stack.tos()
