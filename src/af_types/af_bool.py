@@ -103,5 +103,4 @@ Type.register_ctor('Bool',Operation('<=',op_less_than_or_equal_to),[TAny,TAny])
 Type.register_ctor('Bool',Operation('>=',op_greater_than_or_equal_to),[TAny,TAny])
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
-flags = WordFlags()
-Type.add_op(Operation('not', op_not), TypeSignature([TBool],[TBool]), flags, "Bool")
+Type.add_op(Operation('not', op_not), TypeSignature([TBool],[TBool]), "Bool")

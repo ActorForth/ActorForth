@@ -38,11 +38,8 @@ class TypeSignature:
     def match_out(self, on_stack_types: List["Type"]) -> bool:
         return True
 
-@dataclass
-class WordFlags:
-    immediate : bool = False
 
-Op_list = List[Tuple[Operation, TypeSignature, WordFlags]]
+Op_list = List[Tuple[Operation, TypeSignature]]
 
 Op_map = List[Tuple[List["Type"],Operation]]
 
@@ -116,24 +113,22 @@ class Type:
 
     # Inserts a new operations for the given type name (or global for None).
     @staticmethod
-    def add_op(op: Operation, sig: TypeSignature, flags: WordFlags = None, type: Type_name = "Any") -> None:
+    def add_op(op: Operation, sig: TypeSignature, type: Type_name = "Any") -> None:
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
-        if not flags:
-            flags = WordFlags()
         type_list = Type.types.get(type,[])        
-        type_list.insert(0,(op, sig, flags))
+        type_list.insert(0,(op, sig))
         #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
 
     # Returns the first matching operation for this named type.
     @staticmethod
-    def find_op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
+    def find_op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
         #print("Searching for op:'%s' in type: '%s'." % (name,type))
         assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
         sigs_found : List[TypeSignature] = []
         op_list = Type.types.get(type,[])  
-        #print("\top_list = %s" % [(name,sig.stack_in) for (name, sig, flags) in op_list])
-        for op, sig, flags in op_list:
+        #print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
+        for op, sig, in op_list:
             if op.name == name:
                 name_found = True
                 sigs_found.append(sig)
@@ -142,8 +137,8 @@ class Type:
                 # stack input signature? Probably so.
                 if sig.match_in(cont.stack):
 
-                    #print("Found! Returning %s, %s, %s, %s" % (op, sig, flags, True))
-                    return op, sig, flags, True
+                    #print("Found! Returning %s, %s, %s, %s" % (op, sig, True))
+                    return op, sig, True
         # Not found.
         if name_found:
             # Is this what we want to do?
@@ -151,35 +146,34 @@ class Type:
 
         #print ("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
-        return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), WordFlags(), False
+        return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), False
 
     @staticmethod    
-    def op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, WordFlags, bool]:
+    def op(name: Op_name, cont: Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
         tos = cont.stack.tos()        
         op : Operation = Operation("invalid_result!", make_atom)
         sig : TypeSignature = TypeSignature([],[])
-        flags : WordFlags = WordFlags()
         found : bool = False
 
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
-            op, sig, flags, found = Type.find_op(name, cont, tos.type.name)
+            op, sig, found = Type.find_op(name, cont, tos.type.name)
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
-            op, sig, flags, found = Type.find_op(name, cont)
+            op, sig, found = Type.find_op(name, cont)
 
         if tos is not Stack.Empty and not found:
             # There's no such operation by that 'name' in existence 
             # so let's find the default op for this type or else from the global dict
             # (as that's the make_atom op returned by default for Type.find_op.)
             #print("Searching for default specialized for Type: %s." % tos.type.name)
-            op, sig, flags, found = Type.find_op('_', cont, tos.type.name)            
+            op, sig, found = Type.find_op('_', cont, tos.type.name)            
             op.name = name
 
 
         #print("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
-        return op, sig, flags, found            
+        return op, sig, found            
 
     def __eq__(self, type: object) -> bool:
         if isinstance(type, Type):
