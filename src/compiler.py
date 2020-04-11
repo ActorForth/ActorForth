@@ -6,6 +6,7 @@ from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
 from af_types import *
+from af_types.af_any import op_swap
 
 TWordDefinition = Type("WordDefinition")
 TInputTypeSignature = Type("InputTypeSignature")

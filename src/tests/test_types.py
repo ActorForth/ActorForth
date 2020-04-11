@@ -3,11 +3,11 @@ import unittest
 from continuation import Continuation, Stack
 
 from af_types import StackObject, Type, TypeSignature, \
-                    make_atom, TAtom, op_print, op_dup, op_swap, \
-                    op_drop, op_2dup
+                    make_atom, TAtom
 
 from af_types.af_int import *
 from af_types.af_bool import *
+from af_types.af_any import *
 
 TTest = Type("Test")
 TParm1 = Type("Parm1")

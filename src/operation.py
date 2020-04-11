@@ -64,10 +64,17 @@ class Operation:
 
     def short_name(self) -> str:
         return self.name        
-
-def op_nop(c: "AF_Continuation") -> None:
-    pass     
+  
 
 Op_list = List[Tuple[Operation, TypeSignature]]
 
 Op_map = List[Tuple[Sequence["AF_Type"],Operation]]
+
+
+
+
+def op_nop(c: "AF_Continuation") -> None:
+    pass   
+
+
+

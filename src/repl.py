@@ -3,6 +3,8 @@ import sys
 from continuation import *
 from interpret import *
 
+from af_types.af_any import print_words
+
 def print_stack_stats(stack):
     print("")
     print(stack.contents())
