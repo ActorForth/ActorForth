@@ -23,16 +23,19 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
 
     if prompt: print(prompt,end='',flush=True)    
     for s_id, linenum, column in p.tokens():
+        # Setup the continuation...
         cont.symbol = Symbol(s_id, Location(p.filename,linenum,column) ) #, TAtom)
 
         if p.filename != "stdin":
             print(s_id)
 
         # With new Type.find_op behaviour we can remove found if we want.
-        cont.op, sig, found = Type.op(cont.symbol.s_id, cont)
+        ## OLD WAY cont.op, sig, found = Type.op(cont.symbol.s_id, cont)
 
         try:
-            cont.op(cont)
+            ## OLD WAY cont.op(cont)
+            # NEW WAY 
+            cont.execute()
             print(cont)
 
             # if found:

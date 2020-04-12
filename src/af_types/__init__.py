@@ -47,7 +47,15 @@ class Type(AF_Type):
         if not Type.types.get(self.name, False):
             Type.types[self.name] = TypeDefinition(ops_list = [])
 
-        ## Do we need this? super().__init__(self)            
+        ## Do we need this? super().__init__(self)       
+    def ops(self) -> Op_list:
+        t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
+        return t_def.ops_list
+
+    # Typing doesn't like me having a return type specification here so dropped it.
+    def handler(self):
+        t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
+        return t_def.op_handler
 
     @staticmethod
     def register_ctor(name: Type_name, op: Operation, sig: List["Type"]) -> None:

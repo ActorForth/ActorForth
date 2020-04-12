@@ -6,7 +6,7 @@ from typing import Callable, List, Optional
 
 from dataclasses import dataclass
 
-from stack import Stack
+from stack import Stack, KStack
 
 #from aftype import AF_Type, AF_Continuation, Symbol, Location
 from af_types import *
@@ -25,6 +25,16 @@ class Continuation(AF_Continuation):
 
     debug : bool = False
     ddepth : int = 0        # Depth of calls for debug tab output.
+
+    def execute(self) -> None:
+        type_context = TAny
+        tos = self.stack.tos()
+        if tos != KStack.Empty:
+            type_context = tos.type
+        handler = type_context.handler()
+        return handler(self)
+
+
 
 
     def __str__(self) -> str:
