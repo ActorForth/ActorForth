@@ -15,16 +15,21 @@ TAny = Type("Any")
 
 TOp = lambda stack : stack
 
-Type.register_ctor("Test",Operation('nop', TOp), [TParm1])
+
 
 class TestTypeSignature(unittest.TestCase):
 
     def setUp(self) -> None:
+        # Clear up all the types.
         Type.types = {}
-        Type.types["Any"] = [] 
-        Type.types["CodeCompile"] = []
-        Type.types["Parm1"] = []
-        Type.types["Test"] = []
+        the_types = ["Any","CodeCompile","Parm1","Test"]
+        for t in the_types:
+            Type.types[t] = []
+            Type.ctors[t] = []
+            x = Type(t)
+
+        Type.register_ctor("Test",Operation('nop', TOp), [TParm1])
+
 
     def test_match_in(self) -> None:
         empty_sig = TypeSignature([],[])
@@ -73,6 +78,8 @@ class TestTypeSignature(unittest.TestCase):
         cont = Continuation(stack)
         cont.stack.push(StackObject("tparm", TParm1))
         Type.add_op(Operation("test", lambda cont: 42), TypeSignature([TParm1],[]) ) #, "Test")
+
+        print_words()
 
         op, sig, found = Type.op("test", cont ) #, "Test")
 

@@ -21,12 +21,21 @@ Type.add_op(Operation('stack', op_stack), TypeSignature([],[]))
 
 
 def print_words() -> None:
-    print("Global Dictionary : %s" % list(set([op[0].short_name() for op in Type.types["Any"].ops])) )
-    for type in Type.types.keys():
-        if type != "Any":
-            ops = Type.types.get(type,TypeDefinition(ops = [])).ops
-            if len(ops):
-                print("%s Dictionary : %s" % (type,list(set([op[0].short_name() for op in ops]))) )
+    _t_def = Type.types.get("Any",None)
+    _ops : Op_list = []
+    if not _t_def:
+        _t_def = TypeDefinition(ops_list = [])
+        _ops = _t_def.ops_list
+    else:
+        _ops = _t_def.ops_list
+    print("Global Dictionary : %s" % list(set([op[0].short_name() for op in _ops])) )
+    for type_name in Type.types.keys():
+        if type_name != "Any":
+            _t_def = Type.types.get(type_name,None)
+            if _t_def:
+                _ops = _t_def.ops_list
+                if len(_ops):
+                    print("%s Dictionary : %s" % (type_name,list(set([op[0].short_name() for op in _ops]))) )
 
 def op_words(c: AF_Continuation) -> None:                
     print_words()

@@ -15,13 +15,16 @@ from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
 Type_name = str
 
 
+#
+# NOTE : had to remove Python typing notation from this function
+#        to get things to compile clean.
 def default_op_handler(cont):
     cont.op, sig, found = Type.op(cont.symbol.s_id, cont)
     cont.op(cont)
 
 @dataclass
 class TypeDefinition:
-    ops: Op_list 
+    ops_list: Op_list 
     op_handler : Callable[["AF_Continuation"],None] = default_op_handler
 
 class Type(AF_Type):
@@ -31,8 +34,8 @@ class Type(AF_Type):
 
     types : Dict[Type_name, TypeDefinition] = {}
 
-    types["Any"] = TypeDefinition(ops = []) # Global dictionary. 
-    types["CodeCompile"] = TypeDefinition(ops = [])
+    types["Any"] = TypeDefinition(ops_list = []) # Global dictionary. 
+    types["CodeCompile"] = TypeDefinition(ops_list = [])
 
     ctors : Dict[Type_name, Op_map] = {}
 
@@ -42,7 +45,7 @@ class Type(AF_Type):
         if not Type.ctors.get(self.name, False):
             Type.ctors[self.name] = []
         if not Type.types.get(self.name, False):
-            Type.types[self.name] = TypeDefinition(ops = [])
+            Type.types[self.name] = TypeDefinition(ops_list = [])
 
         ## Do we need this? super().__init__(self)            
 
@@ -92,34 +95,40 @@ class Type(AF_Type):
                 
 
 
-    # Inserts a new operations for the given type name (or global for None).
+    # Inserts a new operations for the given type name (or global for Any).
     @staticmethod
-    def add_op(op: Operation, sig: TypeSignature, type: Type_name = "Any") -> None:
-        assert Type.types.get(type, None) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
-        type_def = Type.types.get(type,TypeDefinition(ops = []))        
-        type_def.ops.insert(0,(op, sig))
+    def add_op(op: Operation, sig: TypeSignature, type_name: Type_name = "Any") -> None:
+        type_def = Type.types.get(type_name, None)
+        assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
+        if type_def:
+            type_def.ops_list.insert(0,(op, sig))            
+        
+        #print("\n\nADD_OP type_def type(%s) = %s." % (type(type_def), str(type_def)))
+
         #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
 
     # Returns the first matching operation for this named type.
     @staticmethod
-    def find_op(name: Op_name, cont: AF_Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
-        print("Searching for op:'%s' in type: '%s'." % (name,type))
-        assert Type.types.get(type, None) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
+    def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
+        type_def = Type.types.get(type_name, None)
+        print("Searching for op:'%s' in type: '%s'." % (name,type_name))
+        assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
         sigs_found : List[TypeSignature] = []
-        op_list = Type.types.get(type,TypeDefinition).ops  
-        print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
-        for op, sig, in op_list:
-            if op.name == name:
-                name_found = True
-                sigs_found.append(sig)
-                # Now try to match the input stack...
-                # Should it be an exception to match the name but not the 
-                # stack input signature? Probably so.
-                if sig.match_in(cont.stack):
+        if type_def:
+            op_list = type_def.ops_list  
+            print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
+            for op, sig, in op_list:
+                if op.name == name:
+                    name_found = True
+                    sigs_found.append(sig)
+                    # Now try to match the input stack...
+                    # Should it be an exception to match the name but not the 
+                    # stack input signature? Probably so.
+                    if sig.match_in(cont.stack):
 
-                    print("Found! Returning %s, %s, %s" % (op, sig, True))
-                    return op, sig, True
+                        print("Found! Returning %s, %s, %s" % (op, sig, True))
+                        return op, sig, True
         # Not found.
         if name_found:
             # Is this what we want to do?
@@ -130,7 +139,7 @@ class Type(AF_Type):
         return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), False
 
     @staticmethod    
-    def op(name: Op_name, cont: AF_Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
+    def op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
         tos = cont.stack.tos()        
         op : Operation = Operation("invalid_result!", make_atom)
         sig : TypeSignature = TypeSignature([],[])
