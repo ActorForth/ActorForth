@@ -15,15 +15,24 @@ from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
 Type_name = str
 
 
+def default_op_handler(cont):
+    cont.op, sig, found = Type.op(cont.symbol.s_id, cont)
+    cont.op(cont)
+
+@dataclass
+class TypeDefinition:
+    ops: Op_list 
+    op_handler : Callable[["AF_Continuation"],None] = default_op_handler
+
 class Type(AF_Type):
 
     # Types is a dictionary of Type names to their respective
     # custom dictionaries.   
 
-    types : Dict[Type_name, Op_list] = {}
+    types : Dict[Type_name, TypeDefinition] = {}
 
-    types["Any"] = [] # Global dictionary. 
-    types["CodeCompile"] = []
+    types["Any"] = TypeDefinition(ops = []) # Global dictionary. 
+    types["CodeCompile"] = TypeDefinition(ops = [])
 
     ctors : Dict[Type_name, Op_map] = {}
 
@@ -33,7 +42,7 @@ class Type(AF_Type):
         if not Type.ctors.get(self.name, False):
             Type.ctors[self.name] = []
         if not Type.types.get(self.name, False):
-            Type.types[self.name] = []
+            Type.types[self.name] = TypeDefinition(ops = [])
 
         ## Do we need this? super().__init__(self)            
 
@@ -86,19 +95,19 @@ class Type(AF_Type):
     # Inserts a new operations for the given type name (or global for None).
     @staticmethod
     def add_op(op: Operation, sig: TypeSignature, type: Type_name = "Any") -> None:
-        assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
-        type_list = Type.types.get(type,[])        
-        type_list.insert(0,(op, sig))
+        assert Type.types.get(type, None) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
+        type_def = Type.types.get(type,TypeDefinition(ops = []))        
+        type_def.ops.insert(0,(op, sig))
         #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
 
     # Returns the first matching operation for this named type.
     @staticmethod
     def find_op(name: Op_name, cont: AF_Continuation, type: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
         print("Searching for op:'%s' in type: '%s'." % (name,type))
-        assert Type.types.get(type) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
+        assert Type.types.get(type, None) is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
         sigs_found : List[TypeSignature] = []
-        op_list = Type.types.get(type,[])  
+        op_list = Type.types.get(type,TypeDefinition).ops  
         print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
         for op, sig, in op_list:
             if op.name == name:

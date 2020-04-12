@@ -31,7 +31,7 @@ def op_compile_atom(c: AF_Continuation) -> None:
 new_op = Operation('_', op_compile_atom)
 new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
                         [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
-Type.types["CodeCompile"].insert(0, (new_op,new_sig))
+Type.types["CodeCompile"].ops.insert(0, (new_op,new_sig))
 
 
 #
@@ -55,12 +55,12 @@ def op_compile_word(c: AF_Continuation) -> None:
 #
 for t in Type.types.keys():
     if t == "CodeCompile": continue
-    t_words = Type.types.get(t,[])
+    t_words = Type.types.get(t,TypeDefinition(ops = [])).ops
     for op, sig in t_words:
         new_op = Operation(op.name, op_compile_word, [op])
         new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
                         [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
-        Type.types["CodeCompile"].insert(0, (new_op,new_sig) )
+        Type.types["CodeCompile"].ops.insert(0, (new_op,new_sig) )
 
 
 def op_new_word(c: AF_Continuation) -> None:
@@ -211,7 +211,7 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
     new_op = Operation(op.name, op_compile_word, [op])
     new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
                     [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
-    Type.types["CodeCompile"].insert(0, (new_op, new_sig))
+    Type.types["CodeCompile"].ops.insert(0, (new_op, new_sig))
 Type.add_op(Operation(';',op_finish_word_compilation), 
             TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[TWordDefinition]), 
             "CodeCompile")
