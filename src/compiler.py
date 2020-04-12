@@ -50,7 +50,9 @@ def op_compile_word(c: AF_Continuation) -> None:
         # And add it to our list of words to execute for the newly defined word.
         c.stack.tos().value.add_word(op)
 
-
+#
+# Now we create compiler-specific versions of all the existing words for each Type.
+#
 for t in Type.types.keys():
     if t == "CodeCompile": continue
     t_words = Type.types.get(t,[])
@@ -69,6 +71,8 @@ def op_new_word(c: AF_Continuation) -> None:
     and turn it into a new WordDefinition.
     """
     itype = c.stack.tos().type
+    # Why is TWordDefinition ok here? For pattern matching/word overloading? 
+    # Need to update the TypeSignature for it if we still want this.
     assert (itype == TAtom) or (itype == TWordDefinition), \
         "New words must be atoms or new word definitions. %s is a %s." % (c.stack.tos().value, itype)
 
