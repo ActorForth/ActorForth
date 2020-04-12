@@ -40,12 +40,15 @@ class Type(AF_Type):
     ctors : Dict[Type_name, Op_map] = {}
 
 
-    def __init__(self, typename: Type_name):
+    def __init__(self, typename: Type_name, handler = None):
+        if handler is None:
+            handler = default_op_handler
         self.name = typename
         if not Type.ctors.get(self.name, False):
             Type.ctors[self.name] = []
         if not Type.types.get(self.name, False):
-            Type.types[self.name] = TypeDefinition(ops_list = [])
+            t_def = TypeDefinition(ops_list=[], op_handler=handler)
+            Type.types[self.name] = t_def
 
         ## Do we need this? super().__init__(self)       
     def ops(self) -> Op_list:
