@@ -46,7 +46,7 @@ if __name__ == "__main__":
             break
         except Exception as x:
             print( x )
-            #raise
+            raise
 
     print_stack_stats(cont.stack)
     print("\nend of line...")

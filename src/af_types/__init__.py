@@ -35,7 +35,7 @@ class Type(AF_Type):
     types : Dict[Type_name, TypeDefinition] = {}
 
     types["Any"] = TypeDefinition(ops_list = []) # Global dictionary. 
-    types["CodeCompile"] = TypeDefinition(ops_list = [])
+    #types["CodeCompile"] = TypeDefinition(ops_list = [])
 
     ctors : Dict[Type_name, Op_map] = {}
 
@@ -143,6 +143,7 @@ class Type(AF_Type):
         # Not found.
         if name_found:
             # Is this what we want to do?
+            pass # This will happen if names match but stacks don't.
             raise Exception("Continuation doesn't match Op '%s' with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
 
         #print ("Not found!")

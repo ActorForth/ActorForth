@@ -42,6 +42,22 @@ def op_words(c: AF_Continuation) -> None:
 Type.add_op(Operation('words', op_words), TypeSignature([],[]))
 
 
+def op_print_types(c: AF_Continuation) -> None:
+    print("\nTypes:")
+    for type_name in Type.types.keys():
+
+        _t_def = Type.types.get(type_name,None)
+
+        if _t_def:
+            _ops = _t_def.ops_list
+            _handle = _t_def.op_handler
+            print("\t%s op_handler = %s" % (type_name, _handle))
+
+Type.add_op(Operation('types', op_print_types), TypeSignature([],[]))                
+
+
+
+
 
 #
 #   Should dup, swap, drop and any other generic stack operators 

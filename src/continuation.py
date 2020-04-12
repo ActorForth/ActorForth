@@ -20,7 +20,7 @@ class Continuation(AF_Continuation):
     symbol : Optional[Symbol] = None
     op : Operation = Operation("nop",op_nop)
 
-    debug : bool = False
+    debug : bool = True
     cdepth : int = 0        # Depth of calls for debug tab output.
 
 
@@ -38,7 +38,7 @@ class Continuation(AF_Continuation):
 
 
     def __str__(self) -> str:
-        result = "Cont: symbol: %s  op: %s" % (self.symbol, self.op)
+        result = "Cont: %s  %s" % (self.symbol, self.op)
         if self.debug:
             result += "\nDebug : On (Call Depth:%s)" % self.cdepth
 
@@ -47,7 +47,7 @@ class Continuation(AF_Continuation):
                 content += "empty"
             else:    
                 for n, s in enumerate(self.stack.contents()[::-1]):
-                    content += "%s) v=%s,t=%s\n\t\t" % (n, s.value, s.type.name)
+                    content += "%s) val=%s,  type=%s\n\t\t" % (n, s.value, s.type.name)
             content += "\n"
 
             result += "\n\tStack =\t%s " % (content)

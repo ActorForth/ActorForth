@@ -13,6 +13,9 @@ class TypeSignature:
 
     def match_in(self, stack: Stack) -> bool:
         if not len(self.stack_in): return True
+        if len(self.stack_in) > stack.depth():
+            print("match_in: input stack too short for signature.")
+            return False
         stack_types = [s.type for s in stack.contents()[len(self.stack_in)*-1:] ]
 
         print("\nmatch_in: in_types = %s" % (self.stack_in))
@@ -34,6 +37,17 @@ class TypeSignature:
     def match_out(self, on_stack_types: List["AF_Type"]) -> bool:
         return True
 
+    def __str__(self) -> str:
+        out = "TypeSignature ["
+        for t in self.stack_in:
+            out += " %s," % t.name
+        out += "] -> ["
+
+        for t in self.stack_out:
+            out += " %s," % t.name
+
+        out += "]"
+        return out
 
 Op_name = str
 Operation_def = Callable[["AF_Continuation"],None]
