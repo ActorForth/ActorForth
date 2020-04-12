@@ -122,13 +122,13 @@ class Type(AF_Type):
     @staticmethod
     def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
         type_def = Type.types.get(type_name, None)
-        print("Searching for op:'%s' in type: '%s'." % (name,type_name))
+        #print("Searching for op:'%s' in type: '%s'." % (name,type_name))
         assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         name_found = False
         sigs_found : List[TypeSignature] = []
         if type_def:
             op_list = type_def.ops_list  
-            print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
+            #print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
             for op, sig, in op_list:
                 if op.name == name:
                     name_found = True
@@ -138,14 +138,14 @@ class Type(AF_Type):
                     # stack input signature? Probably so.
                     if sig.match_in(cont.stack):
 
-                        print("Found! Returning %s, %s, %s" % (op, sig, True))
+                        #print("Found! Returning %s, %s, %s" % (op, sig, True))
                         return op, sig, True
         # Not found.
         if name_found:
             # Is this what we want to do?
             raise Exception("Continuation doesn't match Op '%s' with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
 
-        print ("Not found!")
+        #print ("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
         return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), False
 

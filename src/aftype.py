@@ -38,4 +38,4 @@ class AF_Continuation:
 
 
     debug : bool = False
-    ddepth : int = 0        # Depth of calls for debug tab output.
+    cdepth : int = 0        # Depth of calls for debug tab output.

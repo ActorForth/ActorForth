@@ -53,14 +53,6 @@ TInputTypeSignature = Type("InputTypeSignature", handler = input_type_handler)
 TOutputTypeSignature = Type("OutputTypeSignature", handler = output_type_handler)
 
 
-
-
-##
-## Since we've imported all the built-in types (af_types), all the basic words will
-## exist for each Type. Let's go ahead and create compiler context words so these
-## built-in words can be used to construct other words in the compiler.
-##
-
 #### THIS CATCHES ATOMS DURING COMPILATION
 def op_compile_atom(c: AF_Continuation) -> None:
     if c.symbol is None:
@@ -78,7 +70,7 @@ Type.types["CodeCompile"].ops_list.insert(0, (new_op,new_sig))
 #
 #
 #
-def op_compile_word(c: AF_Continuation) -> None:
+def compile_word_handler(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation) 
         -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
@@ -92,25 +84,16 @@ def op_compile_word(c: AF_Continuation) -> None:
     assert c.symbol
     op, sig, found = Type.op(c.symbol.s_id, c)
 
+    ##
+    ## THIS IS WHERE WE SHOULD DO TYPE CHECKING DURING COMPILATION
+    ##
+
     if found:
         c.stack.tos().value.add_word(op)
     else:
         assert False        
 
-TCodeCompile = Type("CodeCompile", handler = op_compile_word)
-
-
-# #
-# # Now we create compiler-specific versions of all the existing words for each Type.
-# #
-# for t in Type.types.keys():
-#     if t == "CodeCompile": continue
-#     t_words = Type.types.get(t,TypeDefinition(ops_list = [])).ops_list
-#     for op, sig in t_words:
-#         new_op = Operation(op.name, op_compile_word, [op])
-#         new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
-#                         [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
-#         Type.types["CodeCompile"].ops_list.insert(0, (new_op,new_sig) )
+TCodeCompile = Type("CodeCompile", handler = compile_word_handler)
 
 
 def op_new_word(c: AF_Continuation) -> None:
@@ -132,55 +115,7 @@ def op_new_word(c: AF_Continuation) -> None:
     if itype == TAtom:
         c.stack.tos().type = TWordDefinition
 Type.add_op(Operation(':',op_new_word), TypeSignature([TAtom],[TWordDefinition]))        
-
-# #
-# # Next three ops are for taking type names for type signatures.
-# #
-# def op_start_input_sig(c: AF_Continuation) -> None:
-#     """
-#     WordDefinition(Op_name) -> WordDefinition(Op_name), InputTypeSignature(TypeSignature).
-
-#     Works only there's a WordDefinition followed by an Atom on tos.
-#     Creates a new TypeSignature, adds the first item and pushes it to the stack.
-#     Does NOT consume the WordDefinition.
-#     """
-
-#     assert Type.types.get(c.op.name, False) is not False, \
-#         "%s is not a valid type name.\nValid types are: %s." % (c.op.name, [n for n in Type.types.keys()])
-#     #print("Got valid type: %s" % c.op.name)
-#     sig = TypeSignature([Type(c.op.name)],[])
-#     c.stack.push(StackObject(sig,TInputTypeSignature))
-
-# def op_continue_input_sig(c: AF_Continuation) -> None:
-#     """
-#      WordDefinition(Op_name), InputTypeSignature(TypeSignature) 
-#         ->  WordDefinition(Op_name), InputTypeSignature(TypeSignature).
-
-#     Adds another Type to the InputTypeSignature list.
-#     """
-#     c.stack.tos().value.stack_in.append(Type(c.op.name))
-
-# def op_output_sig(c: AF_Continuation) -> None:
-#     """
-#     WordDefinition(Op_name), OutputTypeSignature -> WordDefinition(Op_name), OutputTypeSignature.
-
-#     Should be invoked only when there's an InputTypeSignaure followed by the -> operator.
-#     Takes the existing TypeSignature, adds the first item to the output signature. 
-#     Does NOT consume the TypeSignature.
-#     """
-#     c.stack.tos().value.stack_out.append(Type(c.op.name))
-
-# # Register every type name in order to be able to express Type Signatures at compile time.
-# for type_name in Type.types.keys():
-#     Type.add_op(Operation(type_name, op_start_input_sig), 
-#                 TypeSignature([TWordDefinition],[TWordDefinition,TInputTypeSignature]), 
-#                 "WordDefinition")
-#     Type.add_op(Operation(type_name, op_continue_input_sig), 
-#                 TypeSignature([TWordDefinition, TInputTypeSignature],[TWordDefinition, TInputTypeSignature]), 
-#                 "InputTypeSignature")  
-#     Type.add_op(Operation(type_name, op_output_sig), 
-#                 TypeSignature([TWordDefinition, TOutputTypeSignature],[TWordDefinition, TOutputTypeSignature]), 
-#                 "OutputTypeSignature")          
+        
 
 def op_switch_to_output_sig(c: AF_Continuation) -> None:
     """
@@ -282,7 +217,7 @@ Type.add_op(Operation('.',op_finish_word_definition),
 
 
 def _indent(c: AF_Continuation) -> str:
-    return ''.join(['\t' for n in range(c.ddepth)])  
+    return ''.join(['\t' for n in range(c.cdepth)])  
 
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
@@ -293,13 +228,13 @@ def op_execute_compiled_word(c: AF_Continuation) -> None:
     doutput = _indent(c) + op.name + " : "
     #print("\tExecuting %s words for %s : %s." % (len(words), op.name, words))
     for word in words:
-        c.ddepth += 1
+        c.cdepth += 1
         doutput += "\n%s%s" % (_indent(c),word)
         #print("\n\t\tword: %s" % word)
         c.op = word
         c.symbol = Symbol(word.name, Location())
         word(c)
-        c.ddepth -= 1
+        c.cdepth -= 1
         #print("\n\t\t%s c.stack.contents = %s." % (word,c.stack.contents()))
     
     if c.debug:

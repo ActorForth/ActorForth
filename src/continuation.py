@@ -13,6 +13,7 @@ from af_types import *
 
 from operation import Operation
 
+
 @dataclass
 class Continuation(AF_Continuation):
     stack : Stack
@@ -20,7 +21,7 @@ class Continuation(AF_Continuation):
     op : Operation = Operation("nop",op_nop)
 
     debug : bool = False
-    ddepth : int = 0        # Depth of calls for debug tab output.
+    cdepth : int = 0        # Depth of calls for debug tab output.
 
 
     def execute(self) -> None:
@@ -37,10 +38,17 @@ class Continuation(AF_Continuation):
 
 
     def __str__(self) -> str:
-        result = "Cont: %s" % self.op
+        result = "Cont: symbol: %s  op: %s" % (self.symbol, self.op)
         if self.debug:
-            result += "\nDebug : On (Depth:%s)" % self.ddepth
+            result += "\nDebug : On (Call Depth:%s)" % self.cdepth
 
-        result += "\n      Stack(%s) = %s " \
-            % (len(self.stack.contents()),self.stack.contents())
+            content = ""
+            if self.stack.is_empty():
+                content += "empty"
+            else:    
+                for n, s in enumerate(self.stack.contents()[::-1]):
+                    content += "%s) v=%s,t=%s\n\t\t" % (n, s.value, s.type.name)
+            content += "\n"
+
+            result += "\n\tStack =\t%s " % (content)
         return result
