@@ -10,7 +10,7 @@ from af_types.af_any import op_swap, op_stack
 
 
 def compilation_word_handler(c: AF_Continuation) -> bool:
-    print("compilation_word_handler")
+    #print("compilation_word_handler")
     # Lookup ONLY words for my specific type.
     assert c.symbol
     name = c.symbol.s_id
@@ -25,11 +25,11 @@ def compilation_word_handler(c: AF_Continuation) -> bool:
     return False
 
 def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
-    print("\n\nstarting type_sig_handler")  
+    #print("\n\nstarting type_sig_handler")  
     handled = compilation_word_handler(c)
     out = "type_sig_handler for type_name='%s' : received for symbol: %s "
     if handled: out += "HANDLED by compilation_word_handler."
-    print(out % (type_name, c.symbol))
+    #print(out % (type_name, c.symbol))
     if handled: return 
 
     #
@@ -45,8 +45,8 @@ def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
     else:
         c.stack.tos().value.stack_out.append(Type(c.symbol.s_id))
 
-    print("\nfinishing type_sig_handler")
-    print(c)
+    #print("\nfinishing type_sig_handler")
+    #print(c)
 
 
 def input_type_handler(c: AF_Continuation) -> None:
@@ -91,12 +91,12 @@ def compile_word_handler(c: AF_Continuation) -> None:
     Given an Op_name, place it in the list of our Operation to be executed at runtime later.
     TODO: Confirm Type Signatures in & out of found words to enforce type safety.
     """
-    print("compile_word_handler starting")
+    #print("compile_word_handler starting")
     handled = compilation_word_handler(c)
     if handled: return
 
     assert c.symbol
-    print("looking up symbol.s_id = %s" % c.symbol.s_id)
+    #print("looking up symbol.s_id = %s" % c.symbol.s_id)
     op_name = c.symbol.s_id
     found = False
 
@@ -109,15 +109,14 @@ def compile_word_handler(c: AF_Continuation) -> None:
         # Match to the output stack of our last word in this definition.
         words = c.stack.tos().value.words 
         tos_output_sig = words[-1].sig.stack_out
-        print("Match to prior word's output sig: %s" % tos_output_sig)
-        # BROKE HERE - HAVE TO HAVE TYPESIGNATURES WITH OUR OPERATIONS TO MATCH TYPES
+        #print("Match to prior word's output sig: %s" % tos_output_sig)
 
     else:
         # Match to the input stack of the input defintion of our word.
         op_swap(c)
         tos_output_sig = c.stack.tos().value.stack_in
         op_swap(c)
-        print("Match to current word's input sig: %s" % tos_output_sig)
+        #print("Match to current word's input sig: %s" % tos_output_sig)
 
     if len(tos_output_sig):
         # First try to match up with an op specialized for this type.
@@ -128,7 +127,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
             fake_c.stack.push(StackObject(None, t))
 
         output_type_name = tos_output_sig[-1].name
-        print("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
+        #print("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
         op, found = Type.find_op(op_name, fake_c, output_type_name)
 
         ### HACK HACK
@@ -154,7 +153,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
     else:
         print("FAILED TO FIND WORD TO COMPILE %s" % c.symbol.s_id )
         assert False   
-    print("compile_word_handler ending")     
+    #print("compile_word_handler ending")     
 
 TCodeCompile = Type("CodeCompile", handler = compile_word_handler)
 

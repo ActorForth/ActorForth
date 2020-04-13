@@ -35,8 +35,9 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
         try:
             ## OLD WAY cont.op(cont)
             # NEW WAY 
+            old_tos = cont.stack.tos()
             cont.execute()
-            print(cont)
+            print("%s" % cont)
 
             # if found:
             #     #print("Executing %s:" % cont.op)
