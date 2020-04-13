@@ -28,7 +28,9 @@ class TypeSignature:
             so that manipulations across generics are still completely type safe.
             """
             stack_type = stack_types.pop()
-            if in_type != stack_type and stack_type != "Any" and in_type != "Any":
+            if in_type == "Any": continue
+            if stack_type == "Any": continue
+            if in_type != stack_type: 
                 #print("match_in: Stack type %s doesn't match input arg type %s." % (type,in_type))
                 return False
         #print("match_in: Found matching type for stack_in: %s" % self.stack_in)
