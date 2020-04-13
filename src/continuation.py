@@ -20,7 +20,7 @@ class Continuation(AF_Continuation):
     symbol : Optional[Symbol] = None
     op : Operation = Operation("nop",op_nop)
 
-    debug : bool = True
+    debug : bool = False
     cdepth : int = 0        # Depth of calls for debug tab output.
 
 

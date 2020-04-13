@@ -38,7 +38,7 @@ class TypeSignature:
         return True
 
     def __str__(self) -> str:
-        out = "TypeSignature ["
+        out = "["
         for t in self.stack_in:
             out += " %s," % t.name
         out += "] -> ["
@@ -54,10 +54,11 @@ Operation_def = Callable[["AF_Continuation"],None]
 
 class Operation:
 
-    def __init__(self, name: Op_name, op: Operation_def, words: List["Operation"] = None) -> None:
+    def __init__(self, name: Op_name, op: Operation_def, words: List["Operation"] = None, sig: TypeSignature = None) -> None:
         self.name = name
         self.the_op : Operation_def = op
         self.words : List["Operation"] = words or []
+        self.sig : TypeSignature = sig or TypeSignature([],[])
 
     def add_word(self, op: "Operation") -> bool:
         # Should check for valid stack type signature.
@@ -68,8 +69,8 @@ class Operation:
         self.the_op(cont)
 
     def __str__(self) -> str:
-        result = "Op{'%s':(%s)" % (self.name, self.the_op.__qualname__)
-        result += str(self.words)
+        result = "Op{'%s' %s :(%s)" % (self.name, self.sig, self.the_op.__qualname__)
+        result += " %s" % str(self.words)
         result += "}"
         return result
 
@@ -80,7 +81,8 @@ class Operation:
         return self.name        
   
 
-Op_list = List[Tuple[Operation, TypeSignature]]
+#Op_list = List[Tuple[Operation, TypeSignature]]
+Op_list = List[Operation]
 
 Op_map = List[Tuple[Sequence["AF_Type"],Operation]]
 

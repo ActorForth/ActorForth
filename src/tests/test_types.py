@@ -77,23 +77,23 @@ class TestTypeSignature(unittest.TestCase):
         stack = Stack()
         cont = Continuation(stack)
         cont.stack.push(StackObject("tparm", TParm1))
-        Type.add_op(Operation("test", lambda cont: 42), TypeSignature([TParm1],[]) ) #, "Test")
+        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([TParm1],[]) )) #, "Test")
 
         print_words()
 
-        op, sig, found = Type.op("test", cont ) #, "Test")
+        op, found = Type.op("test", cont ) #, "Test")
 
         assert found
-        assert sig == TypeSignature([TParm1],[])
+        assert op.sig == TypeSignature([TParm1],[])
 
-        op, sig, found = Type.op("not found", cont)
+        op, found = Type.op("not found", cont)
         assert not found
 
     def test_op_with_wrong_type_signature(self) -> None:
         stack = Stack()
         stack.push(StackObject("tparm", TTest))
 
-        Type.add_op(Operation("test", op_print), TypeSignature([TParm1],[]))
+        Type.add_op(Operation("test", op_print, sig = TypeSignature([TParm1],[])))
 
         with self.assertRaises( Exception ):
             Type.op("test", stack)
@@ -106,12 +106,12 @@ class TestTypeSignature(unittest.TestCase):
         s = Stack()        
         c = Continuation(s)    
 
-        Type.add_op(Operation("test", stack_fun), TypeSignature([],[]) ) 
+        Type.add_op(Operation("test", stack_fun, sig = TypeSignature([],[]) ) )
 
-        op, sig, found = Type.op("test", c)
+        op, found = Type.op("test", c)
 
         assert found
-        assert sig == TypeSignature([],[])
+        assert op.sig == TypeSignature([],[])
 
 
 class TestGenericTypeStuff(unittest.TestCase):       

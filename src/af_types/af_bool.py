@@ -91,7 +91,7 @@ def op_greater_than_or_equal_to(c: AF_Continuation) -> None:
 def op_not(c: AF_Continuation) -> None:
     # Restrict to only workong on Bools!
     op1 = c.stack.tos().value = not c.stack.tos().value
-Type.add_op(Operation('not', op_not), TypeSignature([TBool],[TBool]), "Bool")
+Type.add_op(Operation('not', op_not, sig=TypeSignature([TBool],[TBool]) ), "Bool")
     
 
 #   Bool dictionary

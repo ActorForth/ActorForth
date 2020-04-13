@@ -29,7 +29,7 @@ def op_plus(c: AF_Continuation) -> None:
     assert int(result) - op2 == op1, "python math error"
     c.stack.push(StackObject(result,TInt))
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
-Type.add_op(Operation('+',op_plus), TypeSignature([TInt,TInt],[TInt]), "Int")    
+Type.add_op(Operation('+',op_plus, sig=TypeSignature([TInt,TInt],[TInt]) ), "Int") 
 
 def op_minus(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
@@ -39,7 +39,7 @@ def op_minus(c: AF_Continuation) -> None:
     assert int(result) + op1 == op2, "python math error"
     c.stack.push(StackObject(result,TInt))
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
-Type.add_op(Operation('-',op_minus), TypeSignature([TInt,TInt],[TInt]), "Int")    
+Type.add_op(Operation('-',op_minus, sig=TypeSignature([TInt,TInt],[TInt]) ), "Int")    
 
 def op_multiply(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
@@ -51,7 +51,7 @@ def op_multiply(c: AF_Continuation) -> None:
 
     c.stack.push(StackObject(result,TInt))
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
-Type.add_op(Operation('*',op_multiply), TypeSignature([TInt,TInt],[TInt]), "Int")    
+Type.add_op(Operation('*',op_multiply, sig=TypeSignature([TInt,TInt],[TInt]) ), "Int")    
 
 def op_divide(c: AF_Continuation) -> None: 
     assert c.stack.tos().value != 0, "int division by zero error."
@@ -61,6 +61,6 @@ def op_divide(c: AF_Continuation) -> None:
     remainder = op2 - (result * op1)
     c.stack.push(StackObject(result, TInt))
     c.stack.push(StackObject(remainder, TInt))
-Type.add_op(Operation('/',op_divide), TypeSignature([TInt,TInt],[TInt,TInt]), "Int")
+Type.add_op(Operation('/',op_divide, sig=TypeSignature([TInt,TInt],[TInt,TInt]) ), "Int")
 
 

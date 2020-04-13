@@ -1,13 +1,13 @@
 from . import *
 
 # op_nop from continuation.
-Type.add_op(Operation('nop', op_nop), TypeSignature([],[]))
+Type.add_op(Operation('nop', op_nop, sig=TypeSignature([],[])) )
 
 
 def op_print(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
     print("'%s'" % op1)
-Type.add_op(Operation('print', op_print), TypeSignature([TAny],[]))
+Type.add_op(Operation('print', op_print, sig=TypeSignature([TAny],[])) )
 
 
 def op_stack(c: AF_Continuation) -> None:
@@ -17,7 +17,7 @@ def op_stack(c: AF_Continuation) -> None:
         for n in reversed(c.stack.contents()):
             print('%s'%str(n))
 
-Type.add_op(Operation('stack', op_stack), TypeSignature([],[]))
+Type.add_op(Operation('stack', op_stack, sig=TypeSignature([],[])) )
 
 
 def print_words() -> None:
@@ -28,18 +28,18 @@ def print_words() -> None:
         _ops = _t_def.ops_list
     else:
         _ops = _t_def.ops_list
-    print("Global Dictionary : %s" % list(set([op[0].short_name() for op in _ops])) )
+    print("Global Dictionary : %s" % list(set([op.short_name() for op in _ops])) )
     for type_name in Type.types.keys():
         if type_name != "Any":
             _t_def = Type.types.get(type_name,None)
             if _t_def:
                 _ops = _t_def.ops_list
                 if len(_ops):
-                    print("%s Dictionary : %s" % (type_name,list(set([op[0].short_name() for op in _ops]))) )
+                    print("%s Dictionary : %s" % (type_name,list(set([op.short_name() for op in _ops]))) )
 
 def op_words(c: AF_Continuation) -> None:                
     print_words()
-Type.add_op(Operation('words', op_words), TypeSignature([],[]))
+Type.add_op(Operation('words', op_words, sig=TypeSignature([],[])) )
 
 
 def op_print_types(c: AF_Continuation) -> None:
@@ -53,7 +53,7 @@ def op_print_types(c: AF_Continuation) -> None:
             _handle = _t_def.op_handler
             print("\t%s op_handler = %s" % (type_name, _handle))
 
-Type.add_op(Operation('types', op_print_types), TypeSignature([],[]))                
+Type.add_op(Operation('types', op_print_types, sig=TypeSignature([],[])) )                
 
 
 
@@ -67,7 +67,7 @@ Type.add_op(Operation('types', op_print_types), TypeSignature([],[]))
 def op_dup(c: AF_Continuation) -> None:
     op1 = c.stack.tos()
     c.stack.push(op1)
-Type.add_op(Operation('dup', op_dup), TypeSignature([TAny],[TAny, TAny]))
+Type.add_op(Operation('dup', op_dup, sig=TypeSignature([TAny],[TAny, TAny])) )
 
 
 def op_swap(c: AF_Continuation) -> None:
@@ -75,12 +75,12 @@ def op_swap(c: AF_Continuation) -> None:
     op2 = c.stack.pop()
     c.stack.push(op1)
     c.stack.push(op2)
-Type.add_op(Operation('swap', op_swap), TypeSignature([TAny, TAny],[TAny, TAny]))
+Type.add_op(Operation('swap', op_swap, sig=TypeSignature([TAny, TAny],[TAny, TAny])) )
 
 
 def op_drop(c: AF_Continuation) -> None:
     op1 = c.stack.pop()
-Type.add_op(Operation('drop', op_drop), TypeSignature([TAny],[]))
+Type.add_op(Operation('drop', op_drop, sig=TypeSignature([TAny],[])) )
 
 
 def op_2dup(c: AF_Continuation) -> None:
@@ -90,4 +90,4 @@ def op_2dup(c: AF_Continuation) -> None:
     op_swap(c)
     c.stack.push(op2)
     c.stack.push(op1)
-Type.add_op(Operation('2dup', op_2dup), TypeSignature([TAny, TAny],[TAny, TAny]))
+Type.add_op(Operation('2dup', op_2dup, sig=TypeSignature([TAny, TAny],[TAny, TAny])) )

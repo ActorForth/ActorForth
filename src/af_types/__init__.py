@@ -19,7 +19,7 @@ Type_name = str
 # NOTE : had to remove Python typing notation from this function
 #        to get things to compile clean.
 def default_op_handler(cont):
-    cont.op, sig, found = Type.op(cont.symbol.s_id, cont)
+    cont.op, found = Type.op(cont.symbol.s_id, cont)
     cont.op(cont)
 
 @dataclass
@@ -49,8 +49,8 @@ class Type(AF_Type):
         if not Type.types.get(self.name, False):
             t_def = TypeDefinition(ops_list=[], op_handler=handler)
             Type.types[self.name] = t_def
+        ## Do we need this? super().__init__(self)      
 
-        ## Do we need this? super().__init__(self)       
     def ops(self) -> Op_list:
         t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
         return t_def.ops_list
@@ -61,15 +61,16 @@ class Type(AF_Type):
         return t_def.op_handler
 
     @staticmethod
-    def register_ctor(name: Type_name, op: Operation, sig: List["Type"]) -> None:
+    def register_ctor(name: Type_name, op: Operation, input_sig: List["Type"]) -> None:
         # Ctors only have TypeSignatures that return their own Type.
         # Register the ctor in the Global dictionary.
-        Type.add_op(op, TypeSignature(sig,[Type("Any")]))
+        op.sig = TypeSignature(input_sig,[Type("Any")]) ## HACK - why is this ANY rather than the Type_name???
+        Type.add_op(op)
 
         # Append this ctor to our list of valid ctors.
         op_map = Type.ctors.get(name, None)
         assert op_map is not None, ("No ctor map for type %s found.\n\tCtors exist for the following types: %s." % (name, Type.ctors.keys()))
-        op_map.append((sig,op))
+        op_map.append((input_sig,op))
 
     @staticmethod
     def find_ctor(name: Type_name, inputs : List["Type"]) -> Optional[Operation]:
@@ -108,11 +109,11 @@ class Type(AF_Type):
 
     # Inserts a new operations for the given type name (or global for Any).
     @staticmethod
-    def add_op(op: Operation, sig: TypeSignature, type_name: Type_name = "Any") -> None:
+    def add_op(op: Operation, type_name: Type_name = "Any") -> None:
         type_def = Type.types.get(type_name, None)
         assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
         if type_def:
-            type_def.ops_list.insert(0,(op, sig))            
+            type_def.ops_list.insert(0,op)            
         
         #print("\n\nADD_OP type_def type(%s) = %s." % (type(type_def), str(type_def)))
 
@@ -120,7 +121,7 @@ class Type(AF_Type):
 
     # Returns the first matching operation for this named type.
     @staticmethod
-    def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
+    def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, bool]:
         type_def = Type.types.get(type_name, None)
         #print("Searching for op:'%s' in type: '%s'." % (name,type_name))
         assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
@@ -129,17 +130,17 @@ class Type(AF_Type):
         if type_def:
             op_list = type_def.ops_list  
             #print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
-            for op, sig, in op_list:
+            for op in op_list:
                 if op.name == name:
                     name_found = True
-                    sigs_found.append(sig)
+                    sigs_found.append(op.sig)
                     # Now try to match the input stack...
                     # Should it be an exception to match the name but not the 
                     # stack input signature? Probably so.
-                    if sig.match_in(cont.stack):
+                    if op.sig.match_in(cont.stack):
 
                         #print("Found! Returning %s, %s, %s" % (op, sig, True))
-                        return op, sig, True
+                        return op, True
         # Not found.
         if name_found:
             # Is this what we want to do?
@@ -148,10 +149,10 @@ class Type(AF_Type):
 
         #print ("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
-        return Operation("make_atom", make_atom), TypeSignature([],[TAtom]), False
+        return Operation("make_atom", make_atom, sig=TypeSignature([],[TAtom])), False
 
     @staticmethod    
-    def op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, TypeSignature, bool]:
+    def op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, bool]:
         tos = cont.stack.tos()        
         op : Operation = Operation("invalid_result!", make_atom)
         sig : TypeSignature = TypeSignature([],[])
@@ -159,23 +160,23 @@ class Type(AF_Type):
 
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
-            op, sig, found = Type.find_op(name, cont, tos.type.name)
+            op, found = Type.find_op(name, cont, tos.type.name)
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
-            op, sig, found = Type.find_op(name, cont)
+            op, found = Type.find_op(name, cont)
 
         if tos is not Stack.Empty and not found:
             # There's no such operation by that 'name' in existence 
             # so let's find the default op for this type or else from the global dict
             # (as that's the make_atom op returned by default for Type.find_op.)
             #print("Searching for default specialized for Type: %s." % tos.type.name)
-            op, sig, found = Type.find_op('_', cont, tos.type.name)            
+            op, found = Type.find_op('_', cont, tos.type.name)            
             op.name = name
 
 
         #print("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
-        return op, sig, found            
+        return op, found            
 
     def __eq__(self, type: object) -> bool:
         if self.name == "Any":

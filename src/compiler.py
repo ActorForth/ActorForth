@@ -2,7 +2,7 @@
 #   compiler.py     - Building new words/types for our language.
 #
 
-from typing import Dict, List, Tuple, Callable, Any, Optional
+from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
 
 from af_types import *
@@ -14,10 +14,10 @@ def compilation_word_handler(c: AF_Continuation) -> bool:
     # Lookup ONLY words for my specific type.
     assert c.symbol
     name = c.symbol.s_id
-    op, sig, found = Type.find_op(name, c, c.stack.tos().type.name)
+    op, found = Type.find_op(name, c, c.stack.tos().type.name)
 
     # Is this a word specialized for my type matches my stack/type specification?
-    if found and sig.match_in(c.stack):
+    if found and op.sig.match_in(c.stack):
         # Yes - so execute it.
         c.op = op
         c.op(c)
@@ -107,7 +107,10 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
     if c.stack.tos().value.words:
         # Match to the output stack of our last word in this definition.
-        tos_output_sig = c.stack.tos().value.words
+        tos_output_sig = c.stack.tos().value.words 
+
+        # BROKE HERE - HAVE TO HAVE TYPESIGNATURES WITH OUR OPERATIONS TO MATCH TYPES
+
     else:
         # Match to the input stack of the input defintion of our word.
         op_swap(c)
@@ -122,11 +125,11 @@ def compile_word_handler(c: AF_Continuation) -> None:
         for t in tos_output_sig:
             fake_c.stack.push(StackObject(None, t))
 
-        op, sig, found = Type.find_op(op_name, fake_c, tos_output_sig[-1].name)
+        op, found = Type.find_op(op_name, fake_c, tos_output_sig[-1].name)
 
     if not found:
         # Next try to match up with an op for Any type.
-        op, sig, found = Type.find_op(op_name, c)
+        op, found = Type.find_op(op_name, c)
 
 
     if found:
@@ -152,7 +155,7 @@ def op_new_word(c: AF_Continuation) -> None:
     assert (itype == TAtom) or (itype == TWordDefinition), \
         "New words must be atoms or new word definitions. %s is a %s." % (c.stack.tos().value, itype)
 
-    op, sig, found = Type.op(c.stack.tos().value, c)
+    op, found = Type.op(c.stack.tos().value, c)
     assert not found, "Can't redefine an existing op." 
 
     if itype == TAtom:
@@ -161,7 +164,7 @@ def op_new_word(c: AF_Continuation) -> None:
     sig = TypeSignature([],[])
     c.stack.push(StackObject(sig,TInputTypeSignature))
 
-Type.add_op(Operation(':',op_new_word), TypeSignature([TAtom],[TWordDefinition, TInputTypeSignature]))        
+Type.add_op(Operation(':',op_new_word, sig=TypeSignature([TAtom],[TWordDefinition, TInputTypeSignature])) )       
         
 
 def op_switch_to_output_sig(c: AF_Continuation) -> None:
@@ -173,9 +176,9 @@ def op_switch_to_output_sig(c: AF_Continuation) -> None:
     input types to building the output types.
     """
     c.stack.tos().type = TOutputTypeSignature
-Type.add_op(Operation('->',op_switch_to_output_sig), 
-            TypeSignature([TWordDefinition, TInputTypeSignature],[TWordDefinition, TOutputTypeSignature]), 
-            "InputTypeSignature")
+Type.add_op(Operation('->',op_switch_to_output_sig, 
+            sig=TypeSignature([TWordDefinition, TInputTypeSignature],[TWordDefinition, TOutputTypeSignature]) ), 
+            "InputTypeSignature") 
 
 
 def op_skip_to_output_sig(c: AF_Continuation) -> None:
@@ -186,9 +189,9 @@ def op_skip_to_output_sig(c: AF_Continuation) -> None:
     """
     sig = TypeSignature([],[])
     c.stack.push(StackObject(sig,TOutputTypeSignature))
-Type.add_op(Operation('->',op_skip_to_output_sig), 
-            TypeSignature([TWordDefinition],[TWordDefinition, TOutputTypeSignature]), 
-            "WordDefinition")
+Type.add_op(Operation('->',op_skip_to_output_sig, 
+            sig=TypeSignature([TWordDefinition],[TWordDefinition, TOutputTypeSignature]) ), 
+            "WordDefinition") 
 
 
 def op_start_code_compile(c: AF_Continuation) -> None:
@@ -211,8 +214,8 @@ def op_start_code_compile(c: AF_Continuation) -> None:
     #c.stack.push(sig_s)
     #print("I'M COMPILING Op=%s!!!" % op)
     c.stack.push( StackObject(op, TCodeCompile) )
-Type.add_op(Operation(';',op_start_code_compile), 
-            TypeSignature([TWordDefinition, TOutputTypeSignature],[TWordDefinition, TOutputTypeSignature, TCodeCompile]), 
+Type.add_op(Operation(';',op_start_code_compile, 
+            sig = TypeSignature([TWordDefinition, TOutputTypeSignature],[TWordDefinition, TOutputTypeSignature, TCodeCompile]) ), 
             "OutputTypeSignature")
 
 
@@ -228,8 +231,8 @@ def op_skip_to_code_compile(c: AF_Continuation) -> None:
     c.stack.push(StackObject(sig,TOutputTypeSignature))  
     op_start_code_compile(c)
 # Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
-Type.add_op(Operation(';',op_skip_to_code_compile), 
-            TypeSignature([TWordDefinition],[TWordDefinition, TOutputTypeSignature, TCodeCompile]), 
+Type.add_op(Operation(';',op_skip_to_code_compile, 
+            sig=TypeSignature([TWordDefinition],[TWordDefinition, TOutputTypeSignature, TCodeCompile]) ), 
             "WordDefinition")
 
 
@@ -246,8 +249,8 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
     # new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
     #                 [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
     # Type.types["CodeCompile"].ops_list.insert(0, (new_op, new_sig))
-Type.add_op(Operation(';',op_finish_word_compilation), 
-            TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[TWordDefinition]), 
+Type.add_op(Operation(';',op_finish_word_compilation, 
+            sig=TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[TWordDefinition]) ), 
             "CodeCompile")
 
 
@@ -258,8 +261,8 @@ def op_finish_word_definition(c: AF_Continuation) -> None:
     """
     op_finish_word_compilation(c)
     c.stack.pop()
-Type.add_op(Operation('.',op_finish_word_definition), 
-            TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[]), 
+Type.add_op(Operation('.',op_finish_word_definition, 
+            sig=TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[]) ), 
             "CodeCompile")    
 
 
