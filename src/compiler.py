@@ -6,7 +6,7 @@ from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
 
 from af_types import *
-from af_types.af_any import op_swap
+from af_types.af_any import op_swap, op_stack
 
 
 def compilation_word_handler(c: AF_Continuation) -> bool:
@@ -27,7 +27,7 @@ def compilation_word_handler(c: AF_Continuation) -> bool:
 def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
     print("\n\nstarting type_sig_handler")  
     handled = compilation_word_handler(c)
-    out = "type_sig_handler for %s : received for symbol: %s "
+    out = "type_sig_handler for type_name='%s' : received for symbol: %s "
     if handled: out += "HANDLED by compilation_word_handler."
     print(out % (type_name, c.symbol))
     if handled: return 
@@ -107,8 +107,9 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
     if c.stack.tos().value.words:
         # Match to the output stack of our last word in this definition.
-        tos_output_sig = c.stack.tos().value.words 
-
+        words = c.stack.tos().value.words 
+        tos_output_sig = words[-1].sig.stack_out
+        print("Match to prior word's output sig: %s" % tos_output_sig)
         # BROKE HERE - HAVE TO HAVE TYPESIGNATURES WITH OUR OPERATIONS TO MATCH TYPES
 
     else:
@@ -116,6 +117,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         op_swap(c)
         tos_output_sig = c.stack.tos().value.stack_in
         op_swap(c)
+        print("Match to current word's input sig: %s" % tos_output_sig)
 
     if len(tos_output_sig):
         # First try to match up with an op specialized for this type.
@@ -125,7 +127,22 @@ def compile_word_handler(c: AF_Continuation) -> None:
         for t in tos_output_sig:
             fake_c.stack.push(StackObject(None, t))
 
-        op, found = Type.find_op(op_name, fake_c, tos_output_sig[-1].name)
+        output_type_name = tos_output_sig[-1].name
+        print("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
+        op, found = Type.find_op(op_name, fake_c, output_type_name)
+
+        ### HACK HACK
+        ### Because TypeSignatures may output an "Any" type, we really need to replace
+        ### them with the concrete output type for proper type checking.
+        ### For now just jump through all the types and see if we find one and hope
+        ### there are no word collisions.
+        if not found and output_type_name == "Any":
+            for output_type_name in Type.types.keys():
+                if output_type_name == "Any": continue
+                if found: break
+                op, found = Type.find_op(op_name, fake_c, output_type_name)
+
+
 
     if not found:
         # Next try to match up with an op for Any type.
@@ -243,8 +260,8 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
     """
     #print("finishing word compilation!")
     op = c.stack.pop().value
-    sig = c.stack.pop().value
-    Type.add_op(op,sig)
+    op.sig = c.stack.pop().value
+    Type.add_op(op)
     # new_op = Operation(op.name, op_compile_word, [op])
     # new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
     #                 [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])

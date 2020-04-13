@@ -51,14 +51,17 @@ class Type(AF_Type):
             Type.types[self.name] = t_def
         ## Do we need this? super().__init__(self)      
 
+
     def ops(self) -> Op_list:
         t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
         return t_def.ops_list
+
 
     # Typing doesn't like me having a return type specification here so dropped it.
     def handler(self):
         t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
         return t_def.op_handler
+
 
     @staticmethod
     def register_ctor(name: Type_name, op: Operation, input_sig: List["Type"]) -> None:
@@ -71,6 +74,7 @@ class Type(AF_Type):
         op_map = Type.ctors.get(name, None)
         assert op_map is not None, ("No ctor map for type %s found.\n\tCtors exist for the following types: %s." % (name, Type.ctors.keys()))
         op_map.append((input_sig,op))
+
 
     @staticmethod
     def find_ctor(name: Type_name, inputs : List["Type"]) -> Optional[Operation]:
@@ -106,7 +110,6 @@ class Type(AF_Type):
         return None
                 
 
-
     # Inserts a new operations for the given type name (or global for Any).
     @staticmethod
     def add_op(op: Operation, type_name: Type_name = "Any") -> None:
@@ -118,6 +121,7 @@ class Type(AF_Type):
         #print("\n\nADD_OP type_def type(%s) = %s." % (type(type_def), str(type_def)))
 
         #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
+
 
     # Returns the first matching operation for this named type.
     @staticmethod
@@ -151,6 +155,7 @@ class Type(AF_Type):
         # Default operation is to treat the symbol as an Atom and put it on the stack.
         return Operation("make_atom", make_atom, sig=TypeSignature([],[TAtom])), False
 
+
     @staticmethod    
     def op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, bool]:
         tos = cont.stack.tos()        
@@ -174,9 +179,9 @@ class Type(AF_Type):
             op, found = Type.find_op('_', cont, tos.type.name)            
             op.name = name
 
-
         #print("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
         return op, found            
+
 
     def __eq__(self, type: object) -> bool:
         if self.name == "Any":
@@ -185,6 +190,7 @@ class Type(AF_Type):
             return self.name == type.name
         return False
 
+
     def __ne__(self, type: object) -> bool:
         if self.name == "Any":
             return False
@@ -192,8 +198,10 @@ class Type(AF_Type):
             return self.name != type.name
         return False        
 
+
     def __str__(self) -> Type_name:
         return self.name
+
 
     def __repr__(self) -> str:
         return self.__str__()
