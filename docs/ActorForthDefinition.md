@@ -24,51 +24,61 @@ input from stdin if no file name is passed to it.
 ```
 ./interpret samples/fundamentals01.a4 
 ActorForth demo interpreter. ^C to exit.
-Global Dictionary : ['>=', '<=', '>', '<', '!=', '==', 'bool', 'bool', 'int', 'int', '2dup', 'drop', 'swap', 'dup', 'print']
+Global Dictionary : ['>=', '==', 'swap', 'debug', 'dup', ':', 'words', 'bool', 'print', 'drop', '>', '2dup', 'int', 'nop', 'stack', '<=', '<', '!=', 'types']
 Int Dictionary : ['/', '*', '-', '+']
 Bool Dictionary : ['not']
+Debug Dictionary : ['off', 'on']
+WordDefinition Dictionary : ['->', ';']
+InputTypeSignature Dictionary : ['->']
+OutputTypeSignature Dictionary : [';']
+CodeCompile Dictionary : [';', '.']
 Interpreting file: 'samples/fundamentals01.a4'.
-junk
-Stack(1) = [StackObject(value='junk', type=Atom)] 
-40
-Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value='40', type=Atom)] 
-int
-match_in: in_types = [Atom]
-match_in: stack_types = [Atom]
-Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value=40, type=Int)] 
-2
-Stack(3) = [StackObject(value='junk', type=Atom), StackObject(value=40, type=Int), StackObject(value='2', type=Atom)] 
-int
-match_in: in_types = [Atom]
-match_in: stack_types = [Atom]
-Stack(3) = [StackObject(value='junk', type=Atom), StackObject(value=40, type=Int), StackObject(value=2, type=Int)] 
-+
-match_in: in_types = [Int, Int]
-match_in: stack_types = [Int, Int]
-Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value=42, type=Int)] 
-print
-match_in: in_types = [Any]
-match_in: stack_types = [Int]
+ok: junk
+Cont:
+        sym=Symbol(s_id='junk', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=1))
+         op=Op{'make_atom' [] -> [ Atom,] :(make_atom) []}
+ok: 40
+Cont:
+        sym=Symbol(s_id='40', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=6))
+         op=Op{'40' [] -> [ Atom,] :(make_atom) []}
+ok: int
+Cont:
+        sym=Symbol(s_id='int', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=9))
+         op=Op{'int' [ Atom,] -> [ Any,] :(op_int) []}
+ok: 2
+Cont:
+        sym=Symbol(s_id='2', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=13))
+         op=Op{'2' [] -> [ Atom,] :(make_atom) []}
+ok: int
+Cont:
+        sym=Symbol(s_id='int', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=15))
+         op=Op{'int' [ Atom,] -> [ Any,] :(op_int) []}
+ok: +
+Cont:
+        sym=Symbol(s_id='+', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=19))
+         op=Op{'+' [ Int, Int,] -> [ Int,] :(op_plus) []}
+ok: print
 '42'
-Stack(1) = [StackObject(value='junk', type=Atom)] 
-True
-Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value='True', type=Atom)] 
-bool
-match_in: in_types = [Bool]
-match_in: stack_types = [Atom]
-match_in: Stack type <class 'type'> doesn't match input arg type Bool.
-match_in: in_types = [Atom]
-match_in: stack_types = [Atom]
-Stack(2) = [StackObject(value='junk', type=Atom), StackObject(value=True, type=Bool)] 
-False
-Stack(3) = [StackObject(value='junk', type=Atom), StackObject(value=True, type=Bool), StackObject(value='False', type=Atom)] 
-bool
-match_in: in_types = [Bool]
-match_in: stack_types = [Atom]
-match_in: Stack type <class 'type'> doesn't match input arg type Bool.
-match_in: in_types = [Atom]
-match_in: stack_types = [Atom]
-Stack(3) = [StackObject(value='junk', type=Atom), StackObject(value=True, type=Bool), StackObject(value=False, type=Bool)] 
+Cont:
+        sym=Symbol(s_id='print', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=21))
+         op=Op{'print' [ Any,] -> [] :(op_print) []}
+ok: True
+Cont:
+        sym=Symbol(s_id='True', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=27))
+         op=Op{'True' [] -> [ Atom,] :(make_atom) []}
+ok: bool
+Cont:
+        sym=Symbol(s_id='bool', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=32))
+         op=Op{'bool' [ Atom,] -> [ Any,] :(op_bool) []}
+ok: False
+Cont:
+        sym=Symbol(s_id='False', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=37))
+         op=Op{'False' [] -> [ Atom,] :(make_atom) []}
+ok: bool
+Cont:
+        sym=Symbol(s_id='bool', location=Location(filename='samples/fundamentals01.a4', linenum=1, column=43))
+         op=Op{'bool' [ Atom,] -> [ Any,] :(op_bool) []}
+ok: 
 [StackObject(value='junk', type=Atom), StackObject(value=True, type=Bool), StackObject(value=False, type=Bool)]
 Stack max_depth = 3
 Stack depth_history = [1, 2, 1, 2, 3, 2, 3, 2, 1, 2, 1, 2, 1, 2, 1, 2, 3, 2, 3]
@@ -82,35 +92,80 @@ end of line...
 ```
 ./interpret 
 ActorForth demo interpreter. ^C to exit.
-Global Dictionary : ['>=', '<=', '>', '<', '!=', '==', 'bool', 'bool', 'int', 'int', '2dup', 'drop', 'swap', 'dup', 'print']
-Int Dictionary : ['/', '*', '-', '+']
+Global Dictionary : ['debug', 'nop', '==', 'words', 'types', '>=', '<=', '2dup', 'swap', 'bool', 'dup', '<', ':', 'stack', '!=', '>', 'drop', 'print', 'int']
+Int Dictionary : ['/', '-', '*', '+']
 Bool Dictionary : ['not']
+Debug Dictionary : ['off', 'on']
+WordDefinition Dictionary : [';', '->']
+InputTypeSignature Dictionary : ['->']
+OutputTypeSignature Dictionary : [';']
+CodeCompile Dictionary : ['.', ';']
+ok: debug on
+Cont:
+        sym=Symbol(s_id='debug', location=Location(filename='stdin', linenum=1, column=1))
+         op=Op{'debug' [] -> [ Any,] :(op_debug) []}
+ok: Cont:
+        sym=Symbol(s_id='on', location=Location(filename='stdin', linenum=1, column=7))
+         op=Op{'on' [ Debug,] -> [] :(op_on) []}
+        Debug : On (Call Depth:0)
+        Stack = empty
+ 
 ok: 10
-Stack(1) = [StackObject(value='10', type=Atom)] 
+Cont:
+        sym=Symbol(s_id='10', location=Location(filename='stdin', linenum=2, column=1))
+         op=Op{'make_atom' [] -> [ Atom,] :(make_atom) []}
+        Debug : On (Call Depth:0)
+        Stack = 0) val=10,  type=Atom
+
+ 
 ok: int
-match_in: in_types = [Atom]
-match_in: stack_types = [Atom]
-Stack(1) = [StackObject(value=10, type=Int)] 
+Cont:
+        sym=Symbol(s_id='int', location=Location(filename='stdin', linenum=3, column=1))
+         op=Op{'int' [ Atom,] -> [ Any,] :(op_int) []}
+        Debug : On (Call Depth:0)
+        Stack = 0) val=10,  type=Int
+
+ 
 ok: 20
-Stack(2) = [StackObject(value=10, type=Int), StackObject(value='20', type=Atom)] 
+Cont:
+        sym=Symbol(s_id='20', location=Location(filename='stdin', linenum=4, column=1))
+         op=Op{'20' [] -> [ Atom,] :(make_atom) []}
+        Debug : On (Call Depth:0)
+        Stack = 0) val=20,  type=Atom
+                1) val=10,  type=Int
+
+ 
 ok: int
-match_in: in_types = [Atom]
-match_in: stack_types = [Atom]
-Stack(2) = [StackObject(value=10, type=Int), StackObject(value=20, type=Int)] 
+Cont:
+        sym=Symbol(s_id='int', location=Location(filename='stdin', linenum=5, column=1))
+         op=Op{'int' [ Atom,] -> [ Any,] :(op_int) []}
+        Debug : On (Call Depth:0)
+        Stack = 0) val=20,  type=Int
+                1) val=10,  type=Int
+
+ 
 ok: *
-match_in: in_types = [Int, Int]
-match_in: stack_types = [Int, Int]
-Stack(1) = [StackObject(value=200, type=Int)] 
+Cont:
+        sym=Symbol(s_id='*', location=Location(filename='stdin', linenum=6, column=1))
+         op=Op{'*' [ Int, Int,] -> [ Int,] :(op_multiply) []}
+        Debug : On (Call Depth:0)
+        Stack = 0) val=200,  type=Int
+
+ 
 ok: print
-match_in: in_types = [Any]
-match_in: stack_types = [Int]
 '200'
-Stack(0) = [] 
+Cont:
+        sym=Symbol(s_id='print', location=Location(filename='stdin', linenum=7, column=1))
+         op=Op{'print' [ Any,] -> [] :(op_print) []}
+        Debug : On (Call Depth:0)
+        Stack = empty
+ 
 ok: ^C key interrupt.
+
 []
 Stack max_depth = 2
-Stack depth_history = [1, 0, 1, 2, 1, 2, 1, 0, 1, 0, 1, 0]
-Stack total operations = 12
+Stack depth_history = [1, 0, 1, 0, 1, 2, 1, 2, 1, 0, 1, 0, 1, 0]
+Stack total operations = 14
 
 end of line...
 

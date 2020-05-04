@@ -38,9 +38,9 @@ class Continuation(AF_Continuation):
 
 
     def __str__(self) -> str:
-        result = "Cont: %s  %s" % (self.symbol, self.op)
+        result = "Cont:\n\tsym=%s\n\t op=%s" % (self.symbol, self.op)
         if self.debug:
-            result += "\nDebug : On (Call Depth:%s)" % self.cdepth
+            result += "\n\tDebug : On (Call Depth:%s)" % self.cdepth
 
             content = ""
             if self.stack.is_empty():
