@@ -1,8 +1,8 @@
 """
-    interpret.py - outer interpreter for ActorForth.
+interpret.py - outer interpreter for ActorForth.
 
-    INTRO 2 : The interpreter parses the input stream and executes it in 
-              the context of the Continuation.
+INTRO 2 : The interpreter parses the input stream and executes it in 
+          the context of the Continuation.
 """
 from typing import TextIO, Optional
 
@@ -26,19 +26,18 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
     """
     for s_id, linenum, column in p.tokens():        
         """
-        INTRO 2.3 : Constructs a symbol from the token and updates the
+        INTRO 2.3 : Construct a symbol from the token and updates the
                    Continuation's symbol.
         """
-        cont.symbol = Symbol(s_id, Location(p.filename,linenum,column) ) #, TAtom)
+        cont.symbol = Symbol( s_id, Location(p.filename,linenum,column) ) 
 
         if p.filename != "stdin":
             print(s_id)
 
         try:
             """
-            INTRO 2.4 : Calls execute on the Continuation...
+            INTRO 2.4 : Call execute on the Continuation...
             """
-            old_tos = cont.stack.tos()
             cont.execute()
             print("%s" % cont)
 
@@ -51,9 +50,7 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             print("Exception %s" % x)
             print("Interpreting symbol %s" % cont.symbol)
             print(cont)
-            
-            # See what happens if we just keep going...
-            #break
+
             raise
         if prompt: print(prompt,end='',flush=True)    
 

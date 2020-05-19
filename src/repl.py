@@ -1,12 +1,12 @@
 """
-    repl.py - top level read/eval/print loop.
+repl.py - top level read/eval/print loop.
 
-    INTRO 1 : This is where ActorForth all begins for execution purposes.
+INTRO 1 : This is where ActorForth all begins for execution purposes.
 """
 import sys
 
-from continuation import *
-from interpret import *
+from continuation import Continuation, Stack
+from interpret import interpret
 
 from af_types.af_any import print_words
 

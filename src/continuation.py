@@ -1,29 +1,46 @@
 """
-    continuation.py - 
+continuation.py - the ultimate Context of all state and computation centers here.
+
+INTRO 3 : The Continuation contains all state of the system except for the 
+          word dictionaries. (TODO: Later all but the global 'Any' dictionaries)
+          may be moved into the Continuation as well.) 
 """
 
-from typing import Callable, List, Optional
+from typing import Optional
 
 from dataclasses import dataclass
 
 from stack import Stack, KStack
-
-#from aftype import AF_Type, AF_Continuation, Symbol, Location
-from af_types import *
-
-from operation import Operation
+from af_types import AF_Continuation, Symbol, TAny
+from operation import Operation, op_nop
 
 
 @dataclass
 class Continuation(AF_Continuation):
+    """
+    INTRO 3.1 :  Continuation consists of the Stack, (Soon a Return Stack 
+                 will be added) the current Symbol being interpreted, and 
+                 the Operation that was discovered for this context to 
+                 operate on the Symbol.
+    """
     stack : Stack
     symbol : Optional[Symbol] = None
     op : Operation = Operation("nop",op_nop)
+
+    """
+    INTRO 3.2 : We also track a Debug state.
+    """
 
     debug : bool = False
     cdepth : int = 0        # Depth of calls for debug tab output.
 
 
+    """
+    INTRO 3.3 : When a Continuation is executed it looks at the Type of the
+                object on top of the stack (tos) and makes that the context
+                by which it will execut. If the stack is empty it will 
+                default to the global 'Any' type word dictionary.
+    """
     def execute(self) -> None:
         # Assume that we're an empty stack and will use the TAny op_handler.
         type_context = TAny
@@ -32,7 +49,12 @@ class Continuation(AF_Continuation):
             # Make the tos type's op_handler our context instead.
             type_context = tos.type
 
-        # Execute the operation according to our context.            
+        """
+            INTRO 3.4 : Execute the operation according to our context.
+                        All Type handlers take a Continuation and return nothing.
+
+                        Continue to aftype.py for INTRO stage 4.
+        """
         handler = type_context.handler()
         return handler(self)
 
