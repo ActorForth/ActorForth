@@ -1,3 +1,8 @@
+"""
+    repl.py - top level read/eval/print loop.
+
+    INTRO 1 : This is where ActorForth all begins for execution purposes.
+"""
 import sys
 
 from continuation import *
@@ -17,6 +22,11 @@ if __name__ == "__main__":
 
     print("ActorForth demo interpreter. ^C to exit.")
     print_words()
+
+    """
+    INTRO 1.1 : Input always comes from a file whether that's the default
+                stdin or a filename passed to the system.
+    """
     handle = sys.stdin
     filename = "stdin"
     if len(sys.argv) >= 2:
@@ -26,14 +36,38 @@ if __name__ == "__main__":
 
         print("Interpreting file: '%s'." % sys.argv[1])
 
+    """
+    INTRO 1.2 : Establish our stack and build our stateful Continutaion from it.
+    """
+
     stack = Stack()
     cont = Continuation(stack)
 
     while True:
 
+        """
+        INTRO 1.3 : Continuously call the Interpreter until ^C is hit, the
+                    input file runs out of tokens to parse, or an 
+                    exception is encountered.
+
+                    TODO: Likely probably want exceptions to just reset the 
+                    stack/Continuation and resume.
+        """
+
         try:
             cont = interpret(cont, handle, filename, prompt="ok: ")
 
+
+            """
+            INTRO 1.4 : If the last token in the input file is 'resume' 
+                        then we re-establish stdin as our input file and
+                        continue at the repl with everything intact. This
+                        is a special hard-coded command.
+
+                        TODO: How to do this in a more forth-like manner?
+
+            INTRO 1.5 : Continue in interpret.py for INTRO stage 2.                        
+            """
             if cont.stack.tos().value == "resume":
                 handle = sys.stdin
                 filename = "stdin"

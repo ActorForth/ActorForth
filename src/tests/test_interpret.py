@@ -4,6 +4,7 @@ from copy import deepcopy
 
 from continuation import Continuation, Stack
 from interpret import *
+from af_types.af_bool import *
 
 class TestInterpreter(unittest.TestCase):
 

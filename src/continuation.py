@@ -1,6 +1,6 @@
-#
-#	continuation.py		-	Continuation state of our environment.
-#
+"""
+    continuation.py - 
+"""
 
 from typing import Callable, List, Optional
 
