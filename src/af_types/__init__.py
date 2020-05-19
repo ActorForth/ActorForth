@@ -1,42 +1,83 @@
-#
-#   af_types.py     - Types for our language.
-#
+"""
+af_types    - Types for our language. What everything is built on.
+
+INTRO 5 : Types drive all ActorForth behavior and construction. ActorForth
+          execution context is based on the Continuation (state) plus the 
+          Type behavior (words in the type dictionary) for whatever is on
+          the top of the Stack in the Continuation.
+"""
 
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
 
 from stack import Stack
-
 from aftype import AF_Type, AF_Continuation, Symbol, Location
-
 from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
 
 Type_name = str
 
 
-#
-# NOTE : had to remove Python typing notation from this function
-#        to get things to compile clean.
-def default_op_handler(cont):
+"""
+INTRO 5.1 : The default execution handler (kind of an inter interpreter in 
+            FORTH parlance) simply takes a Continutation, looks up the 
+            Symbol in its list of Operations (ops_list) or the core (Any)
+            dictionary if it can't be found there, and then calls the
+            discovered Operation by passing the Continuation to it.
+
+            Most types only ever want to execute the words looked up in 
+            their dictionaries. Those types should just use this handler.
+
+            But sometimes you want to manipulate those words rather than
+            execute them - such as when you're writing a compiler. Then
+            you can create a specialized op handler that does something
+            completely different.
+"""
+def default_op_handler(cont): # Had to remove Python typing notation to get it to compile.
     cont.op, found = Type.op(cont.symbol.s_id, cont)
     cont.op(cont)
 
+
+"""
+INTRO 5.2 : A TypeDefinition is defined as a list of named Operations, ops_list,
+            and its handler, op_handler, which defines what you want to
+            do with these named Operations when they're referenced. 
+"""
 @dataclass
 class TypeDefinition:
     ops_list: Op_list 
     op_handler : Callable[["AF_Continuation"],None] = default_op_handler
 
+"""
+INTRO 5.3 : The Type class holds all the TypeDefinitions in global 
+            dictionaries along with their special Constructors (ctors).
+"""
 class Type(AF_Type):
 
-    # Types is a dictionary of Type names to their respective
-    # custom dictionaries.   
-
+    """
+    INTRO 5.4 : An individual Type is simply a named TypeDefinition.
+    """
     types : Dict[Type_name, TypeDefinition] = {}
 
+    """
+    INTRO 5.5 : The core words in ActorForth are stored in the special
+                "Any" Type. This is the global dictionary for words.
+    """
     types["Any"] = TypeDefinition(ops_list = []) # Global dictionary. 
-    #types["CodeCompile"] = TypeDefinition(ops_list = [])
 
+    """
+    INTRO 5.6 : Constructors (ctors) are special words that take one or
+                more objects from the Stack and create an instance of the
+                ctor's Type with them and then places the result on the
+                Stack. 
+
+                It is through ctors that Atoms can become other useful
+                types.
+
+                Ctors are named for their Type and are not regular
+                words in the Dictionaries. They can only return a single
+                instance of their own Type.
+    """
     ctors : Dict[Type_name, Op_map] = {}
 
 
@@ -148,7 +189,7 @@ class Type(AF_Type):
         # Not found.
         if name_found:
             # Is this what we want to do?
-            pass # This will happen if names match but stacks don't.
+            # This will happen if names match but stacks don't.
             raise Exception("Continuation doesn't match Op '%s' with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
 
         #print ("Not found!")
@@ -206,21 +247,41 @@ class Type(AF_Type):
     def __repr__(self) -> str:
         return self.__str__()
 
-
+"""
+INTRO 5.7 : Stacks strictly contain StackObjects. Every StackObject
+            consists of the object's value and it's Type.
+"""
 @dataclass
 class StackObject:
     value: Any
     type: Type 
 
 
+"""
+INTRO 5.8 : The Atom Type is what gets created any time a new Symbol
+            shows up that the Interpreter does not recognize. Ultimately
+            ALL objects initially are introduced into an ActorForth
+            environment as Atoms.
+"""
 TAtom = Type("Atom")
 
+
+"""
+INTRO 5.9 : The Any Type is a special Type that will match ALL other types.
+            It is also where the global word dictionary is contained.
+"""
 TAny = Type("Any")
 
 
 #
 #   Generic operations
 #
+"""
+INTRO 5.10 : make_atom is the primitive that takes a token and converts
+             it into an Atom on the Stack. 
+
+             Continue to operation.py for INTRO stage 6.
+"""
 # Atom needs to take the symbol name to push on the stack.
 def make_atom(c: AF_Continuation) -> None:
     #print("make_atom c.symbol = %s" % c.symbol)

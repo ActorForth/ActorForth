@@ -107,7 +107,7 @@ class TestSymbol(unittest.TestCase):
         assert s.location.filename is "Unknown"
 
         x = Symbol("fib", Location())
-        assert s == "fib"
+        assert s != "fib"
         assert s == x
 
     def test_normal_symbol_with_location(self) -> None:
