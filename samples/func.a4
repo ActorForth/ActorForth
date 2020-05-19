@@ -1,3 +1,5 @@
+debug on
+
 samenum : Int -> Bool ;
 dup == .
 42 int
@@ -7,7 +9,7 @@ samenum
 drop
 
 double : Int -> Int ;
-2 int *.
+dup +.
 
 42 int double
 
