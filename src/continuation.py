@@ -31,7 +31,7 @@ class Continuation(AF_Continuation):
     INTRO 3.2 : We also track a Debug state.
     """
 
-    debug : bool = False
+    debug : bool = True
     cdepth : int = 0        # Depth of calls for debug tab output.
 
 
