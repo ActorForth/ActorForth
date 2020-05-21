@@ -1,5 +1,5 @@
 """
-af_types    - Types for our language. What everything is built on.
+af_types.py - Types for our language. What everything is built on.
 
 INTRO 5 : Types drive all ActorForth behavior and construction. ActorForth
           execution context is based on the Continuation (state) plus the 

@@ -1,3 +1,12 @@
+"""
+operation.py -  the operations which make up the executable words of ActorForth.
+
+INTRO 6 : Named words which implement the behavior of ActorForth. New words
+          can be built (presently only global words for 'Any' type) and are
+          first class citizens as if they were primitives. Operations are
+          stored in various Type dictionaries.
+"""
+
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
 
