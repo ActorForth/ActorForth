@@ -15,8 +15,6 @@ from stack import Stack
 from aftype import AF_Type, AF_Continuation, Symbol, Location
 from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
 
-print("af_types/__init__.py loading")
-
 Type_name = str
 
 

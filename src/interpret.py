@@ -10,9 +10,18 @@ from continuation import Continuation
 from parser import Parser
 from af_types import Symbol, Location
 
+""" 
+INTRO 2.1 : All types get imported imported here.""
+"""
+from af_types.af_any import *
+from af_types.af_int import *
+from af_types.af_bool import *
+from af_types.af_debug import *
+from compiler import *
+
 def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Continuation:    
     """
-    INTRO 2.1 : Setup a parser for the input stream (passed from repl.py).
+    INTRO 2.2 : Setup a parser for the input stream (passed from repl.py).
     """
     p = Parser()
     p.open_handle(input_stream, filename)
@@ -22,11 +31,11 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
     if prompt: print(prompt,end='',flush=True)    
 
     """
-    INTRO 2.2 : For each token in the input stream...
+    INTRO 2.3 : For each token in the input stream...
     """
     for s_id, linenum, column in p.tokens():        
         """
-        INTRO 2.3 : Construct a symbol from the token and updates the
+        INTRO 2.4 : Construct a symbol from the token and updates the
                    Continuation's symbol.
         """
         cont.symbol = Symbol( s_id, Location(p.filename,linenum,column) ) 
@@ -36,13 +45,13 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
 
         try:
             """
-            INTRO 2.4 : Call execute on the Continuation...
+            INTRO 2.5 : Call execute on the Continuation...
             """
             cont.execute()
             print("%s" % cont)
 
             """
-            INTRO 2.5:  ...until the end of tokens or an execution occurs
+            INTRO 2.6:  ...until the end of tokens or an execution occurs
                         then it returns the Continuation.
             """
                 
@@ -57,5 +66,5 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
     return cont
 
     """
-    INTRO 2.6 : Continue to continuation.py for INTRO stage 3.
+    INTRO 2.7 : Continue to continuation.py for INTRO stage 3.
     """
