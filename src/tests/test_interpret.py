@@ -12,9 +12,11 @@ class TestInterpreter(unittest.TestCase):
         self.stack = Stack()
         self.cont = Continuation(self.stack)
         self.save_types = deepcopy(Type.types)
+        self.save_ctors = deepcopy(Type.ctors)
 
     def tearDown(self) -> None:
         Type.types = deepcopy(self.save_types)
+        Type.ctors = deepcopy(self.save_ctors)
 
     def testMakeAtom(self) -> None:
         code = """
