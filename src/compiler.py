@@ -112,7 +112,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         #print("Match to prior word's output sig: %s" % tos_output_sig)
 
     else:
-        # Match to the input stack of the input defintion of our word.
+        # Match to the input stack of the input definition of our word.
         op_swap(c)
         tos_output_sig = c.stack.tos().value.stack_in
         op_swap(c)
@@ -152,8 +152,9 @@ def compile_word_handler(c: AF_Continuation) -> None:
         c.stack.tos().value.add_word(op)
     else:
         print("FAILED TO FIND WORD TO COMPILE %s" % c.symbol.s_id )
-        assert False   
-    #print("compile_word_handler ending")     
+        c.stack.push(c.symbol.s_id)
+        make_atom(c)
+
 
 TCodeCompile = Type("CodeCompile", handler = compile_word_handler)
 
