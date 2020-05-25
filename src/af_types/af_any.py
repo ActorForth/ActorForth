@@ -7,7 +7,7 @@ Type.add_op(Operation('nop', op_nop, sig=TypeSignature([],[])) )
 def op_print(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
     print("'%s'" % op1)
-Type.add_op(Operation('print', op_print, sig=TypeSignature([[TAny,0]],[])) )
+Type.add_op(Operation('print', op_print, sig=TypeSignature([TAny],[])) )
 
 
 def op_stack(c: AF_Continuation) -> None:
@@ -67,7 +67,7 @@ Type.add_op(Operation('types', op_print_types, sig=TypeSignature([],[])) )
 def op_dup(c: AF_Continuation) -> None:
     op1 = c.stack.tos()
     c.stack.push(op1)
-Type.add_op(Operation('dup', op_dup, sig=TypeSignature([[TAny,0]],[[TAny,0], [TAny,0]])) )
+Type.add_op(Operation('dup', op_dup, sig=TypeSignature([TAny],[TAny, TAny])) )
 
 
 def op_swap(c: AF_Continuation) -> None:
@@ -75,12 +75,12 @@ def op_swap(c: AF_Continuation) -> None:
     op2 = c.stack.pop()
     c.stack.push(op1)
     c.stack.push(op2)
-Type.add_op(Operation('swap', op_swap, sig=TypeSignature([[TAny,0], [TAny,1]],[[TAny,1], [TAny,0]])) )
+Type.add_op(Operation('swap', op_swap, sig=TypeSignature([TAny, TAny],[TAny, TAny])) )
 
 
 def op_drop(c: AF_Continuation) -> None:
     op1 = c.stack.pop()
-Type.add_op(Operation('drop', op_drop, sig=TypeSignature([[TAny,0]],[])) )
+Type.add_op(Operation('drop', op_drop, sig=TypeSignature([TAny],[])) )
 
 
 def op_2dup(c: AF_Continuation) -> None:
@@ -90,4 +90,4 @@ def op_2dup(c: AF_Continuation) -> None:
     op_swap(c)
     c.stack.push(op2)
     c.stack.push(op1)
-Type.add_op(Operation('2dup', op_2dup, sig=TypeSignature([[TAny,0], [TAny,1]],[[TAny,0], [TAny,1], [TAny,0], [TAny,1]])) )
+Type.add_op(Operation('2dup', op_2dup, sig=TypeSignature([TAny, TAny],[TAny, TAny])) )

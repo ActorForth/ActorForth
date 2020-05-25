@@ -112,7 +112,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         #print("Match to prior word's output sig: %s" % tos_output_sig)
 
     else:
-        # Match to the input stack of the input definition of our word.
+        # Match to the input stack of the input defintion of our word.
         op_swap(c)
         tos_output_sig = c.stack.tos().value.stack_in
         op_swap(c)
@@ -126,25 +126,21 @@ def compile_word_handler(c: AF_Continuation) -> None:
         for t in tos_output_sig:
             fake_c.stack.push(StackObject(None, t))
 
-        # Later do instantiation of type variable
-        if type(tos_output_sig[-1]) is list:
-            pass
-        else:
-            output_type_name = tos_output_sig[-1].name
-            #print("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
-            op, found = Type.find_op(op_name, fake_c, output_type_name)
+        output_type_name = tos_output_sig[-1].name
+        #print("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
+        op, found = Type.find_op(op_name, fake_c, output_type_name)
 
-            ### HACK HACK
-            ### Because TypeSignatures may output an "Any" type, we really need to replace
-            ### them with the concrete output type for proper type checking.
-            ### For now just jump through all the types and see if we find one and hope
-            ### there are no word collisions.
-            if not found and output_type_name == "Any":
-                for output_type_name in Type.types.keys():
-                    if output_type_name == "Any": continue
-                    if found: break
-                    op, found = Type.find_op(op_name, fake_c, output_type_name)
-                
+        ### HACK HACK
+        ### Because TypeSignatures may output an "Any" type, we really need to replace
+        ### them with the concrete output type for proper type checking.
+        ### For now just jump through all the types and see if we find one and hope
+        ### there are no word collisions.
+        if not found and output_type_name == "Any":
+            for output_type_name in Type.types.keys():
+                if output_type_name == "Any": continue
+                if found: break
+                op, found = Type.find_op(op_name, fake_c, output_type_name)
+
 
 
     if not found:
@@ -156,9 +152,8 @@ def compile_word_handler(c: AF_Continuation) -> None:
         c.stack.tos().value.add_word(op)
     else:
         print("FAILED TO FIND WORD TO COMPILE %s" % c.symbol.s_id )
-        c.stack.push(c.symbol.s_id)
-        make_atom(c)
-
+        c.stack.tos().value.add_word(Operation(c.symbol.s_id, make_atom))
+        # assert False   
 
 TCodeCompile = Type("CodeCompile", handler = compile_word_handler)
 
