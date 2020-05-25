@@ -126,21 +126,25 @@ def compile_word_handler(c: AF_Continuation) -> None:
         for t in tos_output_sig:
             fake_c.stack.push(StackObject(None, t))
 
-        output_type_name = tos_output_sig[-1].name
-        #print("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
-        op, found = Type.find_op(op_name, fake_c, output_type_name)
+        # Later do instantiation of type variable
+        if type(tos_output_sig[-1]) is list:
+            pass
+        else:
+            output_type_name = tos_output_sig[-1].name
+            #print("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
+            op, found = Type.find_op(op_name, fake_c, output_type_name)
 
-        ### HACK HACK
-        ### Because TypeSignatures may output an "Any" type, we really need to replace
-        ### them with the concrete output type for proper type checking.
-        ### For now just jump through all the types and see if we find one and hope
-        ### there are no word collisions.
-        if not found and output_type_name == "Any":
-            for output_type_name in Type.types.keys():
-                if output_type_name == "Any": continue
-                if found: break
-                op, found = Type.find_op(op_name, fake_c, output_type_name)
-
+            ### HACK HACK
+            ### Because TypeSignatures may output an "Any" type, we really need to replace
+            ### them with the concrete output type for proper type checking.
+            ### For now just jump through all the types and see if we find one and hope
+            ### there are no word collisions.
+            if not found and output_type_name == "Any":
+                for output_type_name in Type.types.keys():
+                    if output_type_name == "Any": continue
+                    if found: break
+                    op, found = Type.find_op(op_name, fake_c, output_type_name)
+                
 
 
     if not found:

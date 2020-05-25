@@ -51,11 +51,25 @@ class TypeSignature:
     def __str__(self) -> str:
         out = "["
         for t in self.stack_in:
-            out += " %s," % t.name
+            if type(t) == list:
+                if t[0].name == "Any":
+                    s = " Any%s " % str(t[1])
+                else:
+                    raise Exception("Unknown type: " + t)
+            else:
+                 s = t.name   
+            out += " %s," % s
         out += "] -> ["
-
+        
         for t in self.stack_out:
-            out += " %s," % t.name
+            if type(t) == list:
+                if t[0].name == "Any":
+                    s = " Any%s " % str(t[1])
+                else:
+                    raise Exception("Unknown type: " + t)
+            else:
+                 s = t.name   
+            out += " %s," % s
 
         out += "]"
         return out

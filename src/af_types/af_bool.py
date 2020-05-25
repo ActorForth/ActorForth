@@ -97,11 +97,11 @@ Type.add_op(Operation('not', op_not, sig=TypeSignature([TBool],[TBool]) ), "Bool
 #   Bool dictionary
 Type.register_ctor('Bool',Operation('bool',op_bool),[TAtom])
 Type.register_ctor('Bool',Operation('bool',op_bool),[TBool])
-Type.register_ctor('Bool',Operation('==',op_equals),[TAny,TAny])
-Type.register_ctor('Bool',Operation('!=',op_not_equals),[TAny,TAny])
-Type.register_ctor('Bool',Operation('<',op_less_than),[TAny,TAny])
-Type.register_ctor('Bool',Operation('>',op_greater_than),[TAny,TAny])
-Type.register_ctor('Bool',Operation('<=',op_less_than_or_equal_to),[TAny,TAny])
-Type.register_ctor('Bool',Operation('>=',op_greater_than_or_equal_to),[TAny,TAny])
+Type.register_ctor('Bool',Operation('==',op_equals),[[TAny,0],[TAny,0]])
+Type.register_ctor('Bool',Operation('!=',op_not_equals),[[TAny,0],[TAny,0]])
+Type.register_ctor('Bool',Operation('<',op_less_than),[[TAny,0],[TAny,0]])
+Type.register_ctor('Bool',Operation('>',op_greater_than),[[TAny,0],[TAny,0]])
+Type.register_ctor('Bool',Operation('<=',op_less_than_or_equal_to),[[TAny,0],[TAny,0]])
+Type.register_ctor('Bool',Operation('>=',op_greater_than_or_equal_to),[[TAny,0],[TAny,0]])
 
 #Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
