@@ -1,9 +1,9 @@
 """
 continuation.py - the ultimate Context of all state and computation centers here.
 
-INTRO 3 : The Continuation contains all state of the system except for the 
+INTRO 3 : The Continuation contains all state of the system except for the
           word dictionaries. (TODO: Later all but the global 'Any' dictionaries)
-          may be moved into the Continuation as well.) 
+          may be moved into the Continuation as well.)
 """
 
 from typing import Optional
@@ -18,9 +18,9 @@ from operation import Operation, op_nop
 @dataclass
 class Continuation(AF_Continuation):
     """
-    INTRO 3.1 :  Continuation consists of the Stack, (Soon a Return Stack 
-                 will be added) the current Symbol being interpreted, and 
-                 the Operation that was discovered for this context to 
+    INTRO 3.1 :  Continuation consists of the Stack, (Soon a Return Stack
+                 will be added) the current Symbol being interpreted, and
+                 the Operation that was discovered for this context to
                  operate on the Symbol.
     """
     stack : Stack
@@ -38,7 +38,7 @@ class Continuation(AF_Continuation):
     """
     INTRO 3.3 : When a Continuation is executed it looks at the Type of the
                 object on top of the stack (tos) and makes that the context
-                by which it will execut. If the stack is empty it will 
+                by which it will executed. If the stack is empty it will
                 default to the global 'Any' type word dictionary.
     """
     def execute(self) -> None:
@@ -67,7 +67,7 @@ class Continuation(AF_Continuation):
             content = ""
             if self.stack.is_empty():
                 content += "empty"
-            else:    
+            else:
                 for n, s in enumerate(self.stack.contents()[::-1]):
                     content += "%s) val=%s,  type=%s\n\t\t" % (n, s.value, s.type.name)
             content += "\n"
