@@ -216,11 +216,11 @@ class Type(AF_Type):
             # There's no such operation by that 'name' in existence 
             # so let's find the default op for this type or else from the global dict
             # (as that's the make_atom op returned by default for Type.find_op.)
-            #print("Searching for default specialized for Type: %s." % tos.type.name)
+            # print("Searching for default specialized for Type: %s." % tos.type.name)
             op, found = Type.find_op('_', cont, tos.type.name)            
             op.name = name
 
-        #print("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
+        # print("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
         return op, found            
 
 

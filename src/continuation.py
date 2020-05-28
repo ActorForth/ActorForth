@@ -52,6 +52,7 @@ class Continuation(AF_Continuation):
         """
             INTRO 3.4 : Execute the operation according to our context.
                         All Type handlers take a Continuation and return nothing.
+                        (See af_types/__init__.py for the default handler.)
 
                         Continue to aftype.py for INTRO stage 4.
         """

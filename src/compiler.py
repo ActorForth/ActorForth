@@ -148,11 +148,28 @@ def compile_word_handler(c: AF_Continuation) -> None:
         op, found = Type.find_op(op_name, c)
 
 
+    if not found:
+        # See if there's a ctor for this name?
+        ctor = Type.find_ctor(op_name, [TAny,])
+        if ctor is not None:
+            c.stack.tos().value.add_word(ctor)
+            found = True
+
+
     if found:
         c.stack.tos().value.add_word(op)
     else:
         print("FAILED TO FIND WORD TO COMPILE %s" % c.symbol.s_id )
-        assert False   
+        print("Compile as literal")
+        #assert False   
+        def curry_make_atom(s, func = make_atom ):
+            def compiled_make_atom( c: AF_Continuation ):
+                c.symbol = s
+                return func(c)
+        new_op = Operation(op_name, curry_make_atom(op_name), sig=TypeSignature([],[TAtom]))
+        print("New anonymous function: %s" % new_op)
+        c.stack.tos().value.add_word( new_op )
+
     #print("compile_word_handler ending")     
 
 TCodeCompile = Type("CodeCompile", handler = compile_word_handler)

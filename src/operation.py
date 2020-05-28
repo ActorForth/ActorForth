@@ -80,7 +80,12 @@ class Operation:
         self.the_op(cont)
 
     def __str__(self) -> str:
-        result = "Op{'%s' %s :(%s)" % (self.name, self.sig, self.the_op.__qualname__)
+        qualified_name = "Anonymous"
+        try:
+            qualified_name = self.the_op.__qualname__
+        except AttributeError:
+            pass         
+        result = "Op{'%s' %s :(%s)" % (self.name, self.sig, qualified_name)
         result += " %s" % str(self.words)
         result += "}"
         return result
