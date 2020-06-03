@@ -81,14 +81,14 @@ class Stack(KStack):
             self._depth_history.pop(0)
 
     def history_depth_count(self, depth = None):
-        """
-
-        """
         if depth is not None:
             return self._depth_history_count.get(depth,0)
         return [(k,self._depth_history_count.get(k,0)) for k in self._depth_history_count.keys()]
 
     def depth_history(self, count_limit = None):
+        """
+        Return the depth history of the stack.
+        """
         if count_limit is None:
             count_limit = Stack.DEPTH_HISTORY
         else:
@@ -108,6 +108,9 @@ class Stack(KStack):
         return 0
 
     def depth(self):
+        """
+        Returns the stack depth.
+        """
         return self._push_count - self._pop_count
 
     def total_operations(self):
@@ -118,6 +121,9 @@ class Stack(KStack):
         return self._push_count + self._pop_count
 
     def is_empty(self):
+        """
+        Returns if the stack is empty.
+        """
         return self.depth() == 0
 
     def contents(self):
@@ -131,8 +137,7 @@ class Stack(KStack):
 
     def push(self, item):
         """
-        Adds item to top of stack.
-        Updates our stack_history.
+        Adds item to top of stack and updates the stack_history.
         """        
         self._push_count += 1
         self._update_depth_history()
@@ -141,8 +146,8 @@ class Stack(KStack):
 
     def pop(self):
         """
-        If the stack is not empty, update the depth_history 
-        and return the top item on the stack.
+        If the stack is not empty, update the depth_history and return the
+        top item on the stack.
         """
         result = super(Stack,self).pop()
         if result is not KStack.Empty:

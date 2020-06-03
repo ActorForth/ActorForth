@@ -57,10 +57,16 @@ class TestExecution(unittest.TestCase):
 
                 8 int 8 int combo
                 4 int 2 int combo
-                """        
+                """
 
         assert self.execute(code) == False
         cont.stack.pop()
         assert self.stack.tos().value == True
 
-
+    def test_compile_double_drop(self) -> None:
+        code =  """
+                double : Int -> Int ;
+                    2 int *.
+                5 int double
+                """
+        assert self.execute(code) == 10

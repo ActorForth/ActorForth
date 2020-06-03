@@ -160,6 +160,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         c.stack.tos().value.add_word(op)
     else:
         print("FAILED TO FIND WORD TO COMPILE %s" % c.symbol.s_id )
+
         print("Compile as literal")
         #assert False   
         def curry_make_atom(s, func = make_atom ):
@@ -170,7 +171,11 @@ def compile_word_handler(c: AF_Continuation) -> None:
         print("New anonymous function: %s" % new_op)
         c.stack.tos().value.add_word( new_op )
 
-    #print("compile_word_handler ending")     
+        #print("compile_word_handler ending")     
+
+        ### MERGE CONFLICT HERE c.stack.tos().value.add_word(Operation(c.symbol.s_id, make_atom))
+        # assert False   
+
 
 TCodeCompile = Type("CodeCompile", handler = compile_word_handler)
 
