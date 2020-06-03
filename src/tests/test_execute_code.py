@@ -30,6 +30,16 @@ class TestExecution(unittest.TestCase):
                 """
         assert self.execute(code) == 4
 
+    @unittest.skip("Not yet compiling ctors into composite words.")
+    def test_compile_double_literal(self) -> None:
+        code =  """
+                double : Int -> Int;
+                    2 int * .
+
+                2 int double
+                """
+        assert self.execute(code) == 4        
+
     @unittest.skip("Got a problem compiling double in combo.")
     def test_compile_combo(self) -> None:
         code =  """
