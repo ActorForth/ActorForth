@@ -29,7 +29,7 @@ class TypeSignature:
             # Upgrade "Any" types to whatever they're being paired with.
             if m_s == "Any":
                 m_s = in_s
-            if in_s == "Any":
+            elif in_s == "Any":
                 in_s = m_s
 
             assert m_s == in_s, "Error! Input Type '%s' not equivalent to Sig Type '%s' for In Stack = %s matched with Sig %s." % (in_s, m_s, self.stack_in, sig)

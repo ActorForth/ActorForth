@@ -54,6 +54,5 @@ class AF_Continuation:
     op : Any = None # Becomes an Operation in Continuation
 
 
-
     debug : bool = False
     cdepth : int = 0        # Depth of calls for debug tab output.
