@@ -31,6 +31,9 @@ def op_new_word(c: AF_Continuation) -> None:
     Take an Atom, confirm that it's not already an active op,
     and turn it into a new WordDefinition.
     """
+    op_name = c.stack.tos().value
+    op, found = Type.op(op_name,c)  # Do we need to check that it's also not a ctor/type? Probably so.
+    assert not found, "Compile error: '%s' already defined." % op_name
     c.stack.tos().type = TWordDefinition
 
     sig = TypeSignature([],[])
@@ -51,20 +54,6 @@ def op_switch_to_output_sig(c: AF_Continuation) -> None:
 Type.add_op(Operation('->',op_switch_to_output_sig, 
             sig=TypeSignature([TWordDefinition, TInputTypeSignature],[TWordDefinition, TOutputTypeSignature]) ), 
             "InputTypeSignature") 
-
-
-def op_skip_to_output_sig(c: AF_Continuation) -> None:
-    """
-    WordDefinition(Op_name), InputTypeSignature(TypeSignature) 
-		-> WordDefinition(Op_name), OutputTypeSignature(TypeSignature).
-
-    Used when a WordDefition is encountered that has no InputTypeSignature.
-    """
-    sig = TypeSignature([],[])
-    c.stack.push(StackObject(sig,TOutputTypeSignature))
-Type.add_op(Operation('->',op_skip_to_output_sig, 
-            sig=TypeSignature([TWordDefinition, TInputTypeSignature],[TWordDefinition, TOutputTypeSignature]) ), 
-            "WordDefinition") 
 
 
 def op_start_code_compile(c: AF_Continuation) -> None:
@@ -92,29 +81,95 @@ Type.add_op(Operation(';',op_start_code_compile,
             "OutputTypeSignature")
 
 
+def op_skip_to_code_compile(c: AF_Continuation) -> None:
+    """
+    WordDefinition(Op_name) -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation).
 
-### THIS CATCHES ATOMS DURING COMPILATION
-# def op_compile_atom(c: AF_Continuation) -> None:
-#     if c.symbol is None:
-#         c.symbol = Symbol("Unknown", Location())
-#     #print("\n\nCompiling Atom: %s\n\n" % c.symbol.s_id)
-#     new_op = Operation(c.symbol.s_id, make_atom)
-#     c.stack.tos().value.add_word(new_op)
-
-# # new_op = Operation('_', op_compile_atom)
-# # new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
-# #                         [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
-# # Type.types["CodeCompile"].ops_list.insert(0, (new_op,new_sig))
-
-# Type.add_op(Operation('_',op_compile_atom), 
-#             TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],
-#                           [TWordDefinition, TOutputTypeSignature, TCodeCompile]), 
-#                           "CodeCompile") 
+    Used if a new word definition is created but has no TypeSignature. 
+    Creates the new empty TypeSignature, new Operation, and switches
+    to start the definition of the word's behavior.
+    """
+    sig = TypeSignature([],[])
+    c.stack.push(StackObject(sig,TOutputTypeSignature))  
+    op_start_code_compile(c)
+# Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
+Type.add_op(Operation(';',op_skip_to_code_compile, 
+            sig=TypeSignature([TWordDefinition],[TWordDefinition, TOutputTypeSignature, TCodeCompile]) ), 
+            "WordDefinition")
 
 
-#
-#
-#
+def op_finish_word_compilation(c: AF_Continuation) -> None:
+    """
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
+        -> WordDefinition
+    """
+    #print("finishing word compilation!")
+    op = c.stack.pop().value
+    op.sig = c.stack.pop().value
+    Type.add_op(op)
+    # new_op = Operation(op.name, op_compile_word, [op])
+    # new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
+    #                 [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
+    # Type.types["CodeCompile"].ops_list.insert(0, (new_op, new_sig))
+Type.add_op(Operation(';',op_finish_word_compilation, 
+            sig=TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[TWordDefinition]) ), 
+            "CodeCompile")
+
+
+def op_finish_word_definition(c: AF_Continuation) -> None:
+    """
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
+        -> (empty)
+    """
+    op_finish_word_compilation(c)
+    c.stack.pop()
+Type.add_op(Operation('.',op_finish_word_definition, 
+            sig=TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[]) ), 
+            "CodeCompile")    
+
+
+def _indent(c: AF_Continuation) -> str:
+    return ''.join(['\t' for n in range(c.cdepth)])  
+
+
+def compilation_word_handler(c: AF_Continuation) -> bool:
+    #print("compilation_word_handler")
+    # Lookup ONLY words for my specific type.
+    assert c.symbol
+    name = c.symbol.s_id
+    op, found = Type.find_op(name, c, c.stack.tos().type.name)
+
+    # Is this a word specialized for my type matches my stack/type specification?
+    if found and op.sig.match_in(c.stack):
+        # Yes - so execute it.
+        c.op = op
+        c.op(c)
+        return True
+    return False
+
+
+def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
+    #print("\n\nstarting type_sig_handler")  
+    handled = compilation_word_handler(c)
+    out = "type_sig_handler for type_name='%s' : received for symbol: %s "
+    if handled: out += "HANDLED by compilation_word_handler."
+    #print(out % (type_name, c.symbol))
+    if handled: return 
+
+    #
+    # NOTE - HERE'S WHERE WE'D DEAL WITH LITERALS/VALUES BY MAPPING TYPE SPECS & CTORS
+    #
+
+    # Is this word actually a type?
+    assert c.symbol
+    _type = Type.types.get(c.symbol.s_id,None)
+    assert _type
+    if type_name == "InputTypeSignature":
+        c.stack.tos().value.stack_in.append(Type(c.symbol.s_id))
+    else:
+        c.stack.tos().value.stack_out.append(Type(c.symbol.s_id))
+
+
 def compile_word_handler(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation) 
@@ -173,8 +228,6 @@ def compile_word_handler(c: AF_Continuation) -> None:
                 if found: break
                 op, found = Type.find_op(op_name, fake_c, output_type_name)
 
-
-
     if not found:
         # Next try to match up with an op for Any type.
         op, found = Type.find_op(op_name, c)
@@ -209,63 +262,6 @@ def compile_word_handler(c: AF_Continuation) -> None:
         # assert False   
 
 
-
-
-
-
-
-
-def op_skip_to_code_compile(c: AF_Continuation) -> None:
-    """
-    WordDefinition(Op_name) -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation).
-
-    Used if a new word definition is created but has no TypeSignature. 
-    Creates the new empty TypeSignature, new Operation, and switches
-    to start the definition of the word's behavior.
-    """
-    sig = TypeSignature([],[])
-    c.stack.push(StackObject(sig,TOutputTypeSignature))  
-    op_start_code_compile(c)
-# Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
-Type.add_op(Operation(';',op_skip_to_code_compile, 
-            sig=TypeSignature([TWordDefinition],[TWordDefinition, TOutputTypeSignature, TCodeCompile]) ), 
-            "WordDefinition")
-
-
-def op_finish_word_compilation(c: AF_Continuation) -> None:
-    """
-    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
-        -> WordDefinition
-    """
-    #print("finishing word compilation!")
-    op = c.stack.pop().value
-    op.sig = c.stack.pop().value
-    Type.add_op(op)
-    # new_op = Operation(op.name, op_compile_word, [op])
-    # new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
-    #                 [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
-    # Type.types["CodeCompile"].ops_list.insert(0, (new_op, new_sig))
-Type.add_op(Operation(';',op_finish_word_compilation, 
-            sig=TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[TWordDefinition]) ), 
-            "CodeCompile")
-
-
-def op_finish_word_definition(c: AF_Continuation) -> None:
-    """
-    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
-        -> (empty)
-    """
-    op_finish_word_compilation(c)
-    c.stack.pop()
-Type.add_op(Operation('.',op_finish_word_definition, 
-            sig=TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[]) ), 
-            "CodeCompile")    
-
-
-def _indent(c: AF_Continuation) -> str:
-    return ''.join(['\t' for n in range(c.cdepth)])  
-
-
 def op_execute_compiled_word(c: AF_Continuation) -> None:
     #print("\nop_execute_compiled_word c.stack.contents = %s." % c.stack.contents())
     op = c.op
@@ -288,43 +284,3 @@ def op_execute_compiled_word(c: AF_Continuation) -> None:
 
     c.op = op
     c.symbol = symbol
-        
-
-def compilation_word_handler(c: AF_Continuation) -> bool:
-    #print("compilation_word_handler")
-    # Lookup ONLY words for my specific type.
-    assert c.symbol
-    name = c.symbol.s_id
-    op, found = Type.find_op(name, c, c.stack.tos().type.name)
-
-    # Is this a word specialized for my type matches my stack/type specification?
-    if found and op.sig.match_in(c.stack):
-        # Yes - so execute it.
-        c.op = op
-        c.op(c)
-        return True
-    return False
-
-def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
-    #print("\n\nstarting type_sig_handler")  
-    handled = compilation_word_handler(c)
-    out = "type_sig_handler for type_name='%s' : received for symbol: %s "
-    if handled: out += "HANDLED by compilation_word_handler."
-    #print(out % (type_name, c.symbol))
-    if handled: return 
-
-    #
-    # NOTE - HERE'S WHERE WE'D DEAL WITH LITERALS/VALUES BY MAPPING TYPE SPECS & CTORS
-    #
-
-    # Is this word actually a type?
-    assert c.symbol
-    _type = Type.types.get(c.symbol.s_id,None)
-    assert _type
-    if type_name == "InputTypeSignature":
-        c.stack.tos().value.stack_in.append(Type(c.symbol.s_id))
-    else:
-        c.stack.tos().value.stack_out.append(Type(c.symbol.s_id))
-
-
-
