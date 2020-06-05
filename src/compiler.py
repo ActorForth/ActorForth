@@ -31,17 +31,7 @@ def op_new_word(c: AF_Continuation) -> None:
     Take an Atom, confirm that it's not already an active op,
     and turn it into a new WordDefinition.
     """
-    itype = c.stack.tos().type
-    # Why is TWordDefinition ok here? For pattern matching/word overloading? 
-    # Need to update the TypeSignature for it if we still want this.
-    assert (itype == TAtom) or (itype == TWordDefinition), \
-        "New words must be atoms or new word definitions. %s is a %s." % (c.stack.tos().value, itype)
-
-    op, found = Type.op(c.stack.tos().value, c)
-    assert not found, "Can't redefine an existing op." 
-
-    if itype == TAtom:
-        c.stack.tos().type = TWordDefinition
+    c.stack.tos().type = TWordDefinition
 
     sig = TypeSignature([],[])
     c.stack.push(StackObject(sig,TInputTypeSignature))
