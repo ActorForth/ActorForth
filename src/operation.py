@@ -6,7 +6,6 @@ INTRO 6 : Named words which implement the behavior of ActorForth. New words
           first class citizens as if they were primitives. Operations are
           stored in various Type dictionaries.
 """
-
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
 
@@ -20,30 +19,31 @@ class TypeSignature:
     stack_in : Sequence["AF_Type"]
     stack_out : Sequence["AF_Type"]
 
-    def match_in(self, stack: Stack) -> bool:
-        if not len(self.stack_in): return True
-        if len(self.stack_in) > stack.depth():
-            #print("match_in: input stack too short for signature.")
-            return False
-        stack_types = [s.type for s in stack.contents()[len(self.stack_in)*-1:] ]
+    # Produces a mapped type sequence that accounts for "Any" types.
+    def map_from_input_sig(self, sig: Sequence["AF_Type"]) -> Sequence["AF_Type"]:
+        result_sig : List["AF_Type"] = []
+        assert len(self.stack_in) <= len(sig), "Error! In Stack '%s' longer than Sig '%s'." % (self.stack_in,sig)
 
-        #print("\nmatch_in: in_types = %s" % (self.stack_in))
-        #print("match_in: stack_types = %s" % stack_types)
-        for in_type in reversed(self.stack_in):
-            ## This is now handled in Type class overloads!!
-            ## if in_type == TAny: continue
-            """
-            Should probably have TAny types transform to the discovered type
-            so that manipulations across generics are still completely type safe.
-            """
-            stack_type = stack_types.pop()
-            if in_type == "Any": continue
-            if stack_type == "Any": continue
-            if in_type != stack_type: 
-                #print("match_in: Stack type %s doesn't match input arg type %s." % (type,in_type))
-                return False
-        #print("match_in: Found matching type for stack_in: %s" % self.stack_in)
-        return True
+        # Iterate over both sequences in reverse.
+        for in_s, m_s in zip(self.stack_in[::-1],sig[::-1]):
+            # Upgrade "Any" types to whatever they're being paired with.
+            if m_s == "Any":
+                m_s = in_s
+            if in_s == "Any":
+                in_s = m_s
+
+            assert m_s == in_s, "Error! Input Type '%s' not equivalent to Sig Type '%s' for In Stack = %s matched with Sig %s." % (in_s, m_s, self.stack_in, sig)
+            result_sig.insert(0,m_s)
+        return result_sig
+
+    # Used by the runtime interpreter to check for mathing types for words.
+    def match_in(self, stack: Stack) -> bool:
+        try:
+            result = self.map_from_input_sig([i.type for i in stack.contents()])
+            return True
+        except AssertionError:
+            return False
+
 
     def match_out(self, on_stack_types: List["AF_Type"]) -> bool:
         return True

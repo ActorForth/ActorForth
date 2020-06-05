@@ -45,7 +45,7 @@ class Symbol:
 
 
 class AF_Type:
-    pass
+    name : str
 
 @dataclass 
 class AF_Continuation:

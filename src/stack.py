@@ -135,6 +135,9 @@ class Stack(KStack):
             #return [x for x in reversed(self._stack._data)]
         return []
 
+    def __len__(self):
+        return self.depth()        
+
     def push(self, item):
         """
         Adds item to top of stack and updates the stack_history.
