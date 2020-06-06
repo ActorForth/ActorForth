@@ -17,6 +17,7 @@ from af_types.af_any import *
 from af_types.af_int import *
 from af_types.af_bool import *
 from af_types.af_debug import *
+from af_types.af_see import *
 from compiler import *
 
 def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Continuation:    

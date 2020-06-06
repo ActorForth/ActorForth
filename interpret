@@ -1,2 +1,2 @@
 clear
-python src/repl.py $1
+python3 src/repl.py $1
