@@ -107,7 +107,7 @@ class Operation:
             if len(l) == len(r):
                 constraints = zip(l,r)
                 for (a,b) in constraints:
-                    if a == b or a == "Any" or b == "Any":
+                    if a.name == b.name or a.name == "Any" or b.name == "Any":
                         continue
                     else:
                         return False
@@ -115,9 +115,15 @@ class Operation:
             else:
                 return False
 
-        # TODO: go through each word and check if the input sig
-        # matches output sig of previous word
- 
+        # stack picture
+        stack = self.sig.stack_in
+        # go through each word and check if the input sig matches
+        # output sig of previous word
+        for w in self.words[1::]:
+            if not matches(w.sig.stack_in, stack):
+                raise TypeMismatch
+            stack = w.sig.stack_out
+        
   
 
 #Op_list = List[Tuple[Operation, TypeSignature]]
