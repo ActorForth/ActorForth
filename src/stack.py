@@ -62,6 +62,9 @@ class Stack(KStack):
 
     DEPTH_HISTORY = 1000
 
+    def __str__(self):
+        return str(self.contents())
+
     def __init__(self):
         self.reset()
         super(Stack, self).__init__()
