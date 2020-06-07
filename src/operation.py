@@ -94,7 +94,30 @@ class Operation:
         return self.__str__()
 
     def short_name(self) -> str:
-        return self.name        
+        return self.name
+
+    def check_stack_effect(self):
+        """
+        Check that the body of the operation is well-typed.
+        """
+        def matches(l,r):
+            """
+            Does the stack signature l match the stack signature r?
+            """
+            if len(l) == len(r):
+                constraints = zip(l,r)
+                for (a,b) in constraints:
+                    if a == b or a == "Any" or b == "Any":
+                        continue
+                    else:
+                        return False
+                return True
+            else:
+                return False
+
+        # TODO: go through each word and check if the input sig
+        # matches output sig of previous word
+ 
   
 
 #Op_list = List[Tuple[Operation, TypeSignature]]
