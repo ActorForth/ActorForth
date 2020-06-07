@@ -132,6 +132,7 @@ def _indent(c: AF_Continuation) -> str:
     return ''.join(['\t' for n in range(c.cdepth)])  
 
 
+# For executing COMPILE TIME words only! 
 def compilation_word_handler(c: AF_Continuation) -> bool:
     #print("compilation_word_handler")
     # Lookup ONLY words for my specific type.
