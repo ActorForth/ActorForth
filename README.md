@@ -1,5 +1,7 @@
 # ActorForth
 
+[![Join the chat at https://gitter.im/ActorForth/community](https://badges.gitter.im/ActorForth/community.svg)](https://gitter.im/ActorForth/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 ActorForth is Open Source software covered under BSD license (see
 LICENSE.txt).  If you contribute to this project then you guarantee
 that you have the right to contribute your content & IP, will abide by
