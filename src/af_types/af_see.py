@@ -4,20 +4,23 @@ from continuation import Continuation
 
 def see_handler(cont: AF_Continuation) -> None:
     print("Calling see_handler")
-    symbol : str = cont.symbol.s_id
-    t = Type.types.get(symbol)
+    symbol : Optional[Symbol] = cont.symbol
+    symbol_id : str = ""
+    if symbol:
+        symbol_id = symbol.s_id
+    t = Type.types.get(symbol_id)
     if t:
-        so = StackObject("Type",Type(symbol))
+        so = StackObject("Type",Type(symbol_id))
         cont.stack.tos().value.push(so)
         return
     s : Stack = cont.stack.tos().value
     fcont = Continuation(s)
-    cont.op, found = Type.op(cont.symbol.s_id, fcont)
+    cont.op, found = Type.op(symbol_id, fcont)
     if found:
         for i in cont.op.words:
             print(i.name, i.sig)
     else:
-        print("See: Failed to find word {}".format(cont.symbol.s_id))
+        print("See: Failed to find word {}".format(symbol_id))
         
     cont.stack.pop()
     
