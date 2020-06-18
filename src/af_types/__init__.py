@@ -149,16 +149,18 @@ class Type(AF_Type):
             if matching == True:
                 return type_sig[1]
         return None
-                
+
 
     # Inserts a new operations for the given type name (or global for Any).
     @staticmethod
-    def add_op(op: Operation, type_name: Type_name = "Any") -> None:
+    def add_op(op: Operation, type_name: Type_name = None) -> None:
+        if type_name is None:
+            type_name = "Any"
         type_def = Type.types.get(type_name, None)
-        assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
+        assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys())
         if type_def:
-            type_def.ops_list.insert(0,op)            
-        
+            type_def.ops_list.insert(0,op)
+
         #print("\n\nADD_OP type_def type(%s) = %s." % (type(type_def), str(type_def)))
 
         #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
