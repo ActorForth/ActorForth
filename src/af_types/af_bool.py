@@ -26,7 +26,7 @@ def op_bool(c: AF_Continuation) -> None:
             result.value = False
 
     assert result.value is not None, "%s is not a valid Boolean value." % stack_object.value
-    
+
     c.stack.push(result)
 
 
@@ -50,13 +50,13 @@ def optionally_infer_type_from_atom(c: AF_Continuation) -> StackObject:
         sobj1 = c.stack.pop()
         #print("Converted from %s to %s." % (sobj1,s.tos().type))
         #print("New stack is %s." % s.contents())
-    
+
     return sobj1
 
 
 def op_equals(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
-    # Now we pop off whatever is the ultimate object that's 
+    # Now we pop off whatever is the ultimate object that's
     # possibly been inferred.
     sobj2 = c.stack.pop()
     c.stack.push(StackObject(sobj1 == sobj2, TBool))
@@ -75,7 +75,7 @@ def op_less_than(c: AF_Continuation) -> None:
 def op_greater_than(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
-    c.stack.push(StackObject(sobj2.value > sobj1.value, TBool))    
+    c.stack.push(StackObject(sobj2.value > sobj1.value, TBool))
 
 def op_less_than_or_equal_to(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
@@ -92,16 +92,13 @@ def op_not(c: AF_Continuation) -> None:
     # Restrict to only workong on Bools!
     op1 = c.stack.tos().value = not c.stack.tos().value
 Type.add_op(Operation('not', op_not, sig=TypeSignature([TBool],[TBool]) ), "Bool")
-    
+
 
 #   Bool dictionary
-Type.register_ctor('Bool',Operation('bool',op_bool),[TAtom])
-Type.register_ctor('Bool',Operation('bool',op_bool),[TBool])
-Type.register_ctor('Bool',Operation('==',op_equals),[TAny,TAny])
-Type.register_ctor('Bool',Operation('!=',op_not_equals),[TAny,TAny])
-Type.register_ctor('Bool',Operation('<',op_less_than),[TAny,TAny])
-Type.register_ctor('Bool',Operation('>',op_greater_than),[TAny,TAny])
-Type.register_ctor('Bool',Operation('<=',op_less_than_or_equal_to),[TAny,TAny])
-Type.register_ctor('Bool',Operation('>=',op_greater_than_or_equal_to),[TAny,TAny])
-
-#Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
+Type.add_op(Operation('bool', op_bool, sig=TypeSignature([TAny],[TBool]) ))
+Type.add_op(Operation('==', op_equals, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('!=', op_not_equals, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('<', op_less_than, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('>', op_greater_than, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('<=', op_less_than_or_equal_to, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('>=', op_greater_than_or_equal_to, sig=TypeSignature([TAny,TAny],[TBool]) ))
