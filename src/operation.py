@@ -8,6 +8,7 @@ INTRO 6 : Named words which implement the behavior of ActorForth. New words
 """
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
+from itertools import zip_longest
 
 from aftype import AF_Type, AF_Continuation
 
@@ -117,10 +118,22 @@ class Operation:
         Out[68]: [(3, 'e'), (2, 'd'), (1, 'c'), (None, 'b'), (None, 'a')]
 
         """
+
+        def backwards(i):
+            j=i.copy()
+            j.reverse()
+            return j
+
         matches: bool = False
         sig_out: Sequence['AF_Type'] = []
-        if sig_in is None: sig_in = self.sig.stack_in.copy()
-        else: sig_in = sig_in.copy()
+        if sig_in is None: sig_out = self.sig.stack_in.copy()
+        else: sig_out = sig_in.copy()
+        consume_in = self.sig.stack_in.copy()
+
+        # Consume as much of the input as our input signature requires.
+        for i in range(len(self.sig.stack_in)):
+            pass
+
 
 
 

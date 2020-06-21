@@ -19,13 +19,16 @@ class KStack:
             stack._stack = KStack.NonEmpty(value)
             return KStack.NonEmpty
 
+        def copy(self):
+            return KStack.Empty()
+
     class NonEmpty:
 
         def __init__(self, value):
             self._data = []
             self._data.append(value)            
 
-        def tos(self, stack):
+        def tos(self, stack):          
             if len(self._data):
                 return self._data[-1]
 
@@ -45,6 +48,11 @@ class KStack:
             self._data.append(value)
             return KStack.NonEmpty
 
+        def copy(self):
+            result = KStack.NonEmpty(None)
+            result._data = self._data.copy()
+            return result
+
 
     def __init__(self):
         self._stack = KStack.Empty()
@@ -57,6 +65,11 @@ class KStack:
 
     def push(self, value):
         return self._stack.push(self, value)
+
+    def copy(self):
+        result = KStack()
+        result._stack = self._stack.copy()
+        return result
 
 class Stack(KStack):
 
@@ -169,5 +182,12 @@ class Stack(KStack):
         """
         return super(Stack,self).tos()
 
+    def copy(self):
+        result = Stack()
+        result._stack = self._stack.copy()
+        result._depth_history_count = self._depth_history_count
+        result._depth_history = self._depth_history 
+        result._push_count = self._push_count 
+        result._pop_count = self._pop_count 
 
-
+        return result
