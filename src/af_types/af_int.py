@@ -18,6 +18,7 @@ def op_int(c: AF_Continuation) -> None:
 #   Int dictionary
 Type.register_ctor('Int', Operation('int',op_int), [TInt])
 Type.register_ctor('Int', Operation('int',op_int), [TAtom])
+# Type.add_op(Operation('int',op_int, sig=TypeSignature([TAtom],[TInt])), None)
 
 # Operations
 

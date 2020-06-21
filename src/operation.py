@@ -96,34 +96,35 @@ class Operation:
     def short_name(self) -> str:
         return self.name
 
-    def check_stack_effect(self):
+    def check_stack_effect(self, sig_in : Optional[ Sequence['AF_Type'] ] = None) -> Tuple[ Sequence['AF_Type'], bool ]:
         """
-        Check that the body of the operation is well-typed.
-        """
-        def matches(l,r):
-            """
-            Does the stack signature l match the stack signature r?
-            """
-            if len(l) == len(r):
-                constraints = zip(l,r)
-                for (a,b) in constraints:
-                    if a.name == b.name or a.name == "Any" or b.name == "Any":
-                        continue
-                    else:
-                        return False
-                return True
-            else:
-                return False
+        Returns the output stack effect of this operation given an optional input stack.
+        "Any" types will be specialized to a concrete type if matched against it.
 
-        # stack picture
-        stack = self.sig.stack_in
-        # go through each word and check if the input sig matches
-        # output sig of previous word
-        for w in self.words[1::]:
-            if not matches(w.sig.stack_in, stack):
-                raise TypeMismatch
-            stack = w.sig.stack_out
-        
+        If no sequence is passed in we just copy the input type signature for this Operation
+        and treat that as the input sequence for purposes of stack effect.
+
+        Also returns a secondary Boolean that is true only if the output matches the 
+        output type signature declared for this Operation.
+
+        In [65]: def backwards(i): 
+        ...:     j=i.copy() 
+        ...:     j.reverse() 
+        ...:     return j 
+
+
+        In [68]: [(n,m) for (n,m) in itertools.zip_longest(backwards(i),backwards(j))]                                                                              
+        Out[68]: [(3, 'e'), (2, 'd'), (1, 'c'), (None, 'b'), (None, 'a')]
+
+        """
+        matches: bool = False
+        sig_out: Sequence['AF_Type'] = []
+        if sig_in is None: sig_in = self.sig.stack_in.copy()
+        else: sig_in = sig_in.copy()
+
+
+
+        return sig_out, matches     
   
 
 #Op_list = List[Tuple[Operation, TypeSignature]]
