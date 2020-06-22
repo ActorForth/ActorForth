@@ -45,14 +45,13 @@ class Symbol:
 
 
 class AF_Type:
-    pass
+    name : str
 
 @dataclass 
 class AF_Continuation:
     stack : Stack
     symbol : Optional[Symbol] = None
     op : Any = None # Becomes an Operation in Continuation
-
 
 
     debug : bool = False

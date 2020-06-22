@@ -6,59 +6,72 @@ INTRO 6 : Named words which implement the behavior of ActorForth. New words
           first class citizens as if they were primitives. Operations are
           stored in various Type dictionaries.
 """
-
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
+from itertools import zip_longest
 
 from aftype import AF_Type, AF_Continuation
 
 from stack import Stack
 
 
-@dataclass
+
 class TypeSignature:
-    stack_in : Sequence["AF_Type"]
-    stack_out : Sequence["AF_Type"]
 
+    def __init__(self, in_seq: Sequence["AF_Type"] = None, out_seq: Sequence["AF_Type"] = None ):
+        if in_seq is None: in_seq = []
+        if out_seq is None: out_seq = []
+
+        self.stack_in : Stack = Stack(in_seq)
+        self.stack_out : Stack = Stack(out_seq)
+
+
+    # Produces a mapped type sequence that accounts for "Any" types.
+    def map_from_input_sig(self, sig: Sequence["AF_Type"]) -> Sequence["AF_Type"]:
+        result_sig : List["AF_Type"] = []
+        assert len(self.stack_in) <= len(sig), "Error! In Stack '%s' longer than Sig '%s'." % (self.stack_in,sig)
+
+        # Iterate over both sequences in reverse.
+        for in_s, m_s in zip(self.stack_in.contents()[::-1],sig[::-1]):
+            # Upgrade "Any" types to whatever they're being paired with.
+            if m_s == "Any":
+                m_s = in_s
+            elif in_s == "Any":
+                in_s = m_s
+
+            assert m_s == in_s, "Error! Input Type '%s' not equivalent to Sig Type '%s' for In Stack = %s matched with Sig %s." % (in_s, m_s, self.stack_in, sig)
+            result_sig.insert(0,m_s)
+        return result_sig
+
+
+    # Used by the runtime interpreter to check for mathing types for words.
     def match_in(self, stack: Stack) -> bool:
-        if not len(self.stack_in): return True
-        if len(self.stack_in) > stack.depth():
-            #print("match_in: input stack too short for signature.")
+        try:
+            result = self.map_from_input_sig([i.type for i in stack.contents()])
+            return True
+        except AssertionError:
             return False
-        stack_types = [s.type for s in stack.contents()[len(self.stack_in)*-1:] ]
 
-        #print("\nmatch_in: in_types = %s" % (self.stack_in))
-        #print("match_in: stack_types = %s" % stack_types)
-        for in_type in reversed(self.stack_in):
-            ## This is now handled in Type class overloads!!
-            ## if in_type == TAny: continue
-            """
-            Should probably have TAny types transform to the discovered type
-            so that manipulations across generics are still completely type safe.
-            """
-            stack_type = stack_types.pop()
-            if in_type == "Any": continue
-            if stack_type == "Any": continue
-            if in_type != stack_type: 
-                #print("match_in: Stack type %s doesn't match input arg type %s." % (type,in_type))
-                return False
-        #print("match_in: Found matching type for stack_in: %s" % self.stack_in)
-        return True
 
     def match_out(self, on_stack_types: List["AF_Type"]) -> bool:
         return True
 
     def __str__(self) -> str:
         out = "["
-        for t in self.stack_in:
+        for t in self.stack_in.contents():
             out += " %s," % t.name
         out += "] -> ["
 
-        for t in self.stack_out:
+        for t in self.stack_out.contents():
             out += " %s," % t.name
 
         out += "]"
         return out
+
+    def __eq__(self, s : object) -> bool:
+        if not isinstance(s, TypeSignature):
+            return NotImplemented  
+        return (self.stack_in == s.stack_in) and (self.stack_out == s.stack_out)
 
 Op_name = str
 Operation_def = Callable[["AF_Continuation"],None]
@@ -94,7 +107,58 @@ class Operation:
         return self.__str__()
 
     def short_name(self) -> str:
-        return self.name        
+        return self.name
+
+    def check_stack_effect(self, sig_in : Optional[ Stack ] = None) -> Tuple[ Stack, bool ]:
+        """
+        Returns the output stack effect of this operation given an optional input stack.
+        "Any" types will be specialized to a concrete type if matched against it.
+
+        If no sequence is passed in we just copy the input type signature for this Operation
+        and treat that as the input sequence for purposes of stack effect.
+
+        Also returns a secondary Boolean that is true only if the output matches the 
+        output type signature declared for this Operation.
+        """
+        matches: bool = True
+        sig_out: Stack = Stack()
+        if sig_in is None: sig_out = self.sig.stack_in.copy()
+        else: sig_out = sig_in.copy()
+        consume_in = self.sig.stack_in.copy()
+
+        # Consume as much of the input as our input signature requires.
+        for i in range(len(self.sig.stack_in)):
+            in_type = sig_out.pop()
+            match_type = consume_in.pop()
+
+            if match_type == "Any":
+                match_type = in_type
+            if in_type == "Any":
+                in_type = match_type
+
+            print("in_type:%s =?= match_type:%s : %s" % (in_type, match_type, in_type==match_type) )
+
+            if in_type != match_type: matches = False
+
+        # Tack on the output stack effect that we're claiming.
+        out_sig = self.sig.stack_out.contents()
+        for i in out_sig:
+            print("adding output type:%s" % i)
+            sig_out.push(i)
+
+        # Make sure we match on the final output signature. But only up until as
+        # much as the output signature declares. Extra deeper items are ok.
+        test_match_out = self.sig.stack_out.copy()
+        test_sig_out = sig_out.copy()
+        for i in range(len(test_match_out)):
+            x = test_match_out.pop()
+            y = test_sig_out.pop()
+            if x != y:
+                matches = False
+                print("sig_out: %s != stack_out: %s" % (sig_out, self.sig.stack_out))
+
+        print("Returning output signature: %s with matching = %s." % (sig_out,matches))
+        return sig_out, matches
   
 
 #Op_list = List[Tuple[Operation, TypeSignature]]

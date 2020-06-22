@@ -58,6 +58,61 @@ class StackTests(unittest.TestCase):
 
         self.assertEqual(s.total_operations(), len(self.init_list)*2)
 
+    def test_stack_copy(self) -> None:
+        s = Stack()
+        s.push(1)
+        s.push(2)
+        s.push(3)
+
+        self.assertEqual(str(s),'[1, 2, 3]')
+
+        r = s.copy()
+
+        #print("Type s = %s, Type r = %s" % (type(s),type(r)))
+        self.assertEqual(type(s),type(r))
+
+        x = s.tos()
+        y = r.tos()
+        self.assertEqual(x,y)
+
+        self.assertEqual(s.pop(), r.pop())
+        self.assertEqual(s.pop(), r.pop())
+        self.assertEqual(s.pop(), r.pop())
+
+        self.assertEqual(len(s),len(s))
+
+    def test_empty_stack_copy(self) -> None:
+        s = Stack()
+        self.assertEqual(str(s),'[]')
+
+        r = s.copy()
+
+        print("Type s = %s, Type r = %s" % (type(s),type(r)))
+
+        x = s.tos()
+        y = r.tos()
+        self.assertEqual(x,y)
+        self.assertEqual(len(s),0)
+        self.assertEqual(len(r),0)
+
+    def test_stack_equality(self) -> None:
+        s = Stack()
+        r = Stack()
+        q = Stack()
+        p = Stack()
+
+        s.push(1)
+        s.push(2)
+        r.push(1)
+        r.push(2)
+        q.push(1)
+        q.push(1)
+        p.push(1)
+
+        assert s == r
+        assert s != q
+        assert s != p
+
 class KevlinsStackTest(unittest.TestCase):
     """
     https://youtu.be/nrVIlhtoE3Y?t=3630
@@ -143,3 +198,31 @@ class KevlinsStackTest(unittest.TestCase):
         self.stack.pop()
         self.assertEqual(self.stack.tos(), KStack.Empty)
         
+
+    def test_kstack_copy(self) -> None:
+        s = KStack()
+        s.push(1)
+        s.push(2)
+        s.push(3)
+
+        r = s.copy()
+
+        self.assertEqual(type(s),type(r))
+
+        x = s.tos()
+        y = r.tos()
+        self.assertEqual(x,y)
+
+        self.assertEqual(s.pop(), r.pop())
+        self.assertEqual(s.pop(), r.pop())
+        self.assertEqual(s.pop(), r.pop())
+
+    def test_empty_kstack_copy(self) -> None:
+        s = KStack()
+        r = s.copy()
+
+        print("Type s = %s, Type r = %s" % (type(s),type(r)))
+
+        x = s.tos()
+        y = r.tos()
+        self.assertEqual(x,y)

@@ -5,6 +5,7 @@ INTRO 2 : The interpreter parses the input stream and executes it in
           the context of the Continuation.
 """
 from typing import TextIO, Optional
+import traceback
 
 from continuation import Continuation 
 from parser import Parser
@@ -17,6 +18,7 @@ from af_types.af_any import *
 from af_types.af_int import *
 from af_types.af_bool import *
 from af_types.af_debug import *
+from af_types.af_see import *
 from compiler import *
 
 def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Continuation:    
@@ -56,7 +58,8 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             """
                 
         except Exception as x:
-            print("Exception %s" % x)
+            print("Interpreter Exception Type: %s : %s" % (type(x),x) )
+            print( "TRACEBACK : %s" % traceback.format_exc() )
             print("Interpreting symbol %s" % cont.symbol)
             print(cont)
 
