@@ -6,6 +6,7 @@ TODO: Unit testing is not catching this file presently!! FIX!
 INTRO 1 : This is where ActorForth all begins for execution purposes.
 """
 from typing import TextIO, Tuple
+import traceback
 import sys
 
 from continuation import Continuation, Stack
@@ -89,7 +90,8 @@ if __name__ == "__main__":
             
             INTRO 1.6 : Continue in interpret.py for INTRO stage 2.
             """
-            print( x )
+            print( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
+            print( "TRACEBACK : %s" % traceback.format_exc() )
             cont.debug = True
             print_continuation_stats(cont)
             filename, handle = setup_stream_for_interpreter(force_stdio = True)

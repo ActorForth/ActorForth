@@ -15,10 +15,17 @@ from aftype import AF_Type, AF_Continuation
 from stack import Stack
 
 
-@dataclass
+
 class TypeSignature:
-    stack_in : Sequence["AF_Type"]
-    stack_out : Sequence["AF_Type"]
+
+    def __init__(self, in_seq: Sequence["AF_Type"] = None, out_seq: Sequence["AF_Type"] = None ):
+        if in_seq is None: in_seq = []
+        if out_seq is None: out_seq = []
+
+        self.stack_in : Stack = Stack(in_seq)
+        self.stack_out : Stack = Stack(out_seq)
+
+
 
     # Produces a mapped type sequence that accounts for "Any" types.
     def map_from_input_sig(self, sig: Sequence["AF_Type"]) -> Sequence["AF_Type"]:
@@ -26,7 +33,7 @@ class TypeSignature:
         assert len(self.stack_in) <= len(sig), "Error! In Stack '%s' longer than Sig '%s'." % (self.stack_in,sig)
 
         # Iterate over both sequences in reverse.
-        for in_s, m_s in zip(self.stack_in[::-1],sig[::-1]):
+        for in_s, m_s in zip(self.stack_in.contents()[::-1],sig[::-1]):
             # Upgrade "Any" types to whatever they're being paired with.
             if m_s == "Any":
                 m_s = in_s
@@ -51,15 +58,20 @@ class TypeSignature:
 
     def __str__(self) -> str:
         out = "["
-        for t in self.stack_in:
+        for t in self.stack_in.contents():
             out += " %s," % t.name
         out += "] -> ["
 
-        for t in self.stack_out:
+        for t in self.stack_out.contents():
             out += " %s," % t.name
 
         out += "]"
         return out
+
+    def __eq__(self, s : object) -> bool:
+        if not isinstance(s, TypeSignature):
+            return NotImplemented  
+        return (self.stack_in == s.stack_in) and (self.stack_out == s.stack_out)
 
 Op_name = str
 Operation_def = Callable[["AF_Continuation"],None]
@@ -97,7 +109,7 @@ class Operation:
     def short_name(self) -> str:
         return self.name
 
-    def check_stack_effect(self, sig_in : Optional[ Sequence['AF_Type'] ] = None) -> Tuple[ Sequence['AF_Type'], bool ]:
+    def check_stack_effect(self, sig_in : Optional[ Stack ] = None) -> Tuple[ Stack, bool ]:
         """
         Returns the output stack effect of this operation given an optional input stack.
         "Any" types will be specialized to a concrete type if matched against it.
@@ -125,7 +137,7 @@ class Operation:
             return j
 
         matches: bool = False
-        sig_out: Sequence['AF_Type'] = []
+        sig_out: Stack = Stack()
         if sig_in is None: sig_out = self.sig.stack_in.copy()
         else: sig_out = sig_in.copy()
         consume_in = self.sig.stack_in.copy()

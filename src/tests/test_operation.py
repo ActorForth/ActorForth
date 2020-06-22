@@ -1,6 +1,6 @@
 import unittest
 
-from operation import TypeSignature, Operation, op_nop
+from operation import TypeSignature, Operation, op_nop, Stack
 
 from af_types.af_bool import *
 from af_types.af_int import *
@@ -13,5 +13,5 @@ class OperationTests(unittest.TestCase):
         op = Operation("nop", op_nop, sig=TypeSignature([TInt],[TInt]))
 
         sig, match = op.check_stack_effect()
-        assert sig == [TInt]
+        assert sig == Stack([TInt])
         assert match == False

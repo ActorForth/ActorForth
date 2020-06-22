@@ -4,6 +4,7 @@
     But we're also interested in how deep our stack gets over its lifetime and, more
     specifically over the last 'n' operations (set in Stack.DEPTH_HISTORY).
 """
+from typing import Sequence, Any
 
 class KStack:
 
@@ -78,9 +79,12 @@ class Stack(KStack):
     def __str__(self):
         return str(self.contents())
 
-    def __init__(self):
+    def __init__(self, in_seq: Sequence[Any] = None):
         self.reset()
         super(Stack, self).__init__()
+        if in_seq is not None:
+            for n in in_seq:
+                self.push(n)
 
     def reset(self):
         self._depth_history_count = {0:1}
@@ -191,3 +195,10 @@ class Stack(KStack):
         result._pop_count = self._pop_count 
 
         return result
+
+    def __eq__(self, s : object) -> bool:
+        if not isinstance(s, Stack):
+            return NotImplemented
+
+        if len(s) != len(s): return False
+        return all([(a==b) for (a,b) in zip(self.contents(), s.contents())])

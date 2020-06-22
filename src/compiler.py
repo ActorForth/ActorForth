@@ -166,9 +166,11 @@ def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
     _type = Type.types.get(c.symbol.s_id,None)
     assert _type
     if type_name == "InputTypeSignature":
-        c.stack.tos().value.stack_in.append(Type(c.symbol.s_id))
+        #c.stack.tos().value.stack_in.append(Type(c.symbol.s_id))
+        c.stack.tos().value.stack_in.push(Type(c.symbol.s_id))
     else:
-        c.stack.tos().value.stack_out.append(Type(c.symbol.s_id))
+        #c.stack.tos().value.stack_out.append(Type(c.symbol.s_id))
+        c.stack.tos().value.stack_out.push(Type(c.symbol.s_id))
 
 
 def compile_word_handler(c: AF_Continuation) -> None:
@@ -191,7 +193,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
     ##
     ## THIS IS WHERE WE SHOULD DO TYPE CHECKING DURING COMPILATION
     ##
-    tos_output_sig : Sequence["AF_Type"] = []
+    tos_output_sig : Stack = Stack()
 
     if c.stack.tos().value.words:
         # Match to the output stack of our last word in this definition.
@@ -211,10 +213,10 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
         # Have to create a fake continuation for type matching.
         fake_c = AF_Continuation(stack = Stack())
-        for t in tos_output_sig:
+        for t in tos_output_sig.contents():
             fake_c.stack.push(StackObject(None, t))
 
-        output_type_name = tos_output_sig[-1].name
+        output_type_name = tos_output_sig.contents()[-1].name
         #print("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
         op, found = Type.find_op(op_name, fake_c, output_type_name)
 
