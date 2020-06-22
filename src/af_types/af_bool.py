@@ -29,7 +29,7 @@ def op_bool(c: AF_Continuation) -> None:
 
     c.stack.push(result)
 
-
+# TODO : issue #17 wait for created gerneralize type infer
 def optionally_infer_type_from_atom(c: AF_Continuation) -> StackObject:
     sobj1 = c.stack.pop()
     sobj2 = c.stack.tos()
@@ -95,6 +95,7 @@ Type.add_op(Operation('not', op_not, sig=TypeSignature([TBool],[TBool]) ), "Bool
 
 
 #   Bool dictionary
+Type.register_ctor('Bool',Operation('bool',op_bool),[TAny])
 Type.add_op(Operation('bool', op_bool, sig=TypeSignature([TAny],[TBool]) ))
 Type.add_op(Operation('==', op_equals, sig=TypeSignature([TAny,TAny],[TBool]) ))
 Type.add_op(Operation('!=', op_not_equals, sig=TypeSignature([TAny,TAny],[TBool]) ))

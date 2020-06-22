@@ -2,7 +2,7 @@
 af_types/__init__.py - Types for our language. What everything is built on.
 
 INTRO 5 : Types drive all ActorForth behavior and construction. ActorForth
-          execution context is based on the Continuation (state) plus the 
+          execution context is based on the Continuation (state) plus the
           Type behavior (words in the type dictionary) for whatever is on
           the top of the Stack in the Continuation.
 """
@@ -19,13 +19,13 @@ Type_name = str
 
 
 """
-INTRO 5.1 : The default execution handler (kind of an inter interpreter in 
-            FORTH parlance) simply takes a Continutation, looks up the 
+INTRO 5.1 : The default execution handler (kind of an inter interpreter in
+            FORTH parlance) simply takes a Continutation, looks up the
             Symbol in its list of Operations (ops_list) or the core (Any)
             dictionary if it can't be found there, and then calls the
             discovered Operation by passing the Continuation to it.
 
-            Most types only ever want to execute the words looked up in 
+            Most types only ever want to execute the words looked up in
             their dictionaries. Those types should just use this handler.
 
             But sometimes you want to manipulate those words rather than
@@ -41,15 +41,15 @@ def default_op_handler(cont): # Had to remove Python typing notation to get it t
 """
 INTRO 5.2 : A TypeDefinition is defined as a list of named Operations, ops_list,
             and its handler, op_handler, which defines what you want to
-            do with these named Operations when they're referenced. 
+            do with these named Operations when they're referenced.
 """
 @dataclass
 class TypeDefinition:
-    ops_list: Op_list 
+    ops_list: Op_list
     op_handler : Callable[["AF_Continuation"],None] = default_op_handler
 
 """
-INTRO 5.3 : The Type class holds all the TypeDefinitions in global 
+INTRO 5.3 : The Type class holds all the TypeDefinitions in global
             dictionaries along with their special Constructors (ctors).
 """
 class Type(AF_Type):
@@ -63,13 +63,13 @@ class Type(AF_Type):
     INTRO 5.5 : The core words in ActorForth are stored in the special
                 "Any" Type. This is the global dictionary for words.
     """
-    types["Any"] = TypeDefinition(ops_list = []) # Global dictionary. 
+    types["Any"] = TypeDefinition(ops_list = []) # Global dictionary.
 
     """
     INTRO 5.6 : Constructors (ctors) are special words that take one or
                 more objects from the Stack and create an instance of the
                 ctor's Type with them and then places the result on the
-                Stack. 
+                Stack.
 
                 It is through ctors that Atoms can become other useful
                 types.
@@ -90,7 +90,7 @@ class Type(AF_Type):
         if not Type.types.get(self.name, False):
             t_def = TypeDefinition(ops_list=[], op_handler=handler)
             Type.types[self.name] = t_def
-        ## Do we need this? super().__init__(self)      
+        ## Do we need this? super().__init__(self)
 
 
     def ops(self) -> Op_list:
@@ -108,8 +108,8 @@ class Type(AF_Type):
     def register_ctor(name: Type_name, op: Operation, input_sig: List["Type"]) -> None:
         # Ctors only have TypeSignatures that return their own Type.
         # Register the ctor in the Global dictionary.
-        op.sig = TypeSignature(input_sig,[Type("Any")]) ## HACK - why is this ANY rather than the Type_name???
-        Type.add_op(op)
+        op.sig = TypeSignature(input_sig,[Type(name)]) ## HACK - why is this ANY rather than the Type_name??? change to  'name'
+        # Type.add_op(op)
 
         # Append this ctor to our list of valid ctors.
         op_map = Type.ctors.get(name, None)
@@ -171,18 +171,18 @@ class Type(AF_Type):
     def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, bool]:
         type_def = Type.types.get(type_name, None)
         #print("Searching for op:'%s' in type: '%s'." % (name,type_name))
-        assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys()) 
+        assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys())
         name_found = False
         sigs_found : List[TypeSignature] = []
         if type_def:
-            op_list = type_def.ops_list  
+            op_list = type_def.ops_list
             #print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
             for op in op_list:
                 if op.name == name:
                     name_found = True
                     sigs_found.append(op.sig)
                     # Now try to match the input stack...
-                    # Should it be an exception to match the name but not the 
+                    # Should it be an exception to match the name but not the
                     # stack input signature? Probably so.
                     if op.sig.match_in(cont.stack):
 
@@ -199,9 +199,9 @@ class Type(AF_Type):
         return Operation("make_atom", make_atom, sig=TypeSignature([],[TAtom])), False
 
 
-    @staticmethod    
+    @staticmethod
     def op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, bool]:
-        tos = cont.stack.tos()        
+        tos = cont.stack.tos()
         op : Operation = Operation("invalid_result!", make_atom)
         sig : TypeSignature = TypeSignature([],[])
         found : bool = False
@@ -215,15 +215,15 @@ class Type(AF_Type):
             op, found = Type.find_op(name, cont)
 
         if tos is not Stack.Empty and not found:
-            # There's no such operation by that 'name' in existence 
+            # There's no such operation by that 'name' in existence
             # so let's find the default op for this type or else from the global dict
             # (as that's the make_atom op returned by default for Type.find_op.)
             # print("Searching for default specialized for Type: %s." % tos.type.name)
-            op, found = Type.find_op('_', cont, tos.type.name)            
+            op, found = Type.find_op('_', cont, tos.type.name)
             op.name = name
 
         # print("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
-        return op, found            
+        return op, found
 
 
     def __eq__(self, type: object) -> bool:
@@ -239,7 +239,7 @@ class Type(AF_Type):
             return False
         if isinstance(type, Type):
             return self.name != type.name
-        return False        
+        return False
 
 
     def __str__(self) -> Type_name:
@@ -256,7 +256,7 @@ INTRO 5.7 : Stacks strictly contain StackObjects. Every StackObject
 @dataclass
 class StackObject:
     value: Any
-    type: Type 
+    type: Type
 
 
 """
@@ -280,7 +280,7 @@ TAny = Type("Any")
 #
 """
 INTRO 5.10 : make_atom is the primitive that takes a token and converts
-             it into an Atom on the Stack. 
+             it into an Atom on the Stack.
 
              Continue to operation.py for INTRO stage 6.
 """
@@ -291,4 +291,3 @@ def make_atom(c: AF_Continuation) -> None:
         c.symbol = Symbol("Unknown", Location())
     c.stack.push(StackObject(c.symbol.s_id,TAtom))
 #Type.add_op(Operation('_', make_atom), TypeSignature([],[TAtom]))
-
