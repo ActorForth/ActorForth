@@ -3,7 +3,7 @@ import sys
 
 from parser import Parser, Type
 
-test_file_name = "samples/fib.a4"
+test_file_name = "samples/aspire/fib.a4"
 test_token_list = [('fib', 1, 1),
  (':', 1, 5),
  ('nat', 1, 7),

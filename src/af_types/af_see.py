@@ -21,14 +21,13 @@ def see_handler(cont: AF_Continuation) -> None:
             print(i.name, i.sig)
     else:
         print("See: Failed to find word {}".format(symbol_id))
-        
+
     cont.stack.pop()
-    
-            
+
+
 TSee = Type("See",see_handler)
 
 def op_see(c: AF_Continuation) -> None:
     s = Stack()
     c.stack.push(StackObject(s,TSee))
-Type.register_ctor('See', Operation('see',op_see),[])
-
+Type.add_op(Operation('see', op_see, sig=TypeSignature([],[]) ))
