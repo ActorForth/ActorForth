@@ -120,12 +120,6 @@ class Operation:
         Also returns a secondary Boolean that is true only if the output matches the 
         output type signature declared for this Operation.
         """
-
-        def backwards(i):
-            j=i.copy()
-            j.reverse()
-            return j
-
         matches: bool = True
         sig_out: Stack = Stack()
         if sig_in is None: sig_out = self.sig.stack_in.copy()
@@ -142,7 +136,7 @@ class Operation:
             if in_type == "Any":
                 in_type = match_type
 
-            print("in_type:%s =?= match_type:%s : %s" % (in_type,match_type,in_type==match_type))
+            print("in_type:%s =?= match_type:%s : %s" % (in_type, match_type, in_type==match_type) )
 
             if in_type != match_type: matches = False
 
@@ -159,11 +153,11 @@ class Operation:
         for i in range(len(test_match_out)):
             x = test_match_out.pop()
             y = test_sig_out.pop()
-            if x != y: 
+            if x != y:
                 matches = False
                 print("sig_out: %s != stack_out: %s" % (sig_out, self.sig.stack_out))
 
-        print("Returning output signature: %s" % sig_out)
+        print("Returning output signature: %s with matching = %s." % (sig_out,matches))
         return sig_out, matches
   
 
