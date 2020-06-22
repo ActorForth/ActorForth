@@ -14,4 +14,29 @@ class OperationTests(unittest.TestCase):
 
         sig, match = op.check_stack_effect()
         assert sig == Stack([TInt])
-        assert match == False
+        assert match == True
+
+        sig, match = op.check_stack_effect(Stack([TBool, TInt]))
+        assert sig == Stack([TBool, TInt])
+        assert match == True
+
+    def test_any_stack_effect(self) -> None:
+        op = Operation("nop", op_nop, sig=TypeSignature([TAny],[TInt]))
+
+        check_out = Stack([TInt])
+
+        sig, match = op.check_stack_effect()
+        assert sig == check_out
+        assert match == True
+
+        sig, match = op.check_stack_effect(Stack([TBool]))
+        assert sig == check_out
+        assert match == True
+
+        sig, match = op.check_stack_effect(Stack([TAny]))
+        assert sig == check_out
+        assert match == True
+
+        sig, match = op.check_stack_effect(Stack([TBool, TInt]))
+        assert sig == Stack([TBool, TInt])
+        assert match == True

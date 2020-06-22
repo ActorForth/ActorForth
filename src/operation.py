@@ -26,7 +26,6 @@ class TypeSignature:
         self.stack_out : Stack = Stack(out_seq)
 
 
-
     # Produces a mapped type sequence that accounts for "Any" types.
     def map_from_input_sig(self, sig: Sequence["AF_Type"]) -> Sequence["AF_Type"]:
         result_sig : List["AF_Type"] = []
@@ -43,6 +42,7 @@ class TypeSignature:
             assert m_s == in_s, "Error! Input Type '%s' not equivalent to Sig Type '%s' for In Stack = %s matched with Sig %s." % (in_s, m_s, self.stack_in, sig)
             result_sig.insert(0,m_s)
         return result_sig
+
 
     # Used by the runtime interpreter to check for mathing types for words.
     def match_in(self, stack: Stack) -> bool:
@@ -119,16 +119,6 @@ class Operation:
 
         Also returns a secondary Boolean that is true only if the output matches the 
         output type signature declared for this Operation.
-
-        In [65]: def backwards(i): 
-        ...:     j=i.copy() 
-        ...:     j.reverse() 
-        ...:     return j 
-
-
-        In [68]: [(n,m) for (n,m) in itertools.zip_longest(backwards(i),backwards(j))]                                                                              
-        Out[68]: [(3, 'e'), (2, 'd'), (1, 'c'), (None, 'b'), (None, 'a')]
-
         """
 
         def backwards(i):
@@ -136,7 +126,7 @@ class Operation:
             j.reverse()
             return j
 
-        matches: bool = False
+        matches: bool = True
         sig_out: Stack = Stack()
         if sig_in is None: sig_out = self.sig.stack_in.copy()
         else: sig_out = sig_in.copy()
@@ -144,12 +134,37 @@ class Operation:
 
         # Consume as much of the input as our input signature requires.
         for i in range(len(self.sig.stack_in)):
-            pass
+            in_type = sig_out.pop()
+            match_type = consume_in.pop()
 
+            if match_type == "Any":
+                match_type = in_type
+            if in_type == "Any":
+                in_type = match_type
 
+            print("in_type:%s =?= match_type:%s : %s" % (in_type,match_type,in_type==match_type))
 
+            if in_type != match_type: matches = False
 
-        return sig_out, matches     
+        # Tack on the output stack effect that we're claiming.
+        out_sig = self.sig.stack_out.contents()
+        for i in out_sig:
+            print("adding output type:%s" % i)
+            sig_out.push(i)
+
+        # Make sure we match on the final output signature. But only up until as
+        # much as the output signature declares. Extra deeper items are ok.
+        test_match_out = self.sig.stack_out.copy()
+        test_sig_out = sig_out.copy()
+        for i in range(len(test_match_out)):
+            x = test_match_out.pop()
+            y = test_sig_out.pop()
+            if x != y: 
+                matches = False
+                print("sig_out: %s != stack_out: %s" % (sig_out, self.sig.stack_out))
+
+        print("Returning output signature: %s" % sig_out)
+        return sig_out, matches
   
 
 #Op_list = List[Tuple[Operation, TypeSignature]]

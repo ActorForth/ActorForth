@@ -95,7 +95,23 @@ class StackTests(unittest.TestCase):
         self.assertEqual(len(s),0)
         self.assertEqual(len(r),0)
 
+    def test_stack_equality(self) -> None:
+        s = Stack()
+        r = Stack()
+        q = Stack()
+        p = Stack()
 
+        s.push(1)
+        s.push(2)
+        r.push(1)
+        r.push(2)
+        q.push(1)
+        q.push(1)
+        p.push(1)
+
+        assert s == r
+        assert s != q
+        assert s != p
 
 class KevlinsStackTest(unittest.TestCase):
     """

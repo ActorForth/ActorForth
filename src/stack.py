@@ -79,6 +79,9 @@ class Stack(KStack):
     def __str__(self):
         return str(self.contents())
 
+    def __repr__(self):
+        return self.__str__()
+
     def __init__(self, in_seq: Sequence[Any] = None):
         self.reset()
         super(Stack, self).__init__()
@@ -200,5 +203,5 @@ class Stack(KStack):
         if not isinstance(s, Stack):
             return NotImplemented
 
-        if len(s) != len(s): return False
+        if len(self) != len(s): return False
         return all([(a==b) for (a,b) in zip(self.contents(), s.contents())])
