@@ -16,7 +16,8 @@ def op_int(c: AF_Continuation) -> None:
     assert i > -999999999999, "int underflow < -999999999999"
     c.stack.push(StackObject(i,TInt))
 #   Int dictionary
-Type.add_op(Operation('int',op_int, sig=TypeSignature([TAtom],[TInt]) ))
+Type.register_ctor('Int',Operation('int',op_int),[TAny])
+Type.add_op(Operation('int',op_int, sig=TypeSignature([TAny],[TInt]) ))
 
 
 # Operations
