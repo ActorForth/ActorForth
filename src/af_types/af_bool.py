@@ -30,28 +30,28 @@ def op_bool(c: AF_Continuation) -> None:
     c.stack.push(result)
 
 # TODO : issue #17 wait for created gerneralize type infer
-# def optionally_infer_type_from_atom(c: AF_Continuation) -> StackObject:
-#     sobj1 = c.stack.pop()
-#     sobj2 = c.stack.tos()
-#
-#     # If the top item is an Atom but the second item
-#     # is not, then automatically infer the top item's
-#     # type from the second item then perform the comparison.
-#     if sobj1.type is TAtom and sobj2 is not TAtom:
-#         #print("Trying to infer %s type from %s given the following: %s." % (sobj2.type, sobj1, [o.type for o in s.contents()]))
-#         # Pass along the entire list of types from the stack
-#         # in case the type's ctor takes multiple parameters.
-#         ##ctor = sobj2.type.find_ctor([o.type for o in s.contents()])
-#         ctor = Type.find_ctor( (sobj2.type.name), [o.type for o in c.stack.contents()] )
-#         assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.type, sobj1)
-#         # Call the ctor and put its result on the stack.
-#         c.stack.push(sobj1)
-#         ctor(c)
-#         sobj1 = c.stack.pop()
-#         #print("Converted from %s to %s." % (sobj1,s.tos().type))
-#         #print("New stack is %s." % s.contents())
-#
-#     return sobj1
+def optionally_infer_type_from_atom(c: AF_Continuation) -> StackObject:
+    sobj1 = c.stack.pop()
+    sobj2 = c.stack.tos()
+
+    # If the top item is an Atom but the second item
+    # is not, then automatically infer the top item's
+    # type from the second item then perform the comparison.
+    if sobj1.type is TAtom and sobj2 is not TAtom:
+        #print("Trying to infer %s type from %s given the following: %s." % (sobj2.type, sobj1, [o.type for o in s.contents()]))
+        # Pass along the entire list of types from the stack
+        # in case the type's ctor takes multiple parameters.
+        ##ctor = sobj2.type.find_ctor([o.type for o in s.contents()])
+        ctor = Type.find_ctor( (sobj2.type.name), [o.type for o in c.stack.contents()] )
+        assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.type, sobj1)
+        # Call the ctor and put its result on the stack.
+        c.stack.push(sobj1)
+        ctor(c)
+        sobj1 = c.stack.pop()
+        #print("Converted from %s to %s." % (sobj1,s.tos().type))
+        #print("New stack is %s." % s.contents())
+
+    return sobj1
 
 
 def op_equals(c: AF_Continuation) -> None:
@@ -95,13 +95,11 @@ Type.add_op(Operation('not', op_not, sig=TypeSignature([TBool],[TBool]) ), "Bool
 
 
 #   Bool dictionary
-Type.register_ctor('Bool',Operation('bool',op_bool),[TAtom])
-Type.register_ctor('Bool',Operation('bool',op_bool),[TBool])
-Type.register_ctor('Bool',Operation('==',op_equals),[TAny,TAny])
-Type.register_ctor('Bool',Operation('!=',op_not_equals),[TAny,TAny])
-Type.register_ctor('Bool',Operation('<',op_less_than),[TAny,TAny])
-Type.register_ctor('Bool',Operation('>',op_greater_than),[TAny,TAny])
-Type.register_ctor('Bool',Operation('<=',op_less_than_or_equal_to),[TAny,TAny])
-Type.register_ctor('Bool',Operation('>=',op_greater_than_or_equal_to),[TAny,TAny])
-
-#Type.add_op('int', op_int, TypeSignature([TAtom],[TInt]))
+Type.register_ctor('Bool',Operation('bool',op_bool),[TAny])
+Type.add_op(Operation('bool', op_bool, sig=TypeSignature([TAny],[TBool]) ))
+Type.add_op(Operation('==', op_equals, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('!=', op_not_equals, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('<', op_less_than, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('>', op_greater_than, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('<=', op_less_than_or_equal_to, sig=TypeSignature([TAny,TAny],[TBool]) ))
+Type.add_op(Operation('>=', op_greater_than_or_equal_to, sig=TypeSignature([TAny,TAny],[TBool]) ))
