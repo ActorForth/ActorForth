@@ -18,4 +18,12 @@ combo : Int -> Bool;
 	double
 	samenum.
 
-resume	
+multiinput : Bool Int Int Int -> Int ;
++ == == .
+
+False bool 1 int 1 int 1 int
+
+noinputnooutput : -> ;
+stack .
+
+resume

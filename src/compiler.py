@@ -105,15 +105,15 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
     """
     #print("finishing word compilation!")
     op = c.stack.pop().value
-    op.sig = c.stack.pop().value
-    Type.add_op(op)
     pop_value = c.stack.pop().value
     op.sig = pop_value
-
     s_in = pop_value.stack_in
-    s_in_tos = s_in.tos()
-    Type.add_op(op, str(s_in_tos))
-    # TODO Pat  what if s_in.tos() empty
+
+    if s_in.is_empty() :
+        Type.add_op(op)
+    else:
+        s_in_tos = s_in.tos()
+        Type.add_op(op, str(s_in_tos))
 
     # new_op = Operation(op.name, op_compile_word, [op])
     # new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
