@@ -100,7 +100,7 @@ class TestExecution(unittest.TestCase):
         code =  """
                 multiinput : Bool Int Int Int -> Int ;
                 + == == .
-                 1 int 1 int 1 int
+                False bool 1 int 1 int 1 int
                 """
         stack = Stack()
         cont = Continuation(stack)
