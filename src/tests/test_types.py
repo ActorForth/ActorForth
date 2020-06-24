@@ -89,6 +89,62 @@ class TestTypeSignature(unittest.TestCase):
         op, found = Type.op("not found", cont)
         assert not found
 
+    def test_op_with_type_multi_input_signature(self) -> None:
+
+        stack = Stack()
+        cont = Continuation(stack)
+        cont.stack.push(StackObject("tparm", TParm1))
+        cont.stack.push(StackObject("tparm", TParm1))
+        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([TParm1,TParm1],[]) )) #, "Test")
+
+        print_words()
+
+        op, found = Type.op("test", cont ) #, "Test")
+
+        assert found
+        assert op.sig == TypeSignature([TParm1,TParm1],[])
+
+        op, found = Type.op("not found", cont)
+        assert not found
+
+    def test_op_with_type_multi_input_multi_output_signature(self) -> None:
+
+        stack = Stack()
+        cont = Continuation(stack)
+        cont.stack.push(StackObject("ttest", TTest))
+        cont.stack.push(StackObject("tparm", TParm1))
+        cont.stack.push(StackObject("tparm", TParm1))
+
+        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([TTest,TParm1,TParm1],[TTest,TParm1]) )) #, "Test")
+
+        print_words()
+
+        op, found = Type.op("test", cont ) #, "Test")
+
+        assert found
+        assert op.sig == TypeSignature([TTest,TParm1,TParm1],[TTest,TParm1])
+
+        op, found = Type.op("not found", cont)
+        assert not found
+
+    def test_op_with_type_multi_output_signature(self) -> None:
+
+        stack = Stack()
+        cont = Continuation(stack)
+
+
+        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([],[TTest,TParm1]) )) #, "Test")
+
+        print_words()
+
+        op, found = Type.op("test", cont ) #, "Test")
+
+        assert found
+        assert op.sig == TypeSignature([],[TTest,TParm1])
+
+        op, found = Type.op("not found", cont)
+        assert not found
+
     def test_op_with_wrong_type_signature(self) -> None:
         stack = Stack()
         stack.push(StackObject("tparm", TTest))
@@ -98,23 +154,22 @@ class TestTypeSignature(unittest.TestCase):
         with self.assertRaises( Exception ):
             Type.op("test", stack)
             # Never get here -> print("op='%s', sig='%s', flag='%s', found='%s'" % (op,sig,flag,found))
-        
+
     def test_op_with_no_type_signature(self) -> None:
         def stack_fun(s: Stack) -> None:
             s.push(42)
 
-        s = Stack()        
-        c = Continuation(s)    
+        s = Stack()
+        c = Continuation(s)
 
         Type.add_op(Operation("test", stack_fun, sig = TypeSignature([],[]) ) )
-
         op, found = Type.op("test", c)
 
         assert found
         assert op.sig == TypeSignature([],[])
 
 
-class TestGenericTypeStuff(unittest.TestCase):       
+class TestGenericTypeStuff(unittest.TestCase):
 
     def setUp(self) -> None:
         self.s = Stack()
@@ -126,7 +181,7 @@ class TestGenericTypeStuff(unittest.TestCase):
         make_atom(self.c)
         item = self.c.stack.pop()
         assert item.value == "test"
-        assert item.type == TAtom 
+        assert item.type == TAtom
 
     def test_op_print(self) -> None:
         self.c.stack.push(StackObject("test", TAtom))
@@ -139,7 +194,7 @@ class TestGenericTypeStuff(unittest.TestCase):
         item1 = self.c.stack.pop()
         item2 = self.c.stack.pop()
         assert item1 == item2
-        
+
     def test_op_swap(self) -> None:
         self.c.symbol.s_id = "first"
         make_atom(self.c)
@@ -171,4 +226,3 @@ class TestGenericTypeStuff(unittest.TestCase):
         assert item2.value == item4.value
         assert item1.value != item2.value
         assert self.c.stack.depth() == 0
-
