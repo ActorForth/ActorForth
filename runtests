@@ -3,3 +3,6 @@ clear
 #export PYTHONPATH=$(pwd)/src
 mypy --ignore-missing-imports src/*.py
 pytest -v --cov-report html --cov-branch --cov-report term-missing  --cov=.
+
+#show test print output
+#pytest -v -s --cov-report html --cov-branch --cov-report term-missing  --cov=.

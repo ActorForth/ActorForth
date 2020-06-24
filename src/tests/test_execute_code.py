@@ -5,6 +5,13 @@ from copy import deepcopy
 from continuation import Continuation, Stack
 from interpret import *
 
+from af_types import StackObject, Type, TypeSignature, \
+                    make_atom, TAtom
+
+TBool = Type("Bool")
+TInt = Type("Int")
+
+
 class TestExecution(unittest.TestCase):
 
     def setUp(self) -> None:
@@ -38,7 +45,7 @@ class TestExecution(unittest.TestCase):
 
                 2 int double
                 """
-        assert self.execute(code) == 4        
+        assert self.execute(code) == 4
 
     @unittest.skip("Got a problem compiling double in combo.")
     def test_compile_combo(self) -> None:
@@ -71,3 +78,38 @@ class TestExecution(unittest.TestCase):
                 5 int double
                 """
         assert self.execute(code) == 10
+
+    def test_compile_no_input_no_output(self) -> None:
+        code =  """
+                noinputnooutput : -> ;
+                stack .
+                """
+        stack = Stack()
+        cont = Continuation(stack)
+        cont = interpret(cont, io.StringIO(code))
+
+        op, found = Type.op("noinputnooutput", cont ) #, "Test")
+
+        assert found
+        assert op.sig == TypeSignature([],[])
+
+        op, found = Type.op("not found", cont)
+        assert not found
+
+    def test_compile_multi_input_multi_output(self) -> None:
+        code =  """
+                multiinput : Bool Int Int Int -> Int ;
+                + == == .
+                 1 int 1 int 1 int
+                """
+        stack = Stack()
+        cont = Continuation(stack)
+        cont = interpret(cont, io.StringIO(code))
+
+        op, found = Type.op("multiinput", cont ) #, "Test")
+
+        assert found
+        assert op.sig == TypeSignature([TBool,TInt,TInt,TInt],[TInt])
+
+        op, found = Type.op("not found", cont)
+        assert not found
