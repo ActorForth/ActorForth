@@ -14,6 +14,18 @@ from stack import Stack, KStack
 from af_types import AF_Continuation, Symbol, TAny
 from operation import Operation, op_nop
 
+import logging
+import sys
+
+root_log = logging.getLogger()
+root_log.setLevel(logging.DEBUG)
+
+ch = logging.StreamHandler(sys.stdout)
+ch.setLevel(logging.DEBUG)
+FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
+formatter = logging.Formatter(FORMAT)
+ch.setFormatter(formatter)
+root_log.addHandler(ch)
 
 @dataclass
 class Continuation(AF_Continuation):
@@ -31,8 +43,9 @@ class Continuation(AF_Continuation):
     INTRO 3.2 : We also track a Debug state.
     """
 
-    debug : bool = True
+    debug : bool = False
     cdepth : int = 0        # Depth of calls for debug tab output.
+    log : logging.Logger = root_log
 
 
     """

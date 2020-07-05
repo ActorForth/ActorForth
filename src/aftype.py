@@ -5,6 +5,7 @@ INTRO 4 : This is mainly here to satisfy module dependencies in the python
           implementation and serve as a pre-requisite for af_types/__init__.py.
 """
 
+import logging
 from typing import Callable, List, Optional, Any
 from dataclasses import dataclass
 
@@ -56,3 +57,4 @@ class AF_Continuation:
 
     debug : bool = False
     cdepth : int = 0        # Depth of calls for debug tab output.
+    log : logging.Logger = logging.getLogger()

@@ -14,6 +14,7 @@ from continuation import Continuation, Stack
 from interpret import interpret
 
 from af_types.af_any import print_words
+from af_types.af_debug import op_debug, op_on, op_off
 
 def print_continuation_stats(cont : Continuation):
     print("")
@@ -37,12 +38,14 @@ def setup_stream_for_interpreter(force_stdio: bool = False) -> Tuple[str, TextIO
     return filename, handle
 
 
-def afs(code: str) -> Tuple[str, TextIO]:
+def afc(code: str) -> TextIO:
     """
-    Given a string of ActorForth code, returns a temp name and a file stream 
+    Given a string of ActorForth code, returns a file stream 
     that can be executed by the interpreter.
+
+    cont = interpret(cont, afc("1 int 2 int +"))
     """
-    return "local input", StringIO(code)
+    return StringIO(code)
 
 
 """
@@ -51,6 +54,10 @@ INTRO 1.2 : Establish our stack and build our stateful Continutaion from it.
 
 stack = Stack()
 cont = Continuation(stack)
+
+# Set Debug on or off initially.
+op_debug(cont)
+op_off(cont)
 
 if __name__ == "__main__":
 
@@ -102,7 +109,10 @@ if __name__ == "__main__":
             """
             print( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
             print( "TRACEBACK : %s" % traceback.format_exc() )
-            cont.debug = True
+            #cont.debug = True
+            op_debug(cont)
+            op_on(cont) 
+
             print_continuation_stats(cont)
             filename, handle = setup_stream_for_interpreter(force_stdio = True)
 

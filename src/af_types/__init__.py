@@ -7,6 +7,7 @@ INTRO 5 : Types drive all ActorForth behavior and construction. ActorForth
           the top of the Stack in the Continuation.
 """
 
+import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
@@ -14,6 +15,11 @@ from dataclasses import dataclass
 from stack import Stack
 from aftype import AF_Type, AF_Continuation, Symbol, Location
 from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
+
+
+
+
+
 
 Type_name = str
 
@@ -121,8 +127,8 @@ class Type(AF_Type):
     @staticmethod
     def find_ctor(name: Type_name, inputs : List["Type"]) -> Optional[Operation]:
         # Given a stack of input types, find the first matching ctor.
-        #print("Attempting to find a ctor for Type '%s' using the following input types: %s." % (self.name, inputs))
-        #print("Type '%s' has the following ctors: %s." % (self.name, self.ctors))
+        logging.debug("Attempting to find a ctor for Type '%s' using the following input types: %s." % (name, inputs))
+        logging.debug("Type '%s' has the following ctors: %s." % (name, Type.ctors))
         for type_sig in Type.ctors.get(name,[]):
 
             matching = False
@@ -173,13 +179,13 @@ class Type(AF_Type):
     def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name) -> Tuple[Operation, bool]:
 
         type_def : TypeDefinition = Type.types[type_name] # (type_name,Type.types["Any"])
-        print("Searching for op:'%s' in type: '%s'." % (name,type_name))
+        cont.log.debug("Searching for op:'%s' in type: '%s'." % (name,type_name))
         assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys())
         name_found = False
         sigs_found : List[TypeSignature] = []
         if type_def:
             op_list = type_def.ops_list
-            print("\top_list = %s" % [(op.name,op.sig.stack_in) for op in op_list])
+            cont.log.debug("\top_list = %s" % [(op.name,op.sig.stack_in) for op in op_list])
             for op in op_list:
                 if op.name == name:
                     name_found = True
@@ -191,7 +197,7 @@ class Type(AF_Type):
                     ### TIDO : start using operation.check_stack_effect!!!
                     if op.sig.match_in(cont.stack):
 
-                        print("Found! Returning %s, %s, %s" % (op, op.sig, True))
+                        cont.log.debug("Found! Returning %s, %s, %s" % (op, op.sig, True))
                         return op, True
         # Not found.
         if name_found:
@@ -199,7 +205,7 @@ class Type(AF_Type):
             # This will happen if names match but stacks don't.
             raise Exception("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
 
-        print ("Not found!")
+        cont.log.debug("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
         return Operation("make_atom", make_atom, sig=TypeSignature([],[TAtom])), False
 
@@ -227,7 +233,7 @@ class Type(AF_Type):
             op, found = Type.find_op('_', cont, tos.type.name)
             op.name = name
 
-        # print("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
+        logging.debug("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
         return op, found
 
 
