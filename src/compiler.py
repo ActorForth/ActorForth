@@ -233,7 +233,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
     if not found:
         # Next try to match up with an op for Any type.
-        op, found = Type.find_op(op_name, c)
+        op, found = Type.find_op(op_name, c, "Any")
 
 
     if not found:

@@ -43,7 +43,7 @@ class Symbol:
             return symbol.s_id == self.s_id
         return False
 
-
+@dataclass
 class AF_Type:
     name : str
 

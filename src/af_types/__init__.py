@@ -46,7 +46,8 @@ INTRO 5.2 : A TypeDefinition is defined as a list of named Operations, ops_list,
 @dataclass
 class TypeDefinition:
     ops_list: Op_list
-    op_handler : Callable[["AF_Continuation"],None] = default_op_handler
+    op_handler : Callable[["AF_Continuation"],None] = default_op_handler 
+
 
 """
 INTRO 5.3 : The Type class holds all the TypeDefinitions in global
@@ -166,17 +167,19 @@ class Type(AF_Type):
         #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
 
 
-    # Returns the first matching operation for this named type.
+    # Returns the first matching operation for this named type, defaulting to "make_atom"
+    # and a boolean indicating whether a named operation was found.
     @staticmethod
-    def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, bool]:
-        type_def = Type.types.get(type_name, None)
-        #print("Searching for op:'%s' in type: '%s'." % (name,type_name))
+    def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name) -> Tuple[Operation, bool]:
+
+        type_def : TypeDefinition = Type.types[type_name] # (type_name,Type.types["Any"])
+        print("Searching for op:'%s' in type: '%s'." % (name,type_name))
         assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys())
         name_found = False
         sigs_found : List[TypeSignature] = []
         if type_def:
             op_list = type_def.ops_list
-            #print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
+            print("\top_list = %s" % [(op.name,op.sig.stack_in) for op in op_list])
             for op in op_list:
                 if op.name == name:
                     name_found = True
@@ -184,17 +187,19 @@ class Type(AF_Type):
                     # Now try to match the input stack...
                     # Should it be an exception to match the name but not the
                     # stack input signature? Probably so.
+
+                    ### TIDO : start using operation.check_stack_effect!!!
                     if op.sig.match_in(cont.stack):
 
-                        #print("Found! Returning %s, %s, %s" % (op, sig, True))
+                        print("Found! Returning %s, %s, %s" % (op, op.sig, True))
                         return op, True
         # Not found.
         if name_found:
             # Is this what we want to do?
             # This will happen if names match but stacks don't.
-            raise Exception("Continuation doesn't match Op '%s' with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
+            raise Exception("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
 
-        #print ("Not found!")
+        print ("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
         return Operation("make_atom", make_atom, sig=TypeSignature([],[TAtom])), False
 
@@ -212,7 +217,7 @@ class Type(AF_Type):
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
-            op, found = Type.find_op(name, cont)
+            op, found = Type.find_op(name, cont, "Any")
 
         if tos is not Stack.Empty and not found:
             # There's no such operation by that 'name' in existence

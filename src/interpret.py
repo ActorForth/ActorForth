@@ -58,10 +58,11 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             """
                 
         except Exception as x:
-            print("Interpreter Exception Type: %s : %s" % (type(x),x) )
-            print( "TRACEBACK : %s" % traceback.format_exc() )
-            print("Interpreting symbol %s" % cont.symbol)
-            print(cont)
+            # repl.py does this exact thing so this is redundant for now.
+            # print("Interpreter Exception Type: %s : %s" % (type(x),x) )
+            # print( "TRACEBACK : %s" % traceback.format_exc() )
+            # print("Interpreting symbol %s" % cont.symbol)
+            # print(cont)
 
             raise
         if prompt: print(prompt,end='',flush=True)    
