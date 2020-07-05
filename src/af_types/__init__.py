@@ -137,19 +137,19 @@ class Type(AF_Type):
                 for ctor_type in type_sig[0]:
                     in_type = types.pop(0)
                     if in_type.name == "Any" or ctor_type == "Any":
-                        #print("Matching ctor for Any type.")
+                        logging.debug("Matching ctor for 'Any' type.")
                         matching = True
                         continue
                     if in_type == ctor_type:
-                        #print("Matching ctor for specific %s type." % in_type)
+                        logging.debug("Matching ctor for specific '%s' type." % in_type)
                         matching = True
                     else:
-                        #print("Failed match for %s and %s types." % (in_type, ctor_type))
+                        logging.debug("Failed match for '%s' and '%s' types." % (in_type, ctor_type))
                         matching = False
                         break
             except IndexError:
                 # wasn't enough on the stack to match
-                #print("Ran out of inputs to match a ctor for %s type." % self.name)
+                logging.debug("Ran out of inputs to match a ctor for '%s' type." % name)
                 matching = False
                 break
 
@@ -170,7 +170,7 @@ class Type(AF_Type):
 
         #print("\n\nADD_OP type_def type(%s) = %s." % (type(type_def), str(type_def)))
 
-        #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
+        logging.debug("Added Op:'%s' to %s context : %s." % (op,type_name,type_def))
 
 
     # Returns the first matching operation for this named type, defaulting to "make_atom"
@@ -233,7 +233,7 @@ class Type(AF_Type):
             op, found = Type.find_op('_', cont, tos.type.name)
             op.name = name
 
-        logging.debug("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
+        cont.log.debug("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
         return op, found
 
 
@@ -297,7 +297,7 @@ INTRO 5.10 : make_atom is the primitive that takes a token and converts
 """
 # Atom needs to take the symbol name to push on the stack.
 def make_atom(c: AF_Continuation) -> None:
-    #print("make_atom c.symbol = %s" % c.symbol)
+    c.log.debug("make_atom c.symbol = %s" % c.symbol)
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
     c.stack.push(StackObject(c.symbol.s_id,TAtom))

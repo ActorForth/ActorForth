@@ -2,6 +2,7 @@
 #   compiler.py     - Building new words/types for our language.
 #
 
+import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
 
@@ -134,7 +135,7 @@ def _indent(c: AF_Continuation) -> str:
 
 # For executing COMPILE TIME words only! 
 def compilation_word_handler(c: AF_Continuation) -> bool:
-    #print("compilation_word_handler")
+    c.log.debug("compilation_word_handler")
     # Lookup ONLY words for my specific type.
     assert c.symbol
     name = c.symbol.s_id
@@ -150,11 +151,11 @@ def compilation_word_handler(c: AF_Continuation) -> bool:
 
 
 def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
-    #print("\n\nstarting type_sig_handler")  
+    c.log.debug("\n\nstarting type_sig_handler")  
     handled = compilation_word_handler(c)
     out = "type_sig_handler for type_name='%s' : received for symbol: %s "
     if handled: out += "HANDLED by compilation_word_handler."
-    #print(out % (type_name, c.symbol))
+    c.log.debug(out % (type_name, c.symbol))
     if handled: return 
 
     #
@@ -181,12 +182,12 @@ def compile_word_handler(c: AF_Continuation) -> None:
     Given an Op_name, place it in the list of our Operation to be executed at runtime later.
     TODO: Confirm Type Signatures in & out of found words to enforce type safety.
     """
-    #print("compile_word_handler starting")
+    c.log.debug("compile_word_handler starting")
     handled = compilation_word_handler(c)
     if handled: return
 
     assert c.symbol
-    #print("looking up symbol.s_id = %s" % c.symbol.s_id)
+    c.log.debug("looking up symbol.s_id = %s" % c.symbol.s_id)
     op_name = c.symbol.s_id
     found = False
 
@@ -199,14 +200,14 @@ def compile_word_handler(c: AF_Continuation) -> None:
         # Match to the output stack of our last word in this definition.
         words = c.stack.tos().value.words 
         tos_output_sig = words[-1].sig.stack_out
-        #print("Match to prior word's output sig: %s" % tos_output_sig)
+        c.log.debug("Match to prior word's output sig: %s" % tos_output_sig)
 
     else:
         # Match to the input stack of the input defintion of our word.
         op_swap(c)
         tos_output_sig = c.stack.tos().value.stack_in
         op_swap(c)
-        #print("Match to current word's input sig: %s" % tos_output_sig)
+        c.log.debug("Match to current word's input sig: %s" % tos_output_sig)
 
     if len(tos_output_sig):
         # First try to match up with an op specialized for this type.
@@ -217,7 +218,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
             fake_c.stack.push(StackObject(None, t))
 
         output_type_name = tos_output_sig.contents()[-1].name
-        #print("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
+        c.log.debug("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
         op, found = Type.find_op(op_name, fake_c, output_type_name)
 
         ### HACK HACK
@@ -247,43 +248,41 @@ def compile_word_handler(c: AF_Continuation) -> None:
     if found:
         c.stack.tos().value.add_word(op)
     else:
-        print("FAILED TO FIND WORD TO COMPILE %s" % c.symbol.s_id )
+        c.log.debug("FAILED TO FIND WORD TO COMPILE %s" % c.symbol.s_id )
 
-        print("Compile as literal")
+        c.log.debug("Compile as literal")
         #assert False   
         def curry_make_atom(s, func = make_atom ):
             def compiled_make_atom( c: AF_Continuation ):
                 c.symbol = s
                 return func(c)
         new_op = Operation(op_name, curry_make_atom(op_name), sig=TypeSignature([],[TAtom]))
-        print("New anonymous function: %s" % new_op)
+        c.log.debug("New anonymous function: %s" % new_op)
         c.stack.tos().value.add_word( new_op )
 
-        #print("compile_word_handler ending")     
-
-        ### MERGE CONFLICT HERE c.stack.tos().value.add_word(Operation(c.symbol.s_id, make_atom))
-        # assert False   
+        c.log.debug("compile_word_handler ending")     
 
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
-    #print("\nop_execute_compiled_word c.stack.contents = %s." % c.stack.contents())
+    c.log.debug("\nop_execute_compiled_word c.stack.contents = %s." % c.stack.contents())
     op = c.op
     symbol = c.symbol
     words = op.words
     doutput = _indent(c) + op.name + " : "
-    #print("\tExecuting %s words for %s : %s." % (len(words), op.name, words))
+
+    c.log.debug("\tExecuting %s words for %s : %s." % (len(words), op.name, words))
     for word in words:
         c.cdepth += 1
         doutput += "\n%s%s" % (_indent(c),word)
-        #print("\n\t\tword: %s" % word)
+        c.log.debug("\n\t\tword: %s" % word)
         c.op = word
         c.symbol = Symbol(word.name, Location())
         word(c)
         c.cdepth -= 1
-        #print("\n\t\t%s c.stack.contents = %s." % (word,c.stack.contents()))
+        c.log.debug("\n\t\t%s c.stack.contents = %s." % (word,c.stack.contents()))
     
     if c.debug:
-        print(doutput)
+        c.log.debug(doutput)
 
     c.op = op
     c.symbol = symbol

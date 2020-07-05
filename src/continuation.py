@@ -18,10 +18,10 @@ import logging
 import sys
 
 root_log = logging.getLogger()
-root_log.setLevel(logging.DEBUG)
+root_log.setLevel(logging.WARNING)
 
 ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.DEBUG)
+ch.setLevel(logging.WARNING)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 formatter = logging.Formatter(FORMAT)
 ch.setFormatter(formatter)

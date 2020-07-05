@@ -107,9 +107,10 @@ if __name__ == "__main__":
             
             INTRO 1.6 : Continue in interpret.py for INTRO stage 2.
             """
-            print( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
-            print( "TRACEBACK : %s" % traceback.format_exc() )
-            #cont.debug = True
+            cont.log.error( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
+            cont.log.error( "TRACEBACK : %s" % traceback.format_exc() )
+
+            # Turn debug on automatically.
             op_debug(cont)
             op_on(cont) 
 

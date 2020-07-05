@@ -38,7 +38,7 @@ def optionally_infer_type_from_atom(c: AF_Continuation) -> StackObject:
     # is not, then automatically infer the top item's
     # type from the second item then perform the comparison.
     if sobj1.type is TAtom and sobj2 is not TAtom:
-        #print("Trying to infer %s type from %s given the following: %s." % (sobj2.type, sobj1, [o.type for o in s.contents()]))
+        c.log.debug("Trying to infer %s type from %s given the following: %s." % (sobj2.type, sobj1, [o.type for o in c.stack.contents()]))
         # Pass along the entire list of types from the stack
         # in case the type's ctor takes multiple parameters.
         ##ctor = sobj2.type.find_ctor([o.type for o in s.contents()])
@@ -48,8 +48,8 @@ def optionally_infer_type_from_atom(c: AF_Continuation) -> StackObject:
         c.stack.push(sobj1)
         ctor(c)
         sobj1 = c.stack.pop()
-        #print("Converted from %s to %s." % (sobj1,s.tos().type))
-        #print("New stack is %s." % s.contents())
+        c.log.debug("Converted from %s to %s." % (sobj1,c.stack.tos().type))
+
 
     return sobj1
 
@@ -69,7 +69,7 @@ def op_not_equals(c: AF_Continuation) -> None:
 def op_less_than(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
-    print("is %s (%s) < %s (%s)?" % (sobj2.value, type(sobj2.value), sobj1.value, type(sobj1.value)))
+    c.log.debug("is %s (%s) < %s (%s)?" % (sobj2.value, type(sobj2.value), sobj1.value, type(sobj1.value)))
     c.stack.push(StackObject(sobj2.value < sobj1.value, TBool))
 
 def op_greater_than(c: AF_Continuation) -> None:
