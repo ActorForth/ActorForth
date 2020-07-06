@@ -55,11 +55,13 @@ INTRO 1.2 : Establish our stack and build our stateful Continutaion from it.
 stack = Stack()
 cont = Continuation(stack)
 
-# Set Debug on or off initially.
-op_debug(cont)
-op_off(cont)
+
 
 if __name__ == "__main__":
+
+    # Set Debug on or off initially.
+    op_debug(cont)
+    op_off(cont)
 
     print("ActorForth demo interpreter. ^C to exit.")
     print_words()

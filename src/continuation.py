@@ -21,7 +21,7 @@ root_log = logging.getLogger()
 root_log.setLevel(logging.WARNING)
 
 ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.WARNING)
+ch.setLevel(logging.DEBUG)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 formatter = logging.Formatter(FORMAT)
 ch.setFormatter(formatter)

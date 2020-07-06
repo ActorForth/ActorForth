@@ -194,8 +194,9 @@ class Type(AF_Type):
                     # Should it be an exception to match the name but not the
                     # stack input signature? Probably so.
 
-                    ### TIDO : start using operation.check_stack_effect!!!
-                    if op.sig.match_in(cont.stack):
+                    ### TODO : start using operation.check_stack_effect!!!
+                    #if op.sig.match_in(cont.stack):
+                    if op.check_stack_effect(cont.stack):
 
                         cont.log.debug("Found! Returning %s, %s, %s" % (op, op.sig, True))
                         return op, True
@@ -203,6 +204,7 @@ class Type(AF_Type):
         if name_found:
             # Is this what we want to do?
             # This will happen if names match but stacks don't.
+            cont.log.debug("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
             raise Exception("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
 
         cont.log.debug("Not found!")
