@@ -2,7 +2,11 @@ clear
 # pytest -v --cov-report term-missing --cov=. --cov-config .coveragerc
 #export PYTHONPATH=$(pwd)/src
 mypy --ignore-missing-imports src/*.py
-pytest -v --cov-report html --cov-branch --cov-report term-missing  --cov=.
 
-#show test print output
-#pytest -v -s --cov-report html --cov-branch --cov-report term-missing  --cov=.
+# The $@ is all the command line parameters passed to this script.
+# They will be passed to pytest.
+#
+# Most likely parameter of interest would be -s which displays all string output.
+#
+
+pytest  -v --cov-report html --cov-branch --cov-report term-missing  --cov=. "$@"

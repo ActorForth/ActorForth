@@ -7,6 +7,7 @@ INTRO 5 : Types drive all ActorForth behavior and construction. ActorForth
           the top of the Stack in the Continuation.
 """
 
+import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional
 from dataclasses import dataclass
 
@@ -14,6 +15,11 @@ from dataclasses import dataclass
 from stack import Stack
 from aftype import AF_Type, AF_Continuation, Symbol, Location
 from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
+
+
+
+
+
 
 Type_name = str
 
@@ -46,7 +52,8 @@ INTRO 5.2 : A TypeDefinition is defined as a list of named Operations, ops_list,
 @dataclass
 class TypeDefinition:
     ops_list: Op_list
-    op_handler : Callable[["AF_Continuation"],None] = default_op_handler
+    op_handler : Callable[["AF_Continuation"],None] = default_op_handler 
+
 
 """
 INTRO 5.3 : The Type class holds all the TypeDefinitions in global
@@ -120,8 +127,8 @@ class Type(AF_Type):
     @staticmethod
     def find_ctor(name: Type_name, inputs : List["Type"]) -> Optional[Operation]:
         # Given a stack of input types, find the first matching ctor.
-        #print("Attempting to find a ctor for Type '%s' using the following input types: %s." % (self.name, inputs))
-        #print("Type '%s' has the following ctors: %s." % (self.name, self.ctors))
+        logging.debug("Attempting to find a ctor for Type '%s' using the following input types: %s." % (name, inputs))
+        logging.debug("Type '%s' has the following ctors: %s." % (name, Type.ctors))
         for type_sig in Type.ctors.get(name,[]):
 
             matching = False
@@ -130,19 +137,19 @@ class Type(AF_Type):
                 for ctor_type in type_sig[0]:
                     in_type = types.pop(0)
                     if in_type.name == "Any" or ctor_type == "Any":
-                        #print("Matching ctor for Any type.")
+                        logging.debug("Matching ctor for 'Any' type.")
                         matching = True
                         continue
                     if in_type == ctor_type:
-                        #print("Matching ctor for specific %s type." % in_type)
+                        logging.debug("Matching ctor for specific '%s' type." % in_type)
                         matching = True
                     else:
-                        #print("Failed match for %s and %s types." % (in_type, ctor_type))
+                        logging.debug("Failed match for '%s' and '%s' types." % (in_type, ctor_type))
                         matching = False
                         break
             except IndexError:
                 # wasn't enough on the stack to match
-                #print("Ran out of inputs to match a ctor for %s type." % self.name)
+                logging.debug("Ran out of inputs to match a ctor for '%s' type." % name)
                 matching = False
                 break
 
@@ -163,20 +170,22 @@ class Type(AF_Type):
 
         #print("\n\nADD_OP type_def type(%s) = %s." % (type(type_def), str(type_def)))
 
-        #print("Added Op:'%s' to %s context : %s." % (op,type,type_list))
+        logging.debug("Added Op:'%s' to %s context : %s." % (op,type_name,type_def))
 
 
-    # Returns the first matching operation for this named type.
+    # Returns the first matching operation for this named type, defaulting to "make_atom"
+    # and a boolean indicating whether a named operation was found.
     @staticmethod
-    def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, bool]:
-        type_def = Type.types.get(type_name, None)
-        #print("Searching for op:'%s' in type: '%s'." % (name,type_name))
+    def find_op(name: Op_name, cont: AF_Continuation, type_name: Type_name) -> Tuple[Operation, bool]:
+
+        type_def : TypeDefinition = Type.types[type_name] # (type_name,Type.types["Any"])
+        cont.log.debug("Searching for op:'%s' in type: '%s'." % (name,type_name))
         assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys())
         name_found = False
         sigs_found : List[TypeSignature] = []
         if type_def:
             op_list = type_def.ops_list
-            #print("\top_list = %s" % [(name,sig.stack_in) for (name, sig) in op_list])
+            cont.log.debug("\top_list = %s" % [(op.name,op.sig.stack_in) for op in op_list])
             for op in op_list:
                 if op.name == name:
                     name_found = True
@@ -184,17 +193,21 @@ class Type(AF_Type):
                     # Now try to match the input stack...
                     # Should it be an exception to match the name but not the
                     # stack input signature? Probably so.
-                    if op.sig.match_in(cont.stack):
 
-                        #print("Found! Returning %s, %s, %s" % (op, sig, True))
+                    ### TODO : start using operation.check_stack_effect!!!
+                    #if op.sig.match_in(cont.stack):
+                    if op.check_stack_effect(cont.stack):
+
+                        cont.log.debug("Found! Returning %s, %s, %s" % (op, op.sig, True))
                         return op, True
         # Not found.
         if name_found:
             # Is this what we want to do?
             # This will happen if names match but stacks don't.
-            raise Exception("Continuation doesn't match Op '%s' with available signatures: %s." % (name, [s.stack_in for s in sigs_found]))
+            cont.log.debug("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
+            raise Exception("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
 
-        #print ("Not found!")
+        cont.log.debug("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
         return Operation("make_atom", make_atom, sig=TypeSignature([],[TAtom])), False
 
@@ -212,7 +225,7 @@ class Type(AF_Type):
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
-            op, found = Type.find_op(name, cont)
+            op, found = Type.find_op(name, cont, "Any")
 
         if tos is not Stack.Empty and not found:
             # There's no such operation by that 'name' in existence
@@ -222,7 +235,7 @@ class Type(AF_Type):
             op, found = Type.find_op('_', cont, tos.type.name)
             op.name = name
 
-        # print("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
+        cont.log.debug("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
         return op, found
 
 
@@ -286,7 +299,7 @@ INTRO 5.10 : make_atom is the primitive that takes a token and converts
 """
 # Atom needs to take the symbol name to push on the stack.
 def make_atom(c: AF_Continuation) -> None:
-    #print("make_atom c.symbol = %s" % c.symbol)
+    c.log.debug("make_atom c.symbol = %s" % c.symbol)
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
     c.stack.push(StackObject(c.symbol.s_id,TAtom))

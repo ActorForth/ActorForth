@@ -6,6 +6,8 @@ INTRO 6 : Named words which implement the behavior of ActorForth. New words
           first class citizens as if they were primitives. Operations are
           stored in various Type dictionaries.
 """
+
+import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
 from itertools import zip_longest
@@ -136,14 +138,14 @@ class Operation:
             if in_type == "Any":
                 in_type = match_type
 
-            print("in_type:%s =?= match_type:%s : %s" % (in_type, match_type, in_type==match_type) )
+            logging.debug("in_type:%s =?= match_type:%s : %s" % (in_type, match_type, in_type==match_type) )
 
             if in_type != match_type: matches = False
 
         # Tack on the output stack effect that we're claiming.
         out_sig = self.sig.stack_out.contents()
         for i in out_sig:
-            print("adding output type:%s" % i)
+            logging.debug("adding output type:%s" % i)
             sig_out.push(i)
 
         # Make sure we match on the final output signature. But only up until as
@@ -155,9 +157,9 @@ class Operation:
             y = test_sig_out.pop()
             if x != y:
                 matches = False
-                print("sig_out: %s != stack_out: %s" % (sig_out, self.sig.stack_out))
+                logging.debug("sig_out: %s != stack_out: %s" % (sig_out, self.sig.stack_out))
 
-        print("Returning output signature: %s with matching = %s." % (sig_out,matches))
+        logging.debug("Returning output signature: %s with matching = %s." % (sig_out,matches))
         return sig_out, matches
   
 
