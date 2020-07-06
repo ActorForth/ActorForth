@@ -12,10 +12,10 @@ class KStack:
 
         def tos(self, stack):
             return KStack.Empty
-   
+
         def pop(self, stack):
             return KStack.Empty
-        
+
         def push(self, stack, value):
             stack._stack = KStack.NonEmpty(value)
             return KStack.NonEmpty
@@ -27,24 +27,24 @@ class KStack:
 
         def __init__(self, value):
             self._data = []
-            self._data.append(value)            
+            self._data.append(value)
 
-        def tos(self, stack):          
+        def tos(self, stack):
             if len(self._data):
                 return self._data[-1]
 
             # Stack is empty if we get this far.
             stack._stack = KStack.Empty()
-            return KStack.Empty                
-        
+            return KStack.Empty
+
         def pop(self, stack):
             if len(self._data):
                 return self._data.pop()
-                
+
             # Stack is empty if we get this far.
             stack._stack = KStack.Empty()
             return KStack.Empty
-    
+
         def push(self, stack, value):
             self._data.append(value)
             return KStack.NonEmpty
@@ -123,7 +123,7 @@ class Stack(KStack):
     def max_depth(self, history_limit = None):
         """
         Returns the deepest depth of our stack over it's known history
-        up to 'history_limit' (if specified) or 'Stack.DEPTH_HISTORY' 
+        up to 'history_limit' (if specified) or 'Stack.DEPTH_HISTORY'
         operations whichever is smaller.
         """
         if self.depth_history(history_limit):
@@ -159,15 +159,15 @@ class Stack(KStack):
         return []
 
     def __len__(self):
-        return self.depth()        
+        return self.depth()
 
     def push(self, item):
         """
         Adds item to top of stack and updates the stack_history.
-        """        
+        """
         self._push_count += 1
         self._update_depth_history()
-        
+
         return super(Stack,self).push(item)
 
     def pop(self):
@@ -193,9 +193,9 @@ class Stack(KStack):
         result = Stack()
         result._stack = self._stack.copy()
         result._depth_history_count = self._depth_history_count
-        result._depth_history = self._depth_history 
-        result._push_count = self._push_count 
-        result._pop_count = self._pop_count 
+        result._depth_history = self._depth_history
+        result._push_count = self._push_count
+        result._pop_count = self._pop_count
 
         return result
 

@@ -11,3 +11,4 @@ htmlcov
 credentials.txt
 
 .~lock.*
+runtests-pat
