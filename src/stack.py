@@ -4,6 +4,7 @@
     But we're also interested in how deep our stack gets over its lifetime and, more
     specifically over the last 'n' operations (set in Stack.DEPTH_HISTORY).
 """
+from typing import Sequence, Any
 
 class KStack:
 
@@ -19,13 +20,16 @@ class KStack:
             stack._stack = KStack.NonEmpty(value)
             return KStack.NonEmpty
 
+        def copy(self):
+            return KStack.Empty()
+
     class NonEmpty:
 
         def __init__(self, value):
             self._data = []
             self._data.append(value)            
 
-        def tos(self, stack):
+        def tos(self, stack):          
             if len(self._data):
                 return self._data[-1]
 
@@ -45,6 +49,11 @@ class KStack:
             self._data.append(value)
             return KStack.NonEmpty
 
+        def copy(self):
+            result = KStack.NonEmpty(None)
+            result._data = self._data.copy()
+            return result
+
 
     def __init__(self):
         self._stack = KStack.Empty()
@@ -58,6 +67,11 @@ class KStack:
     def push(self, value):
         return self._stack.push(self, value)
 
+    def copy(self):
+        result = KStack()
+        result._stack = self._stack.copy()
+        return result
+
 class Stack(KStack):
 
     DEPTH_HISTORY = 1000
@@ -65,9 +79,15 @@ class Stack(KStack):
     def __str__(self):
         return str(self.contents())
 
-    def __init__(self):
+    def __repr__(self):
+        return self.__str__()
+
+    def __init__(self, in_seq: Sequence[Any] = None):
         self.reset()
         super(Stack, self).__init__()
+        if in_seq is not None:
+            for n in in_seq:
+                self.push(n)
 
     def reset(self):
         self._depth_history_count = {0:1}
@@ -169,5 +189,19 @@ class Stack(KStack):
         """
         return super(Stack,self).tos()
 
+    def copy(self):
+        result = Stack()
+        result._stack = self._stack.copy()
+        result._depth_history_count = self._depth_history_count
+        result._depth_history = self._depth_history 
+        result._push_count = self._push_count 
+        result._pop_count = self._pop_count 
 
+        return result
 
+    def __eq__(self, s : object) -> bool:
+        if not isinstance(s, Stack):
+            return NotImplemented
+
+        if len(self) != len(s): return False
+        return all([(a==b) for (a,b) in zip(self.contents(), s.contents())])

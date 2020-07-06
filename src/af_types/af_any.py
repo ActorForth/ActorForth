@@ -46,12 +46,12 @@ def op_print_types(c: AF_Continuation) -> None:
     print("\nTypes:")
     for type_name in Type.types.keys():
 
-        _t_def : Optional[TypeDefinition] = Type.types.get(type_name,None)
+        _t_def : TypeDefinition = Type.types[type_name]
 
-        if _t_def:
-            _ops : Op_list = _t_def.ops_list
-            _handle = _t_def.op_handler
-            print("\t%s op_handler = %s" % (type_name, _handle))
+        _ops : Op_list = _t_def.ops_list
+        _handle = _t_def.op_handler
+
+        print("\t%s op_handler = %s" % (type_name, _handle))
 
 Type.add_op(Operation('types', op_print_types, sig=TypeSignature([],[])) )                
 

@@ -6,12 +6,15 @@ TODO: Unit testing is not catching this file presently!! FIX!
 INTRO 1 : This is where ActorForth all begins for execution purposes.
 """
 from typing import TextIO, Tuple
+import traceback
 import sys
+from io import StringIO
 
 from continuation import Continuation, Stack
 from interpret import interpret
 
 from af_types.af_any import print_words
+from af_types.af_debug import op_debug, op_on, op_off
 
 def print_continuation_stats(cont : Continuation):
     print("")
@@ -20,10 +23,10 @@ def print_continuation_stats(cont : Continuation):
     print("Stack depth_history = %s" % cont.stack.depth_history())
     print("Stack total operations = %s" % cont.stack.total_operations())
 
-    """
-    INTRO 1.1 : Input always comes from a file whether that's the default
-                stdin or a filename passed to the system.
-    """
+"""
+INTRO 1.1 : Input always comes from a file whether that's the default
+            stdin or a filename passed to the system.
+"""
 def setup_stream_for_interpreter(force_stdio: bool = False) -> Tuple[str, TextIO]:
     handle = sys.stdin
     filename = sys.stdin.name
@@ -34,19 +37,36 @@ def setup_stream_for_interpreter(force_stdio: bool = False) -> Tuple[str, TextIO
         print("Interpreting file: '%s'." % sys.argv[1])
     return filename, handle
 
+
+def afc(code: str) -> TextIO:
+    """
+    Given a string of ActorForth code, returns a file stream 
+    that can be executed by the interpreter.
+
+    cont = interpret(cont, afc("1 int 2 int +"))
+    """
+    return StringIO(code)
+
+
+"""
+INTRO 1.2 : Establish our stack and build our stateful Continutaion from it.
+"""
+
+stack = Stack()
+cont = Continuation(stack)
+
+
+
 if __name__ == "__main__":
+
+    # Set Debug on or off initially.
+    op_debug(cont)
+    op_off(cont)
 
     print("ActorForth demo interpreter. ^C to exit.")
     print_words()
 
     filename, handle = setup_stream_for_interpreter()
-
-    """
-    INTRO 1.2 : Establish our stack and build our stateful Continutaion from it.
-    """
-
-    stack = Stack()
-    cont = Continuation(stack)
 
     while True:
 
@@ -89,8 +109,13 @@ if __name__ == "__main__":
             
             INTRO 1.6 : Continue in interpret.py for INTRO stage 2.
             """
-            print( x )
-            cont.debug = True
+            cont.log.error( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
+            cont.log.error( "TRACEBACK : %s" % traceback.format_exc() )
+
+            # Turn debug on automatically.
+            op_debug(cont)
+            op_on(cont) 
+
             print_continuation_stats(cont)
             filename, handle = setup_stream_for_interpreter(force_stdio = True)
 
