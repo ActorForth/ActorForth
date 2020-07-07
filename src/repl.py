@@ -56,8 +56,8 @@ stack = Stack()
 cont = Continuation(stack)
 
 
-
-if __name__ == "__main__":
+def do_repl(filename: str, handle: TextIO):    
+    global cont
 
     # Set Debug on or off initially.
     op_debug(cont)
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     print("ActorForth interpreter. ^C to exit.")
     print_words()
 
-    filename, handle = setup_stream_for_interpreter()
+    
 
     while True:
 
@@ -121,4 +121,9 @@ if __name__ == "__main__":
 
     print_continuation_stats(cont)
     print("\nend of line...")
+    return cont.stack.tos().value
+
+if __name__ == "__main__":
+    filename, handle = setup_stream_for_interpreter()
+    do_repl(filename, handle)
 
