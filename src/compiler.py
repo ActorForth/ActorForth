@@ -256,15 +256,17 @@ def compile_word_handler(c: AF_Continuation) -> None:
     if found:
         c.stack.tos().value.add_word(op)
     else:
-        c.log.debug("FAILED TO FIND WORD TO COMPILE %s" % c.symbol.s_id )
+        c.log.debug("FAILED TO FIND WORD TO COMPILE '%s'" % c.symbol.s_id )
 
         c.log.debug("Compile as literal")
         #assert False
         def curry_make_atom(s, func = make_atom ):
             def compiled_make_atom( c: AF_Continuation ):
-                c.symbol = s
+                c.symbol = c.symbol
                 return func(c)
-        new_op = Operation(op_name, curry_make_atom(op_name), sig=TypeSignature([],[TAtom]))
+            return compiled_make_atom
+        op_implementation = curry_make_atom(op_name, make_atom)                
+        new_op = Operation(op_name, op_implementation, sig=TypeSignature([],[TAtom]))
         c.log.debug("New anonymous function: %s" % new_op)
         c.stack.tos().value.add_word( new_op )
 

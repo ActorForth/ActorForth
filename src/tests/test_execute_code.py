@@ -37,7 +37,7 @@ class TestExecution(unittest.TestCase):
                 """
         assert self.execute(code) == 4
 
-    @unittest.skip("Not yet compiling ctors into composite words.")
+    #@unittest.skip("Not yet compiling ctors into composite words.")
     def test_compile_double_literal(self) -> None:
         code =  """
                 double : Int -> Int;
@@ -47,7 +47,7 @@ class TestExecution(unittest.TestCase):
                 """
         assert self.execute(code) == 4
 
-    @unittest.skip("Got a problem compiling double in combo.")
+    #@unittest.skip("Got a problem compiling double in combo.")
     def test_compile_combo(self) -> None:
         code =  """
                 is_equal : Any Any -> Bool;
@@ -67,10 +67,10 @@ class TestExecution(unittest.TestCase):
                 """
 
         assert self.execute(code) == False
-        cont.stack.pop()
+        self.cont.stack.pop()
         assert self.stack.tos().value == True
 
-    @unittest.skip("Can't compile literals yet.")
+    #@unittest.skip("Can't compile literals yet.")
     def test_compile_double_drop(self) -> None:
         code =  """
                 double : Int -> Int ;

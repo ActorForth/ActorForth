@@ -299,7 +299,7 @@ INTRO 5.10 : make_atom is the primitive that takes a token and converts
 """
 # Atom needs to take the symbol name to push on the stack.
 def make_atom(c: AF_Continuation) -> None:
-    c.log.debug("make_atom c.symbol = %s" % c.symbol)
+    c.log.debug("make_atom c.symbol = '%s'" % c.symbol)
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
     c.stack.push(StackObject(c.symbol.s_id,TAtom))
