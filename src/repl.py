@@ -121,7 +121,12 @@ def do_repl(filename: str, handle: TextIO):
 
     print_continuation_stats(cont)
     print("\nend of line...")
-    return cont.stack.tos().value
+    
+    tos = cont.stack.tos()
+    if tos != Stack.Empty:
+        return tos.value
+    else:
+        return None
 
 if __name__ == "__main__":
     filename, handle = setup_stream_for_interpreter()
