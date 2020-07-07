@@ -63,7 +63,7 @@ if __name__ == "__main__":
     op_debug(cont)
     op_off(cont)
 
-    print("ActorForth demo interpreter. ^C to exit.")
+    print("ActorForth interpreter. ^C to exit.")
     print_words()
 
     filename, handle = setup_stream_for_interpreter()

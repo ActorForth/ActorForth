@@ -34,8 +34,8 @@ def print_words() -> None:
             _t_def = Type.types.get(type_name,None)
             if _t_def:
                 _ops = _t_def.ops_list
-                if len(_ops):
-                    print("%s Dictionary : %s" % (type_name,list(set([op.short_name() for op in _ops]))) )
+                #if len(_ops):
+                print("%s Dictionary : %s" % (type_name,list(set([op.short_name() for op in _ops]))) )
 
 def op_words(c: AF_Continuation) -> None:                
     print_words()
