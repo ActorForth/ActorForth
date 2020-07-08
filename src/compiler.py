@@ -249,8 +249,15 @@ def compile_word_handler(c: AF_Continuation) -> None:
         # See if there's a ctor for this name?
         ctor = Type.find_ctor(op_name, [TAny,])
         if ctor is not None:
+
+            ### TODO:   See if the prior word is a literal/atom (how to tell?)
+            ###         and, if so, go ahead and apply the ctor and therefore
+            ###         set it's value/type at compile time.
+
             c.stack.tos().value.add_word(ctor)
             found = True
+
+
 
 
     if found:
