@@ -55,9 +55,6 @@ class TypeSignature:
             return False
 
 
-    def match_out(self, on_stack_types: List["AF_Type"]) -> bool:
-        return True
-
     def __str__(self) -> str:
         out = "["
         for t in self.stack_in.contents():
