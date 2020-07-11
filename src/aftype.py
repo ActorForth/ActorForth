@@ -27,8 +27,6 @@ INTRO 4.2: A Symbol is the string representation of the token plus its Location
            Location data from the Parser to create the Symbol. The Interpreter
            then updates the Symbol in the Continuation and executes it. 
            (See INTRO 2.4 in interpret.py)
-
-           Continue to af_types/__init__.py for INTRO stage 5. 
 """
 @dataclass(order = True)
 class Symbol:
@@ -47,6 +45,17 @@ class Symbol:
 @dataclass
 class AF_Type:
     name : str
+
+"""
+INTRO 4.3 : Stacks strictly contain StackObjects. Every StackObject
+            consists of the object's value and it's Type.
+
+           Continue to af_types/__init__.py for INTRO stage 5.             
+"""
+@dataclass
+class StackObject:
+    type: AF_Type
+    value: Any = None
 
 @dataclass 
 class AF_Continuation:

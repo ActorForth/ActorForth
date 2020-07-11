@@ -2,7 +2,8 @@ import unittest
 
 from continuation import Continuation, Stack
 
-from af_types import StackObject, Type, TypeSignature, \
+from aftype import StackObject
+from af_types import Type, TypeSignature, \
                     make_atom, TAtom
 
 from af_types.af_int import *
@@ -36,14 +37,14 @@ class TestTypeSignature(unittest.TestCase):
         s = Stack()
         assert empty_sig.match_in(s)
 
-        s.push(StackObject(None, TParm1))
+        s.push(StackObject(type=TParm1))
         sig = TypeSignature([TParm1],[])
 
         # We can do this twice because it doesn't consume the stack.
         assert sig.match_in(s)
         assert sig.match_in(s)
 
-        s.push(StackObject(None, TTest))
+        s.push(StackObject(type=TTest))
 
         assert sig.match_in(s) == False
 
@@ -68,7 +69,7 @@ class TestTypeSignature(unittest.TestCase):
 
         stack = Stack()
         cont = Continuation(stack)
-        cont.stack.push(StackObject("tparm", TParm1))
+        cont.stack.push(StackObject(type=TParm1, value="tparm"))
         Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([TParm1],[]) )) #, "Test")
 
         print_words()
@@ -85,8 +86,8 @@ class TestTypeSignature(unittest.TestCase):
 
         stack = Stack()
         cont = Continuation(stack)
-        cont.stack.push(StackObject("tparm", TParm1))
-        cont.stack.push(StackObject("tparm", TParm1))
+        cont.stack.push(StackObject(type=TParm1, value="tparm"))
+        cont.stack.push(StackObject(type=TParm1, value="tparm"))
         Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([TParm1,TParm1],[]) )) #, "Test")
 
         print_words()
@@ -103,9 +104,9 @@ class TestTypeSignature(unittest.TestCase):
 
         stack = Stack()
         cont = Continuation(stack)
-        cont.stack.push(StackObject("ttest", TTest))
-        cont.stack.push(StackObject("tparm", TParm1))
-        cont.stack.push(StackObject("tparm", TParm1))
+        cont.stack.push(StackObject(type=TTest, value="ttest"))
+        cont.stack.push(StackObject(type=TParm1, value="tparm"))
+        cont.stack.push(StackObject(type=TParm1, value="tparm"))
 
         Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([TTest,TParm1,TParm1],[TTest,TParm1]) )) #, "Test")
 
@@ -139,7 +140,7 @@ class TestTypeSignature(unittest.TestCase):
 
     def test_op_with_wrong_type_signature(self) -> None:
         stack = Stack()
-        stack.push(StackObject("tparm", TTest))
+        stack.push(StackObject(type=TTest, value="tparm"))
 
         Type.add_op(Operation("test", op_print, sig = TypeSignature([TParm1],[])))
 
@@ -176,7 +177,7 @@ class TestGenericTypeStuff(unittest.TestCase):
         assert item.type == TAtom
 
     def test_op_print(self) -> None:
-        self.c.stack.push(StackObject("test", TAtom))
+        self.c.stack.push(StackObject(type=TAtom, value="test"))
         op_print(self.c)
         assert self.c.stack.depth() == 0
 
@@ -199,7 +200,7 @@ class TestGenericTypeStuff(unittest.TestCase):
         assert item2.value == "second"
 
     def test_op_drop(self) -> None:
-        self.s.push(StackObject("test", TAtom))
+        self.s.push(StackObject(type=TAtom, value="test"))
         op_drop(self.c)
         assert self.c.stack.depth() == 0
 

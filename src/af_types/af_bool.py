@@ -1,6 +1,7 @@
  #from stack import Stack
 
 from . import *
+from aftype import StackObject
 
 TBool = Type("Bool")
 
@@ -12,7 +13,7 @@ def op_bool(c: AF_Continuation) -> None:
     stack_object = c.stack.pop()
     #print("op_bool stack_object = %s" % stack_object)
 
-    result = StackObject(None, TBool)
+    result = StackObject(value=None, type=TBool)
     if stack_object.type == TBool:
         #print ("Got a Bool")
         result.value = stack_object.value
@@ -64,7 +65,7 @@ def op_equals(c: AF_Continuation) -> None:
     # Now we pop off whatever is the ultimate object that's
     # possibly been inferred.
     sobj2 = c.stack.pop()
-    c.stack.push(StackObject(sobj1 == sobj2, TBool))
+    c.stack.push(StackObject(value=(sobj1 == sobj2), type=TBool))
 Type.add_op(Operation('==', op_equals, sig=TypeSignature([TAny,TAny],[TBool]) ))    
 
 
@@ -79,28 +80,28 @@ def op_less_than(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
     c.log.debug("is %s (%s) < %s (%s)?" % (sobj2.value, type(sobj2.value), sobj1.value, type(sobj1.value)))
-    c.stack.push(StackObject(sobj2.value < sobj1.value, TBool))
+    c.stack.push(StackObject(value=(sobj2.value < sobj1.value), type=TBool))
 Type.add_op(Operation('<', op_less_than, sig=TypeSignature([TAny,TAny],[TBool]) ))    
 
 
 def op_greater_than(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
-    c.stack.push(StackObject(sobj2.value > sobj1.value, TBool))
+    c.stack.push(StackObject(value=(sobj2.value > sobj1.value), type=TBool))
 Type.add_op(Operation('>', op_greater_than, sig=TypeSignature([TAny,TAny],[TBool]) ))    
 
 
 def op_less_than_or_equal_to(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
-    c.stack.push(StackObject(sobj2.value <= sobj1.value, TBool))
+    c.stack.push(StackObject(value=(sobj2.value <= sobj1.value), type=TBool))
 Type.add_op(Operation('<=', op_less_than_or_equal_to, sig=TypeSignature([TAny,TAny],[TBool]) ))    
 
 
 def op_greater_than_or_equal_to(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
-    c.stack.push(StackObject(sobj2.value >= sobj1.value, TBool))
+    c.stack.push(StackObject(value=(sobj2.value >= sobj1.value), type=TBool))
 Type.add_op(Operation('>=', op_greater_than_or_equal_to, sig=TypeSignature([TAny,TAny],[TBool]) ))
 
 

@@ -5,7 +5,8 @@ from copy import deepcopy
 from continuation import Continuation, Stack
 from interpret import *
 
-from af_types import StackObject, Type, TypeSignature, \
+from aftype import StackObject
+from af_types import Type, TypeSignature, \
                     make_atom, TAtom
 
 TBool = Type("Bool")

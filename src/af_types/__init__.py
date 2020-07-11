@@ -13,7 +13,7 @@ from dataclasses import dataclass
 
 
 from stack import Stack
-from aftype import AF_Type, AF_Continuation, Symbol, Location
+from aftype import AF_Type, AF_Continuation, StackObject, Symbol, Location
 from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
 
 
@@ -262,18 +262,9 @@ class Type(AF_Type):
     def __repr__(self) -> str:
         return self.__str__()
 
-"""
-INTRO 5.7 : Stacks strictly contain StackObjects. Every StackObject
-            consists of the object's value and it's Type.
-"""
-@dataclass
-class StackObject:
-    value: Any
-    type: Type
-
 
 """
-INTRO 5.8 : The Atom Type is what gets created any time a new Symbol
+INTRO 5.7 : The Atom Type is what gets created any time a new Symbol
             shows up that the Interpreter does not recognize. Ultimately
             ALL objects initially are introduced into an ActorForth
             environment as Atoms.
@@ -282,7 +273,7 @@ TAtom = Type("Atom")
 
 
 """
-INTRO 5.9 : The Any Type is a special Type that will match ALL other types.
+INTRO 5.8 : The Any Type is a special Type that will match ALL other types.
             It is also where the global word dictionary is contained.
 """
 TAny = Type("Any")
@@ -292,7 +283,7 @@ TAny = Type("Any")
 #   Generic operations
 #
 """
-INTRO 5.10 : make_atom is the primitive that takes a token and converts
+INTRO 5.9 : make_atom is the primitive that takes a token and converts
              it into an Atom on the Stack.
 
              Continue to operation.py for INTRO stage 6.
@@ -302,5 +293,6 @@ def make_atom(c: AF_Continuation) -> None:
     c.log.debug("make_atom c.symbol = '%s'" % c.symbol)
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
-    c.stack.push(StackObject(c.symbol.s_id,TAtom))
+    c.stack.push(StackObject(value=c.symbol.s_id,type=TAtom))
 #Type.add_op(Operation('_', make_atom), TypeSignature([],[TAtom]))
+

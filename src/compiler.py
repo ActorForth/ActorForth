@@ -38,7 +38,7 @@ def op_new_word(c: AF_Continuation) -> None:
     c.stack.tos().type = TWordDefinition
 
     sig = TypeSignature([],[])
-    c.stack.push(StackObject(sig,TInputTypeSignature))
+    c.stack.push(StackObject(value=sig,type=TInputTypeSignature))
 
 Type.add_op(Operation(':',op_new_word, sig=TypeSignature([TAtom],[TWordDefinition, TInputTypeSignature])) )
 
@@ -76,7 +76,7 @@ def op_start_code_compile(c: AF_Continuation) -> None:
     op_swap(c)
     #c.stack.push(sig_s)
     #print("I'M COMPILING Op=%s!!!" % op)
-    c.stack.push( StackObject(op, TCodeCompile) )
+    c.stack.push( StackObject(value=op, type=TCodeCompile) )
 Type.add_op(Operation(';',op_start_code_compile,
             sig = TypeSignature([TWordDefinition, TOutputTypeSignature],[TWordDefinition, TOutputTypeSignature, TCodeCompile]) ),
             "OutputTypeSignature")
@@ -91,7 +91,7 @@ def op_skip_to_code_compile(c: AF_Continuation) -> None:
     to start the definition of the word's behavior.
     """
     sig = TypeSignature([],[])
-    c.stack.push(StackObject(sig,TOutputTypeSignature))
+    c.stack.push(StackObject(value=sig, type=TOutputTypeSignature))
     op_start_code_compile(c)
 # Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
 Type.add_op(Operation(';',op_skip_to_code_compile,
@@ -223,7 +223,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         # Have to create a fake continuation for type matching.
         fake_c = AF_Continuation(stack = Stack())
         for t in tos_output_sig.contents():
-            fake_c.stack.push(StackObject(None, t))
+            fake_c.stack.push(StackObject(type=t, value=None))
 
         output_type_name = tos_output_sig.contents()[-1].name
         c.log.debug("fake Continuation stack for find_op: %s" % fake_c.stack.contents())

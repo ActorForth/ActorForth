@@ -4,7 +4,7 @@ from . import *
 TDebug = Type("Debug")
 
 def op_debug(c: AF_Continuation) -> None:
-    c.stack.push(StackObject("Debug",TDebug))
+    c.stack.push(StackObject(value="Debug",type=TDebug))
 Type.register_ctor('Debug',Operation('debug',op_debug),[TAny])
 Type.add_op(Operation('debug', op_debug, sig=TypeSignature([],[TDebug]) ))
 

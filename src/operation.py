@@ -17,7 +17,6 @@ from aftype import AF_Type, AF_Continuation
 from stack import Stack
 
 
-
 class TypeSignature:
 
     def __init__(self, in_seq: Sequence["AF_Type"] = None, out_seq: Sequence["AF_Type"] = None ):
