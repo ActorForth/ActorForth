@@ -14,10 +14,10 @@ def op_int(c: AF_Continuation) -> None:
     i = int(c.stack.pop().value)
     assert i <  999999999999, "int overflow > 999999999999"
     assert i > -999999999999, "int underflow < -999999999999"
-    c.stack.push(StackObject(value=i,type=TInt))
+    c.stack.push(StackObject(value=i, stype=TInt))
 #   Int dictionary
-Type.register_ctor('Int',Operation('int',op_int),[TAny])
-Type.add_op(Operation('int',op_int, sig=TypeSignature([TAny],[TInt]) ))
+Type.register_ctor('Int',Operation('int',op_int),[StackObject(stype=TAny)])
+Type.add_op(Operation('int',op_int, sig=TypeSignature([StackObject(stype=TAny)],[StackObject(stype=TInt)]) ))
 
 
 # Operations
@@ -28,9 +28,9 @@ def op_plus(c: AF_Continuation) -> None:
     result = op1+op2
     # Guarantee output is valid and not overflow.
     assert int(result) - op2 == op1, "python math error"
-    c.stack.push(StackObject(value=result, type=TInt))
+    c.stack.push(StackObject(value=result, stype=TInt))
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
-Type.add_op(Operation('+',op_plus, sig=TypeSignature([TInt,TInt],[TInt]) ), "Int")
+Type.add_op(Operation('+',op_plus, sig=TypeSignature([StackObject(stype=TInt),StackObject(stype=TInt)],[StackObject(stype=TInt)]) ), "Int")
 
 def op_minus(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
@@ -38,9 +38,9 @@ def op_minus(c: AF_Continuation) -> None:
     result = op2-op1
     # Guarantee output is valid and not overflow.
     assert int(result) + op1 == op2, "python math error"
-    c.stack.push(StackObject(value=result, type=TInt))
+    c.stack.push(StackObject(value=result, stype=TInt))
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
-Type.add_op(Operation('-',op_minus, sig=TypeSignature([TInt,TInt],[TInt]) ), "Int")
+Type.add_op(Operation('-',op_minus, sig=TypeSignature([StackObject(stype=TInt),StackObject(stype=TInt)],[StackObject(stype=TInt)]) ), "Int")
 
 def op_multiply(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
@@ -50,9 +50,9 @@ def op_multiply(c: AF_Continuation) -> None:
     if op1 != 0: # Protect against divide by zero error on check.
         assert int(result) / op1 == op2, "python math error"
 
-    c.stack.push(StackObject(value=result, type=TInt))
+    c.stack.push(StackObject(value=result, stype=TInt))
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
-Type.add_op(Operation('*',op_multiply, sig=TypeSignature([TInt,TInt],[TInt]) ), "Int")
+Type.add_op(Operation('*',op_multiply, sig=TypeSignature([StackObject(stype=TInt),StackObject(stype=TInt)],[StackObject(stype=TInt)]) ), "Int")
 
 def op_divide(c: AF_Continuation) -> None:
     assert c.stack.tos().value != 0, "int division by zero error."
@@ -60,6 +60,6 @@ def op_divide(c: AF_Continuation) -> None:
     op2 = c.stack.pop().value
     result = int(op2/op1)
     remainder = op2 - (result * op1)
-    c.stack.push(StackObject(value=result, type=TInt))
-    c.stack.push(StackObject(value=remainder, type=TInt))
-Type.add_op(Operation('/',op_divide, sig=TypeSignature([TInt,TInt],[TInt,TInt]) ), "Int")
+    c.stack.push(StackObject(value=result, stype=TInt))
+    c.stack.push(StackObject(value=remainder, stype=TInt))
+Type.add_op(Operation('/',op_divide, sig=TypeSignature([StackObject(stype=TInt),StackObject(stype=TInt)],[StackObject(stype=TInt),StackObject(stype=TInt)]) ), "Int")

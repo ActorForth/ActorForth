@@ -29,7 +29,7 @@ class TestTypeSignature(unittest.TestCase):
             Type.ctors[t] = []
             x = Type(t)
 
-        Type.register_ctor("Test",Operation('nop', TOp), [TParm1])
+        Type.register_ctor("Test",Operation('nop', TOp), [StackObject(stype=TParm1)])
 
     @unittest.skip
     def test_match_in(self) -> None:
@@ -37,29 +37,29 @@ class TestTypeSignature(unittest.TestCase):
         s = Stack()
         assert empty_sig.match_in(s)
 
-        s.push(StackObject(type=TParm1))
-        sig = TypeSignature([TParm1],[])
+        s.push(StackObject(stype=TParm1))
+        sig = TypeSignature([StackObject(stype=TParm1)],[])
 
         # We can do this twice because it doesn't consume the stack.
         assert sig.match_in(s)
         assert sig.match_in(s)
 
-        s.push(StackObject(type=TTest))
+        s.push(StackObject(stype=TTest))
 
         assert sig.match_in(s) == False
 
 
     def test_find_ctor(self) -> None:
-        l = [TParm1]
+        l = [StackObject(stype=TParm1)]
         assert Type.find_ctor("Test",l).the_op == TOp
 
         # Execute the lambda so we get full code coverage.
         assert TOp("fake_stack") == "fake_stack"
 
-        l = [TAny]
+        l = [StackObject(stype=TAny)]
         assert Type.find_ctor("Test",l).the_op == TOp
 
-        l = [TTest]
+        l = [StackObject(stype=TTest)]
         assert Type.find_ctor("Test",l) == None
 
         l = []
@@ -69,15 +69,15 @@ class TestTypeSignature(unittest.TestCase):
 
         stack = Stack()
         cont = Continuation(stack)
-        cont.stack.push(StackObject(type=TParm1, value="tparm"))
-        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([TParm1],[]) )) #, "Test")
+        cont.stack.push(StackObject(stype=TParm1, value="tparm"))
+        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([StackObject(stype=TParm1)],[]) )) #, "Test")
 
         print_words()
 
         op, found = Type.op("test", cont ) #, "Test")
 
         assert found
-        assert op.sig == TypeSignature([TParm1],[])
+        assert op.sig == TypeSignature([StackObject(stype=TParm1)],[])
 
         op, found = Type.op("not found", cont)
         assert not found
@@ -86,16 +86,16 @@ class TestTypeSignature(unittest.TestCase):
 
         stack = Stack()
         cont = Continuation(stack)
-        cont.stack.push(StackObject(type=TParm1, value="tparm"))
-        cont.stack.push(StackObject(type=TParm1, value="tparm"))
-        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([TParm1,TParm1],[]) )) #, "Test")
+        cont.stack.push(StackObject(stype=TParm1, value="tparm"))
+        cont.stack.push(StackObject(stype=TParm1, value="tparm"))
+        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([StackObject(stype=TParm1),StackObject(stype=TParm1)],[]) )) #, "Test")
 
         print_words()
 
         op, found = Type.op("test", cont ) #, "Test")
 
         assert found
-        assert op.sig == TypeSignature([TParm1,TParm1],[])
+        assert op.sig == TypeSignature([StackObject(stype=TParm1),StackObject(stype=TParm1)],[])
 
         op, found = Type.op("not found", cont)
         assert not found
@@ -104,18 +104,20 @@ class TestTypeSignature(unittest.TestCase):
 
         stack = Stack()
         cont = Continuation(stack)
-        cont.stack.push(StackObject(type=TTest, value="ttest"))
-        cont.stack.push(StackObject(type=TParm1, value="tparm"))
-        cont.stack.push(StackObject(type=TParm1, value="tparm"))
+        cont.stack.push(StackObject(stype=TTest, value="ttest"))
+        cont.stack.push(StackObject(stype=TParm1, value="tparm"))
+        cont.stack.push(StackObject(stype=TParm1, value="tparm"))
 
-        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([TTest,TParm1,TParm1],[TTest,TParm1]) )) #, "Test")
+        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([StackObject(stype=TTest),StackObject(stype=TParm1),StackObject(stype=TParm1)],
+                                                            [StackObject(stype=TTest),StackObject(stype=TParm1)]) )) #, "Test")
 
         print_words()
 
         op, found = Type.op("test", cont ) #, "Test")
 
         assert found
-        assert op.sig == TypeSignature([TTest,TParm1,TParm1],[TTest,TParm1])
+        assert op.sig == TypeSignature([StackObject(stype=TTest),StackObject(stype=TParm1),StackObject(stype=TParm1)],
+                        [StackObject(stype=TTest),StackObject(stype=TParm1)])
 
         op, found = Type.op("not found", cont)
         assert not found
@@ -126,23 +128,24 @@ class TestTypeSignature(unittest.TestCase):
         cont = Continuation(stack)
 
 
-        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([],[TTest,TParm1]) )) #, "Test")
+        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([],
+                                    [StackObject(stype=TTest),StackObject(stype=TParm1)]) )) #, "Test")
 
         print_words()
 
         op, found = Type.op("test", cont ) #, "Test")
 
         assert found
-        assert op.sig == TypeSignature([],[TTest,TParm1])
+        assert op.sig == TypeSignature([],[StackObject(stype=TTest),StackObject(stype=TParm1)])
 
         op, found = Type.op("not found", cont)
         assert not found
 
     def test_op_with_wrong_type_signature(self) -> None:
         stack = Stack()
-        stack.push(StackObject(type=TTest, value="tparm"))
+        stack.push(StackObject(stype=TTest, value="tparm"))
 
-        Type.add_op(Operation("test", op_print, sig = TypeSignature([TParm1],[])))
+        Type.add_op(Operation("test", op_print, sig = TypeSignature([StackObject(stype=TParm1)],[])))
 
         with self.assertRaises( Exception ):
             Type.op("test", stack)
@@ -174,10 +177,10 @@ class TestGenericTypeStuff(unittest.TestCase):
         make_atom(self.c)
         item = self.c.stack.pop()
         assert item.value == "test"
-        assert item.type == TAtom
+        assert item.stype == TAtom
 
     def test_op_print(self) -> None:
-        self.c.stack.push(StackObject(type=TAtom, value="test"))
+        self.c.stack.push(StackObject(stype=TAtom, value="test"))
         op_print(self.c)
         assert self.c.stack.depth() == 0
 
@@ -200,7 +203,7 @@ class TestGenericTypeStuff(unittest.TestCase):
         assert item2.value == "second"
 
     def test_op_drop(self) -> None:
-        self.s.push(StackObject(type=TAtom, value="test"))
+        self.s.push(StackObject(stype=TAtom, value="test"))
         op_drop(self.c)
         assert self.c.stack.depth() == 0
 

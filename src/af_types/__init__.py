@@ -17,10 +17,6 @@ from aftype import AF_Type, AF_Continuation, StackObject, Symbol, Location
 from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
 
 
-
-
-
-
 Type_name = str
 
 
@@ -112,10 +108,10 @@ class Type(AF_Type):
 
 
     @staticmethod
-    def register_ctor(name: Type_name, op: Operation, input_sig: List["Type"]) -> None:
+    def register_ctor(name: Type_name, op: Operation, input_sig: List["StackObject"]) -> None:
         # Ctors only have TypeSignatures that return their own Type.
         # Register the ctor in the Global dictionary.
-        op.sig = TypeSignature(input_sig,[Type(name)]) ## HACK - why is this ANY rather than the Type_name??? change to  'name'
+        op.sig = TypeSignature(input_sig,[StackObject(stype=Type(name))]) 
         # Type.add_op(op)
 
         # Append this ctor to our list of valid ctors.
@@ -125,17 +121,17 @@ class Type(AF_Type):
 
 
     @staticmethod
-    def find_ctor(name: Type_name, inputs : List["Type"]) -> Optional[Operation]:
+    def find_ctor(name: Type_name, inputs : List["StackObject"]) -> Optional[Operation]:
         # Given a stack of input types, find the first matching ctor.
         logging.debug("Attempting to find a ctor for Type '%s' using the following input types: %s." % (name, inputs))
         logging.debug("Type '%s' has the following ctors: %s." % (name, Type.ctors))
         for type_sig in Type.ctors.get(name,[]):
 
             matching = False
-            types = inputs.copy()
+            inputs = inputs.copy()
             try:
                 for ctor_type in type_sig[0]:
-                    in_type = types.pop(0)
+                    in_type = inputs.pop(0).stype
                     if in_type.name == "Any" or ctor_type == "Any":
                         logging.debug("Matching ctor for 'Any' type.")
                         matching = True
@@ -185,7 +181,7 @@ class Type(AF_Type):
         sigs_found : List[TypeSignature] = []
         if type_def:
             op_list = type_def.ops_list
-            cont.log.debug("\top_list = %s" % [(op.name,op.sig.stack_in) for op in op_list])
+            cont.log.debug("\top_list = %s" % ["name:'%s', sig:%s" % (op.name,op.sig.stack_in) for op in op_list])
             for op in op_list:
                 if op.name == name:
                     name_found = True
@@ -209,7 +205,7 @@ class Type(AF_Type):
 
         cont.log.debug("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
-        return Operation("make_atom", make_atom, sig=TypeSignature([],[TAtom])), False
+        return Operation("make_atom", make_atom, sig=TypeSignature([],[StackObject(stype=TAtom)])), False
 
 
     @staticmethod
@@ -221,7 +217,7 @@ class Type(AF_Type):
 
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
-            op, found = Type.find_op(name, cont, tos.type.name)
+            op, found = Type.find_op(name, cont, tos.stype.name)
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
@@ -231,8 +227,8 @@ class Type(AF_Type):
             # There's no such operation by that 'name' in existence
             # so let's find the default op for this type or else from the global dict
             # (as that's the make_atom op returned by default for Type.find_op.)
-            # print("Searching for default specialized for Type: %s." % tos.type.name)
-            op, found = Type.find_op('_', cont, tos.type.name)
+            cont.log.debug("Searching for default specialized for Type: %s." % tos.stype.name)
+            op, found = Type.find_op('_', cont, tos.stype.name)
             op.name = name
 
         cont.log.debug("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
@@ -293,6 +289,6 @@ def make_atom(c: AF_Continuation) -> None:
     c.log.debug("make_atom c.symbol = '%s'" % c.symbol)
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
-    c.stack.push(StackObject(value=c.symbol.s_id,type=TAtom))
+    c.stack.push(StackObject(value=c.symbol.s_id,stype=TAtom))
 #Type.add_op(Operation('_', make_atom), TypeSignature([],[TAtom]))
 

@@ -17,11 +17,14 @@ from operation import Operation, op_nop
 import logging
 import sys
 
+ROOT_LOGGING_DEFAULT = logging.DEBUG # logging.WARNING
+LOGGING_DEFAULT = logging.DEBUG
+
 root_log = logging.getLogger()
-root_log.setLevel(logging.WARNING)
+root_log.setLevel(ROOT_LOGGING_DEFAULT)
 
 ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.DEBUG)
+ch.setLevel(LOGGING_DEFAULT)
 FORMAT = "[%(filename)s:%(lineno)s - %(funcName)20s() ] %(message)s"
 formatter = logging.Formatter(FORMAT)
 ch.setFormatter(formatter)
@@ -60,7 +63,7 @@ class Continuation(AF_Continuation):
         tos = self.stack.tos()
         if tos != KStack.Empty:
             # Make the tos type's op_handler our context instead.
-            type_context = tos.type
+            type_context = tos.stype
 
         """
             INTRO 3.4 : Execute the operation according to our context.
@@ -83,7 +86,7 @@ class Continuation(AF_Continuation):
                 content += "empty"
             else:
                 for n, s in enumerate(self.stack.contents()[::-1]):
-                    content += "%s) val=%s,  type=%s\n\t\t" % (n, s.value, s.type.name)
+                    content += "%s) val=%s,  type=%s\n\t\t" % (n, s.value, s.stype.name)
             content += "\n"
 
             result += "\n\tStack =\t%s " % (content)

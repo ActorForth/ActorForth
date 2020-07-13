@@ -110,7 +110,8 @@ class TestExecution(unittest.TestCase):
         op, found = Type.op("multiinput", cont ) #, "Test")
 
         assert found
-        assert op.sig == TypeSignature([TBool,TInt,TInt,TInt],[TInt])
+        assert op.sig == TypeSignature([StackObject(type=TBool),StackObject(type=TInt),StackObject(type=TInt),StackObject(type=TInt)],
+                                [StackObject(type=TInt)])
 
         op, found = Type.op("not found", cont)
         assert not found

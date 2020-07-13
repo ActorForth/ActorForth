@@ -10,33 +10,33 @@ class OperationTests(unittest.TestCase):
 
 
     def test_simple_stack_effect(self) -> None:
-        op = Operation("nop", op_nop, sig=TypeSignature([TInt],[TInt]))
+        op = Operation("nop", op_nop, sig=TypeSignature([StackObject(stype=TInt)],[StackObject(stype=TInt)]))
 
         sig, match = op.check_stack_effect()
-        assert sig == Stack([TInt])
+        assert sig == Stack([StackObject(stype=TInt)])
         assert match == True
 
-        sig, match = op.check_stack_effect(Stack([TBool, TInt]))
-        assert sig == Stack([TBool, TInt])
+        sig, match = op.check_stack_effect(Stack([StackObject(stype=TBool), StackObject(stype=TInt)]))
+        assert sig == Stack([StackObject(stype=TBool), StackObject(stype=TInt)])
         assert match == True
 
     def test_any_stack_effect(self) -> None:
-        op = Operation("nop", op_nop, sig=TypeSignature([TAny],[TInt]))
+        op = Operation("nop", op_nop, sig=TypeSignature([StackObject(stype=TAny)],[StackObject(stype=TInt)]))
 
-        check_out = Stack([TInt])
+        check_out = Stack([StackObject(stype=TInt)])
 
         sig, match = op.check_stack_effect()
         assert sig == check_out
         assert match == True
 
-        sig, match = op.check_stack_effect(Stack([TBool]))
+        sig, match = op.check_stack_effect(Stack([StackObject(stype=TBool)]))
         assert sig == check_out
         assert match == True
 
-        sig, match = op.check_stack_effect(Stack([TAny]))
+        sig, match = op.check_stack_effect(Stack([StackObject(stype=TAny)]))
         assert sig == check_out
         assert match == True
 
-        sig, match = op.check_stack_effect(Stack([TBool, TInt]))
-        assert sig == Stack([TBool, TInt])
+        sig, match = op.check_stack_effect(Stack([StackObject(stype=TBool), StackObject(stype=TInt)]))
+        assert sig == Stack([StackObject(stype=TBool), StackObject(stype=TInt)])
         assert match == True

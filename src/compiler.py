@@ -35,12 +35,13 @@ def op_new_word(c: AF_Continuation) -> None:
     op_name = c.stack.tos().value
     op, found = Type.op(op_name,c)  # Do we need to check that it's also not a ctor/type? Probably so.
     assert not found, "Compile error: '%s' already defined." % op_name
-    c.stack.tos().type = TWordDefinition
+    c.stack.tos().stype = TWordDefinition
 
     sig = TypeSignature([],[])
-    c.stack.push(StackObject(value=sig,type=TInputTypeSignature))
+    c.stack.push(StackObject(value=sig,stype=TInputTypeSignature))
 
-Type.add_op(Operation(':',op_new_word, sig=TypeSignature([TAtom],[TWordDefinition, TInputTypeSignature])) )
+Type.add_op(Operation(':',op_new_word, sig=TypeSignature([StackObject(stype=TAtom)],
+            [StackObject(stype=TWordDefinition), StackObject(stype=TInputTypeSignature)])) )
 
 
 def op_switch_to_output_sig(c: AF_Continuation) -> None:
@@ -51,9 +52,10 @@ def op_switch_to_output_sig(c: AF_Continuation) -> None:
     During a TypeSignature declaration, -> switches the compiler from building the
     input types to building the output types.
     """
-    c.stack.tos().type = TOutputTypeSignature
+    c.stack.tos().stype = TOutputTypeSignature
 Type.add_op(Operation('->',op_switch_to_output_sig,
-            sig=TypeSignature([TWordDefinition, TInputTypeSignature],[TWordDefinition, TOutputTypeSignature]) ),
+            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TInputTypeSignature)],
+                        [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature)]) ),
             "InputTypeSignature")
 
 
@@ -76,10 +78,11 @@ def op_start_code_compile(c: AF_Continuation) -> None:
     op_swap(c)
     #c.stack.push(sig_s)
     #print("I'M COMPILING Op=%s!!!" % op)
-    c.stack.push( StackObject(value=op, type=TCodeCompile) )
+    c.stack.push( StackObject(value=op, stype=TCodeCompile) )
 Type.add_op(Operation(';',op_start_code_compile,
-            sig = TypeSignature([TWordDefinition, TOutputTypeSignature],[TWordDefinition, TOutputTypeSignature, TCodeCompile]) ),
-            "OutputTypeSignature")
+            sig = TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature)],
+                    [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)]) ),
+                    "OutputTypeSignature")
 
 
 def op_skip_to_code_compile(c: AF_Continuation) -> None:
@@ -91,12 +94,13 @@ def op_skip_to_code_compile(c: AF_Continuation) -> None:
     to start the definition of the word's behavior.
     """
     sig = TypeSignature([],[])
-    c.stack.push(StackObject(value=sig, type=TOutputTypeSignature))
+    c.stack.push(StackObject(value=sig, stype=TOutputTypeSignature))
     op_start_code_compile(c)
 # Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
 Type.add_op(Operation(';',op_skip_to_code_compile,
-            sig=TypeSignature([TWordDefinition],[TWordDefinition, TOutputTypeSignature, TCodeCompile]) ),
-            "WordDefinition")
+            sig=TypeSignature([StackObject(stype=TWordDefinition)],
+                [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)]) ),
+                "WordDefinition")
 
 
 def op_finish_word_compilation(c: AF_Continuation) -> None:
@@ -104,25 +108,28 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
         -> WordDefinition
     """
-    #print("finishing word compilation!")
+    c.log.debug("finishing word compilation!")
     op = c.stack.pop().value
     pop_value = c.stack.pop().value
     op.sig = pop_value
     s_in = pop_value.stack_in
 
     if s_in.is_empty() :
+        c.log.debug("'%s' operation being added to global dictionary." % op.name)
         Type.add_op(op)
     else:
-        s_in_tos = s_in.tos()
-        Type.add_op(op, str(s_in_tos))
+        s_in_tos : StackObject = s_in.tos()
+        c.log.debug("'%s' operation being added to '%s' dictionary." % (op.name, s_in_tos.value))
+        Type.add_op(op, s_in_tos.value)
 
     # new_op = Operation(op.name, op_compile_word, [op])
     # new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
     #                 [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
     # Type.types["CodeCompile"].ops_list.insert(0, (new_op, new_sig))
 Type.add_op(Operation(';',op_finish_word_compilation,
-            sig=TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[TWordDefinition]) ),
-            "CodeCompile")
+            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)],
+                    [StackObject(stype=TWordDefinition)]) ),
+                    "CodeCompile")
 
 
 def op_finish_word_definition(c: AF_Continuation) -> None:
@@ -133,8 +140,9 @@ def op_finish_word_definition(c: AF_Continuation) -> None:
     op_finish_word_compilation(c)
     c.stack.pop()
 Type.add_op(Operation('.',op_finish_word_definition,
-            sig=TypeSignature([TWordDefinition, TOutputTypeSignature, TCodeCompile],[]) ),
-            "CodeCompile")
+            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)],
+                []) ),
+                "CodeCompile")
 
 
 def _indent(c: AF_Continuation) -> str:
@@ -147,7 +155,7 @@ def compilation_word_handler(c: AF_Continuation) -> bool:
     # Lookup ONLY words for my specific type.
     assert c.symbol
     name = c.symbol.s_id
-    op, found = Type.find_op(name, c, c.stack.tos().type.name)
+    op, found = Type.find_op(name, c, c.stack.tos().stype.name)
 
     # Is this a word specialized for my type matches my stack/type specification?
     if found and op.sig.match_in(c.stack):
@@ -172,14 +180,15 @@ def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
 
     # Is this word actually a type?
     assert c.symbol
+    c.log.debug("Looking up a type called '%s'." % c.symbol.s_id)
     _type = Type.types.get(c.symbol.s_id,None)
-    assert _type
+    assert _type, "%s isn't an existing type : %s" % (_type, Type.types.keys())
     if type_name == "InputTypeSignature":
         #c.stack.tos().value.stack_in.append(Type(c.symbol.s_id))
-        c.stack.tos().value.stack_in.push(Type(c.symbol.s_id))
+        c.stack.tos().value.stack_in.push(StackObject(stype=Type(c.symbol.s_id)) )
     else:
         #c.stack.tos().value.stack_out.append(Type(c.symbol.s_id))
-        c.stack.tos().value.stack_out.push(Type(c.symbol.s_id))
+        c.stack.tos().value.stack_out.push(StackObject(stype=Type(c.symbol.s_id)) )
 
 
 def compile_word_handler(c: AF_Continuation) -> None:
@@ -196,24 +205,25 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
     assert c.symbol
     c.log.debug("looking up symbol.s_id = %s" % c.symbol.s_id)
-    op_name = c.symbol.s_id
-    found = False
+    op_name : Op_name = c.symbol.s_id
+    found : bool = False
 
     ##
     ## THIS IS WHERE WE SHOULD DO TYPE CHECKING DURING COMPILATION
     ##
     tos_output_sig : Stack = Stack()
 
-    if c.stack.tos().value.words:
-        # Match to the output stack of our last word in this definition.
-        words = c.stack.tos().value.words
-        tos_output_sig = words[-1].sig.stack_out
+    op : Operation = c.stack.tos().value
+    op_words : List[Operation] = op.words
+    if op_words:
+        # Match to the output stack of our last word in this definition.        
+        tos_output_sig = op_words[-1].sig.stack_out
         c.log.debug("Match to prior word's output sig: %s" % tos_output_sig)
 
     else:
         # Match to the input stack of the input defintion of our word.
         op_swap(c)
-        tos_output_sig = c.stack.tos().value.stack_in
+        tos_output_sig = op.sig.stack_in
         op_swap(c)
         c.log.debug("Match to current word's input sig: %s" % tos_output_sig)
 
@@ -223,7 +233,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         # Have to create a fake continuation for type matching.
         fake_c = AF_Continuation(stack = Stack())
         for t in tos_output_sig.contents():
-            fake_c.stack.push(StackObject(type=t, value=None))
+            fake_c.stack.push(StackObject(stype=t, value=None))
 
         output_type_name = tos_output_sig.contents()[-1].name
         c.log.debug("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
@@ -247,7 +257,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
     if not found:
         # See if there's a ctor for this name?
-        ctor = Type.find_ctor(op_name, [TAny,])
+        ctor = Type.find_ctor(op_name, [StackObject(stype=TAny),])
         if ctor is not None:
 
             ### TODO:   See if the prior word is a literal/atom (how to tell?)
@@ -273,7 +283,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
                 return func(c)
             return compiled_make_atom
         op_implementation = curry_make_atom(op_name, make_atom)                
-        new_op = Operation(op_name, op_implementation, sig=TypeSignature([],[TAtom]))
+        new_op = Operation(op_name, op_implementation, sig=TypeSignature([],[StackObject(stype=TAtom)]))
         c.log.debug("New anonymous function: %s" % new_op)
         c.stack.tos().value.add_word( new_op )
 

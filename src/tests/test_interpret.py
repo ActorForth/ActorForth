@@ -25,7 +25,7 @@ class TestInterpreter(unittest.TestCase):
         cont = interpret(self.cont, io.StringIO(code))
 
         assert cont.stack.tos().value == "Junk"
-        assert cont.stack.tos().type == TAtom 
+        assert cont.stack.tos().stype == TAtom 
         assert cont.stack.depth() == 2
 
         # Pretend to be stdin.
@@ -78,10 +78,10 @@ class TestInterpreter(unittest.TestCase):
     def testOverloadingBoolCtor(self) -> None:
         Type.register_ctor('Bool',Operation('bool',op_bool),[TBool])
         cont = interpret(self.cont, io.StringIO("True bool"))
-        assert cont.stack.tos().type == TBool
+        assert cont.stack.tos().stype == TBool
         assert cont.stack.tos().value is True
         cont = interpret(cont, io.StringIO("bool"))
-        assert cont.stack.tos().type == TBool
+        assert cont.stack.tos().stype == TBool
         assert cont.stack.pop().value is True
 
 

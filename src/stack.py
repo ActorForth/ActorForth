@@ -155,7 +155,6 @@ class Stack(KStack):
         """
         if isinstance(self._stack, KStack.NonEmpty):
             return [x for x in self._stack._data]
-            #return [x for x in reversed(self._stack._data)]
         return []
 
     def __len__(self):

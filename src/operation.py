@@ -12,14 +12,14 @@ from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
 from itertools import zip_longest
 
-from aftype import AF_Type, AF_Continuation
+from aftype import AF_Type, AF_Continuation, StackObject
 
 from stack import Stack
 
 
 class TypeSignature:
 
-    def __init__(self, in_seq: Sequence["AF_Type"] = None, out_seq: Sequence["AF_Type"] = None ):
+    def __init__(self, in_seq: Sequence["StackObject"] = None, out_seq: Sequence["StackObject"] = None ):
         if in_seq is None: in_seq = []
         if out_seq is None: out_seq = []
 
@@ -28,43 +28,66 @@ class TypeSignature:
 
 
     # Produces a mapped type sequence that accounts for "Any" types.
-    def map_from_input_sig(self, sig: Sequence["AF_Type"]) -> Sequence["AF_Type"]:
-        result_sig : List["AF_Type"] = []
+    def map_from_input_sig(self, sig: Sequence[StackObject]) -> Sequence[StackObject]:
+        result_sig : List[StackObject] = []
         assert len(self.stack_in) <= len(sig), "Error! In Stack '%s' longer than Sig '%s'." % (self.stack_in,sig)
 
         # Iterate over both sequences in reverse.
+        in_s : StackObject
+        m_s  : StackObject
         for in_s, m_s in zip(self.stack_in.contents()[::-1],sig[::-1]):
             # Upgrade "Any" types to whatever they're being paired with.
-            if m_s == "Any":
-                m_s = in_s
-            elif in_s == "Any":
-                in_s = m_s
 
-            assert m_s == in_s, "Error! Input Type '%s' not equivalent to Sig Type '%s' for In Stack = %s matched with Sig %s." % (in_s, m_s, self.stack_in, sig)
+            logging.debug("in_s type is '%s' : %s." % (type(in_s), in_s) )
+            logging.debug("m_s type is '%s' : %s." % (type(m_s),m_s) )
+
+            match_type : AF_Type = m_s.stype
+            if match_type == "Any":
+                m_s.stype = in_s.stype
+            elif in_s.stype == "Any":
+                in_s.stype = match_type
+
+            assert m_s.stype == in_s.stype, "Error! Input Type '%s' not equivalent to Sig Type '%s' for In Stack = %s matched with Sig %s." % (in_s, m_s, self.stack_in, sig)
+
+            ### TODO: Confirm stack content here!!!
+
             result_sig.insert(0,m_s)
         return result_sig
 
 
     # Used by the runtime interpreter to check for mathing types for words.
     def match_in(self, stack: Stack) -> bool:
+        logging.debug("match_in in_s=%s, matching against stack=%s" % (self.stack_in, stack))
         try:
-            result = self.map_from_input_sig([i.type for i in stack.contents()])
+            #result = self.map_from_input_sig([i.stype for i in stack.contents()])
+            result = self.map_from_input_sig(stack.contents())
+            logging.debug("match_in returns True.")
             return True
         except AssertionError:
+            logging.debug("match_in returns False.")
             return False
 
 
     def __str__(self) -> str:
-        out = "["
+        out = "TSig["
         for t in self.stack_in.contents():
-            out += " %s," % t.name
+            out += "t=%s" % t.stype.name
+            if t.value is not None:
+                out += ", v='%s'" % t.value
+            out += ', '
+
         out += "] -> ["
 
         for t in self.stack_out.contents():
-            out += " %s," % t.name
-
+            out += "t=%s" % t.stype.name
+            if t.value is not None:
+                out += ", v='%s'" % t.value
+            out += ', '
         out += "]"
         return out
+
+    def __repr__(self):
+      return self.__str__()        
 
     def __eq__(self, s : object) -> bool:
         if not isinstance(s, TypeSignature):
@@ -126,8 +149,8 @@ class Operation:
 
         # Consume as much of the input as our input signature requires.
         for i in range(len(self.sig.stack_in)):
-            in_type = sig_out.pop()
-            match_type = consume_in.pop()
+            in_type : AF_Type = sig_out.pop().stype
+            match_type : AF_Type = consume_in.pop().stype
 
             if match_type == "Any":
                 match_type = in_type
@@ -162,7 +185,7 @@ class Operation:
 #Op_list = List[Tuple[Operation, TypeSignature]]
 Op_list = List[Operation]
 
-Op_map = List[Tuple[Sequence["AF_Type"],Operation]]
+Op_map = List[Tuple[Sequence["StackObject"],Operation]]
 
 
 

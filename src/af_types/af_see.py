@@ -10,7 +10,7 @@ def see_handler(cont: AF_Continuation) -> None:
         symbol_id = symbol.s_id
     t = Type.types.get(symbol_id)
     if t:
-        so = StackObject(value="Type", type=Type(symbol_id))
+        so = StackObject(value="Type", stype=Type(symbol_id))
         cont.stack.tos().value.push(so)
         return
     s : Stack = cont.stack.tos().value
@@ -29,5 +29,5 @@ TSee = Type("See",see_handler)
 
 def op_see(c: AF_Continuation) -> None:
     s = Stack()
-    c.stack.push(StackObject(value=s,type=TSee))
+    c.stack.push(StackObject(value=s, stype=TSee))
 Type.add_op(Operation('see', op_see, sig=TypeSignature([],[]) ))

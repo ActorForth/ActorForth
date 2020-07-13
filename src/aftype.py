@@ -42,9 +42,11 @@ class Symbol:
             return symbol.s_id == self.s_id
         return False
 
+
 @dataclass
 class AF_Type:
     name : str
+
 
 """
 INTRO 4.3 : Stacks strictly contain StackObjects. Every StackObject
@@ -54,15 +56,23 @@ INTRO 4.3 : Stacks strictly contain StackObjects. Every StackObject
 """
 @dataclass
 class StackObject:
-    type: AF_Type
+    stype: AF_Type
     value: Any = None
+
+    def __str__(self):
+      if self.value is not None:
+        return "SObject(t='%s',v='%s')" % (self.stype, self.value)
+      return "SObject(t='%s')" % self.stype
+
+    def __repr__(self):
+      return self.__str__()
+
 
 @dataclass 
 class AF_Continuation:
     stack : Stack
     symbol : Optional[Symbol] = None
     op : Any = None # Becomes an Operation in Continuation
-
 
     debug : bool = False
     cdepth : int = 0        # Depth of calls for debug tab output.
