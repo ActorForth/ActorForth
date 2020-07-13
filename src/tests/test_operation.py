@@ -2,12 +2,19 @@ import unittest
 
 from operation import TypeSignature, Operation, op_nop, Stack
 
+
+import logging
+root_log = logging.getLogger()
+root_log.setLevel(logging.DEBUG)
+
 from af_types.af_bool import *
 from af_types.af_int import *
 from af_types.af_any import *
 
 class OperationTests(unittest.TestCase):
 
+    def setUp(self) -> None:
+        pass
 
     def test_simple_stack_effect(self) -> None:
         op = Operation("nop", op_nop, sig=TypeSignature([StackObject(stype=TInt)],[StackObject(stype=TInt)]))

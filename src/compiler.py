@@ -211,21 +211,28 @@ def compile_word_handler(c: AF_Continuation) -> None:
     ##
     ## THIS IS WHERE WE SHOULD DO TYPE CHECKING DURING COMPILATION
     ##
-    tos_output_sig : Stack = Stack()
-
     op : Operation = c.stack.tos().value
-    op_words : List[Operation] = op.words
-    if op_words:
-        # Match to the output stack of our last word in this definition.        
-        tos_output_sig = op_words[-1].sig.stack_out
-        c.log.debug("Match to prior word's output sig: %s" % tos_output_sig)
+    op_swap(c)
+    # Get the TypeSignature from the OutputTypeSignature object.
+    op.sig=c.stack.tos().value
+    op_swap(c)
+    tos_output_sig, is_matched = op.check_stack_effect()
+    # tos_output_sig : Stack = Stack()
 
-    else:
-        # Match to the input stack of the input defintion of our word.
-        op_swap(c)
-        tos_output_sig = op.sig.stack_in
-        op_swap(c)
-        c.log.debug("Match to current word's input sig: %s" % tos_output_sig)
+    # op : Operation = c.stack.tos().value
+    # c.log.debug("Compiling operation : %s." % op)
+    # op_words : List[Operation] = op.words
+    # if op_words:
+    #     # Match to the output stack of our last word in this definition.        
+    #     tos_output_sig = op_words[-1].sig.stack_out
+    #     c.log.debug("Match to prior word's output sig: %s" % tos_output_sig)
+
+    # else:
+    #     # Match to the input stack of the input defintion of our word.
+    #     op_swap(c)
+    #     tos_output_sig = op.sig.stack_in
+    #     op_swap(c)
+    #     c.log.debug("Match to current word's input sig: %s" % tos_output_sig)
 
     if len(tos_output_sig):
         # First try to match up with an op specialized for this type.
@@ -233,9 +240,10 @@ def compile_word_handler(c: AF_Continuation) -> None:
         # Have to create a fake continuation for type matching.
         fake_c = AF_Continuation(stack = Stack())
         for t in tos_output_sig.contents():
-            fake_c.stack.push(StackObject(stype=t, value=None))
+            #fake_c.stack.push(StackObject(stype=t, value=None))
+            fake_c.stack.push(t)
 
-        output_type_name = tos_output_sig.contents()[-1].name
+        output_type_name = tos_output_sig.contents()[-1].stype.name
         c.log.debug("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
         op, found = Type.find_op(op_name, fake_c, output_type_name)
 

@@ -120,7 +120,7 @@ class Operation:
         except AttributeError:
             pass         
         result = "Op{'%s' %s :(%s)" % (self.name, self.sig, qualified_name)
-        result += " %s" % str(self.words)
+        result += " words=%s" % str(self.words)
         result += "}"
         return result
 
@@ -131,58 +131,76 @@ class Operation:
         return self.name
 
     def check_stack_effect(self, sig_in : Optional[ Stack ] = None) -> Tuple[ Stack, bool ]:
-        """
-        Returns the output stack effect of this operation given an optional input stack.
-        "Any" types will be specialized to a concrete type if matched against it.
+        logging.debug("op: %s with sig_in = %s." % (self, sig_in) )
+        start_stack : Stack
+        match_stack : Stack
 
-        If no sequence is passed in we just copy the input type signature for this Operation
-        and treat that as the input sequence for purposes of stack effect.
+        # The start_stack is what we're trying to match with.
+        if sig_in is None:
+            start_stack = self.sig.stack_in.copy()
+            logging.debug("Use our default input stack signature instead: %s." % start_stack)
+        else: 
+            start_stack = sig_in.copy()
 
-        Also returns a secondary Boolean that is true only if the output matches the 
-        output type signature declared for this Operation.
-        """
-        matches: bool = True
-        sig_out: Stack = Stack()
-        if sig_in is None: sig_out = self.sig.stack_in.copy()
-        else: sig_out = sig_in.copy()
-        consume_in = self.sig.stack_in.copy()
+        # We're matching the start_stack against our input stack.
+        match_stack = self.sig.stack_in.copy()
+        matches : bool = True
 
-        # Consume as much of the input as our input signature requires.
-        for i in range(len(self.sig.stack_in)):
-            in_type : AF_Type = sig_out.pop().stype
-            match_type : AF_Type = consume_in.pop().stype
+        if len(self.sig.stack_in) > len(start_stack):
+            logging.error("Input stack underrun! len=%s:%s > len%s:%s" % (len(self.sig.stack_in), self.sig.stack_in, len(start_stack), start_stack) )
+            raise Exception("Stack Underrun!")
 
-            if match_type == "Any":
-                match_type = in_type
-            if in_type == "Any":
-                in_type = match_type
+        if len(self.words) == 0:
+            # This is a primitive operation. Just consume, adjust for stack effect.
+            for i in range(len(match_stack)):
+                match = match_stack.pop()
+                test = start_stack.pop()
+                logging.debug("Testing match:%s against test:%s." % (match, test))
 
-            logging.debug("in_type:%s =?= match_type:%s : %s" % (in_type, match_type, in_type==match_type) )
+                # Upgrade "Any" types if present.
+                if match.stype == "Any":
+                    logging.debug("Upgrading match 'Any' to test: %s." % test)
+                    match = test 
+                elif test.stype == "Any":
+                    logging.debug("Upgrading test 'Any' to match: %s." % match)
+                    test = match
 
-            if in_type != match_type: matches = False
+                # Check against value if match has a value!
+                if match.value is not None:
+                    matches = (match.value == test.value)
+                if not matches: 
+                    logging.error("match.value(%s) != test.value(%s)!" % (match.value, test.value))
+                    raise Exception("Value mis-match!")
 
-        # Tack on the output stack effect that we're claiming.
-        out_sig = self.sig.stack_out.contents()
-        for i in out_sig:
-            logging.debug("adding output type:%s" % i)
-            sig_out.push(i)
+                # Check if the types match.
+                matches = (match.stype == test.stype)
+                if not matches: 
+                    logging.error("match.stype(%s) != test.stype(%s)!" % (match.stype, test.stype))
+                    raise Exception("Type mis-match!")
+            
+            # Tack on the output stack effect that we're claiming.            
+            for i in self.sig.stack_out.contents():
+                logging.debug("adding output type:%s" % i)
+                start_stack.push(i)
 
-        # Make sure we match on the final output signature. But only up until as
-        # much as the output signature declares. Extra deeper items are ok.
-        test_match_out = self.sig.stack_out.copy()
-        test_sig_out = sig_out.copy()
-        for i in range(len(test_match_out)):
-            x = test_match_out.pop()
-            y = test_sig_out.pop()
-            if x != y:
-                matches = False
-                logging.debug("sig_out: %s != stack_out: %s" % (sig_out, self.sig.stack_out))
+            logging.debug("Returning following stack effect for primitive word: %s, matches = %s." % (start_stack, matches))
+            return start_stack, matches
 
-        logging.debug("Returning output signature: %s with matching = %s." % (sig_out,matches))
-        return sig_out, matches
-  
+        # We're composite word so walk through the stack effect for each one.
+        logging.debug("Composite word so walking through implementation.")
+        last_word : Operation
+        for word in self.words:
+            if not matches:
+                logging.error("This probably isn't possible. Broke match on word: %s." % last_word)
+                raise Exception("Stack mis-match for composite word!")
+            last_word = word
+            start_stack, matches = word.check_stack_effect(start_stack)
 
-#Op_list = List[Tuple[Operation, TypeSignature]]
+        return start_stack, matches
+
+
+
+
 Op_list = List[Operation]
 
 Op_map = List[Tuple[Sequence["StackObject"],Operation]]
