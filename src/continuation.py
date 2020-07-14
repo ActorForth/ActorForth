@@ -17,7 +17,7 @@ from operation import Operation, op_nop
 import logging
 import sys
 
-ROOT_LOGGING_DEFAULT = logging.DEBUG # logging.WARNING
+ROOT_LOGGING_DEFAULT = logging.WARNING # logging.DEBUG # 
 LOGGING_DEFAULT = logging.DEBUG
 
 root_log = logging.getLogger()
