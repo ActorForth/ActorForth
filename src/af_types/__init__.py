@@ -125,22 +125,30 @@ class Type(AF_Type):
         # Given a stack of input types, find the first matching ctor.
         logging.debug("Attempting to find a ctor for Type '%s' using the following input types: %s." % (name, inputs))
         logging.debug("Type '%s' has the following ctors: %s." % (name, Type.ctors))
+
         for type_sig in Type.ctors.get(name,[]):
 
             matching = False
             inputs = inputs.copy()
             try:
-                for ctor_type in type_sig[0]:
-                    in_type = inputs.pop(0).stype
-                    if in_type.name == "Any" or ctor_type == "Any":
+                ctor_obj : StackObject
+                for ctor_obj in type_sig[0]:
+                    in_obj = inputs.pop(0)
+                    # Match against value first.
+                    if ctor_obj.value is not None:
+                        if ctor_obj.value != in_obj.value:
+                            logging.debug("Failed value match for %s against ctor value %s." % (ctor_obj.value, in_obj.value))
+                            matching = False
+                            break
+                    if in_obj.stype == "Any" or ctor_obj.stype == "Any":
                         logging.debug("Matching ctor for 'Any' type.")
                         matching = True
                         continue
-                    if in_type == ctor_type:
-                        logging.debug("Matching ctor for specific '%s' type." % in_type)
+                    if in_obj.stype == ctor_obj.stype:
+                        logging.debug("Matching ctor for specific '%s' type." % in_obj.stype)
                         matching = True
                     else:
-                        logging.debug("Failed match for '%s' and '%s' types." % (in_type, ctor_type))
+                        logging.debug("Failed match for '%s' against ctor '%s' types." % (in_obj, ctor_obj))
                         matching = False
                         break
             except IndexError:
@@ -150,7 +158,8 @@ class Type(AF_Type):
                 break
 
             if matching == True:
-                return type_sig[1]
+                result : Operation = type_sig[1]
+                return result
         return None
 
 
