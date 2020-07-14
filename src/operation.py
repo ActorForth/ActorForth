@@ -130,7 +130,12 @@ class Operation:
     def short_name(self) -> str:
         return self.name
 
-    def check_stack_effect(self, sig_in : Optional[ Stack ] = None) -> Tuple[ Stack, bool ]:
+    def check_stack_effect(self, sig_in : Optional[ Stack ] = None, force_composite : bool = False) -> Tuple[ Stack, bool ]:
+        """
+        force_composite is used for compiling new composite words that may not yet have a word 
+        in their word list so would otherwise appear as primitive words and return the final 
+        stack effect rather than the starting one which is appropriate when compiling.
+        """
         logging.debug("op: %s with sig_in = %s." % (self, sig_in) )
         start_stack : Stack
         match_stack : Stack
@@ -147,10 +152,10 @@ class Operation:
         matches : bool = True
 
         if len(self.sig.stack_in) > len(start_stack):
-            logging.error("Input stack underrun! len=%s:%s > len%s:%s" % (len(self.sig.stack_in), self.sig.stack_in, len(start_stack), start_stack) )
+            logging.error("Input stack underrun! Match target len=%s:%s > match candidate len%s:%s" % (len(self.sig.stack_in), self.sig.stack_in, len(start_stack), start_stack) )
             raise Exception("Stack Underrun!")
 
-        if len(self.words) == 0:
+        if len(self.words) == 0 and not force_composite:
             # This is a primitive operation. Just consume, adjust for stack effect.
             for i in range(len(match_stack)):
                 match = match_stack.pop()

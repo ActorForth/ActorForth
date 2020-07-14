@@ -216,7 +216,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
     # Get the TypeSignature from the OutputTypeSignature object.
     op.sig=c.stack.tos().value
     op_swap(c)
-    tos_output_sig, is_matched = op.check_stack_effect()
+    tos_output_sig, is_matched = op.check_stack_effect(force_composite = True)
     # tos_output_sig : Stack = Stack()
 
     # op : Operation = c.stack.tos().value

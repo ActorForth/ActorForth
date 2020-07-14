@@ -86,7 +86,7 @@ class Continuation(AF_Continuation):
                 content += "empty"
             else:
                 for n, s in enumerate(self.stack.contents()[::-1]):
-                    content += "%s) val=%s,  type=%s\n\t\t" % (n, s.value, s.stype.name)
+                    content += "%s) type=%s,  val=%s\n\t\t" % (n, s.stype.name, s.value)
             content += "\n"
 
             result += "\n\tStack =\t%s " % (content)
