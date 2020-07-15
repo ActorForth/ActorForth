@@ -217,22 +217,6 @@ def compile_word_handler(c: AF_Continuation) -> None:
     op.sig=c.stack.tos().value
     op_swap(c)
     tos_output_sig, is_matched = op.check_stack_effect(force_composite = True)
-    # tos_output_sig : Stack = Stack()
-
-    # op : Operation = c.stack.tos().value
-    # c.log.debug("Compiling operation : %s." % op)
-    # op_words : List[Operation] = op.words
-    # if op_words:
-    #     # Match to the output stack of our last word in this definition.        
-    #     tos_output_sig = op_words[-1].sig.stack_out
-    #     c.log.debug("Match to prior word's output sig: %s" % tos_output_sig)
-
-    # else:
-    #     # Match to the input stack of the input defintion of our word.
-    #     op_swap(c)
-    #     tos_output_sig = op.sig.stack_in
-    #     op_swap(c)
-    #     c.log.debug("Match to current word's input sig: %s" % tos_output_sig)
 
     if len(tos_output_sig):
         # First try to match up with an op specialized for this type.
@@ -274,9 +258,6 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
             c.stack.tos().value.add_word(ctor)
             found = True
-
-
-
 
     if found:
         c.stack.tos().value.add_word(op)
