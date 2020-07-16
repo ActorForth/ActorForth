@@ -57,15 +57,15 @@ class Parser:
         while True:
             for char in get_char():
 
-                if char is ' ' or char is '\t' or char is '\n':
+                if char == ' ' or char == '\t' or char == '\n':
                     column += 1 # \n will reset column later.
                     # Tabs are assumed to occur on every 4th character
                     # for purposes of column counting.
-                    if char is '\t': column += 4 - (column % 4)
+                    if char == '\t': column += 4 - (column % 4)
                     white_space = True
 
                 # Punctuation doesn't need whitespace!
-                elif char is '.' or char is ':' or char is ';':
+                elif char == '.' or char == ':' or char == ';':
                     white_space = False
 
                     if token:
@@ -87,7 +87,7 @@ class Parser:
                     yield (token, linenum, token_column)
                     token = ""
 
-                if char is '\n':
+                if char == '\n':
                     linenum += 1
                     column = 1  # reset the column as promised.
 

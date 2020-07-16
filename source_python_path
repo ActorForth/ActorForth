@@ -1,1 +1,4 @@
-PYTHONPATH=./src:src:.:$PYTHONPATH
+#PYTHONPATH=./src:src:.:$PYTHONPATH
+PYTHONPATH=./:./src:./src/tests
+MYPYPATH=$PYTHONPATH
+

@@ -44,11 +44,11 @@ class TestParser(unittest.TestCase):
 
     def test_default_parser(self) -> None:
         p = Parser()
-        assert p.filename is ''
+        assert p.filename == ''
 
     def test_open_file(self) -> None:
         p = Parser(test_file_name)
-        assert p.filename is test_file_name
+        assert p.filename == test_file_name
         p.reset()
         assert not p.filename
 
@@ -73,6 +73,6 @@ class TestParser(unittest.TestCase):
     def test_parse_file_with_ending_white_space(self) -> None:
         p = Parser("samples/square.a4")
         [t for t in p.tokens()]
-        assert p.filename is "samples/square.a4"
+        assert p.filename == "samples/square.a4"
 
 
