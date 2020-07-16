@@ -31,7 +31,7 @@ class TestTypeSignature(unittest.TestCase):
 
         Type.register_ctor("Test",Operation('nop', TOp), [StackObject(stype=TParm1)])
 
-    @unittest.skip
+    #@unittest.skip
     def test_match_in(self) -> None:
         empty_sig = TypeSignature([],[])
         s = Stack()
