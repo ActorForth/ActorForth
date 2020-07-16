@@ -2,9 +2,9 @@
 # just Python 3.7+ thus far...
 
 # Development dependencies
-pytest
-coverage
-pytest-cov
-mypy
+pytest==5.4.3
+coverage==5.2
+pytest-cov==2.10.0
+mypy==0.782
 
-ipython
+ipython==7.16.1
