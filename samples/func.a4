@@ -1,29 +1,28 @@
 debug on
 
 samenum : Int -> Bool ;
-dup == .
-42 int
+    dup == .
 
+42 int
 samenum
 
 drop
 
 double : Int -> Int ;
-dup +.
+    dup +.
 
 42 int double
-
 
 combo : Int -> Bool;
 	double
 	samenum.
 
 multiinput : Bool Int Int Int -> Int ;
-+ == == .
+    + == == .
 
 False bool 1 int 1 int 1 int
 
 noinputnooutput : -> ;
-stack .
+    stack .
 
 resume

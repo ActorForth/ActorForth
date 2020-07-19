@@ -19,10 +19,14 @@ def output_type_handler(c: AF_Continuation) -> None:
 def code_compile_handler(c: AF_Continuation ) -> None:
     return compile_word_handler(c)
 
+def word_declaration_handler(c: AF_Continuation ) -> None:
+    return declaration_word_handler(c)    
+
 TWordDefinition = Type("WordDefinition")
 TInputTypeSignature = Type("InputTypeSignature", handler = input_type_handler)
 TOutputTypeSignature = Type("OutputTypeSignature", handler = output_type_handler)
 TCodeCompile = Type("CodeCompile", handler = code_compile_handler)
+TWordDeclaration = Type("WordDeclaration", handler = word_declaration_handler)
 
 
 def op_new_word(c: AF_Continuation) -> None:
@@ -122,10 +126,6 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
         c.log.debug("'%s' operation being added to '%s' dictionary." % (op.name, s_in_tos.value))
         Type.add_op(op, s_in_tos.value)
 
-    # new_op = Operation(op.name, op_compile_word, [op])
-    # new_sig = TypeSignature([Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")],
-    #                 [Type("WordDefinition"),Type("OutputTypeSignature"),Type("CodeCompile")])
-    # Type.types["CodeCompile"].ops_list.insert(0, (new_op, new_sig))
 Type.add_op(Operation(';',op_finish_word_compilation,
             sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)],
                     [StackObject(stype=TWordDefinition)]) ),
@@ -265,7 +265,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         c.log.debug("FAILED TO FIND WORD TO COMPILE '%s'" % c.symbol.s_id )
 
         c.log.debug("Compile as literal")
-        #assert False
+        
         def curry_make_atom(s, func = make_atom ):
             def compiled_make_atom( c: AF_Continuation ):
                 c.symbol = c.symbol
@@ -277,6 +277,15 @@ def compile_word_handler(c: AF_Continuation) -> None:
         c.stack.tos().value.add_word( new_op )
 
         c.log.debug("compile_word_handler ending")
+
+
+def declaration_word_handler(c: AF_Continuation) -> None:
+    """
+
+    """
+
+def op_match_and_execute_compiled_word(c: AF_Continuation) -> None:
+    pass
 
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:

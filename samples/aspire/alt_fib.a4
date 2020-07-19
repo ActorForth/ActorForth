@@ -1,0 +1,47 @@
+fib	: nat -> nat.
+	fib : 0 -> 0.
+	fib : 1 -> 1.
+	fib : _ -> nat;
+		dup
+		1 -
+		fib
+		swap
+		2 - 
+		fib
+		+.
+
+fob	: nat -> nat.
+	fob : 0 -> 0.
+	fob : 1 -> 1.
+	fob : _ -> nat;
+		dup
+		1 -
+		fob
+		swap
+		2 - 
+		fob
+		+!
+
+fab : nat -> nat.
+	: 0 -> 0.
+	: 1 -> 1.
+	: _ -> nat; 
+		dup
+		1 -
+		fab
+		swap
+		2 - 
+		fab
+		+.
+			
+fub : nat -> nat.
+	when 0 -> 0.
+	when 1 -> 1.
+	otherwise -> nat; 
+		dup
+		1 -
+		fub
+		swap
+		2 - 
+		fub
+		+.			
