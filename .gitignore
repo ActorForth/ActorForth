@@ -12,3 +12,5 @@ credentials.txt
 
 .~lock.*
 runtests-pat
+
+docs/.directory
