@@ -113,6 +113,25 @@ class StackTests(unittest.TestCase):
         assert s != q
         assert s != p
 
+    def test_stack_full_content(self) -> None:
+        s = Stack( self.init_list )
+        assert s.contents() == self.init_list
+        assert str(s) == str(s.contents()) == s.__repr__()
+
+    def test_stack_last_content(self) -> None:
+        s = Stack( self.init_list )
+        assert s.contents(4) == self.init_list[-4:]    
+
+    def test_stack_underflow_content(self) -> None:
+        s = Stack( self.init_list )
+        l = len(self.init_list) + 1
+        with self.assertRaises(Exception) as x:
+            s.contents(l)
+
+    def test_can_only_compare_to_stack(self) -> None:
+        s = Stack( self.init_list )
+        (s == self.init_list) == NotImplemented
+
 class KevlinsStackTest(unittest.TestCase):
     """
     https://youtu.be/nrVIlhtoE3Y?t=3630
