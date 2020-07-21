@@ -284,8 +284,37 @@ def declaration_word_handler(c: AF_Continuation) -> None:
 
     """
 
-def op_match_and_execute_compiled_word(c: AF_Continuation) -> None:
-    pass
+def match_and_execute_compiled_word(c: AF_Continuation, pattern: List[Tuple[Sequence["StackObject"], Operation]] ) -> Callable[["AF_Continuation"],None]:
+    def op_curry_match_and_execute(c: AF_Continuation):
+        c.log.debug("Attempting to pattern match with pattern(s) = %s." % [x for x,y in pattern])
+        match_to : Sequence["StackObject"]
+        op : Operation
+        for match_to, op in pattern:
+            matches : bool = True
+            # Copy as many items off the stack as our pattern to match against.
+            match_against = c.stack.contents(len(match_to))
+            c.log.debug("Matching input: %s against pattern: %s." % (match_against, match_to))
+            pat : StackObject
+            test : StackObject
+            for pat,test in zip(match_to,match_against):
+                # If our pattern has a value then the test value must match it.
+                if pat.value is not None:
+                    if pat.value != test.value: 
+                        c.log.debug("Value mismatch: %s != %s." % (pat.value, test.value))
+                        matches = False
+                        break
+                if pat.stype != test.stype: 
+                        c.log.debug("Type mismatch: %s != %s." % (pat.stype, test.stype))
+                        matches = False
+                        break
+            # Everything matches - this is our op. Call it.
+            if matches: 
+                c.log.debug("Matched! Call the operator.")
+                return op(c)
+        # If we got here then nothing matched!
+        c.log.error("No matches found!")
+        raise Exception("No matchs found!")
+    return op_curry_match_and_execute
 
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
