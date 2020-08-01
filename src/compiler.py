@@ -77,8 +77,9 @@ def op_start_code_compile(c: AF_Continuation) -> None:
     #sig = sig.s.value
 
     # Grab the name of the new word from the WordDefinition
+    sig = c.stack.tos().value
     op_swap(c)
-    op = Operation(c.stack.tos().value, op_execute_compiled_word)
+    op = Operation(c.stack.tos().value, op_execute_compiled_word, sig=sig)
     op_swap(c)
     #c.stack.push(sig_s)
     #print("I'M COMPILING Op=%s!!!" % op)
@@ -114,9 +115,11 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
     """
     c.log.debug("finishing word compilation!")
     op = c.stack.pop().value
-    pop_value = c.stack.pop().value
-    op.sig = pop_value
-    s_in = pop_value.stack_in
+    # op_start_code_compile sets the signature now.
+    #pop_value = c.stack.pop().value
+    #op.sig = pop_value
+    #s_in = pop_value.stack_in
+    s_in = op.sig.stack_in
 
     if s_in.is_empty() :
         c.log.debug("'%s' operation being added to global dictionary." % op.name)
