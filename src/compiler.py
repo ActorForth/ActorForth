@@ -19,14 +19,14 @@ def output_type_handler(c: AF_Continuation) -> None:
 def code_compile_handler(c: AF_Continuation ) -> None:
     return compile_word_handler(c)
 
-def word_declaration_handler(c: AF_Continuation ) -> None:
-    return declaration_word_handler(c)    
+def code_pattern_handler(c: AF_Continuation ) -> None:
+    return pattern_word_definition_handler(c)    
 
 TWordDefinition = Type("WordDefinition")
 TInputTypeSignature = Type("InputTypeSignature", handler = input_type_handler)
 TOutputTypeSignature = Type("OutputTypeSignature", handler = output_type_handler)
 TCodeCompile = Type("CodeCompile", handler = code_compile_handler)
-TWordDeclaration = Type("WordDeclaration", handler = word_declaration_handler)
+TMatchPattern = Type("MatchPattern", handler = code_pattern_handler)
 
 
 def op_new_word(c: AF_Continuation) -> None:
@@ -106,6 +106,35 @@ Type.add_op(Operation(';',op_skip_to_code_compile,
             sig=TypeSignature([StackObject(stype=TWordDefinition)],
                 [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)]) ),
                 "WordDefinition")
+
+
+def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
+    """
+    CodeCompile(Operation') 
+        -> CodeCompile(PatternOperation'), MatchPattern([ (Sequence[StackObject],Operation)] )
+
+    Changes the Operation handler to be one that executes a pattern matching algorithm
+    rather than just executes a set of words. Then sets up the compilation to begin
+    capturing these patterns and associated operations.    
+    """
+    # For now, we're not allowing adding pattern matching if words have
+    # already been compiled.
+    if len(c.stack.tos().words): 
+        error_msg = "UNSUPPORTED : can't switch to pattern matching for word, '%s', which has already compiled these words: %s." \
+                        % (c.stack.tos().name, c.stack.tos().words)
+        c.log.error(error_msg)
+        raise Exception(error_msg)
+
+    # This 'patterns' instance gets bound to the new Op that will be in our CodeCompile object.
+    # New patterns get added to the Op via our MatchPattern compilation.
+    patterns : List[Tuple[Sequence["StackObject"], Operation]] = []
+
+    # Over-ride the Operation handler to be a pattern matching Operation.
+    c.stack.tos().the_op = match_and_execute_compiled_word(c, patterns)
+
+    MatchPattern = StackObject(value = patterns, stype=TMatchPattern)
+    c.stack.push(MatchPattern)
+    c.log.debug("'%s' is now a pattern matched word." % c.stack.tos().name)
 
 
 def op_finish_word_compilation(c: AF_Continuation) -> None:
@@ -282,7 +311,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         c.log.debug("compile_word_handler ending")
 
 
-def declaration_word_handler(c: AF_Continuation) -> None:
+def pattern_word_definition_handler(c: AF_Continuation) -> None:
     """
 
     """
