@@ -209,22 +209,21 @@ def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
     if handled: out += "HANDLED by compilation_word_handler."
     c.log.debug(out % (type_name, c.symbol))
     if handled: return
+    assert c.symbol
 
     #
     # NOTE - HERE'S WHERE WE'D DEAL WITH LITERALS/VALUES BY MAPPING TYPE SPECS & CTORS
     #
 
     # Is this word actually a type?
-    assert c.symbol
+
     c.log.debug("Looking up a type called '%s'." % c.symbol.s_id)
-    _type = Type.types.get(c.symbol.s_id,None)
+    _type = Type.get_type(c.symbol.s_id)
     assert _type, "%s isn't an existing type : %s" % (_type, Type.types.keys())
     if type_name == "InputTypeSignature":
-        #c.stack.tos().value.stack_in.append(Type(c.symbol.s_id))
-        c.stack.tos().value.stack_in.push(StackObject(stype=Type(c.symbol.s_id)) )
+        c.stack.tos().value.stack_in.push(StackObject(stype=_type))
     else:
-        #c.stack.tos().value.stack_out.append(Type(c.symbol.s_id))
-        c.stack.tos().value.stack_out.push(StackObject(stype=Type(c.symbol.s_id)) )
+        c.stack.tos().value.stack_out.push(StackObject(stype=_type))
 
 
 def compile_word_handler(c: AF_Continuation) -> None:
