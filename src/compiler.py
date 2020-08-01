@@ -135,6 +135,10 @@ def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
     MatchPattern = StackObject(value = patterns, stype=TMatchPattern)
     c.stack.push(MatchPattern)
     c.log.debug("'%s' is now a pattern matched word." % c.stack.tos().name)
+Type.add_op(Operation( ':',op_switch_to_pattern_compilation,
+            sig=TypeSignature([StackObject(stype=TCodeCompile)],
+                [StackObject(stype=TCodeCompile), StackObject(stype=TMatchPattern)]) ),
+                "CodeCompile")
 
 
 def op_finish_word_compilation(c: AF_Continuation) -> None:
