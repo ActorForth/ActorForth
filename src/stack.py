@@ -149,12 +149,18 @@ class Stack(KStack):
         """
         return self.depth() == 0
 
-    def contents(self):
+    def contents(self, last: int = 0):
         """
         Returns the contents of the stack. Leftmost is oldest. Rightmost is top of stack.
+        If last is not 0 then return the last 'n items off the stack.        
         """
         if isinstance(self._stack, KStack.NonEmpty):
-            return [x for x in self._stack._data]
+            if last == 0:
+                return [x for x in self._stack._data]
+            else:
+                if last > self.depth():
+                    raise Exception("ERROR: Stack underflow. Request for last %i items from a stack with only a depth of %i!" % (last, self.depth()))
+                return self._stack._data[last*-1:]                                    
         return []
 
     def __len__(self):
