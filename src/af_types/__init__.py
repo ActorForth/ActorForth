@@ -106,6 +106,11 @@ class Type(AF_Type):
         t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
         return t_def.op_handler
 
+    @staticmethod
+    def get_type(name: Type_name) -> Optional["Type"]:
+        if Type.types.get(name, None) is not None:
+            return Type(name)
+        return None
 
     @staticmethod
     def register_ctor(name: Type_name, op: Operation, input_sig: List["StackObject"]) -> None:

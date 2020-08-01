@@ -127,7 +127,7 @@ def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
 
     # This 'patterns' instance gets bound to the new Op that will be in our CodeCompile object.
     # New patterns get added to the Op via our MatchPattern compilation.
-    patterns : List[Tuple[Sequence["StackObject"], Operation]] = []
+    patterns : List[ Tuple[Sequence["StackObject"], Optional[Operation]] ] = [([],None)]
 
     # Over-ride the Operation handler to be a pattern matching Operation.
     c.stack.tos().the_op = match_and_execute_compiled_word(c, patterns)
@@ -317,14 +317,72 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
 def pattern_word_definition_handler(c: AF_Continuation) -> None:
     """
-
+    Stack picture looks like this:
+        CodeCompile(PatternOperation'), MatchPattern([ (Sequence[StackObject],Operation)] )
     """
+    c.log.debug("pattern_word_definition_handler starting")
+    handled = compilation_word_handler(c)
+    if handled: return
 
-def match_and_execute_compiled_word(c: AF_Continuation, pattern: List[Tuple[Sequence["StackObject"], Operation]] ) -> Callable[["AF_Continuation"],None]:
+    assert c.symbol
+
+    op_swap(c)
+    op_sig = c.stack.tos().value.sig
+    op_swap(c)
+
+    
+    def stack_from_patterns(c: AF_Continuation) -> Stack:
+        result: Stack = Stack()
+        patterns : List[ Tuple[Sequence["StackObject"], Optional[Operation]] ] = c.stack.tos().value
+        
+        # Grab the last item of the list.
+        pat : Sequence["StackObject"]
+        pat, op = patterns[-1]
+        assert op is not None, "This can't happen!"
+        [result.push(sig) for sig in pat]
+
+        return result
+
+    input_sig : Stack = op_sig.in_seq
+    current_sig : Stack = stack_from_patterns(c)
+    c.log.debug("'%s' match requested for input_sig: %s already having matched: %s." % (c.symbol, input_sig, current_sig))
+        
+    remaining_matches : int = input_sig.depth()-current_sig.depth()
+    if remaining_matches < 1 : raise Exception("Too many inputs now.")
+    next_type : Type = input_sig.contents(remaining_matches)[0].stype
+
+    # First we see if this symbol refers to a Type match.
+    _type : Optional[Type] = Type.get_type(c.symbol.s_id)
+    if _type:
+        if next_type != _type:
+            error_msg = "'%s' being compiled does not match '%s' in the pattern." % (_type, next_type)
+            c.log.error(error_msg)
+            raise Exception(error_msg)
+
+        # Append this type to the current pattern.
+        c.stack.tos().value[-1][0].append( StackObject(stype=_type) )
+
+
+    # If not a Type match then is there a ctor for this value as an atom for the Type?
+    else:
+        ctor : Optional[ Callable[["AF_Continuation"],None] ] = Type.find_ctor(next_type.name, [StackObject(stype=TAtom)])
+        if ctor is None:
+            error_msg = "'%s' is neither a Type %s nor is there a ctor to build that from this Atom." % (c.symbol, next_type.name)
+            c.log.error(error_msg)
+            raise Exception(error_msg)
+
+        # Construct the Type and append to the current pattern.
+        c.stack.push(StackObject(value=c.symbol,stype=TAtom))
+        ctor(c) # This will throw an exception if it fails.
+        s = c.stack.pop()
+        c.stack.tos().value[-1][0].append( s )
+
+
+def match_and_execute_compiled_word(c: AF_Continuation, pattern: List[Tuple[Sequence["StackObject"], Optional[Operation]] ] ) -> Callable[["AF_Continuation"],None]:
     def op_curry_match_and_execute(c: AF_Continuation):
         c.log.debug("Attempting to pattern match with pattern(s) = %s." % [x for x,y in pattern])
         match_to : Sequence["StackObject"]
-        op : Operation
+        op : Optional[Operation]
         for match_to, op in pattern:
             matches : bool = True
             # Copy as many items off the stack as our pattern to match against.
@@ -346,6 +404,7 @@ def match_and_execute_compiled_word(c: AF_Continuation, pattern: List[Tuple[Sequ
             # Everything matches - this is our op. Call it.
             if matches: 
                 c.log.debug("Matched! Call the operator.")
+                assert op is not None
                 return op(c)
         # If we got here then nothing matched!
         c.log.error("No matches found!")
