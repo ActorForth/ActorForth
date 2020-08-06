@@ -45,3 +45,16 @@ fub : nat -> nat.
 		2 - 
 		fub
 		+.			
+
+feb : nat -> nat
+	: 0 -> 0
+	: 1 -> 1
+	: _ -> nat;
+		dup
+		1 -
+		feb
+		swap
+		2 - 
+		feb
+		+.
+
