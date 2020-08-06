@@ -19,16 +19,21 @@ def output_type_handler(c: AF_Continuation) -> None:
 def code_compile_handler(c: AF_Continuation ) -> None:
     return compile_word_handler(c)
 
-def code_pattern_handler(c: AF_Continuation ) -> None:
-    return pattern_word_definition_handler(c)    
+# def code_pattern_handler(c: AF_Continuation ) -> None:
+#     return pattern_word_definition_handler(c)    
+
+def pattern_handler(c: AF_Continuation) -> None:
+    return compile_pattern_handler(c)
+
 
 TWordDefinition = Type("WordDefinition")
 TInputTypeSignature = Type("InputTypeSignature", handler = input_type_handler)
 TOutputTypeSignature = Type("OutputTypeSignature", handler = output_type_handler)
 TCodeCompile = Type("CodeCompile", handler = code_compile_handler)
-TInputPatternMatch = Type("InputPatternMatch")
-TOutputPatternMatch = Type("OutputPatternMatch")
-TMatchPattern = Type("MatchPattern", handler = code_pattern_handler)
+TInputPatternMatch = Type("InputPatternMatch", handler = pattern_handler)
+TOutputPatternMatch = Type("OutputPatternMatch", handler = pattern_handler)
+
+#TMatchPattern = Type("MatchPattern", handler = code_pattern_handler)
 
 
 def op_new_word(c: AF_Continuation) -> None:
@@ -331,45 +336,54 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
         c.log.debug("compile_word_handler ending")
 
-    
-def stack_from_patterns(c: AF_Continuation) -> Stack:
-    assert c.stack.tos().stype == "MatchPattern"
-    result: Stack = Stack()
-    patterns : List[ Tuple[Sequence["StackObject"], Optional[Operation]] ] = c.stack.tos().value
+
+# def stack_from_patterns(c: AF_Continuation) -> Stack:
+#     assert c.stack.tos().stype == "InputPatternMatch"
+#     result: Stack = Stack()
+#     patterns : List[ Tuple[Sequence["StackObject"], Optional[Operation]] ] = c.stack.tos().value
         
-    # Grab the last item of the list.
-    pat : Sequence["StackObject"]
-    pat, op = patterns[-1]
-    assert op is not None, "This can't happen!"
-    [result.push(sig) for sig in pat]
+#     # Grab the last item of the list.
+#     pat : Sequence["StackObject"]
+#     pat, op = patterns[-1]
+#     assert op is not None, "This can't happen!"
+#     [result.push(sig) for sig in pat]
 
-    return result
+#     return result
 
 
-def pattern_word_definition_handler(c: AF_Continuation) -> None:
+def compile_pattern_handler(c: AF_Continuation) -> None:
     """
-    Stack picture looks like this:
-        CodeCompile(PatternOperation'), MatchPattern([ (Sequence[StackObject],Operation)] )
-    """
-    c.log.debug("pattern_word_definition_handler starting")
-    handled = compilation_word_handler(c)
-    if handled: return
+    Stack pattern looks like this:
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), InputPatternMatch(TypeSignature).
 
+    Create a Input Signature for our InputPatternMatch that matches with the
+    Input Signature for the OutputTypeSignature instance below.    
+    """
+    c.log.debug("compile__pattern starting")
     assert c.symbol
+    if compilation_word_handler(c): return
 
-    # Pull the TypeSignature from the Operation in the CodeCompile object
-    # down one position in the stack and then bring MatchPattern back up top.
+    # Pull the TypeSignature from the OutputTypeSignature
+    # down one position in the stack and then bring InputPatternMatch back up top.
     op_swap(c)
-    op_sig = c.stack.tos().value.sig
+    op_sig = c.stack.tos().value
     op_swap(c)
 
-    input_sig : Stack = op_sig.in_seq
-    current_sig : Stack = stack_from_patterns(c)
-    c.log.debug("'%s' match requested for input_sig: %s already having matched: %s." % (c.symbol, input_sig, current_sig))
+    sig_declaration : Stack
+    current_sig : Stack
+
+    if c.stack.tos().stype == TInputPatternMatch:
+        sig_declaration = op_sig.in_seq
+        current_sig = c.stack.tos().value.in_seq
+    else:
+        sig_declaration = op_sig.out_seq
+        current_sig = c.stack.tos().value.out_seq
+
+    c.log.debug("'%s' match requested for sig_declaration: %s already having matched: %s." % (c.symbol, sig_declaration, current_sig))
         
-    remaining_matches : int = input_sig.depth()-current_sig.depth()
-    if remaining_matches < 1 : raise Exception("Too many inputs now.")
-    next_type : Type = input_sig.contents(remaining_matches)[0].stype
+    remaining_matches : int = sig_declaration.depth()-current_sig.depth()
+    if remaining_matches < 1 : raise Exception("Too many entries now.")
+    next_type : Type = sig_declaration.contents(remaining_matches)[0].stype
 
     # First we see if this symbol refers to a Type match.
     _type : Optional[Type] = Type.get_type(c.symbol.s_id)
@@ -380,7 +394,7 @@ def pattern_word_definition_handler(c: AF_Continuation) -> None:
             raise Exception(error_msg)
 
         # Append this type to the current pattern.
-        c.stack.tos().value[-1][0].append( StackObject(stype=_type) )
+        current_sig.push( StackObject(stype=_type) )
 
 
     # If not a Type match then is there a ctor for this value as an atom for the Type?
@@ -395,24 +409,25 @@ def pattern_word_definition_handler(c: AF_Continuation) -> None:
         c.stack.push(StackObject(value=c.symbol,stype=TAtom))
         ctor(c) # This will throw an exception if it fails.
         s = c.stack.pop()
-        c.stack.tos().value[-1][0].append( s )
+        sig_declaration.push( s )
 
 
-def op_switch_to_output_pattern_sig(c: AF_Continuation) -> None:
-    """
-    CodeCompile(PatternOperation'), MatchPattern([ (Sequence[StackObject],Operation)] )
-        -> CodeCompile(PatternOperation'), MatchPattern([ (Sequence[StackObject],Operation)] ), OutputTypeSignature(TypeSignature).
 
-    During a TypeSignature declaration, -> switches the compiler from building the
-    input types to building the output types.
-    """
-    patterns = stack_from_patterns(c).contents()
-    s = StackObject(value = TypeSignature(patterns), stype = TOutputTypeSignature)
-    c.stack.push(s)
-Type.add_op(Operation('->',op_switch_to_output_sig,
-            sig=TypeSignature([StackObject(stype=TCodeCompile), StackObject(stype=TMatchPattern)],
-                        [StackObject(stype=TCodeCompile), StackObject(stype=TMatchPattern), StackObject(stype=TOutputTypeSignature)]) ),
-            "MatchPattern")        
+# def op_switch_to_output_pattern_sig(c: AF_Continuation) -> None:
+#     """
+#     CodeCompile(PatternOperation'), MatchPattern([ (Sequence[StackObject],Operation)] )
+#         -> CodeCompile(PatternOperation'), MatchPattern([ (Sequence[StackObject],Operation)] ), OutputTypeSignature(TypeSignature).
+
+#     During a TypeSignature declaration, -> switches the compiler from building the
+#     input types to building the output types.
+#     """
+#     patterns = stack_from_patterns(c).contents()
+#     s = StackObject(value = TypeSignature(patterns), stype = TOutputTypeSignature)
+#     c.stack.push(s)
+# Type.add_op(Operation('->',op_switch_to_output_sig,
+#             sig=TypeSignature([StackObject(stype=TCodeCompile), StackObject(stype=TMatchPattern)],
+#                         [StackObject(stype=TCodeCompile), StackObject(stype=TMatchPattern), StackObject(stype=TOutputTypeSignature)]) ),
+#             "MatchPattern")        
 
 
 def match_and_execute_compiled_word(c: AF_Continuation, pattern: List[Tuple[Sequence["StackObject"], Optional[Operation]] ] ) -> Callable[["AF_Continuation"],None]:
