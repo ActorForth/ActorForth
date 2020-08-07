@@ -28,6 +28,7 @@ class TypeSignature:
 
 
     # Produces a mapped type sequence that accounts for "Any" types.
+    # Will fail an assertion if the types don't match.
     def map_from_input_sig(self, sig: Sequence[StackObject]) -> Sequence[StackObject]:
         result_sig : List[StackObject] = []
         assert len(self.stack_in) <= len(sig), "Error! In Stack '%s' longer than Sig '%s'." % (self.stack_in,sig)

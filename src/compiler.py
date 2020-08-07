@@ -5,9 +5,11 @@
 import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
+from itertools import zip_longest
 
 from af_types import *
 from af_types.af_any import op_swap, op_stack
+from operation import Operation_def
 
 
 def input_type_handler(c: AF_Continuation) -> None:
@@ -168,6 +170,10 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
     """
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
         -> WordDefinition
+
+    TODO: MUST have this confirm Operation's TypeSignature matches
+          the behavior of this Operation before storing it as a new word.
+
     """
     c.log.debug("finishing word compilation!")
     op = c.stack.pop().value
@@ -419,15 +425,15 @@ def compile_pattern_handler(c: AF_Continuation) -> None:
 def op_switch_to_output_pattern_sig(c: AF_Continuation) -> None:
     """
     Stack pattern looks like this:
-    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), InputPatternMatch(TypeSignature).
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), InputPatternMatch(TypeSignature)
         -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature).
     """
     # Pull the TypeSignature input sequence from the InputTypeSignature
     # down one position in the stack and then bring InputPatternMatch back up top.
     op_swap(c)
-    input_sig = c.stack.tos().value.in_seq
+    input_sig : Stack = c.stack.tos().value.in_seq
     op_swap(c)
-    matched_sig = c.stack.tos().value.in_seq
+    matched_sig : Stack = c.stack.tos().value.in_seq
 
     if input_sig.depth() != matched_sig.depth():
         msg = "Input Signature : %s doesn't match pattern : %s!" % (input_sig, matched_sig)
@@ -438,6 +444,82 @@ Type.add_op(Operation('->', op_switch_to_output_pattern_sig,
             sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TInputPatternMatch)],
                         [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch)]) ),
             "InputPatternMatch")
+
+
+def compile_matched_pattern_to_word(c: AF_Continuation) -> None:
+    """
+    Stack pattern looks like this:
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature)
+        -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), InputPatternMatch(TypeSignature).
+
+    Takes the current OutputPatternMatch object and tries to turn it
+    into a new Operation word for our dictionary.        
+    """
+
+    op_swap(c)
+    output_type_sig : TypeSignature = c.stack.tos().value
+    op_swap(c)
+
+    pattern_type_sig : TypeSignature = c.stack.tos().value
+    pattern_output : Stack = pattern_type_sig.stack_out
+
+    # First confirm that the OutputPattern sig.out_seq conforms to our OutputTypeSignature.
+    # Note : compile_pattern_handler gurantees no invalid patterns exist for both input
+    #        and output sigs, we just need to make sure the full output definition has 
+    #        been fulfilled here so checking length is adequate.
+    assert output_type_sig.stack_out.depth() == pattern_output.depth(), \
+        "Error - Output TypeSignature for Operation: %s doesn't match Pattern Output: %s." % (output_type_sig.stack_out, pattern_output)
+
+    # Now make sure there's a real value for each part of the pattern output.
+    assert all([x.value is not None for x in pattern_output.contents()]), \
+        "Error - None value found in the pattern output: %s, partial words not supported here." % pattern_output
+
+    # OK we have a valid simple Operation! Can we simplify it?
+    op : Operation_def
+    in_sig : Stack = pattern_type_sig.stack_in.copy()
+    out_sig : Stack = pattern_type_sig.stack_out.copy()
+
+    first_position : Optional[int] = None
+    output_vals : List["StackObject"] = []
+    for pos, (a,b) in enumerate(zip_longest(in_sig.contents(), out_sig.contents())):
+        if a.value != b.value and first_position is None: 
+            first_position = pos
+        if first_position is not None and b.value is not None:
+            output_vals.append(b)
+
+    if first_position is None:
+        op = op_nop
+    else:        
+        pops = in_sig.depth() - first_position
+        def op_curry_pop_and_push(pop_count: int, push_content: Sequence["StackObject"]) -> Operation_def:
+            def pop_and_push(c: AF_Continuation) -> None:
+                [c.stack.pop() for x in range(pop_count)]
+                [c.stack.push(x) for x in push_content]
+            return pop_and_push
+
+        op = op_curry_pop_and_push(pops, output_vals)
+
+    # Create our new word! (Will grab the name later.)
+    new_op = Operation("", op, sig = pattern_type_sig)
+
+    # Pop off the OutputPatternMatch
+    c.stack.pop()
+
+    # Get the word name from our WordDefinition
+    op_swap(c)
+    new_op.name = c.stack.tos().value
+    op_swap(c)
+
+    # Now add to the type's disctionary or the global one as appropriate.
+    if pattern_type_sig.stack_in.depth() > 0:
+        Type.add_op(new_op, pattern_type_sig.stack_in.tos().stype.name)
+    else:
+        Type.add_op(new_op)        
+
+
+    # Create a new InputPatternMatch
+    return op_switch_to_pattern_matching(c)
+
 
 
 def match_and_execute_compiled_word(c: AF_Continuation, pattern: List[Tuple[Sequence["StackObject"], Optional[Operation]] ] ) -> Callable[["AF_Continuation"],None]:
