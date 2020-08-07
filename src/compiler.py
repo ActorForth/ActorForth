@@ -455,7 +455,6 @@ def compile_matched_pattern_to_word(c: AF_Continuation) -> None:
     Takes the current OutputPatternMatch object and tries to turn it
     into a new Operation word for our dictionary.        
     """
-
     op_swap(c)
     output_type_sig : TypeSignature = c.stack.tos().value
     op_swap(c)
@@ -488,8 +487,11 @@ def compile_matched_pattern_to_word(c: AF_Continuation) -> None:
             output_vals.append(b)
 
     if first_position is None:
-        op = op_nop
+        # Input & Output stacks match. This Operation is a no-op.
+        op = op_nop 
     else:        
+        # Create an op that consumes an appropriate number of items from the stack 
+        # and then pushes our content delta onto the stack.
         pops = in_sig.depth() - first_position
         def op_curry_pop_and_push(pop_count: int, push_content: Sequence["StackObject"]) -> Operation_def:
             def pop_and_push(c: AF_Continuation) -> None:
@@ -516,9 +518,31 @@ def compile_matched_pattern_to_word(c: AF_Continuation) -> None:
     else:
         Type.add_op(new_op)        
 
-
     # Create a new InputPatternMatch
-    return op_switch_to_pattern_matching(c)
+    op_switch_to_pattern_matching(c)
+
+Type.add_op(Operation(':', compile_matched_pattern_to_word,
+            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch)],
+                        [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TInputPatternMatch)]) ),
+            "OutputPatternMatch")
+
+def compile_and_complete_pattern_to_word(c: AF_Continuation) -> None:
+    """
+    Stack pattern looks like this:
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature)
+        -> (empty).
+
+    Takes the current OutputPatternMatch object and tries to turn it
+    into a new Operation word for our dictionary. Then clears the entire WordDefinition.
+    """
+    compile_matched_pattern_to_word(c)
+    c.stack.pop()
+    c.stack.pop()
+
+Type.add_op(Operation(':', compile_matched_pattern_to_word,
+            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch)],
+                        []) ),
+            "OutputPatternMatch")    
 
 
 
