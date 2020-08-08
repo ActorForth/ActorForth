@@ -9,8 +9,14 @@ from itertools import zip_longest
 
 from af_types import *
 from af_types.af_any import op_swap, op_stack
-from operation import Operation_def
+from operation import Operation_def, TypeSignature
 
+def make_word_context(word_name: Op_name, op_def: Operation_def, in_seq: Sequence["Type"], out_seq: Sequence["Type"]) -> None:
+    context_name : Type_name = in_seq[-1].name
+    in_objects = [StackObject(stype=x) for x in in_seq]
+    out_objects = [StackObject(stype=x) for x in out_seq]
+    sig = TypeSignature(in_seq = in_objects, out_seq = out_objects)
+    Type.add_op(Operation(word_name, op_def, sig=sig), type_name=context_name)
 
 def input_type_handler(c: AF_Continuation) -> None:
     type_sig_handler(c, "InputTypeSignature")
@@ -53,8 +59,9 @@ def op_new_word(c: AF_Continuation) -> None:
     sig = TypeSignature([],[])
     c.stack.push(StackObject(value=sig,stype=TInputTypeSignature))
 
-Type.add_op(Operation(':',op_new_word, sig=TypeSignature([StackObject(stype=TAtom)],
-            [StackObject(stype=TWordDefinition), StackObject(stype=TInputTypeSignature)])) )
+# Type.add_op(Operation(':',op_new_word, sig=TypeSignature([StackObject(stype=TAtom)],
+#             [StackObject(stype=TWordDefinition), StackObject(stype=TInputTypeSignature)])) )
+make_word_context(':', op_new_word, [TAtom],[TWordDefinition, TInputTypeSignature])
 
 
 def op_switch_to_output_sig(c: AF_Continuation) -> None:
@@ -66,10 +73,8 @@ def op_switch_to_output_sig(c: AF_Continuation) -> None:
     input types to building the output types.
     """
     c.stack.tos().stype = TOutputTypeSignature
-Type.add_op(Operation('->',op_switch_to_output_sig,
-            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TInputTypeSignature)],
-                        [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature)]) ),
-            "InputTypeSignature")
+make_word_context('->',op_switch_to_output_sig,[TWordDefinition,TInputTypeSignature],
+                        [TWordDefinition,TOutputTypeSignature])
 
 
 def op_start_code_compile(c: AF_Continuation) -> None:
@@ -82,21 +87,14 @@ def op_start_code_compile(c: AF_Continuation) -> None:
 
     Constructs a new Operation declaration from STUFF
     """
-    #sig_s = c.stack.pop() # Later need to copy and leave on the stack to support pattern matching.
-    #sig = sig.s.value
-
     # Grab the name of the new word from the WordDefinition
     sig = c.stack.tos().value
     op_swap(c)
     op = Operation(c.stack.tos().value, op_execute_compiled_word, sig=sig)
     op_swap(c)
-    #c.stack.push(sig_s)
-    #print("I'M COMPILING Op=%s!!!" % op)
     c.stack.push( StackObject(value=op, stype=TCodeCompile) )
-Type.add_op(Operation(';',op_start_code_compile,
-            sig = TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature)],
-                    [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)]) ),
-                    "OutputTypeSignature")
+make_word_context(';',op_start_code_compile, [TWordDefinition,TOutputTypeSignature], 
+                    [TWordDefinition, TOutputTypeSignature, TCodeCompile])
 
 
 def op_skip_to_code_compile(c: AF_Continuation) -> None:
@@ -110,11 +108,8 @@ def op_skip_to_code_compile(c: AF_Continuation) -> None:
     sig = TypeSignature([],[])
     c.stack.push(StackObject(value=sig, stype=TOutputTypeSignature))
     op_start_code_compile(c)
-# Does this make sense yet? Type.add_op(':', op_new_word, TypeSignature([TWordDefinition],[TWordDefinition]))
-Type.add_op(Operation(';',op_skip_to_code_compile,
-            sig=TypeSignature([StackObject(stype=TWordDefinition)],
-                [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)]) ),
-                "WordDefinition")
+make_word_context(';',op_skip_to_code_compile, [TWordDefinition],
+                [TWordDefinition, TOutputTypeSignature, TCodeCompile])            
 
 
 def op_switch_to_pattern_matching(c: AF_Continuation) -> None:
@@ -127,10 +122,8 @@ def op_switch_to_pattern_matching(c: AF_Continuation) -> None:
     """    
     sig = TypeSignature([],[])
     c.stack.push(StackObject(value=sig, stype=TInputPatternMatch))
-Type.add_op(Operation(':',op_switch_to_pattern_matching,
-            sig = TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature)],
-                    [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TInputPatternMatch)]) ),
-                    "OutputTypeSignature")
+make_word_context(':',op_switch_to_pattern_matching, [TWordDefinition, TOutputTypeSignature],
+                    [TWordDefinition, TOutputTypeSignature, TInputPatternMatch])                
 
 def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
     """
@@ -158,10 +151,9 @@ def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
 
     op = Operation(c.stack.tos().value, op_execute_compiled_word, sig=out_pattern.value)
     c.stack.push( StackObject(value=op, stype=TCodeCompile) )
-Type.add_op(Operation(';',op_switch_to_pattern_compilation,
-            sig = TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch)],
-                    [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch), StackObject(stype=TCodeCompile)]) ),
-                    "OutputPatternMatch")    
+make_word_context(';',op_switch_to_pattern_compilation, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch],
+                    [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch, TCodeCompile])                
+
 
 # def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
 #     """
@@ -203,7 +195,6 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
 
     TODO: MUST have this confirm Operation's TypeSignature matches
           the behavior of this Operation before storing it as a new word.
-
     """
     c.log.debug("finishing word compilation!")
     op = c.stack.pop().value
@@ -221,10 +212,8 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
         c.log.debug("'%s' operation being added to '%s' dictionary." % (op.name, s_in_tos.value))
         Type.add_op(op, s_in_tos.value)
 
-Type.add_op(Operation(';',op_finish_word_compilation,
-            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)],
-                    [StackObject(stype=TWordDefinition)]) ),
-                    "CodeCompile")
+make_word_context(';',op_finish_word_compilation, [TWordDefinition, TOutputTypeSignature, TCodeCompile],
+                    [TWordDefinition])                 
 
 
 def op_finish_word_definition(c: AF_Continuation) -> None:
@@ -234,10 +223,7 @@ def op_finish_word_definition(c: AF_Continuation) -> None:
     """
     op_finish_word_compilation(c)
     c.stack.pop()
-Type.add_op(Operation('.',op_finish_word_definition,
-            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TCodeCompile)],
-                []) ),
-                "CodeCompile")
+make_word_context('.',op_finish_word_definition, [TWordDefinition, TOutputTypeSignature, TCodeCompile], [])            
 
 
 def _indent(c: AF_Continuation) -> str:
@@ -270,12 +256,7 @@ def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
     if handled: return
     assert c.symbol
 
-    #
-    # NOTE - HERE'S WHERE WE'D DEAL WITH LITERALS/VALUES BY MAPPING TYPE SPECS & CTORS
-    #
-
     # Is this word actually a type?
-
     c.log.debug("Looking up a type called '%s'." % c.symbol.s_id)
     _type = Type.get_type(c.symbol.s_id)
     assert _type, "%s isn't an existing type : %s" % (_type, Type.types.keys())
@@ -287,8 +268,12 @@ def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
 
 def compile_word_handler(c: AF_Continuation) -> None:
     """
+    Expects stack signature of:
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation)
-        -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), CodeCompile(Operation')
+    
+    OR
+
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature), CodeCompile(Operation')
 
     Given an Op_name, place it in the list of our Operation to be executed at runtime later.
     TODO: Confirm Type Signatures in & out of found words to enforce type safety.
@@ -302,15 +287,20 @@ def compile_word_handler(c: AF_Continuation) -> None:
     op_name : Op_name = c.symbol.s_id
     found : bool = False
 
-    ##
-    ## THIS IS WHERE WE SHOULD DO TYPE CHECKING DURING COMPILATION
-    ##
     op : Operation = c.stack.tos().value
     op_swap(c)
-    # Get the TypeSignature from the OutputTypeSignature object.
+ 
+    # Get the TypeSignature from the OutputTypeSignature or OutputPatternMatch object.
     op.sig=c.stack.tos().value
     op_swap(c)
     tos_output_sig, is_matched = op.check_stack_effect(force_composite = True)
+
+    ##
+    ## TODO : Now we have to discover potentially multiple viable Operations
+    ##        that this word could invoke and, if more than one is found,
+    ##        have the execution perform run-time pattern matching.
+    ##
+
 
     if len(tos_output_sig):
         # First try to match up with an op specialized for this type.
@@ -471,10 +461,8 @@ def op_switch_to_output_pattern_sig(c: AF_Continuation) -> None:
         c.log.error(msg)
         raise Exception(msg)
     c.stack.tos().stype = TOutputPatternMatch
-Type.add_op(Operation('->', op_switch_to_output_pattern_sig,
-            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TInputPatternMatch)],
-                        [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch)]) ),
-            "InputPatternMatch")
+make_word_context('->', op_switch_to_output_pattern_sig, [TWordDefinition, TOutputTypeSignature, TInputPatternMatch],
+                        [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch])        
 
 
 def compile_matched_pattern_to_word(c: AF_Continuation) -> None:
@@ -553,10 +541,9 @@ def compile_matched_pattern_to_word(c: AF_Continuation) -> None:
     # Create a new InputPatternMatch
     op_switch_to_pattern_matching(c)
 
-Type.add_op(Operation(':', compile_matched_pattern_to_word,
-            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch)],
-                        [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TInputPatternMatch)]) ),
-            "OutputPatternMatch")
+make_word_context(':', compile_matched_pattern_to_word, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch],
+                        [TWordDefinition, TOutputTypeSignature, TInputPatternMatch])        
+
 
 def compile_and_complete_pattern_to_word(c: AF_Continuation) -> None:
     """
@@ -573,11 +560,7 @@ def compile_and_complete_pattern_to_word(c: AF_Continuation) -> None:
     c.stack.pop()
     c.stack.pop()
 
-Type.add_op(Operation('.', compile_and_complete_pattern_to_word,
-            sig=TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch)],
-                        []) ),
-            "OutputPatternMatch")    
-
+make_word_context('.', compile_and_complete_pattern_to_word, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch], [])            
 
 
 def match_and_execute_compiled_word(c: AF_Continuation, pattern: List[Tuple[Sequence["StackObject"], Optional[Operation]] ] ) -> Callable[["AF_Continuation"],None]:
