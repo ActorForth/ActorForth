@@ -96,6 +96,43 @@ class TypeSignature:
             return NotImplemented  
         return (self.stack_in == s.stack_in) and (self.stack_out == s.stack_out)
 
+    def __lt__(self, s: object) -> bool:
+        if not isinstance(s, TypeSignature):
+            return NotImplemented 
+        # Longest stack_in comes first.
+        if self.stack_in.depth() > s.stack_in.depth(): return True
+        if self.stack_in.depth() < s.stack_in.depth(): return False
+
+        # Go ahead and eliminate equal stacks early on as a likely case.
+        if self.stack_in == s.stack_in: return False
+
+        # Stacks with the most TypeValues (prioritized top to bottom) come first.
+        us = self.stack_in.copy()
+        them = s.stack_in.copy()
+        while us.depth():
+            i = us.pop()
+            j = them.pop()
+            if i.s_type < j.stype: return True
+            if i.s_type > j.stype: return False
+            if i.value is None and j.value is None: continue
+            if i.value is not None and j.value is None: return True
+            if i.value is None and j.value is not None: return False
+
+        # We only get here if all the types match and have values.
+        # So we're left to comparing values.
+        us = self.stack_in.copy()
+        them = s.stack_in.copy()
+        while us.depth():
+            i = us.pop()
+            j = them.pop()
+            if i.value < j.value : return True
+            if i.value > j.value : return False
+
+        # We should never get here because we already checked for
+        # equal stacks earlier!
+        return False
+
+
 Op_name = str
 Operation_def = Callable[["AF_Continuation"],None]
 
