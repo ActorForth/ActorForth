@@ -132,6 +132,36 @@ Type.add_op(Operation(':',op_switch_to_pattern_matching,
                     [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TInputPatternMatch)]) ),
                     "OutputTypeSignature")
 
+def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
+    """
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature)
+        -> WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature), CodeCompile(Operation).
+
+    Signifies the completion of the TypeSignature for the new word.
+    Switches to start the definition of the word's behavior.
+
+    Constructs a new Operation declaration from STUFF
+    """
+    c.log.debug("op_switch_to_pattern_compilation started.")
+    out_pattern : StackObject = c.stack.pop()
+
+    # Confirm our OutputTypePatternMatch output pattern matches the OutputTypeSignature's output sig.
+    if out_pattern.value.stack_out.depth() != c.stack.tos().value.stack_out.depth():
+        msg = "Pattern %s doesn't complete output type signature: %s." % (out_pattern.value.stack_out, c.stack.tos().value.stack_out)
+        c.log.error(msg)
+        raise Exception(msg)
+
+    op_swap(c)
+    op_name = c.stack.tos().value
+    op_swap(c)
+    c.stack.push(out_pattern)
+
+    op = Operation(c.stack.tos().value, op_execute_compiled_word, sig=out_pattern.value)
+    c.stack.push( StackObject(value=op, stype=TCodeCompile) )
+Type.add_op(Operation(';',op_switch_to_pattern_compilation,
+            sig = TypeSignature([StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch)],
+                    [StackObject(stype=TWordDefinition), StackObject(stype=TOutputTypeSignature), StackObject(stype=TOutputPatternMatch), StackObject(stype=TCodeCompile)]) ),
+                    "OutputPatternMatch")    
 
 # def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
 #     """

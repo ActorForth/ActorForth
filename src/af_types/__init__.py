@@ -201,13 +201,8 @@ class Type(AF_Type):
                     name_found = True
                     sigs_found.append(op.sig)
                     # Now try to match the input stack...
-                    # Should it be an exception to match the name but not the
-                    # stack input signature? Probably so.
-
-                    ### TODO : start using operation.check_stack_effect!!!
-                    #if op.sig.match_in(cont.stack):
                     try:
-                        if op.check_stack_effect(cont.stack):
+                        if op.check_stack_effect(cont.stack): # TODO - are we doing the right thing with this return types?
                             cont.log.debug("Found! Returning %s, %s, %s" % (op, op.sig, True))
                             return op, True
                     except SigValueTypeMismatchException:
