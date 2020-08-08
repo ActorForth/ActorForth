@@ -16,6 +16,7 @@ from aftype import AF_Type, AF_Continuation, StackObject
 
 from stack import Stack
 
+class SigValueTypeMismatchException(Exception): pass
 
 class TypeSignature:
 
@@ -175,14 +176,16 @@ class Operation:
                 if match.value is not None:
                     matches = (match.value == test.value)
                 if not matches: 
-                    logging.error("match.value(%s) != test.value(%s)!" % (match.value, test.value))
-                    raise Exception("Value mis-match!")
+                    msg = "match.value(%s) != test.value(%s)!" % (match.value, test.value)
+                    logging.debug(msg)
+                    raise SigValueTypeMismatchException("Value mis-match! %s" % msg)
 
                 # Check if the types match.
                 matches = (match.stype == test.stype)
                 if not matches: 
-                    logging.error("match.stype(%s) != test.stype(%s)!" % (match.stype, test.stype))
-                    raise Exception("Type mis-match!")
+                    msg = "match.stype(%s) != test.stype(%s)!" % (match.stype, test.stype)                
+                    logging.debug(msg)
+                    raise SigValueTypeMismatchException("Type mis-match! %s" % msg)
             
             # Tack on the output stack effect that we're claiming.            
             for i in self.sig.stack_out.contents():

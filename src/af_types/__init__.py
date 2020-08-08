@@ -14,7 +14,7 @@ from dataclasses import dataclass
 
 from stack import Stack
 from aftype import AF_Type, AF_Continuation, StackObject, Symbol, Location
-from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop
+from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop, SigValueTypeMismatchException
 
 
 Type_name = str
@@ -206,10 +206,13 @@ class Type(AF_Type):
 
                     ### TODO : start using operation.check_stack_effect!!!
                     #if op.sig.match_in(cont.stack):
-                    if op.check_stack_effect(cont.stack):
-
-                        cont.log.debug("Found! Returning %s, %s, %s" % (op, op.sig, True))
-                        return op, True
+                    try:
+                        if op.check_stack_effect(cont.stack):
+                            cont.log.debug("Found! Returning %s, %s, %s" % (op, op.sig, True))
+                            return op, True
+                    except SigValueTypeMismatchException:
+                        # We found the name but not the right value/type sig. Keep looking.
+                        pass
         # Not found.
         if name_found:
             # Is this what we want to do?
