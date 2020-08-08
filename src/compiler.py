@@ -12,11 +12,8 @@ from af_types.af_any import op_swap, op_stack
 from operation import Operation_def, TypeSignature
 
 def make_word_context(word_name: Op_name, op_def: Operation_def, in_seq: Sequence["Type"], out_seq: Sequence["Type"]) -> None:
-    context_name : Type_name = in_seq[-1].name
-    in_objects = [StackObject(stype=x) for x in in_seq]
-    out_objects = [StackObject(stype=x) for x in out_seq]
-    sig = TypeSignature(in_seq = in_objects, out_seq = out_objects)
-    Type.add_op(Operation(word_name, op_def, sig=sig), type_name=context_name)
+    sig = TypeSignature(in_seq = [StackObject(stype=x) for x in in_seq], out_seq = [StackObject(stype=x) for x in out_seq])
+    Type.add_op(Operation(word_name, op_def, sig=sig), type_name=in_seq[-1].name)
 
 def input_type_handler(c: AF_Continuation) -> None:
     type_sig_handler(c, "InputTypeSignature")
@@ -26,9 +23,6 @@ def output_type_handler(c: AF_Continuation) -> None:
 
 def code_compile_handler(c: AF_Continuation ) -> None:
     return compile_word_handler(c)
-
-# def code_pattern_handler(c: AF_Continuation ) -> None:
-#     return pattern_word_definition_handler(c)    
 
 def pattern_handler(c: AF_Continuation) -> None:
     return compile_pattern_handler(c)
@@ -40,8 +34,6 @@ TOutputTypeSignature = Type("OutputTypeSignature", handler = output_type_handler
 TCodeCompile = Type("CodeCompile", handler = code_compile_handler)
 TInputPatternMatch = Type("InputPatternMatch", handler = pattern_handler)
 TOutputPatternMatch = Type("OutputPatternMatch", handler = pattern_handler)
-
-#TMatchPattern = Type("MatchPattern", handler = code_pattern_handler)
 
 
 def op_new_word(c: AF_Continuation) -> None:
@@ -58,9 +50,6 @@ def op_new_word(c: AF_Continuation) -> None:
 
     sig = TypeSignature([],[])
     c.stack.push(StackObject(value=sig,stype=TInputTypeSignature))
-
-# Type.add_op(Operation(':',op_new_word, sig=TypeSignature([StackObject(stype=TAtom)],
-#             [StackObject(stype=TWordDefinition), StackObject(stype=TInputTypeSignature)])) )
 make_word_context(':', op_new_word, [TAtom],[TWordDefinition, TInputTypeSignature])
 
 
@@ -108,8 +97,7 @@ def op_skip_to_code_compile(c: AF_Continuation) -> None:
     sig = TypeSignature([],[])
     c.stack.push(StackObject(value=sig, stype=TOutputTypeSignature))
     op_start_code_compile(c)
-make_word_context(';',op_skip_to_code_compile, [TWordDefinition],
-                [TWordDefinition, TOutputTypeSignature, TCodeCompile])            
+make_word_context(';',op_skip_to_code_compile, [TWordDefinition], [TWordDefinition, TOutputTypeSignature, TCodeCompile])
 
 
 def op_switch_to_pattern_matching(c: AF_Continuation) -> None:
@@ -124,6 +112,7 @@ def op_switch_to_pattern_matching(c: AF_Continuation) -> None:
     c.stack.push(StackObject(value=sig, stype=TInputPatternMatch))
 make_word_context(':',op_switch_to_pattern_matching, [TWordDefinition, TOutputTypeSignature],
                     [TWordDefinition, TOutputTypeSignature, TInputPatternMatch])                
+
 
 def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
     """
@@ -540,7 +529,6 @@ def compile_matched_pattern_to_word(c: AF_Continuation) -> None:
 
     # Create a new InputPatternMatch
     op_switch_to_pattern_matching(c)
-
 make_word_context(':', compile_matched_pattern_to_word, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch],
                         [TWordDefinition, TOutputTypeSignature, TInputPatternMatch])        
 
@@ -559,7 +547,6 @@ def compile_and_complete_pattern_to_word(c: AF_Continuation) -> None:
     c.stack.pop()
     c.stack.pop()
     c.stack.pop()
-
 make_word_context('.', compile_and_complete_pattern_to_word, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch], [])            
 
 
