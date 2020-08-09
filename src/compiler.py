@@ -579,7 +579,7 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
     def op_curry_match_and_execute(c: AF_Continuation) -> None:
         c.log.debug("Attempting to pattern match with words = %s and this stack: %s." % (words,c.stack))
         word_sig : Sequence["StackObject"]
-        op : Optional[Operation]
+        #op : Optional[Operation]
         for word in words:
             matches : bool = True
             # Copy as many items off the stack as our pattern to match against.
@@ -595,15 +595,14 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
                         c.log.debug("Value mismatch: %s != %s." % (w.value, s.value))
                         matches = False
                         break
-                if w.stype != test.stype: 
+                if w.stype != s.stype: 
                         c.log.debug("Type mismatch: %s != %s." % (w.stype, s.stype))
                         matches = False
                         break
             # Everything matches - this is our op. Call it.
             if matches: 
-                c.log.debug("Matched! Call the operator.")
-                assert op is not None
-                return op(c)
+                c.log.debug("Matched! Call the operator.")                
+                return word(c)
         # If we got here then nothing matched!
         c.log.error("No matches found!")
         raise Exception("No matches found!")
