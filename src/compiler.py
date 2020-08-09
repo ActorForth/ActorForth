@@ -290,7 +290,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
     ##        have the execution perform run-time pattern matching.
     ##
 
-    all_named_words = [w for w in Type.find_named_ops_for_scope(op.name, context_type_name, maybe_recursive_op)]
+    all_named_words = [w for w in Type.find_named_ops_for_scope(op_name, context_type_name, maybe_recursive_op)]
     if context_type_name != "Any":
         all_named_words += [w for w in Type.find_named_ops_for_scope(op_name, "Any")]
     c.log.debug("All candidate words: %s." % all_named_words)
@@ -298,7 +298,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
     def match_type_context(candidate: Operation, context: Stack) -> bool:
         # Walk backward down the stack.
         for test, pattern in zip_longest(candidate.sig.stack_in.contents()[::-1], context.contents()[::-1]):
-            #if test is None: return True # Nothing left to compare.
+            if test is None: return True # Nothing left to compare.
             if pattern is None: return False # Context Stack underflow!            
             if test.stype != pattern.stype: return False # Types didn't match.
             if test.value is not None and pattern.value is not None \
@@ -342,14 +342,14 @@ def compile_word_handler(c: AF_Continuation) -> None:
     #     value_some_matched_words.sort()
     #     type_matched_words.sort()
     #     candidate_words = value_some_matched_words + type_matched_words
-    if value_some_matched_words:
-        if len(value_some_matched_words)==1:
-            c.stack.tos().value.add_word(value_some_matched_words[0])
-            c.log.debug("Compiled exact match for '%s' => %s." % (op_name, value_some_matched_words[0]))
+    if type_matched_words:
+        if len(type_matched_words)==1:
+            c.stack.tos().value.add_word(type_matched_words[0])
+            c.log.debug("Compiled exact match for '%s' => %s." % (op_name, type_matched_words[0]))
             return
 
         # Need to do some runtime pattern matching...
-        matching_op = match_and_execute_compiled_word(value_some_matched_words)        
+        matching_op = match_and_execute_compiled_word(type_matched_words)        
 
         # WHAT'S OUR TYPESIGNATURE?!?!?!?!?
 
@@ -357,7 +357,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
 
 
-        c.log.debug("Compiled pattern matching op for '%s' => %s." % (op_name, value_some_matched_words))
+        c.log.debug("Compiled pattern matching op for '%s' => %s." % (op_name, type_matched_words))
         return
 
     c.log.debug("FAILED TO FIND WORD TO COMPILE '%s'" % c.symbol.s_id )
