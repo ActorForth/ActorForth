@@ -186,12 +186,8 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
           the behavior of this Operation before storing it as a new word.
     """
     c.log.debug("finishing word compilation!")
-    op = c.stack.pop().value
-    # op_start_code_compile sets the signature now.
-    #pop_value = c.stack.pop().value
-    #op.sig = pop_value
-    #s_in = pop_value.stack_in
-    s_in = op.sig.stack_in
+    op : Operation = c.stack.pop().value
+    s_in : Stack = op.sig.stack_in
 
     if s_in.is_empty() :
         c.log.debug("'%s' operation being added to global dictionary." % op.name)
@@ -200,6 +196,7 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
         s_in_tos : StackObject = s_in.tos()
         c.log.debug("'%s' operation being added to '%s' dictionary." % (op.name, s_in_tos.value))
         Type.add_op(op, s_in_tos.value)
+    c.stack.pop()
 
 make_word_context(';',op_finish_word_compilation, [TWordDefinition, TOutputTypeSignature, TCodeCompile],
                     [TWordDefinition])                 

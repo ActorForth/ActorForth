@@ -177,6 +177,7 @@ class Type(AF_Type):
         assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys())
         if type_def:
             type_def.ops_list.insert(0,op)
+            #type_def.ops_list.append(op)
 
         #print("\n\nADD_OP type_def type(%s) = %s." % (type(type_def), str(type_def)))
 

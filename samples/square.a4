@@ -1,5 +1,7 @@
 square : Int -> Int;
-    dup *;
+    dup *.
+
+2 int square print
 
 resume    
 
