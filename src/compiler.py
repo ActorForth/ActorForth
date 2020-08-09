@@ -125,7 +125,7 @@ def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
     Constructs a new Operation declaration from STUFF
     """
     c.log.debug("op_switch_to_pattern_compilation started.")
-    out_pattern : StackObject = c.stack.pop()
+    out_pattern : StackObject = c.stack.pop() # WD, OTS, OPM -> WD, OTS
 
     # Confirm our OutputTypePatternMatch output pattern matches the OutputTypeSignature's output sig.
     if out_pattern.value.stack_out.depth() != c.stack.tos().value.stack_out.depth():
@@ -133,12 +133,12 @@ def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
         c.log.error(msg)
         raise Exception(msg)
 
-    op_swap(c)
+    op_swap(c) # WD, OTS -> OPM, WD
     op_name = c.stack.tos().value
-    op_swap(c)
-    c.stack.push(out_pattern)
+    op_swap(c) # OPM, WD -> WD, OTS
+    c.stack.push(out_pattern) # WD, OTS -> WD, OTS, OPM
 
-    op = Operation(c.stack.tos().value, op_execute_compiled_word, sig=out_pattern.value)
+    op = Operation(op_name, op_execute_compiled_word, sig=out_pattern.value)
     c.stack.push( StackObject(value=op, stype=TCodeCompile) )
 make_word_context(';',op_switch_to_pattern_compilation, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch],
                     [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch, TCodeCompile])                
@@ -210,6 +210,16 @@ def op_finish_word_definition(c: AF_Continuation) -> None:
     op_finish_word_compilation(c)
     c.stack.pop()
 make_word_context('.',op_finish_word_definition, [TWordDefinition, TOutputTypeSignature, TCodeCompile], [])            
+
+
+def op_finish_pattern_word_definition(c: AF_Continuation) -> None:
+    """
+    WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature), CodeCompile(Operation')
+        -> (empty)
+    """
+    op_finish_word_definition(c)
+    c.stack.pop()
+make_word_context('.',op_finish_pattern_word_definition, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch, TCodeCompile], [])  
 
 
 def _indent(c: AF_Continuation) -> str:
