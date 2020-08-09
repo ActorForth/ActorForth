@@ -194,8 +194,8 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
         Type.add_op(op)
     else:
         s_in_tos : StackObject = s_in.tos()
-        c.log.debug("'%s' operation being added to '%s' dictionary." % (op.name, s_in_tos.value))
-        Type.add_op(op, s_in_tos.value)
+        c.log.debug("'%s' operation being added to '%s' dictionary." % (op.name, s_in_tos.stype))
+        Type.add_op(op, s_in_tos.stype.name)
     c.stack.pop()
 
 make_word_context(';',op_finish_word_compilation, [TWordDefinition, TOutputTypeSignature, TCodeCompile],
