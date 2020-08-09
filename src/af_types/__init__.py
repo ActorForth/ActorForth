@@ -198,10 +198,13 @@ class Type(AF_Type):
         for op in type_def.ops_list:
             if op.name == name: yield(op)  # Return any matching Ops with this name.
         # If there's a possible recursive call for an unregistered method with an input type sig...
-        if recurse_option is not None and recurse_option.sig.stack_in.depth():
-            # If the last type for the potential recursive call matches our scope...
-            if recurse_option.sig.stack_in.tos().stype == type_name:
-                yield(recurse_option)
+        if recurse_option is not None:
+            if recurse_option.sig.stack_in.depth():
+                # If the last type for the potential recursive call matches our scope...
+                if recurse_option.sig.stack_in.tos().stype == type_name:
+                    yield(recurse_option)
+            # If the potential recursive call has no input sig and we're in global scope...
+            elif type_name == "Any": yield(recurse_option)        
         
 
     # Returns the first matching operation for this named type, defaulting to "make_atom"
