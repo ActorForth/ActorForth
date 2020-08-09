@@ -10,6 +10,7 @@ INTRO 5 : Types drive all ActorForth behavior and construction. ActorForth
 import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional, Generator
 from dataclasses import dataclass
+from itertools import chain
 
 
 from stack import Stack
@@ -178,8 +179,11 @@ class Type(AF_Type):
         # Once a word has been created for a Type (or global "Any"), 
         # we're going to enforce that the input signature length's be identical 
         # for now on.      
-        existing_words = [o for o in Type.find_ops_named_this_for_scope(op.name, type_name) \
-                            if o.sig.stack_in.depth()==op.sig.stack_in.depth()]
+        all_named_words = chain(Type.find_ops_named_this_for_scope(op.name, type_name), 
+                             Type.find_ops_named_this_for_scope(op.name, "Any"))
+        if type_name == "Any":
+            all_named_words = chain(Type.find_ops_named_this_for_scope(op.name, "Any"))
+        existing_words = [o for o in all_named_words if o.sig.stack_in.depth()==op.sig.stack_in.depth()]
         if existing_words:
             assert existing_words, "ERROR - there are existing words of lengths other than %s : %s." \
                 % (op.sig.stack_in.depth(), [(x,x.sig.stack_in.depth()) for x in existing_words])
@@ -198,12 +202,6 @@ class Type(AF_Type):
             # If the last type for the potential recursive call matches our scope...
             if recurse_option.sig.stack_in.tos().stype == type_name:
                 yield(recurse_option)
-        if type_name != "Any": # Search in global scope as well since we haven't yet.
-            for op in type_def.ops_list:
-                if op.name == "Any": yield(op) # Return any matching global Ops with this name.
-        if recurse_option is not None and recurse_option.sig.stack_in.depth() == 0:
-            # If our potential recursive candidate is global then suggest it as an option now.
-            yield(recurse_option)
         
 
     # Returns the first matching operation for this named type, defaulting to "make_atom"
@@ -236,7 +234,7 @@ class Type(AF_Type):
             # Is this what we want to do?
             # This will happen if names match but stacks don't.
             cont.log.debug("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
-            #raise Exception("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
+            raise Exception("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
 
         cont.log.debug("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
