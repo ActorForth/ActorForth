@@ -11,10 +11,6 @@ from af_types import *
 from af_types.af_any import op_swap, op_stack
 from operation import Operation_def, TypeSignature
 
-def make_word_context(word_name: Op_name, op_def: Operation_def, in_seq: Sequence["Type"], out_seq: Sequence["Type"]) -> None:
-    sig = TypeSignature(in_seq = [StackObject(stype=x) for x in in_seq], out_seq = [StackObject(stype=x) for x in out_seq])
-    Type.add_op(Operation(word_name, op_def, sig=sig), type_name=in_seq[-1].name)
-
 def input_type_handler(c: AF_Continuation) -> None:
     type_sig_handler(c, "InputTypeSignature")
 
@@ -142,39 +138,6 @@ def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
     c.stack.push( StackObject(value=op, stype=TCodeCompile) )
 make_word_context(';',op_switch_to_pattern_compilation, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch],
                     [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch, TCodeCompile])                
-
-
-# def op_switch_to_pattern_compilation(c: AF_Continuation) -> None:
-#     """
-#     CodeCompile(Operation') 
-#         -> CodeCompile(PatternOperation'), MatchPattern([ (Sequence[StackObject],Operation)] )
-
-#     Changes the Operation handler to be one that executes a pattern matching algorithm
-#     rather than just executes a set of words. Then sets up the compilation to begin
-#     capturing these patterns and associated operations.    
-#     """
-#     # For now, we're not allowing adding pattern matching if words have
-#     # already been compiled.
-#     if len(c.stack.tos().words): 
-#         error_msg = "UNSUPPORTED : can't switch to pattern matching for word, '%s', which has already compiled these words: %s." \
-#                         % (c.stack.tos().name, c.stack.tos().words)
-#         c.log.error(error_msg)
-#         raise Exception(error_msg)
-
-#     # This 'patterns' instance gets bound to the new Op that will be in our CodeCompile object.
-#     # New patterns get added to the Op via our MatchPattern compilation.
-#     patterns : List[ Tuple[Sequence["StackObject"], Optional[Operation]] ] = [([],None)]
-
-#     # Over-ride the Operation handler to be a pattern matching Operation.
-#     c.stack.tos().the_op = match_and_execute_compiled_word(c, patterns)
-
-#     MatchPattern = StackObject(value = patterns, stype=TMatchPattern)
-#     c.stack.push(MatchPattern)
-#     c.log.debug("'%s' is now a pattern matched word." % c.stack.tos().name)
-# Type.add_op(Operation( ':',op_switch_to_pattern_compilation,
-#             sig=TypeSignature([StackObject(stype=TCodeCompile)],
-#                 [StackObject(stype=TCodeCompile), StackObject(stype=TMatchPattern)]) ),
-#                 "CodeCompile")
 
 
 def op_finish_word_compilation(c: AF_Continuation) -> None:
@@ -385,20 +348,6 @@ def compile_word_handler(c: AF_Continuation) -> None:
     c.stack.tos().value.add_word( new_op )
 
     c.log.debug("compile_word_handler ending")
-
-
-# def stack_from_patterns(c: AF_Continuation) -> Stack:
-#     assert c.stack.tos().stype == "InputPatternMatch"
-#     result: Stack = Stack()
-#     patterns : List[ Tuple[Sequence["StackObject"], Optional[Operation]] ] = c.stack.tos().value
-        
-#     # Grab the last item of the list.
-#     pat : Sequence["StackObject"]
-#     pat, op = patterns[-1]
-#     assert op is not None, "This can't happen!"
-#     [result.push(sig) for sig in pat]
-
-#     return result
 
 
 def compile_pattern_handler(c: AF_Continuation) -> None:

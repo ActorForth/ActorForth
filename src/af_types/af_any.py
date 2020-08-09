@@ -1,13 +1,14 @@
 from . import *
 
 # op_nop from continuation.
-Type.add_op(Operation('nop', op_nop, sig=TypeSignature([],[])) )
+#Type.add_op(Operation('nop', op_nop, sig=TypeSignature([],[])) )
+make_word_context('nop', op_nop)
 
 
 def op_print(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
     print("'%s'" % op1)
-Type.add_op(Operation('print', op_print, sig=TypeSignature([StackObject(stype=TAny)],[])) )
+make_word_context('print', op_print, [TAny])
 
 
 def op_stack(c: AF_Continuation) -> None:
@@ -17,7 +18,7 @@ def op_stack(c: AF_Continuation) -> None:
         for n in reversed(c.stack.contents()):
             print('%s'%str(n))
 
-Type.add_op(Operation('stack', op_stack, sig=TypeSignature([],[])) )
+make_word_context('stack', op_stack)
 
 
 def print_words() -> None:
@@ -38,7 +39,7 @@ def print_words() -> None:
 
 def op_words(c: AF_Continuation) -> None:                
     print_words()
-Type.add_op(Operation('words', op_words, sig=TypeSignature([],[])) )
+make_word_context('words', op_words)
 
 
 def op_print_types(c: AF_Continuation) -> None:
@@ -52,10 +53,7 @@ def op_print_types(c: AF_Continuation) -> None:
 
         print("\t%s op_handler = %s" % (type_name, _handle))
 
-Type.add_op(Operation('types', op_print_types, sig=TypeSignature([],[])) )                
-
-
-
+make_word_context('types', op_print_types)                
 
 
 #
@@ -66,7 +64,7 @@ Type.add_op(Operation('types', op_print_types, sig=TypeSignature([],[])) )
 def op_dup(c: AF_Continuation) -> None:
     op1 = c.stack.tos()
     c.stack.push(op1)
-Type.add_op(Operation('dup', op_dup, sig=TypeSignature([StackObject(stype=TAny)],[StackObject(stype=TAny), StackObject(stype=TAny)])) )
+make_word_context('dup', op_dup, [TAny],[TAny, TAny])
 
 
 def op_swap(c: AF_Continuation) -> None:
@@ -74,12 +72,12 @@ def op_swap(c: AF_Continuation) -> None:
     op2 = c.stack.pop()
     c.stack.push(op1)
     c.stack.push(op2)
-Type.add_op(Operation('swap', op_swap, sig=TypeSignature([StackObject(stype=TAny), StackObject(stype=TAny)],[StackObject(stype=TAny), StackObject(stype=TAny)])) )
+make_word_context('swap', op_swap, [TAny, TAny],[TAny, TAny])
 
 
 def op_drop(c: AF_Continuation) -> None:
     op1 = c.stack.pop()
-Type.add_op(Operation('drop', op_drop, sig=TypeSignature([StackObject(stype=TAny)],[])) )
+make_word_context('drop', op_drop, [TAny])
 
 
 def op_2dup(c: AF_Continuation) -> None:
@@ -89,4 +87,4 @@ def op_2dup(c: AF_Continuation) -> None:
     op_swap(c)
     c.stack.push(op2)
     c.stack.push(op1)
-Type.add_op(Operation('2dup', op_2dup, sig=TypeSignature([StackObject(stype=TAny), StackObject(stype=TAny)],[StackObject(stype=TAny), StackObject(stype=TAny)])) )
+make_word_context('2dup', op_2dup, [TAny, TAny],[TAny, TAny, TAny, TAny])

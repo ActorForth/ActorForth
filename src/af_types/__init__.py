@@ -8,14 +8,14 @@ INTRO 5 : Types drive all ActorForth behavior and construction. ActorForth
 """
 
 import logging
-from typing import Dict, List, Tuple, Callable, Any, Optional, Generator
+from typing import Dict, List, Tuple, Callable, Any, Optional, Generator, Sequence
 from dataclasses import dataclass
 from itertools import chain
 
 
 from stack import Stack
 from aftype import AF_Type, AF_Continuation, StackObject, Symbol, Location
-from operation import Op_list, Op_map, Op_name, Operation, TypeSignature, op_nop, SigValueTypeMismatchException
+from operation import Op_list, Op_map, Op_name, Operation, Operation_def, TypeSignature, op_nop, SigValueTypeMismatchException
 
 
 Type_name = str
@@ -337,5 +337,13 @@ def make_atom(c: AF_Continuation) -> None:
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
     c.stack.push(StackObject(value=c.symbol.s_id,stype=TAtom))
-#Type.add_op(Operation('_', make_atom), TypeSignature([],[TAtom]))
 
+
+def make_word_context(word_name: Op_name, op_def: Operation_def, in_seq: Sequence["Type"] = [], out_seq: Sequence["Type"] = [], context: Optional[Type_name] = None) -> None:
+    sig = TypeSignature(in_seq = [StackObject(stype=x) for x in in_seq], out_seq = [StackObject(stype=x) for x in out_seq])
+    if context is None: 
+        if in_seq:
+            context = in_seq[-1].name
+        else:
+            context = "Any"
+    Type.add_op(Operation(word_name, op_def, sig=sig), type_name=context)
