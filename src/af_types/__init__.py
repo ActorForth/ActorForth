@@ -193,18 +193,25 @@ class Type(AF_Type):
 
     @staticmethod
     def find_named_ops_for_scope(name: Op_name, type_name: Type_name = "Any", recurse_option: Optional[Operation] = None) -> Generator[Operation, None, None]:
+        logging.debug("find_named_ops_for_scope name:'%s', type_name:'%s', recurse_option:%s." % (name, type_name, recurse_option))
         type_def : Optional[TypeDefinition] = Type.types.get(type_name)
         assert type_def is not None, "No type '%s' found. We have: %s" % (type_name, Type.types.keys())
         for op in type_def.ops_list:
-            if op.name == name: yield(op)  # Return any matching Ops with this name.
+            #logging.debug("Checking against: %s. op.name = '%s'." % (op, op.name))
+            if op.name == name: 
+                logging.debug("\tyielding op:%s" % op)
+                yield(op)  # Return any matching Ops with this name.
         # If there's a possible recursive call for an unregistered method with an input type sig...
         if recurse_option is not None:
             if recurse_option.sig.stack_in.depth():
                 # If the last type for the potential recursive call matches our scope...
                 if recurse_option.sig.stack_in.tos().stype == type_name:
+                    logging.debug("\tyielding recurse_option:%s" % recurse_option)
                     yield(recurse_option)
             # If the potential recursive call has no input sig and we're in global scope...
-            elif type_name == "Any": yield(recurse_option)        
+            elif type_name == "Any": 
+                logging.debug("\tyielding 'Any' recurse_option:%s" % recurse_option)
+                yield(recurse_option)        
         
 
     # Returns the first matching operation for this named type, defaulting to "make_atom"

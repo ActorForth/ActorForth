@@ -292,7 +292,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
     all_named_words = [w for w in Type.find_named_ops_for_scope(op.name, context_type_name, maybe_recursive_op)]
     if context_type_name != "Any":
-        all_named_words += [w for w in Type.find_named_ops_for_scope(op.name, "Any")]
+        all_named_words += [w for w in Type.find_named_ops_for_scope(op_name, "Any")]
     c.log.debug("All candidate words: %s." % all_named_words)
 
     def match_type_context(candidate: Operation, context: Stack) -> bool:
