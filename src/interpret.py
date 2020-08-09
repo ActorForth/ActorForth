@@ -42,6 +42,9 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
         """
         cont.symbol = Symbol( s_id, Location(p.filename,linenum,column) ) 
 
+        # Drop out to terminal input if we're asked to resume.
+        if s_id == "resume": return cont
+
         if p.filename != "stdin":
             print(s_id) # TODO - do we really want this echo? Probably not.
 
