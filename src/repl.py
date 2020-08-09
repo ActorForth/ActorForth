@@ -93,7 +93,7 @@ def do_repl(filename: str, handle: TextIO):
                         TODO: How to do this in a more forth-like manner?                    
             """
             #if cont.stack.tos().value == "resume":
-            if cont.symbol.s_id == "resume":
+            if cont.symbol is not None and cont.symbol.s_id == "resume":
                 handle = sys.stdin
                 filename = "stdin"
                 #cont.stack.pop()

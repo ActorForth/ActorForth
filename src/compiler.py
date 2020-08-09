@@ -274,12 +274,15 @@ def compile_word_handler(c: AF_Continuation) -> None:
     found : bool = False
 
     op : Operation = c.stack.tos().value
-    op_swap(c)
- 
-    # Get the TypeSignature from the OutputTypeSignature or OutputPatternMatch object.
-    op.sig=c.stack.tos().value
-    op_swap(c)
+    maybe_recursive_op : Optional[Operation] = None
+    if op_name == op.name:  # This is potentially a recursive call.
+        maybe_recursive_op = op
+
     tos_output_sig, is_matched = op.check_stack_effect(force_composite = True)
+
+    context_type_name : Type_name = "Any"
+    if len(tos_output_sig):
+        context_type_name = tos_output_sig.tos().stype.name
 
     ##
     ## TODO : Now we have to discover potentially multiple viable Operations
@@ -287,66 +290,91 @@ def compile_word_handler(c: AF_Continuation) -> None:
     ##        have the execution perform run-time pattern matching.
     ##
 
+    all_named_words = [w for w in Type.find_named_ops_for_scope(op.name, context_type_name, maybe_recursive_op)]
+    if context_type_name != "Any":
+        all_named_words += [w for w in Type.find_named_ops_for_scope(op.name, "Any")]
+    c.log.debug("All candidate words: %s." % all_named_words)
 
-    if len(tos_output_sig):
-        # First try to match up with an op specialized for this type.
+    def match_type_context(candidate: Operation, context: Stack) -> bool:
+        # Walk backward down the stack.
+        for test, pattern in zip_longest(candidate.sig.stack_in.contents()[::-1], context.contents()[::-1]):
+            #if test is None: return True # Nothing left to compare.
+            if pattern is None: return False # Context Stack underflow!            
+            if test.stype != pattern.stype: return False # Types didn't match.
+            if test.value is not None and pattern.value is not None \
+                and test.value != pattern.value: return False # Values didn't match.            
+        return True        
 
-        # Have to create a fake continuation for type matching.
-        fake_c = AF_Continuation(stack = Stack())
-        for t in tos_output_sig.contents():
-            #fake_c.stack.push(StackObject(stype=t, value=None))
-            fake_c.stack.push(t)
+    type_matched_words = [w for w in all_named_words if match_type_context(w, tos_output_sig)]
+    c.log.debug("All type sig matching words: %s." % type_matched_words)
 
-        output_type_name = tos_output_sig.contents()[-1].stype.name
-        c.log.debug("fake Continuation stack for find_op: %s" % fake_c.stack.contents())
-        op, found = Type.find_op(op_name, fake_c, output_type_name)
+    def match_some_value_context(candidate: Operation, context: Stack) -> int:        
+        count = 0
+        for count, (test, pattern) in enumerate(zip_longest(candidate.sig.stack_in.contents()[::-1], context.contents()[::-1])):            
+            if test is None and count == 0: return True
+            if test is None: return False
+            if test.value is not None and pattern.value is not None:
+                if test.value == pattern.value: return True
+        return count == 0
+    value_some_matched_words = [w for w in type_matched_words if match_some_value_context(w, tos_output_sig)]   
+    c.log.debug("The some value matching words: %s." % value_some_matched_words)           
 
-        ### HACK HACK
-        ### Because TypeSignatures may output an "Any" type, we really need to replace
-        ### them with the concrete output type for proper type checking.
-        ### For now just jump through all the types and see if we find one and hope
-        ### there are no word collisions.
-        if not found and output_type_name == "Any":
-            for output_type_name in Type.types.keys():
-                if output_type_name == "Any": continue
-                if found: break
-                op, found = Type.find_op(op_name, fake_c, output_type_name)
+    def match_all_value_context(candidate: Operation, context: Stack) -> int:        
+        for count, (test, pattern) in enumerate(zip_longest(candidate.sig.stack_in.contents()[::-1], context.contents()[::-1])):            
+            if test is None and count == 0: return True
+            if test is None: return False
+            if test.value is None: return False
+            if pattern.value is None: return False  
+        return True      
+    value_exact_matched_words = [w for w in value_some_matched_words if match_all_value_context(w, tos_output_sig)]
+    c.log.debug("The exact value matching words: %s." % value_exact_matched_words)
 
-    if not found:
-        # Next try to match up with an op for Any type.
-        op, found = Type.find_op(op_name, c, "Any")
+    #[type_matched_words.remove(word) for word in value_some_matched_words]
+    #[value_some_matched_words.remove(word) for word in value_exact_matched_words]
+
+    if value_exact_matched_words:
+        assert len(value_exact_matched_words) == 1, "ERROR : more than one exact match! Not possible!"
+        c.stack.tos().value.add_word(value_exact_matched_words[0])
+        c.log.debug("Compiled exact match for '%s' => %s." % (op_name, value_exact_matched_words[0]))
+        return
+
+    # if value_some_matched_words or type_matched_words:
+    #     value_some_matched_words.sort()
+    #     type_matched_words.sort()
+    #     candidate_words = value_some_matched_words + type_matched_words
+    if value_some_matched_words:
+        if len(value_some_matched_words)==1:
+            c.stack.tos().value.add_word(value_some_matched_words[0])
+            c.log.debug("Compiled exact match for '%s' => %s." % (op_name, value_some_matched_words[0]))
+            return
+
+        # Need to do some runtime pattern matching...
+        matching_op = match_and_execute_compiled_word(value_some_matched_words)        
+
+        # WHAT'S OUR TYPESIGNATURE?!?!?!?!?
+
+        c.stack.tos().value.add_word(Operation(op_name, matching_op))
 
 
-    if not found:
-        # See if there's a ctor for this name?
-        ctor = Type.find_ctor(op_name, [StackObject(stype=TAny),])
-        if ctor is not None:
 
-            ### TODO:   See if the prior word is a literal/atom (how to tell?)
-            ###         and, if so, go ahead and apply the ctor and therefore
-            ###         set it's value/type at compile time.
+        c.log.debug("Compiled pattern matching op for '%s' => %s." % (op_name, value_some_matched_words))
+        return
 
-            c.stack.tos().value.add_word(ctor)
-            found = True
+    c.log.debug("FAILED TO FIND WORD TO COMPILE '%s'" % c.symbol.s_id )
 
-    if found:
-        c.stack.tos().value.add_word(op)
-    else:
-        c.log.debug("FAILED TO FIND WORD TO COMPILE '%s'" % c.symbol.s_id )
-
-        c.log.debug("Compile as literal")
+    c.log.debug("Compile as literal")
         
-        def curry_make_atom(s, func = make_atom ):
-            def compiled_make_atom( c: AF_Continuation ):
-                c.symbol = c.symbol
-                return func(c)
-            return compiled_make_atom
-        op_implementation = curry_make_atom(op_name, make_atom)                
-        new_op = Operation(op_name, op_implementation, sig=TypeSignature([],[StackObject(stype=TAtom)]))
-        c.log.debug("New anonymous function: %s" % new_op)
-        c.stack.tos().value.add_word( new_op )
+    def curry_make_atom(s, func = make_atom ):
+        def compiled_make_atom( c: AF_Continuation ):
+            c.symbol = c.symbol
+            return func(c)
+        return compiled_make_atom
+    op_implementation = curry_make_atom(op_name, make_atom)                
+    new_op = Operation(op_name, op_implementation, sig=TypeSignature([],[StackObject(stype=TAtom)]))
+    c.log.debug("New anonymous function: %s" % new_op)
+    c.stack.tos().value.add_word( new_op )
 
-        c.log.debug("compile_word_handler ending")
+    c.log.debug("compile_word_handler ending")
 
 
 # def stack_from_patterns(c: AF_Continuation) -> Stack:
@@ -547,27 +575,28 @@ def compile_and_complete_pattern_to_word(c: AF_Continuation) -> None:
 make_word_context('.', compile_and_complete_pattern_to_word, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch], [])            
 
 
-def match_and_execute_compiled_word(c: AF_Continuation, pattern: List[Tuple[Sequence["StackObject"], Optional[Operation]] ] ) -> Callable[["AF_Continuation"],None]:
+def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Continuation"],None]:
     def op_curry_match_and_execute(c: AF_Continuation) -> None:
-        c.log.debug("Attempting to pattern match with pattern(s) = %s." % [x for x,y in pattern])
-        match_to : Sequence["StackObject"]
+        c.log.debug("Attempting to pattern match with words = %s and this stack: %s." % (words,c.stack))
+        word_sig : Sequence["StackObject"]
         op : Optional[Operation]
-        for match_to, op in pattern:
+        for word in words:
             matches : bool = True
             # Copy as many items off the stack as our pattern to match against.
-            match_against = c.stack.contents(len(match_to))
-            c.log.debug("Matching input: %s against pattern: %s." % (match_against, match_to))
+            stack_frame = c.stack.contents(word.sig.stack_in.depth())
+            word_sig = word.sig.stack_in.contents()
+            c.log.debug("Matching stack: %s against word sig: %s." % (stack_frame, word_sig))
             pat : StackObject
             test : StackObject
-            for pat,test in zip(match_to,match_against):
+            for w,s in zip(word_sig,stack_frame):
                 # If our pattern has a value then the test value must match it.
-                if pat.value is not None:
-                    if pat.value != test.value: 
-                        c.log.debug("Value mismatch: %s != %s." % (pat.value, test.value))
+                if w.value is not None:
+                    if w.value != s.value: 
+                        c.log.debug("Value mismatch: %s != %s." % (w.value, s.value))
                         matches = False
                         break
-                if pat.stype != test.stype: 
-                        c.log.debug("Type mismatch: %s != %s." % (pat.stype, test.stype))
+                if w.stype != test.stype: 
+                        c.log.debug("Type mismatch: %s != %s." % (w.stype, s.stype))
                         matches = False
                         break
             # Everything matches - this is our op. Call it.
@@ -577,7 +606,7 @@ def match_and_execute_compiled_word(c: AF_Continuation, pattern: List[Tuple[Sequ
                 return op(c)
         # If we got here then nothing matched!
         c.log.error("No matches found!")
-        raise Exception("No matchs found!")
+        raise Exception("No matches found!")
     return op_curry_match_and_execute
 
 

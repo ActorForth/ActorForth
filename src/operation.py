@@ -164,6 +164,11 @@ class Operation:
     def __repr__(self) -> str:
         return self.__str__()
 
+    def __lt__(self, o: object) -> bool:
+        if not isinstance(o, Operation): return NotImplemented        
+        if self.name < o.name: return True
+        return self.sig < o.sig
+
     def short_name(self) -> str:
         return self.name
 
