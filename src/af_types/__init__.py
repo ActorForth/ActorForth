@@ -183,7 +183,7 @@ class Type(AF_Type):
                              Type.find_named_ops_for_scope(op.name, "Any"))
         if type_name == "Any":
             all_named_words = chain(Type.find_named_ops_for_scope(op.name, "Any"))
-        existing_words = [o for o in all_named_words if o.sig.stack_in.depth()==op.sig.stack_in.depth()]
+        existing_words = [o for o in all_named_words if o.sig.stack_in.depth()!=op.sig.stack_in.depth()]
         if existing_words:
             assert existing_words, "ERROR - there are existing words of lengths other than %s : %s." \
                 % (op.sig.stack_in.depth(), [(x,x.sig.stack_in.depth()) for x in existing_words])
