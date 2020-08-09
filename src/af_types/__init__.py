@@ -179,10 +179,10 @@ class Type(AF_Type):
         # Once a word has been created for a Type (or global "Any"), 
         # we're going to enforce that the input signature length's be identical 
         # for now on.      
-        all_named_words = chain(Type.find_ops_named_this_for_scope(op.name, type_name), 
-                             Type.find_ops_named_this_for_scope(op.name, "Any"))
+        all_named_words = chain(Type.find_named_ops_for_scope(op.name, type_name), 
+                             Type.find_named_ops_for_scope(op.name, "Any"))
         if type_name == "Any":
-            all_named_words = chain(Type.find_ops_named_this_for_scope(op.name, "Any"))
+            all_named_words = chain(Type.find_named_ops_for_scope(op.name, "Any"))
         existing_words = [o for o in all_named_words if o.sig.stack_in.depth()==op.sig.stack_in.depth()]
         if existing_words:
             assert existing_words, "ERROR - there are existing words of lengths other than %s : %s." \
@@ -192,7 +192,7 @@ class Type(AF_Type):
 
 
     @staticmethod
-    def find_ops_named_this_for_scope(name: Op_name, type_name: Type_name = "Any", recurse_option: Optional[Operation] = None) -> Generator[Operation, None, None]:
+    def find_named_ops_for_scope(name: Op_name, type_name: Type_name = "Any", recurse_option: Optional[Operation] = None) -> Generator[Operation, None, None]:
         type_def : Optional[TypeDefinition] = Type.types.get(type_name)
         assert type_def is not None, "No type '%s' found. We have: %s" % (type_name, Type.types.keys())
         for op in type_def.ops_list:
