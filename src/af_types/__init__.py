@@ -8,7 +8,7 @@ INTRO 5 : Types drive all ActorForth behavior and construction. ActorForth
 """
 
 import logging
-from typing import Dict, List, Tuple, Callable, Any, Optional
+from typing import Dict, List, Tuple, Callable, Any, Optional, Generator
 from dataclasses import dataclass
 
 
@@ -175,14 +175,36 @@ class Type(AF_Type):
             type_name = "Any"
         type_def = Type.types.get(type_name, None)
         assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys())
-        if type_def:
-            type_def.ops_list.insert(0,op)
-            #type_def.ops_list.append(op)
-
-        #print("\n\nADD_OP type_def type(%s) = %s." % (type(type_def), str(type_def)))
-
+        # Once a word has been created for a Type (or global "Any"), 
+        # we're going to enforce that the input signature length's be identical 
+        # for now on.      
+        existing_words = [o for o in Type.find_ops_named_this_for_scope(op.name, type_name) \
+                            if o.sig.stack_in.depth()==op.sig.stack_in.depth()]
+        if existing_words:
+            assert existing_words, "ERROR - there are existing words of lengths other than %s : %s." \
+                % (op.sig.stack_in.depth(), [(x,x.sig.stack_in.depth()) for x in existing_words])
+        type_def.ops_list.append(op)
         logging.debug("Added Op:'%s' to %s context : %s." % (op,type_name,type_def))
 
+
+    @staticmethod
+    def find_ops_named_this_for_scope(name: Op_name, type_name: Type_name = "Any", recurse_option: Optional[Operation] = None) -> Generator[Operation, None, None]:
+        type_def : Optional[TypeDefinition] = Type.types.get(type_name)
+        assert type_def is not None, "No type '%s' found. We have: %s" % (type_name, Type.types.keys())
+        for op in type_def.ops_list:
+            if op.name == name: yield(op)  # Return any matching Ops with this name.
+        # If there's a possible recursive call for an unregistered method with an input type sig...
+        if recurse_option is not None and recurse_option.sig.stack_in.depth():
+            # If the last type for the potential recursive call matches our scope...
+            if recurse_option.sig.stack_in.tos().stype == type_name:
+                yield(recurse_option)
+        if type_name != "Any": # Search in global scope as well since we haven't yet.
+            for op in type_def.ops_list:
+                if op.name == "Any": yield(op) # Return any matching global Ops with this name.
+        if recurse_option is not None and recurse_option.sig.stack_in.depth() == 0:
+            # If our potential recursive candidate is global then suggest it as an option now.
+            yield(recurse_option)
+        
 
     # Returns the first matching operation for this named type, defaulting to "make_atom"
     # and a boolean indicating whether a named operation was found.
@@ -214,7 +236,7 @@ class Type(AF_Type):
             # Is this what we want to do?
             # This will happen if names match but stacks don't.
             cont.log.debug("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
-            raise Exception("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
+            #raise Exception("Continuation (stack = %s) doesn't match Op '%s' with available signatures: %s." % (cont.stack, name, [s.stack_in for s in sigs_found]))
 
         cont.log.debug("Not found!")
         # Default operation is to treat the symbol as an Atom and put it on the stack.
