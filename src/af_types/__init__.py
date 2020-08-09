@@ -247,21 +247,24 @@ class Type(AF_Type):
         cont.log.debug("Type.op(name:'%s',cont.symbol:'%s' returning op=%s, sig=%s, found=%s." % (name,cont.symbol,op,sig,found))
         return op, found
 
-
-    def __eq__(self, type: object) -> bool:
-        if self.name == "Any":
-            return True
-        if isinstance(type, Type):
-            return self.name == type.name
-        return False
+    # NOTE - we support comparisons between Type and str.
+    def __eq__(self, t: object) -> bool:
+        if self.name == "Any": return True        
+        if isinstance(t, Type): return self.name == t.name
+        return self.name == t
 
 
-    def __ne__(self, type: object) -> bool:
-        if self.name == "Any":
-            return False
-        if isinstance(type, Type):
-            return self.name != type.name
-        return False
+    def __ne__(self, t: object) -> bool:
+        if self.name == "Any": return False        
+        if isinstance(t, Type): return self.name != t.name
+        return self.name != t
+
+
+    def __lt__(self, t: object) -> bool:
+        # Any Types come last in sorting line. Otherwise lexical sort by name.
+        if self.name == "Any": return False
+        if isinstance(t, Type): return self.name < t.name
+        return self.name < str(t) # Typing requires that string cast. Odd.
 
 
     def __str__(self) -> Type_name:

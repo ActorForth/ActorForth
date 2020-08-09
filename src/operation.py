@@ -92,13 +92,11 @@ class TypeSignature:
       return self.__str__()        
 
     def __eq__(self, s : object) -> bool:
-        if not isinstance(s, TypeSignature):
-            return NotImplemented  
+        if not isinstance(s, TypeSignature): return NotImplemented  
         return (self.stack_in == s.stack_in) and (self.stack_out == s.stack_out)
 
     def __lt__(self, s: object) -> bool:
-        if not isinstance(s, TypeSignature):
-            return NotImplemented 
+        if not isinstance(s, TypeSignature): return NotImplemented 
         # Longest stack_in comes first.
         if self.stack_in.depth() > s.stack_in.depth(): return True
         if self.stack_in.depth() < s.stack_in.depth(): return False
