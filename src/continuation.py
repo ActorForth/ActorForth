@@ -39,7 +39,7 @@ class Continuation(AF_Continuation):
                  operate on the Symbol.
     """
     stack : Stack
-    symbol : Optional[Symbol] = None
+    symbol : Symbol = Symbol() 
     op : Operation = Operation("nop",op_nop)
 
     """

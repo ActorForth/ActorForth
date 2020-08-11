@@ -30,8 +30,8 @@ INTRO 4.2: A Symbol is the string representation of the token plus its Location
 """
 @dataclass(order = True)
 class Symbol:
-    s_id : str
-    location : Location 
+    s_id : str = ''
+    location : Location = Location()
     
     @property
     def size(self) -> int:
@@ -71,7 +71,7 @@ class StackObject:
 @dataclass 
 class AF_Continuation:
     stack : Stack
-    symbol : Optional[Symbol] = None
+    symbol : Symbol 
     op : Any = None # Becomes an Operation in Continuation
 
     debug : bool = False

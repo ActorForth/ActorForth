@@ -339,7 +339,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         
     def curry_make_atom(s, func = make_atom ):
         def compiled_make_atom( c: AF_Continuation ):
-            c.symbol = c.symbol
+            c.symbol.s_id = s
             return func(c)
         return compiled_make_atom
     op_implementation = curry_make_atom(op_name, make_atom)                

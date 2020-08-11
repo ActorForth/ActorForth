@@ -31,6 +31,7 @@ class TestExecution(unittest.TestCase):
 
     def test_compile_double(self) -> None:
         code =  """
+                debug on
                 double : Int -> Int;
                     dup + .
 
