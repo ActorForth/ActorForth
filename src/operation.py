@@ -32,7 +32,7 @@ class TypeSignature:
         for type_sig in [self.stack_in, self.stack_out]:
             updated = False
             new_stack = Stack()
-            for o in self.stack_in.contents():
+            for o in self.type_sig.contents():
                 if o.stype == generic: 
                     o.stype = special
                     updated = True
