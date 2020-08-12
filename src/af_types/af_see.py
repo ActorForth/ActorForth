@@ -30,4 +30,4 @@ TSee = Type("See",see_handler)
 def op_see(c: AF_Continuation) -> None:
     s = Stack()
     c.stack.push(StackObject(value=s, stype=TSee))
-Type.add_op(Operation('see', op_see, sig=TypeSignature([],[]) ))
+make_word_context('see', op_see)

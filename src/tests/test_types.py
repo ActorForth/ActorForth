@@ -31,7 +31,6 @@ class TestTypeSignature(unittest.TestCase):
 
         Type.register_ctor("Test",Operation('nop', TOp), [StackObject(stype=TParm1)])
 
-    #@unittest.skip
     def test_match_in(self) -> None:
         empty_sig = TypeSignature([],[])
         s = Stack()
@@ -70,7 +69,7 @@ class TestTypeSignature(unittest.TestCase):
         stack = Stack()
         cont = Continuation(stack)
         cont.stack.push(StackObject(stype=TParm1, value="tparm"))
-        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([StackObject(stype=TParm1)],[]) )) #, "Test")
+        make_word_context("test", lambda cont: 42, [TParm1])
 
         print_words()
 
@@ -88,7 +87,7 @@ class TestTypeSignature(unittest.TestCase):
         cont = Continuation(stack)
         cont.stack.push(StackObject(stype=TParm1, value="tparm"))
         cont.stack.push(StackObject(stype=TParm1, value="tparm"))
-        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([StackObject(stype=TParm1),StackObject(stype=TParm1)],[]) )) #, "Test")
+        make_word_context("test", lambda cont: 42, [TParm1, TParm1])
 
         print_words()
 
@@ -108,8 +107,7 @@ class TestTypeSignature(unittest.TestCase):
         cont.stack.push(StackObject(stype=TParm1, value="tparm"))
         cont.stack.push(StackObject(stype=TParm1, value="tparm"))
 
-        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([StackObject(stype=TTest),StackObject(stype=TParm1),StackObject(stype=TParm1)],
-                                                            [StackObject(stype=TTest),StackObject(stype=TParm1)]) )) #, "Test")
+        make_word_context("test", lambda cont: 42, [TTest, TParm1, TParm1], [TTest, TParm1])
 
         print_words()
 
@@ -127,9 +125,7 @@ class TestTypeSignature(unittest.TestCase):
         stack = Stack()
         cont = Continuation(stack)
 
-
-        Type.add_op(Operation("test", lambda cont: 42, sig=TypeSignature([],
-                                    [StackObject(stype=TTest),StackObject(stype=TParm1)]) )) #, "Test")
+        make_word_context("test", lambda cont: 42, [], [TTest, TParm1])
 
         print_words()
 
@@ -145,7 +141,7 @@ class TestTypeSignature(unittest.TestCase):
         stack = Stack()
         stack.push(StackObject(stype=TTest, value="tparm"))
 
-        Type.add_op(Operation("test", op_print, sig = TypeSignature([StackObject(stype=TParm1)],[])))
+        make_word_context("test", op_print, [TParm1])
 
         with self.assertRaises( Exception ):
             Type.op("test", stack)
@@ -158,7 +154,7 @@ class TestTypeSignature(unittest.TestCase):
         s = Stack()
         c = Continuation(s)
 
-        Type.add_op(Operation("test", stack_fun, sig = TypeSignature([],[]) ) )
+        make_word_context("test", stack_fun)
         op, found = Type.op("test", c)
 
         assert found

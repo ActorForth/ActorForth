@@ -33,7 +33,7 @@ Type.register_ctor('Bool',Operation('bool',op_bool),[StackObject(stype=TAny)])
 
 ### TODO :  if issue 4 ( https://github.com/ActorForth/ActorForth/issues/4 ) 
 ###         is working properly then we shouldn't need this, right?
-Type.add_op(Operation('bool', op_bool, sig=TypeSignature([StackObject(stype=TAny)],[StackObject(stype=TBool)]) ))
+make_word_context('bool', op_bool, [TAny], [TBool])
 
 
 # TODO : issue #17 wait for created gerneralize type infer
@@ -66,14 +66,14 @@ def op_equals(c: AF_Continuation) -> None:
     # possibly been inferred.
     sobj2 = c.stack.pop()
     c.stack.push(StackObject(value=(sobj1 == sobj2), stype=TBool))
-Type.add_op(Operation('==', op_equals, sig=TypeSignature([StackObject(stype=TAny),StackObject(stype=TAny)],[StackObject(stype=TBool)]) ))    
+make_word_context('==', op_equals, [TAny,TAny], [TBool])
 
 
 def op_not_equals(c: AF_Continuation) -> None:
     op_equals(c)
     result = c.stack.tos()
     result.value = not result.value
-Type.add_op(Operation('!=', op_not_equals, sig=TypeSignature([StackObject(stype=TAny),StackObject(stype=TAny)],[StackObject(stype=TBool)]) ))
+make_word_context('!=', op_not_equals, [TAny,TAny], [TBool])
 
 
 def op_less_than(c: AF_Continuation) -> None:
@@ -81,31 +81,32 @@ def op_less_than(c: AF_Continuation) -> None:
     sobj2 = c.stack.pop()
     c.log.debug("is %s (%s) < %s (%s)?" % (sobj2.value, type(sobj2.value), sobj1.value, type(sobj1.value)))
     c.stack.push(StackObject(value=(sobj2.value < sobj1.value), stype=TBool))
-Type.add_op(Operation('<', op_less_than, sig=TypeSignature([StackObject(stype=TAny),StackObject(stype=TAny)],[StackObject(stype=TBool)]) ))    
+make_word_context('<', op_less_than, [TAny,TAny], [TBool])
 
 
 def op_greater_than(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
     c.stack.push(StackObject(value=(sobj2.value > sobj1.value), stype=TBool))
-Type.add_op(Operation('>', op_greater_than, sig=TypeSignature([StackObject(stype=TAny),StackObject(stype=TAny)],[StackObject(stype=TBool)]) ))    
+make_word_context('>', op_greater_than, [TAny,TAny], [TBool])
 
 
 def op_less_than_or_equal_to(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
     c.stack.push(StackObject(value=(sobj2.value <= sobj1.value), stype=TBool))
-Type.add_op(Operation('<=', op_less_than_or_equal_to, sig=TypeSignature([StackObject(stype=TAny),StackObject(stype=TAny)],[StackObject(stype=TBool)]) ))    
+make_word_context('<=', op_less_than_or_equal_to, [TAny,TAny], [TBool])
 
 
 def op_greater_than_or_equal_to(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
     c.stack.push(StackObject(value=(sobj2.value >= sobj1.value), stype=TBool))
-Type.add_op(Operation('>=', op_greater_than_or_equal_to, sig=TypeSignature([StackObject(stype=TAny),StackObject(stype=TAny)],[StackObject(stype=TBool)]) ))
+make_word_context('>=', op_greater_than_or_equal_to, [TAny,TAny], [TBool])
 
 
 def op_not(c: AF_Continuation) -> None:
     # Restrict to only workong on Bools!
     op1 = c.stack.tos().value = not c.stack.tos().value
-Type.add_op(Operation('not', op_not, sig=TypeSignature([StackObject(stype=TBool)],[StackObject(stype=TBool)]) ), "Bool")
+make_word_context('not', op_not, [TBool], [TBool])
+

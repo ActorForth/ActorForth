@@ -17,7 +17,7 @@ def op_int(c: AF_Continuation) -> None:
     c.stack.push(StackObject(value=i, stype=TInt))
 #   Int dictionary
 Type.register_ctor('Int',Operation('int',op_int),[StackObject(stype=TAny)])
-Type.add_op(Operation('int',op_int, sig=TypeSignature([StackObject(stype=TAny)],[StackObject(stype=TInt)]) ))
+make_word_context('int', op_int, [TAny],[TInt])
 
 
 # Operations
@@ -30,7 +30,7 @@ def op_plus(c: AF_Continuation) -> None:
     assert int(result) - op2 == op1, "python math error"
     c.stack.push(StackObject(value=result, stype=TInt))
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
-Type.add_op(Operation('+',op_plus, sig=TypeSignature([StackObject(stype=TInt),StackObject(stype=TInt)],[StackObject(stype=TInt)]) ), "Int")
+make_word_context('+', op_plus, [TInt, TInt],[TInt])
 
 def op_minus(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
@@ -40,7 +40,7 @@ def op_minus(c: AF_Continuation) -> None:
     assert int(result) + op1 == op2, "python math error"
     c.stack.push(StackObject(value=result, stype=TInt))
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
-Type.add_op(Operation('-',op_minus, sig=TypeSignature([StackObject(stype=TInt),StackObject(stype=TInt)],[StackObject(stype=TInt)]) ), "Int")
+make_word_context('-', op_minus, [TInt, TInt],[TInt])
 
 def op_multiply(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
@@ -52,7 +52,7 @@ def op_multiply(c: AF_Continuation) -> None:
 
     c.stack.push(StackObject(value=result, stype=TInt))
     op_int(c) # We're cheating here cause, for now, op_int is supposed to take a TAtom!
-Type.add_op(Operation('*',op_multiply, sig=TypeSignature([StackObject(stype=TInt),StackObject(stype=TInt)],[StackObject(stype=TInt)]) ), "Int")
+make_word_context('*', op_multiply, [TInt, TInt],[TInt])
 
 def op_divide(c: AF_Continuation) -> None:
     assert c.stack.tos().value != 0, "int division by zero error."
@@ -62,4 +62,4 @@ def op_divide(c: AF_Continuation) -> None:
     remainder = op2 - (result * op1)
     c.stack.push(StackObject(value=result, stype=TInt))
     c.stack.push(StackObject(value=remainder, stype=TInt))
-Type.add_op(Operation('/',op_divide, sig=TypeSignature([StackObject(stype=TInt),StackObject(stype=TInt)],[StackObject(stype=TInt),StackObject(stype=TInt)]) ), "Int")
+make_word_context('/', op_divide, [TInt, TInt],[TInt, TInt])

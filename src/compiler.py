@@ -149,15 +149,8 @@ def op_finish_word_compilation(c: AF_Continuation) -> None:
     op : Operation = c.stack.pop().value
     s_in : Stack = op.sig.stack_in
 
-    if s_in.is_empty() :
-        c.log.debug("'%s' operation being added to global dictionary." % op.name)
-        Type.add_op(op)
-    else:
-        s_in_tos : StackObject = s_in.tos()
-        c.log.debug("'%s' operation being added to '%s' dictionary." % (op.name, s_in_tos.stype))
-        Type.add_op(op, s_in_tos.stype.name)
+    Type.add_op(op, s_in)
     c.stack.pop()
-
 make_word_context(';',op_finish_word_compilation, [TWordDefinition, TOutputTypeSignature, TCodeCompile],
                     [TWordDefinition])                 
 
@@ -503,10 +496,7 @@ def compile_matched_pattern_to_word(c: AF_Continuation) -> None:
     op_swap(c)
 
     # Now add to the type's disctionary or the global one as appropriate.
-    if pattern_type_sig.stack_in.depth() > 0:
-        Type.add_op(new_op, pattern_type_sig.stack_in.tos().stype.name)
-    else:
-        Type.add_op(new_op)        
+    Type.add_op(new_op, pattern_type_sig.stack_in)   
 
     # Create a new InputPatternMatch
     op_switch_to_pattern_matching(c)

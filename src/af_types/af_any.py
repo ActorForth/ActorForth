@@ -17,7 +17,6 @@ def op_stack(c: AF_Continuation) -> None:
     else:
         for n in reversed(c.stack.contents()):
             print('%s'%str(n))
-
 make_word_context('stack', op_stack)
 
 

@@ -171,24 +171,25 @@ class Type(AF_Type):
 
     # Inserts a new operations for the given type name (or global for Any).
     @staticmethod
-    def add_op(op: Operation, type_name: Type_name = None) -> None:
-        if type_name is None:
-            type_name = "Any"
-        type_def = Type.types.get(type_name, None)
-        assert type_def is not None, "No type '%s' found. We have: %s" % (type,Type.types.keys())
+    def add_op(op: Operation, stack_in: Stack) -> None:
+        type_def = Type.get_type("Any")
+        if stack_in.depth() > 0:        
+            type_def = stack_in.tos().stype
+        assert type_def is not None
+
         # Once a word has been created for a Type (or global "Any"), 
         # we're going to enforce that the input signature length's be identical 
         # for now on.      
-        all_named_words = chain(Type.find_named_ops_for_scope(op.name, type_name), 
+        all_named_words = chain(Type.find_named_ops_for_scope(op.name, type_def.name), 
                              Type.find_named_ops_for_scope(op.name, "Any"))
-        if type_name == "Any":
+        if type_def.name == "Any":
             all_named_words = chain(Type.find_named_ops_for_scope(op.name, "Any"))
         existing_words = [o for o in all_named_words if o.sig.stack_in.depth()!=op.sig.stack_in.depth()]
         if existing_words:
             assert existing_words, "ERROR - there are existing words of lengths other than %s : %s." \
                 % (op.sig.stack_in.depth(), [(x,x.sig.stack_in.depth()) for x in existing_words])
-        type_def.ops_list.append(op)
-        logging.debug("Added Op:'%s' to %s context : %s." % (op,type_name,type_def))
+        type_def.ops().append(op)
+        logging.debug("Added Op:'%s' to %s." % (op,type_def))
 
 
     @staticmethod
@@ -339,11 +340,6 @@ def make_atom(c: AF_Continuation) -> None:
     c.stack.push(StackObject(value=c.symbol.s_id,stype=TAtom))
 
 
-def make_word_context(word_name: Op_name, op_def: Operation_def, in_seq: Sequence["Type"] = [], out_seq: Sequence["Type"] = [], context: Optional[Type_name] = None) -> None:
+def make_word_context(word_name: Op_name, op_def: Operation_def, in_seq: Sequence["Type"] = [], out_seq: Sequence["Type"] = [])  -> None: 
     sig = TypeSignature(in_seq = [StackObject(stype=x) for x in in_seq], out_seq = [StackObject(stype=x) for x in out_seq])
-    if context is None: 
-        if in_seq:
-            context = in_seq[-1].name
-        else:
-            context = "Any"
-    Type.add_op(Operation(word_name, op_def, sig=sig), type_name=context)
+    Type.add_op(Operation(word_name, op_def, sig=sig), sig.stack_in)
