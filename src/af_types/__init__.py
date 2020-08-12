@@ -60,14 +60,11 @@ class Type(AF_Type):
 
     """
     INTRO 5.4 : An individual Type is simply a named TypeDefinition.
-    """
-    types : Dict[Type_name, TypeDefinition] = {}
 
-    """
-    INTRO 5.5 : The core words in ActorForth are stored in the special
+    INTRO 5.5 : The core words in ActorForth are stored in the special generic
                 "Any" Type. This is the global dictionary for words.
     """
-    types["Any"] = TypeDefinition(ops_list = []) # Global dictionary.
+    types : Dict[Type_name, TypeDefinition] = {"Any" : TypeDefinition(ops_list=[])}
 
     """
     INTRO 5.6 : Constructors (ctors) are special words that take one or
@@ -82,25 +79,27 @@ class Type(AF_Type):
                 words in the Dictionaries. They can only return a single
                 instance of their own Type.
     """
-    ctors : Dict[Type_name, Op_map] = {}
-
+    ctors : Dict[Type_name, Op_map] = {"Any":[]}
 
     def __init__(self, typename: Type_name, handler = None):
+        assert Type.types["Any"]
         if handler is None:
             handler = default_op_handler
         self.name = typename
-        if not Type.ctors.get(self.name, False):
-            Type.ctors[self.name] = []
-        if not Type.types.get(self.name, False):
-            t_def = TypeDefinition(ops_list=[], op_handler=handler)
-            Type.types[self.name] = t_def
-        ## Do we need this? super().__init__(self)
+        if not self.is_generic():
+            if not Type.ctors.get(self.name, False):
+                Type.ctors[self.name] = []
+            if not Type.types.get(self.name, False):
+                t_def = TypeDefinition(ops_list=[], op_handler=handler)
+                Type.types[self.name] = t_def    
 
 
     def is_generic(self) -> bool:
         # Any types names "Any" or that start with underscore, '_', refer to 
         # generic types and will share the same word lookup.
-        return self.name == "Any" or self.name.startswith('_')
+        result = self.name == "Any" or self.name.startswith('_')
+        print("is_generic for %s is: %s." % (self.name, result))
+        return result
 
 
     def words(self) -> Op_list:
@@ -113,17 +112,6 @@ class Type(AF_Type):
         if self.is_generic():
             return Type.types["Any"].op_handler
         return Type.types[self.name].op_handler
-
-
-    # def ops(self) -> Op_list:
-    #     t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
-    #     return t_def.ops_list
-
-
-    # # Typing doesn't like me having a return type specification here so dropped it.
-    # def handler(self):
-    #     t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
-    #     return t_def.op_handler
 
 
     @staticmethod
@@ -339,6 +327,8 @@ TAtom = Type("Atom")
 """
 INTRO 5.8 : The Any Type is a special Type that will match ALL other types.
             It is also where the global word dictionary is contained.
+            All types that start with an underscore, '_', will also match
+            the Any type in terms of dictionary access.
 """
 TAny = Type("Any")
 

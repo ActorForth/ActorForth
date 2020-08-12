@@ -1,4 +1,5 @@
 import unittest
+from copy import deepcopy
 
 from continuation import Continuation, Stack
 
@@ -21,15 +22,20 @@ TOp = lambda stack : stack
 class TestTypeSignature(unittest.TestCase):
 
     def setUp(self) -> None:
+        self.stack = Stack()
+        self.cont = Continuation(self.stack)
+        self.save_types = deepcopy(Type.types)
+        self.save_ctors = deepcopy(Type.ctors)
         # Clear up all the types.
-        Type.types = {}
         the_types = ["Any","CodeCompile","Parm1","Test"]
         for t in the_types:
-            Type.types[t] = []
-            Type.ctors[t] = []
             x = Type(t)
 
         Type.register_ctor("Test",Operation('nop', TOp), [StackObject(stype=TParm1)])
+
+    def tearDown(self) -> None:
+        Type.types = deepcopy(self.save_types)
+        Type.ctors = deepcopy(self.save_ctors)
 
     def test_match_in(self) -> None:
         empty_sig = TypeSignature([],[])
