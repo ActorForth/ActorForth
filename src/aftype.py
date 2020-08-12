@@ -47,6 +47,12 @@ class Symbol:
 class AF_Type:
     name : str
 
+    def is_generic(self) -> bool:
+        # Any types names "Any" or that start with underscore, '_', refer to 
+        # generic types and will share the same word lookup.
+        result = self.name == "Any" or self.name.startswith('_')
+        #print("is_generic for %s is: %s." % (self.name, result))
+        return result
 
 """
 INTRO 4.3 : Stacks strictly contain StackObjects. Every StackObject

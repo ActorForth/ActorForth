@@ -98,7 +98,7 @@ class Type(AF_Type):
         # Any types names "Any" or that start with underscore, '_', refer to 
         # generic types and will share the same word lookup.
         result = self.name == "Any" or self.name.startswith('_')
-        print("is_generic for %s is: %s." % (self.name, result))
+        #print("is_generic for %s is: %s." % (self.name, result))
         return result
 
 
@@ -154,8 +154,8 @@ class Type(AF_Type):
                             logging.debug("Failed value match for %s against ctor value %s." % (ctor_obj.value, in_obj.value))
                             matching = False
                             break
-                    if in_obj.stype == "Any" or ctor_obj.stype == "Any":
-                        logging.debug("Matching ctor for 'Any' type.")
+                    if in_obj.stype.is_generic() or ctor_obj.stype.is_generic():
+                        logging.debug("Matching ctor for Generic 'Any' type.")
                         matching = True
                         continue
                     if in_obj.stype == ctor_obj.stype:
@@ -188,10 +188,10 @@ class Type(AF_Type):
         # Once a word has been created for a Type (or global "Any"), 
         # we're going to enforce that the input signature length's be identical 
         # for now on.      
-        all_named_words = chain(Type.find_named_ops_for_scope(op.name, type_def.name), 
-                             Type.find_named_ops_for_scope(op.name, "Any"))
-        if type_def.name == "Any":
-            all_named_words = chain(Type.find_named_ops_for_scope(op.name, "Any"))
+        all_named_words = chain(Type.find_named_ops_for_scope(op.name, type_def), 
+                             Type.find_named_ops_for_scope(op.name, TAny))
+        if type_def.is_generic():
+            all_named_words = chain(Type.find_named_ops_for_scope(op.name, TAny))
         existing_words = [o for o in all_named_words if o.sig.stack_in.depth()!=op.sig.stack_in.depth()]
         if existing_words:
             assert existing_words, "ERROR - there are existing words of lengths other than %s : %s." \
@@ -201,11 +201,9 @@ class Type(AF_Type):
 
 
     @staticmethod
-    def find_named_ops_for_scope(name: Op_name, type_name: Type_name = "Any", recurse_option: Optional[Operation] = None) -> Generator[Operation, None, None]:
-        logging.debug("find_named_ops_for_scope name:'%s', type_name:'%s', recurse_option:%s." % (name, type_name, recurse_option))
-        type_def : Optional[TypeDefinition] = Type.types.get(type_name)
-        assert type_def is not None, "No type '%s' found. We have: %s" % (type_name, Type.types.keys())
-        for op in type_def.ops_list:
+    def find_named_ops_for_scope(name: Op_name, type_context: "Type", recurse_option: Optional[Operation] = None) -> Generator[Operation, None, None]:
+        logging.debug("find_named_ops_for_scope name:'%s', type_context:'%s', recurse_option:%s." % (name, type_context, recurse_option))
+        for op in type_context.words():
             #logging.debug("Checking against: %s. op.name = '%s'." % (op, op.name))
             if op.name == name: 
                 logging.debug("\tyielding op:%s" % op)
@@ -214,11 +212,11 @@ class Type(AF_Type):
         if recurse_option is not None:
             if recurse_option.sig.stack_in.depth():
                 # If the last type for the potential recursive call matches our scope...
-                if recurse_option.sig.stack_in.tos().stype == type_name:
+                if recurse_option.sig.stack_in.tos().stype == type_context:
                     logging.debug("\tyielding recurse_option:%s" % recurse_option)
                     yield(recurse_option)
             # If the potential recursive call has no input sig and we're in global scope...
-            elif type_name == "Any": 
+            elif type_context.is_generic(): 
                 logging.debug("\tyielding 'Any' recurse_option:%s" % recurse_option)
                 yield(recurse_option)        
         

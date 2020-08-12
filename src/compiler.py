@@ -243,9 +243,9 @@ def compile_word_handler(c: AF_Continuation) -> None:
 
     tos_output_sig, is_matched = op.check_stack_effect(force_composite = True)
 
-    context_type_name : Type_name = "Any"
+    context_type : Type = TAny
     if len(tos_output_sig):
-        context_type_name = tos_output_sig.tos().stype.name
+        context_type = tos_output_sig.tos().stype
 
     ##
     ## TODO : Now we have to discover potentially multiple viable Operations
@@ -253,9 +253,9 @@ def compile_word_handler(c: AF_Continuation) -> None:
     ##        have the execution perform run-time pattern matching.
     ##
 
-    all_named_words = [w for w in Type.find_named_ops_for_scope(op_name, context_type_name, maybe_recursive_op)]
-    if context_type_name != "Any":
-        all_named_words += [w for w in Type.find_named_ops_for_scope(op_name, "Any")]
+    all_named_words = [w for w in Type.find_named_ops_for_scope(op_name, context_type, maybe_recursive_op)]
+    if not context_type.is_generic():
+        all_named_words += [w for w in Type.find_named_ops_for_scope(op_name, TAny)]
     c.log.debug("All candidate words: %s." % all_named_words)
 
     def match_type_context(candidate: Operation, context: Stack) -> bool:
