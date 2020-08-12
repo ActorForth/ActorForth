@@ -97,21 +97,41 @@ class Type(AF_Type):
         ## Do we need this? super().__init__(self)
 
 
-    def ops(self) -> Op_list:
-        t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
-        return t_def.ops_list
+    def is_generic(self) -> bool:
+        # Any types names "Any" or that start with underscore, '_', refer to 
+        # generic types and will share the same word lookup.
+        return self.name == "Any" or self.name.startswith('_')
 
 
-    # Typing doesn't like me having a return type specification here so dropped it.
+    def words(self) -> Op_list:
+        if self.is_generic():
+            return Type.types["Any"].ops_list
+        return Type.types[self.name].ops_list
+
+
     def handler(self):
-        t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
-        return t_def.op_handler
+        if self.is_generic():
+            return Type.types["Any"].op_handler
+        return Type.types[self.name].op_handler
+
+
+    # def ops(self) -> Op_list:
+    #     t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
+    #     return t_def.ops_list
+
+
+    # # Typing doesn't like me having a return type specification here so dropped it.
+    # def handler(self):
+    #     t_def = Type.types.get(self.name,TypeDefinition(ops_list=[]))
+    #     return t_def.op_handler
+
 
     @staticmethod
     def get_type(name: Type_name) -> Optional["Type"]:
         if Type.types.get(name, None) is not None:
             return Type(name)
         return None
+
 
     @staticmethod
     def register_ctor(name: Type_name, op: Operation, input_sig: List["StackObject"]) -> None:
@@ -188,7 +208,7 @@ class Type(AF_Type):
         if existing_words:
             assert existing_words, "ERROR - there are existing words of lengths other than %s : %s." \
                 % (op.sig.stack_in.depth(), [(x,x.sig.stack_in.depth()) for x in existing_words])
-        type_def.ops().append(op)
+        type_def.words().append(op)
         logging.debug("Added Op:'%s' to %s." % (op,type_def))
 
 
