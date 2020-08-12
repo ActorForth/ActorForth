@@ -11,22 +11,19 @@ from af_types import *
 from af_types.af_any import op_swap, op_stack
 from operation import Operation_def, TypeSignature
 
-def input_type_handler(c: AF_Continuation) -> None:
-    type_sig_handler(c, "InputTypeSignature")
-
-def output_type_handler(c: AF_Continuation) -> None:
-    type_sig_handler(c, "OutputTypeSignature")
+def sig_type_handler(c: AF_Continuation) -> None:
+    compile_type_sig_handler(c)
 
 def code_compile_handler(c: AF_Continuation ) -> None:
-    return compile_word_handler(c)
+    compile_word_handler(c)
 
 def pattern_handler(c: AF_Continuation) -> None:
-    return compile_pattern_handler(c)
+    compile_pattern_handler(c)
 
 
 TWordDefinition = Type("WordDefinition")
-TInputTypeSignature = Type("InputTypeSignature", handler = input_type_handler)
-TOutputTypeSignature = Type("OutputTypeSignature", handler = output_type_handler)
+TInputTypeSignature = Type("InputTypeSignature", handler = sig_type_handler)
+TOutputTypeSignature = Type("OutputTypeSignature", handler = sig_type_handler)
 TCodeCompile = Type("CodeCompile", handler = code_compile_handler)
 TInputPatternMatch = Type("InputPatternMatch", handler = pattern_handler)
 TOutputPatternMatch = Type("OutputPatternMatch", handler = pattern_handler)
@@ -206,12 +203,12 @@ def compilation_word_handler(c: AF_Continuation) -> bool:
     return False
 
 
-def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
-    c.log.debug("\n\nstarting type_sig_handler")
+def compile_type_sig_handler(c: AF_Continuation) -> None:
+    c.log.debug("\n\nstarting compile_type_sig_handler")
     handled = compilation_word_handler(c)
-    out = "type_sig_handler for type_name='%s' : received for symbol: %s "
+    out = "compile_type_sig_handler for type_name='%s' : received for symbol: %s "
     if handled: out += "HANDLED by compilation_word_handler."
-    c.log.debug(out % (type_name, c.symbol))
+    c.log.debug(out % (c.stack.tos().stype.name, c.symbol))
     if handled: return
     assert c.symbol
 
@@ -219,7 +216,7 @@ def type_sig_handler(c: AF_Continuation, type_name: str) -> None:
     c.log.debug("Looking up a type called '%s'." % c.symbol.s_id)
     _type = Type.get_type(c.symbol.s_id)
     assert _type, "%s isn't an existing type : %s" % (_type, Type.types.keys())
-    if type_name == "InputTypeSignature":
+    if c.stack.tos().stype == TInputTypeSignature:
         c.stack.tos().value.stack_in.push(StackObject(stype=_type))
     else:
         c.stack.tos().value.stack_out.push(StackObject(stype=_type))
