@@ -286,15 +286,13 @@ class Type(AF_Type):
         return op, found
 
     # NOTE - we support comparisons between Type and str.
-    def __eq__(self, t: object) -> bool:
-        #if self.name == "Any": return True        
+    def __eq__(self, t: object) -> bool:    
         if self.is_generic(): return True
         if isinstance(t, Type): return self.name == t.name
         return self.name == t
 
 
-    def __ne__(self, t: object) -> bool:
-        #if self.name == "Any": return False        
+    def __ne__(self, t: object) -> bool:      
         if self.is_generic(): return False
         if isinstance(t, Type): return self.name != t.name
         return self.name != t
@@ -302,7 +300,6 @@ class Type(AF_Type):
 
     def __lt__(self, t: object) -> bool:
         # Any Types come last in sorting line. Otherwise lexical sort by name.
-        #if self.name == "Any": return False
         if self.is_generic(): return False
         if isinstance(t, Type): return self.name < t.name
         return self.name < str(t) # Typing requires that string cast. Odd.
@@ -314,6 +311,10 @@ class Type(AF_Type):
 
     def __repr__(self) -> str:
         return self.__str__()
+
+
+    def __hash__(self) -> int:
+        return hash(self.name)
 
 
 """

@@ -28,19 +28,6 @@ class TypeSignature:
         self.stack_out : Stack = Stack(out_seq)
 
 
-    def promote_generic(self, generic : "AF_Type", special : "AF_Type") -> None:
-        for type_sig in [self.stack_in, self.stack_out]:
-            updated = False
-            new_stack = Stack()
-            for o in type_sig.contents():
-                if o.stype == generic: 
-                    o.stype = special
-                    updated = True
-                new_stack.push(o)
-            if updated:
-                type_sig = new_stack
-
-
     # Produces a mapped type sequence that accounts for "Any" types.
     # Will fail an assertion if the types don't match.
     def map_from_input_sig(self, sig: Sequence[StackObject]) -> Sequence[StackObject]:
@@ -183,22 +170,22 @@ class Operation:
     def short_name(self) -> str:
         return self.name
 
-    def check_stack_effect(self, sig_in : Optional[ Stack ] = None, force_composite : bool = False) -> Tuple[ Stack, bool ]:
+    def check_stack_effect(self, context : Optional[ Stack ] = None, force_composite : bool = False) -> Tuple[ Stack, bool ]:
         """
         force_composite is used for compiling new composite words that may not yet have a word 
         in their word list so would otherwise appear as primitive words and return the final 
         stack effect rather than the starting one which is appropriate when compiling.
         """
-        logging.debug("op: %s with sig_in = %s." % (self, sig_in) )
+        logging.debug("op: %s with context = %s." % (self, context) )
         start_stack : Stack
         match_stack : Stack
 
         # The start_stack is what we're trying to match with.
-        if sig_in is None:
+        if context is None:
             start_stack = self.sig.stack_in.copy()
             logging.debug("Use our default input stack signature instead: %s." % start_stack)
         else: 
-            start_stack = sig_in.copy()
+            start_stack = context.copy()
 
         # We're matching the start_stack against our input stack.
         match_stack = self.sig.stack_in.copy()
@@ -208,20 +195,27 @@ class Operation:
             logging.error("Input stack underrun! Match target len=%s:%s > match candidate len%s:%s" % (len(self.sig.stack_in), self.sig.stack_in, len(start_stack), start_stack) )
             raise Exception("Stack Underrun!")
 
+        generic_map : Dict["AF_Type", "StackObject"] = {}
+
         if len(self.words) == 0 and not force_composite:
-            # This is a primitive operation. Just consume, adjust for stack effect.
+            logging.debug("This is a primitive operation. Just consume, adjust for stack effect.")
             for i in range(len(match_stack)):
                 match = match_stack.pop()
                 test = start_stack.pop()
                 logging.debug("Testing match:%s against test:%s." % (match, test))
 
-                # Upgrade "Any" types if present.
-                if match.stype == "Any":
-                    logging.debug("Upgrading match 'Any' to test: %s." % test)
-                    match = test 
-                elif test.stype == "Any":
-                    logging.debug("Upgrading test 'Any' to match: %s." % match)
-                    test = match
+                # Fixup any Generic mappings.
+                o : StackObject 
+                for o in [match, test]:
+                    if o.stype.is_generic() and generic_map.get(o.stype):
+                        o = generic_map[o.stype]
+
+                # Upgrade Generic types if present.
+                for (m,t) in [(match, test), (test,match)]:
+                    if m.stype.is_generic():
+                        logging.debug("Upgrading %s to test: %s." % (m,t))
+                        generic_map[m.stype] = t
+                        m = t
 
                 # Check against value if match has a value!
                 if match.value is not None:
@@ -238,10 +232,18 @@ class Operation:
                     logging.debug(msg)
                     raise SigValueTypeMismatchException("Type mis-match! %s" % msg)
             
-            # Tack on the output stack effect that we're claiming.            
-            for i in self.sig.stack_out.contents():
-                logging.debug("adding output type:%s" % i)
-                start_stack.push(i)
+            # Tack on the output stack effect that we're claiming. 
+                      
+            for o in self.sig.stack_out.contents():
+                # See if we have a generic we need to specialize.
+                # NOTE - we may need to loop over this until .get returns nothing
+                #        in case there's more than one level of mapping. 
+                #        If so beware of infinite loops!
+                if generic_map.get(o.stype):
+                    logging.debug("Specializing %s to %s." % (o,generic_map[o.stype]))
+                    o = generic_map[o.stype]
+                logging.debug("adding output:%s" % o)
+                start_stack.push(o)
 
             logging.debug("Returning following stack effect for primitive word: %s, matches = %s." % (start_stack, matches))
             return start_stack, matches
@@ -256,6 +258,7 @@ class Operation:
             last_word = word
             start_stack, matches = word.check_stack_effect(start_stack)
 
+        logging.debug("Returning output stack: %s with matches = %s." % (start_stack, matches))
         return start_stack, matches
 
 
