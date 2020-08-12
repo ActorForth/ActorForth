@@ -51,15 +51,14 @@ class TypeSignature:
         in_s : StackObject
         m_s  : StackObject
         for in_s, m_s in zip(self.stack_in.contents()[::-1],sig[::-1]):
-            # Upgrade "Any" types to whatever they're being paired with.
-
+            # Upgrade Generic types to whatever they're being paired with.
             logging.debug("in_s type is '%s' : %s." % (type(in_s), in_s) )
             logging.debug("m_s type is '%s' : %s." % (type(m_s),m_s) )
 
             match_type : AF_Type = m_s.stype
-            if match_type == "Any":
+            if match_type.is_generic():
                 m_s.stype = in_s.stype
-            elif in_s.stype == "Any":
+            elif in_s.stype.is_generic():
                 in_s.stype = match_type
 
             assert m_s.stype == in_s.stype, "Error! Input Type '%s' not equivalent to Sig Type '%s' for In Stack = %s matched with Sig %s." % (in_s, m_s, self.stack_in, sig)
@@ -74,7 +73,6 @@ class TypeSignature:
     def match_in(self, stack: Stack) -> bool:
         logging.debug("match_in in_s=%s, matching against stack=%s" % (self.stack_in, stack))
         try:
-            #result = self.map_from_input_sig([i.stype for i in stack.contents()])
             result = self.map_from_input_sig(stack.contents())
             logging.debug("match_in returns True.")
             return True
