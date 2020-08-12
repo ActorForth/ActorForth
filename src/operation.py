@@ -262,17 +262,9 @@ class Operation:
         return start_stack, matches
 
 
-
-
 Op_list = List[Operation]
 
 Op_map = List[Tuple[Sequence["StackObject"],Operation]]
 
-
-
-
 def op_nop(c: "AF_Continuation") -> None:
     pass   
-
-
-

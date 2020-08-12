@@ -21,7 +21,6 @@ make_word_context('int', op_int, [TAny],[TInt])
 
 
 # Operations
-
 def op_plus(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
     op2 = c.stack.pop().value

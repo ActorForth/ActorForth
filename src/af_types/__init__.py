@@ -355,3 +355,4 @@ def make_atom(c: AF_Continuation) -> None:
 def make_word_context(word_name: Op_name, op_def: Operation_def, in_seq: Sequence["Type"] = [], out_seq: Sequence["Type"] = [])  -> None: 
     sig = TypeSignature(in_seq = [StackObject(stype=x) for x in in_seq], out_seq = [StackObject(stype=x) for x in out_seq])
     Type.add_op(Operation(word_name, op_def, sig=sig), sig.stack_in)
+    
