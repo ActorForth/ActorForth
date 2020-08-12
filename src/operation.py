@@ -28,6 +28,19 @@ class TypeSignature:
         self.stack_out : Stack = Stack(out_seq)
 
 
+    def promote_generic(self, generic : "AF_Type", special : "AF_Type") -> None:
+        for type_sig in [self.stack_in, self.stack_out]:
+            updated = False
+            new_stack = Stack()
+            for o in self.stack_in.contents():
+                if o.stype == generic: 
+                    o.stype = special
+                    updated = True
+                new_stack.push(o)
+            if updated:
+                type_sig = new_stack
+
+
     # Produces a mapped type sequence that accounts for "Any" types.
     # Will fail an assertion if the types don't match.
     def map_from_input_sig(self, sig: Sequence[StackObject]) -> Sequence[StackObject]:
