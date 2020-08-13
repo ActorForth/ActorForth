@@ -1,0 +1,15 @@
+debug on 
+
+fib	: Int -> Int
+	: 0 -> 0
+	: 1 -> 1 
+    : Int -> Int;
+        dup
+        1 int - 
+        fib
+        swap
+        2 int -
+        fib
+        +.
+
+resume

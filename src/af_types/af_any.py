@@ -1,7 +1,6 @@
 from . import *
 
 # op_nop from continuation.
-#Type.add_op(Operation('nop', op_nop, sig=TypeSignature([],[])) )
 make_word_context('nop', op_nop)
 
 
@@ -36,6 +35,7 @@ def print_words() -> None:
                 _ops = _t_def.ops_list
                 print("%s Dictionary : %s" % (type_name,list(set([op.short_name() for op in _ops]))) )
 
+
 def op_words(c: AF_Continuation) -> None:                
     print_words()
 make_word_context('words', op_words)
@@ -51,7 +51,6 @@ def op_print_types(c: AF_Continuation) -> None:
         _handle = _t_def.op_handler
 
         print("\t%s op_handler = %s" % (type_name, _handle))
-
 make_word_context('types', op_print_types)                
 
 
