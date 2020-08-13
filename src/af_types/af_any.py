@@ -30,7 +30,7 @@ def print_words() -> None:
         _ops = _t_def.ops_list
     print("Global Dictionary : %s" % list(set([op.short_name() for op in _ops])) )
     for type_name in Type.types.keys():
-        if type_name != "Any":
+        if not Type.is_generic_name(type_name):
             _t_def = Type.types.get(type_name,None)
             if _t_def:
                 _ops = _t_def.ops_list
@@ -63,7 +63,7 @@ make_word_context('types', op_print_types)
 def op_dup(c: AF_Continuation) -> None:
     op1 = c.stack.tos()
     c.stack.push(op1)
-make_word_context('dup', op_dup, [TAny],[TAny, TAny])
+make_word_context('dup', op_dup, [t("Any")],[TAny, TAny])
 
 
 def op_swap(c: AF_Continuation) -> None:
@@ -71,7 +71,7 @@ def op_swap(c: AF_Continuation) -> None:
     op2 = c.stack.pop()
     c.stack.push(op1)
     c.stack.push(op2)
-make_word_context('swap', op_swap, [TAny, TAny],[TAny, TAny])
+make_word_context('swap', op_swap, [t("_a"), t("_b")],[t("_b"), t("_a")])
 
 
 def op_drop(c: AF_Continuation) -> None:
@@ -86,4 +86,4 @@ def op_2dup(c: AF_Continuation) -> None:
     op_swap(c)
     c.stack.push(op2)
     c.stack.push(op1)
-make_word_context('2dup', op_2dup, [TAny, TAny],[TAny, TAny, TAny, TAny])
+make_word_context('2dup', op_2dup, [t("_a"), t("_b")],[t("_a"), t("_b"), t("_a"), t("_b")])

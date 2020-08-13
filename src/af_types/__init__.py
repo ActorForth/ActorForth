@@ -93,13 +93,17 @@ class Type(AF_Type):
                 t_def = TypeDefinition(ops_list=[], op_handler=handler)
                 Type.types[self.name] = t_def    
 
-
-    def is_generic(self) -> bool:
+    @staticmethod
+    def is_generic_name(name: Type_name) -> bool:
         # Any types names "Any" or that start with underscore, '_', refer to 
         # generic types and will share the same word lookup.
-        result = self.name == "Any" or self.name.startswith('_')
+        return name == "Any" or name.startswith('_')
+
+
+    def is_generic(self) -> bool:        
+        return Type.is_generic_name(self.name)
         #print("is_generic for %s is: %s." % (self.name, result))
-        return result
+        
 
 
     def words(self) -> Op_list:
@@ -356,3 +360,5 @@ def make_word_context(word_name: Op_name, op_def: Operation_def, in_seq: Sequenc
     sig = TypeSignature(in_seq = [StackObject(stype=x) for x in in_seq], out_seq = [StackObject(stype=x) for x in out_seq])
     Type.add_op(Operation(word_name, op_def, sig=sig), sig.stack_in)
     
+def t(name: str) -> Type:
+    return Type(name)
