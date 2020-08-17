@@ -81,7 +81,7 @@ def do_repl(filename: str, handle: TextIO):
         """
 
         try:
-            cont = interpret(cont, handle, filename, prompt="ok: ")
+            cont = interpret(cont, handle, filename, prompt=cont.prompt)
 
 
             """

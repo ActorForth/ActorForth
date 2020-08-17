@@ -35,25 +35,31 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
     """
     INTRO 2.3 : For each token in the input stream...
     """
+    last_line = 0
     for s_id, linenum, column in p.tokens():        
         """
         INTRO 2.4 : Construct a symbol from the token and updates the
                    Continuation's symbol.
         """
+
+        if prompt and linenum != last_line: 
+            print(prompt,end='',flush=True)    
+            last_line += 1
+
         cont.symbol = Symbol( s_id, Location(p.filename,linenum,column) ) 
 
         # Drop out to terminal input if we're asked to resume.
         if s_id == "resume": return cont
 
-        if p.filename != "stdin":
-            print(s_id) # TODO - do we really want this echo? Probably not.
+        #if p.filename != "stdin":
+        #    print(s_id) # TODO - do we really want this echo? Probably not.
 
         try:
             """
             INTRO 2.5 : Call execute on the Continuation...
             """
             cont.execute()
-            print("%s" % cont)
+            if cont.debug: print("%s" % cont)
 
             """
             INTRO 2.6:  ...until the end of tokens or an execution occurs
@@ -68,7 +74,7 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             # print(cont)
 
             raise
-        if prompt: print(prompt,end='',flush=True)    
+
 
     return cont
 

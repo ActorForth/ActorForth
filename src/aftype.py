@@ -80,6 +80,8 @@ class AF_Continuation:
     symbol : Symbol 
     op : Any = None # Becomes an Operation in Continuation
 
+    prompt: str = "ok: "
+    
     debug : bool = False
     cdepth : int = 0        # Depth of calls for debug tab output.
     log : logging.Logger = logging.getLogger()

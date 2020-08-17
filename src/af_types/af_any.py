@@ -7,6 +7,8 @@ make_word_context('nop', op_nop)
 def op_print(c: AF_Continuation) -> None:
     op1 = c.stack.pop().value
     print("'%s'" % op1)
+    if c.prompt:
+        print(c.prompt,end='',flush=True)
 make_word_context('print', op_print, [TAny])
 
 
@@ -16,6 +18,8 @@ def op_stack(c: AF_Continuation) -> None:
     else:
         for n in reversed(c.stack.contents()):
             print('%s'%str(n))
+    if c.prompt:
+        print(c.prompt,end='',flush=True)
 make_word_context('stack', op_stack)
 
 
@@ -38,6 +42,8 @@ def print_words() -> None:
 
 def op_words(c: AF_Continuation) -> None:                
     print_words()
+    if c.prompt:
+        print(c.prompt,end='',flush=True)  
 make_word_context('words', op_words)
 
 
@@ -51,6 +57,8 @@ def op_print_types(c: AF_Continuation) -> None:
         _handle = _t_def.op_handler
 
         print("\t%s op_handler = %s" % (type_name, _handle))
+    if c.prompt:
+        print(c.prompt,end='',flush=True)  
 make_word_context('types', op_print_types)                
 
 
