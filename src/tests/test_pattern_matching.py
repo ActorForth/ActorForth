@@ -42,9 +42,9 @@ class TestPatternMatching(unittest.TestCase):
         Type.types = deepcopy(self.save_types)
         Type.ctors = deepcopy(self.save_ctors)
 
-    def execute(self, code) -> Any:
-        cont = interpret(self.cont, io.StringIO(code))
-        return cont.stack.tos().value
+    # def execute(self, code) -> Any:
+    #     cont = interpret(self.cont, io.StringIO(code))
+    #     return cont.stack.tos().value
 
     def test_curry_match_and_execute(self) -> None:
         words = [Operation("test", op_gen(StackObject(stype=TInt,value=99),1), sig = TypeSignature([self.zero_pattern]))]
