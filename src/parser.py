@@ -50,7 +50,8 @@ class Parser:
         linenum = 1
         column = 1
         white_space = True
-        
+
+        # TODO : we're not yet dealing with any quoted strings or escape characters.        
         while char := self.file_handle.read(1):
 
             if char == ' ' or char == '\t' or char == '\n':
@@ -65,21 +66,21 @@ class Parser:
                 white_space = False
 
                 if token:
-                    # Flush out the previous token.
+                    # Token ended via reserved punctuation. Send it.
                     yield (token, linenum, token_column)
                 # Start a new token
                 token = "".join(char)
                 token_column = column
                 column += 1
 
-            else:
+            else: # Add this character to the current token.
                 if white_space:
                     token_column = column
                 column += 1
                 token += char
                 white_space = False
                 
-            if token and white_space:
+            if token and white_space: # Token complete. Send it.
                 yield (token, linenum, token_column)
                 token = ""
 
