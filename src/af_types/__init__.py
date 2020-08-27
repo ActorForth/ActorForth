@@ -37,7 +37,7 @@ INTRO 5.1 : The default execution handler (kind of an inter interpreter in
             completely different.
 """
 def default_op_handler(cont): # Had to remove Python typing notation to get it to compile.
-    cont.op, found = Type.op(cont.symbol.s_id, cont)
+    #cont.op, found = Type.op(cont.symbol.s_id, cont)
     cont.op(cont)
 
 

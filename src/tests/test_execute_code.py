@@ -67,8 +67,10 @@ class TestExecution(unittest.TestCase):
                 """
 
         assert self.execute(code) == False
+        assert self.cont.stack.depth() == 2
         self.cont.stack.pop()
-        assert self.stack.tos().value == True
+        assert self.cont.stack.depth() == 1
+        assert self.cont.stack.tos().value == True
 
     def test_compile_double_drop(self) -> None:
         code =  """

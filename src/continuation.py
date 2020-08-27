@@ -30,7 +30,7 @@ formatter = logging.Formatter(FORMAT)
 ch.setFormatter(formatter)
 root_log.addHandler(ch)
 
-@dataclass
+
 class Continuation(AF_Continuation):
     """
     INTRO 3.1 :  Continuation consists of the Stack, (Soon a Return Stack
@@ -38,19 +38,21 @@ class Continuation(AF_Continuation):
                  the Operation that was discovered for this context to
                  operate on the Symbol.
     """
-    stack : Stack
-    symbol : Symbol = Symbol() 
-    op : Operation = Operation("nop",op_nop)
+    def __init__(self, stack : Stack = None, rstack : Stack = None, symbol : Symbol = None):
+        self.stack = stack or Stack()
+        self.rstack = rstack or Stack()
+        self.symbol = symbol or Symbol() 
+        self.op : Operation = Operation("nop",op_nop)
 
-    """
-    INTRO 3.2 : We also track a Debug state.
-    """
+        """
+        INTRO 3.2 : We also track a Debug state.
+        """
 
-    prompt: str = "ok: "
+        self.prompt: str = "ok: "
 
-    debug : bool = False
-    cdepth : int = 0        # Depth of calls for debug tab output.
-    log : logging.Logger = root_log
+        self.debug : bool = False
+        self.cdepth : int = 0        # Depth of calls for debug tab output.
+        self.log : logging.Logger = root_log
 
 
     """

@@ -53,7 +53,8 @@ INTRO 1.2 : Establish our stack and build our stateful Continutaion from it.
 """
 
 stack = Stack()
-cont = Continuation(stack)
+rstack = Stack()
+cont = Continuation(stack, rstack)
 
 
 def do_repl(filename: str, handle: TextIO):    

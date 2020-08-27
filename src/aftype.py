@@ -77,6 +77,7 @@ class StackObject:
 @dataclass 
 class AF_Continuation:
     stack : Stack
+    rstack : Stack
     symbol : Symbol 
     op : Any = None # Becomes an Operation in Continuation
 

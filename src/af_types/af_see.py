@@ -14,7 +14,8 @@ def see_handler(cont: AF_Continuation) -> None:
         cont.stack.tos().value.push(so)
         return
     s : Stack = cont.stack.tos().value
-    fcont = Continuation(s)
+    r : Stack = Stack()
+    fcont = Continuation(s, r)
     cont.op, found = Type.op(symbol_id, fcont)
     if found:
         for i in cont.op.words:

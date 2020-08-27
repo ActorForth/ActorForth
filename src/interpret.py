@@ -47,6 +47,7 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             last_line += 1
 
         cont.symbol = Symbol( s_id, Location(p.filename,linenum,column) ) 
+        cont.op, found = Type.op(cont.symbol.s_id, cont)
 
         # Drop out to terminal input if we're asked to resume.
         if s_id == "resume": return cont
