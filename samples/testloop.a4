@@ -1,0 +1,39 @@
+deepest_say : -> ;
+	Say.
+
+deeper_say : -> ;
+	deepest_say.
+
+deep_say : -> ;
+	deeper_say.
+
+say : -> ;
+    deep_say
+    print.
+
+start : -> ;
+    Start
+    print
+    3 int
+    countdown
+    rstack
+    Counting
+    print.
+
+say_loop : -> ;
+    Looping
+    print
+    loop.
+
+done : -> ;
+    Done
+    print.
+
+testloop : -> ;
+    say
+    start
+    say_loop
+    done.
+
+testloop
+
