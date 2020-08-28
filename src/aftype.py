@@ -6,7 +6,7 @@ INTRO 4 : This is mainly here to satisfy module dependencies in the python
 """
 
 import logging
-from typing import Callable, List, Optional, Any
+from typing import Callable, List, Optional, Any, Iterator, Tuple
 from dataclasses import dataclass
 
 from stack import Stack
@@ -76,10 +76,12 @@ class StackObject:
 
 @dataclass 
 class AF_Continuation:
+    pc : Iterator[Tuple[int,Tuple[Any,Symbol]]] # Any becomes an Operation in Continuation.
     stack : Stack
     rstack : Stack
     symbol : Symbol 
-    op : Any = None # Becomes an Operation in Continuation
+    op : Any = None # Becomes an Operation in Continuation.
+     
 
     prompt: str = "ok: "
     

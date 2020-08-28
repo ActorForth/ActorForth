@@ -39,10 +39,12 @@ class Continuation(AF_Continuation):
                  operate on the Symbol.
     """
     def __init__(self, stack : Stack = None, rstack : Stack = None, symbol : Symbol = None):
+        self.pc : Iterator[Tuple[int,Tuple[Operation,Symbol]]]
         self.stack = stack or Stack()
         self.rstack = rstack or Stack()
         self.symbol = symbol or Symbol() 
         self.op : Operation = Operation("nop",op_nop)
+
 
         """
         INTRO 3.2 : We also track a Debug state.
@@ -64,10 +66,10 @@ class Continuation(AF_Continuation):
     def execute(self, next_word : Iterator[Tuple[Operation,Symbol]] ) -> AF_Continuation:
 
         try:
-            i = enumerate(iter(next_word))
-            while i:
+            self.pc = enumerate(iter(next_word))
+            while self.pc:
 
-                pos, (op, symbol) = next(i)
+                pos, (op, symbol) = next(self.pc)
                 self.op = op
                 self.symbol = symbol
                 self.log.debug("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos,self.op,self.symbol))
