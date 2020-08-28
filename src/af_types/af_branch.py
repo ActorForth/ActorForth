@@ -98,7 +98,7 @@ make_word_context('to_dstack', op_mov_to_dstack, [], [TAny])
 def op_pcsave(c: AF_Continuation) -> None:
 	c.pc, pc = tee(c.pc)
 	c.rstack.push(StackObject(value=PCSave(pc,c.op,c.symbol), stype=TPCSave))
-	print("op_pcsave : %s" % c.op.name)
+	#print("op_pcsave : %s" % c.op.name)
 make_word_context('pcsave', op_pcsave)
 
 
@@ -108,7 +108,7 @@ def op_loop_pcsave(c: AF_Continuation) -> None:
 	op_pcsave(c)
 	c.rstack.tos().value.val = i
 	c.rstack.tos().value.count = i
-	print("op_loop_pcsave : %s" % i)
+	#print("op_loop_pcsave : %s" % i)
 
 
 def op_pcreturn(c: AF_Continuation) -> None:
@@ -125,7 +125,7 @@ def op_pcreturn(c: AF_Continuation) -> None:
 	# Restore the loop objects.
 	for l in loops:
 		c.rstack.push(l)
-	print("op_pcreturn : %s" % c.op.name)
+	#print("op_pcreturn : %s" % c.op.name)
 
 
 def op_start_countdown(c: AF_Continuation) -> None:
@@ -154,14 +154,14 @@ def op_loop(c: AF_Continuation) -> None:
 		# Restore our returns.
 		for r in returns:
 			c.rstack.push(r)
-		print("op_loop continues...")
+		#print("op_loop continues...")
 	else:
 		c.pc, pc.pc = tee(pc.pc)
 		c.op = pc.op 
 		c.symbol = pc.symbol
 		for r in returns[-1::]:
 			print("dropping return for : %s" % r.value.op.name)
-		print("op_loop loops back to : %s" % c.op.name)
+		#print("op_loop loops back to : %s" % c.op.name)
 		
 make_word_context('loop', op_loop)
 

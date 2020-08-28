@@ -1,0 +1,17 @@
+start : -> ;
+	Starting print.
+
+end : -> ;
+	Ending print.
+
+testloop2 : -> ;
+	start
+	5 int 
+	countdown
+	lcount print
+	loop
+	end.
+
+testloop2
+
+resume

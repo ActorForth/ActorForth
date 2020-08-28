@@ -555,39 +555,10 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
     return op_curry_match_and_execute
 
 
-# def op_execute_compiled_word(c: AF_Continuation) -> None:
-#     c.log.debug("\nop_execute_compiled_word c.stack.contents = %s." % c.stack.contents())
-#     op = c.op
-#     symbol = c.symbol
-#     words = op.words
-#     doutput = _indent(c) + op.name + " : "
-
-#     c.log.debug("\tExecuting %s words for %s : %s." % (len(words), op.name, words))
-#     for word in words:
-#         c.cdepth += 1
-#         doutput += "\n%s%s" % (_indent(c),word)
-#         c.log.debug("\n\t\tword: %s" % word)
-#         c.op = word
-#         c.symbol = word.symbol # Symbol(word.name, Location())
-#         word(c)
-#         c.cdepth -= 1
-#         c.log.debug("\n\t\t%s c.stack.contents = %s." % (word,c.stack.contents()))
-
-#     if c.debug:
-#         c.log.debug(doutput)
-
-#     c.op = op
-#     c.symbol = symbol
-
 def op_execute_compiled_word(c: AF_Continuation) -> None:
-    #op_pcsave(c)
     c.pc, pc = tee(c.pc)
     op = c.op 
     symbol = c.symbol
-    #print("\n\n*** op_execute_compiled_word for op=%s. ***" % top_op.name)
-    
-    #ops = [op.name for op in c.op.words]
-    #print("\tHere are its words: %s.\n\n" % ops)
 
     def ex(c: AF_Continuation) -> Iterator[Tuple[Operation,Symbol]]:
         for word in c.op.words:
@@ -597,7 +568,6 @@ def op_execute_compiled_word(c: AF_Continuation) -> None:
     my_words = ex(c)
     c.execute(my_words)
 
-    #op_pcreturn(c)
     c.op = op
     c.symbol = symbol 
     c.pc, pc = tee(pc)
