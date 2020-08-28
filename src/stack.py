@@ -38,6 +38,8 @@ class KStack:
             return KStack.Empty
 
         def pop(self, stack):
+            ## TODO : This is a bit dangerous because we won't catch a
+            ##        stack underflow.
             if len(self._data):
                 return self._data.pop()
 
