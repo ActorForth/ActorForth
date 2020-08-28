@@ -1,4 +1,10 @@
+from itertools import tee
+from dataclasses import dataclass
+from typing import Iterator, Tuple
+
 from . import *
+from .af_int import *
+from stack import *
 
 """
 
@@ -18,9 +24,19 @@ loop : Int r:PC -> r:PC | r:None;
 10 countdown 
 """
 
+@dataclass
+class PCSave:
+	val : int
+	count : int 
+	pc : Iterator[Tuple[int,Tuple[Operation,Symbol]]]
+
+TPCSave = Type("PCSave")
+
 ###
 ### NOTE : We only perform type/stack checking on the dstack for now.
 ###
+
+
 
 def op_rdup(c: AF_Continuation) -> None:
     op1 = c.rstack.tos()
@@ -74,7 +90,40 @@ def op_mov_to_dstack(c: AF_Continuation) -> None:
 make_word_context('to_dstack', op_mov_to_dstack, [], [TAny])
 
 
-def op_start_countdown(c: AF_Continuation) -> None:
-	pass
+def op_pcsave(c: AF_Continuation) -> None:
+	i = c.rstack.pop().value
+	assert i >= 0
+	c.pc, pc = tee(c.pc)
+	c.rstack.push(StackObject(value=PCSave(i,i,pc), stype=TPCSave))
+make_word_context('pcsave', op_pcsave)
 
-	
+
+def op_start_countdown(c: AF_Continuation) -> None:
+	op_mov_to_rstack(c)
+	op_pcsave(c)
+make_word_context('countdown', op_start_countdown, [TInt], [])
+
+
+def op_start_countdown_atom(c: AF_Continuation) -> None:
+	op_int(c)
+	op_start_countdown(c)
+make_word_context('countdown', op_start_countdown_atom, [TAtom], [])
+
+
+def op_loop(c: AF_Continuation) -> None:
+	pcobj = c.rstack.tos()
+	assert pcobj != KStack.Empty and pcobj.stype == TPCSave
+	pc = pcobj.value
+	if pc.count == 0:
+		op_rdrop(c)
+	else:
+		pc.count -=1
+		c.pc = pc.pc
+make_word_context('loop', op_loop)
+
+def op_loop_count(c: AF_Continuation) -> None:
+	pcobj = c.rstack.tos()
+	assert pcobj.stype == TPCSave
+	pc = pcobj.value
+	c.stack.push(StackObject(value=pc.val - (pc.val-pc.count), stype=TInt))
+make_word_context('lcount', op_loop_count, [], [TInt])	
