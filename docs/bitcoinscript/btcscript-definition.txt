@@ -1,0 +1,25 @@
+Bitcoin & Bitcoin Cash Script Specification
+
+BTC Protocol Version: 1
+	format: 4 bytes, little endian
+	type: ProtocolVersion
+	ctor: proto_version : -> ProtocolVersion(1)
+
+Number of Inputs: 1
+	format: 1 byte
+	type: nat
+
+Transaction Inputs
+
+	Transaction Hash: 96c472ac5cbc3cf6acae1493d4d32f119f39ec9e440176b2fb7de6e6024b9f21
+	format: 32 bytes, little endian
+	type: TxHash
+	ctor: txhash : atom -> TxHash
+
+	Output Index: 01000000
+	format: 4 bytes, little endian, 1-based offset
+	type: UtxoIndex
+	ctor: utxoindex : atom | nat -> UtxoIndex
+
+
+
