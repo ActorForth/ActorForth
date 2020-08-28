@@ -12,7 +12,7 @@ from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
 from dataclasses import dataclass
 from itertools import zip_longest
 
-from aftype import AF_Type, AF_Continuation, StackObject
+from aftype import AF_Type, AF_Continuation, StackObject, Symbol
 
 from stack import Stack
 
@@ -134,11 +134,12 @@ Operation_def = Callable[["AF_Continuation"],None]
 
 class Operation:
 
-    def __init__(self, name: Op_name, op: Operation_def, words: List["Operation"] = None, sig: TypeSignature = None) -> None:
+    def __init__(self, name: Op_name, op: Operation_def, words: List["Operation"] = None, sig: TypeSignature = None, symbol: Symbol = None) -> None:
         self.name = name
         self.the_op : Operation_def = op
         self.words : List["Operation"] = words or []
         self.sig : TypeSignature = sig or TypeSignature([],[])
+        self.symbol : Symbol = symbol or Symbol()
 
     def add_word(self, op: "Operation") -> bool:
         # Should check for valid stack type signature.
@@ -156,6 +157,7 @@ class Operation:
             pass         
         result = "Op{'%s' %s :(%s)" % (self.name, self.sig, qualified_name)
         result += " words=%s" % str(self.words)
+        result += " from=%s" % self.symbol.location
         result += "}"
         return result
 

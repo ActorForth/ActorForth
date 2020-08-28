@@ -332,7 +332,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
             return func(c)
         return compiled_make_atom
     op_implementation = curry_make_atom(op_name, make_atom)                
-    new_op = Operation(op_name, op_implementation, sig=TypeSignature([],[StackObject(stype=TAtom)]))
+    new_op = Operation(op_name, op_implementation, sig=TypeSignature([],[StackObject(stype=TAtom)]), symbol=c.symbol)
     c.log.debug("New anonymous function: %s" % new_op)
     c.stack.tos().value.add_word( new_op )
 
@@ -567,7 +567,7 @@ def op_execute_compiled_word(c: AF_Continuation) -> None:
         doutput += "\n%s%s" % (_indent(c),word)
         c.log.debug("\n\t\tword: %s" % word)
         c.op = word
-        c.symbol = Symbol(word.name, Location())
+        c.symbol = word.symbol # Symbol(word.name, Location())
         word(c)
         c.cdepth -= 1
         c.log.debug("\n\t\t%s c.stack.contents = %s." % (word,c.stack.contents()))
