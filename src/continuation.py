@@ -65,6 +65,7 @@ class Continuation(AF_Continuation):
     """
     def execute(self, next_word : Iterator[Tuple[Operation,Symbol]] ) -> AF_Continuation:
 
+        print("ENTERING INTO EXECUTE.")
         try:
             self.pc = enumerate(iter(next_word))
             while self.pc:
@@ -72,7 +73,8 @@ class Continuation(AF_Continuation):
                 pos, (op, symbol) = next(self.pc)
                 self.op = op
                 self.symbol = symbol
-                self.log.debug("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos,self.op,self.symbol))
+                self.log.debug("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos,self.op.name,self.symbol))
+                print("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos,self.op.name,self.symbol))
 
                 # Assume that we're an empty stack and will use the TAny op_handler.
                 type_context = TAny
@@ -94,7 +96,8 @@ class Continuation(AF_Continuation):
                 handler(self)
         except StopIteration:
             pass
-        self.log.debug("RETURNING FROM EXECUTE")
+        self.log.debug("RETURNING FROM EXECUTE: %s" % self.op.name)
+        print("RETURNING FROM EXECUTE: %s" % self.op.name)
         return self
 
 

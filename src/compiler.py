@@ -3,7 +3,7 @@
 #
 
 import logging
-from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence
+from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence, Iterator
 from dataclasses import dataclass
 from itertools import zip_longest
 
@@ -554,26 +554,39 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
     return op_curry_match_and_execute
 
 
+# def op_execute_compiled_word(c: AF_Continuation) -> None:
+#     c.log.debug("\nop_execute_compiled_word c.stack.contents = %s." % c.stack.contents())
+#     op = c.op
+#     symbol = c.symbol
+#     words = op.words
+#     doutput = _indent(c) + op.name + " : "
+
+#     c.log.debug("\tExecuting %s words for %s : %s." % (len(words), op.name, words))
+#     for word in words:
+#         c.cdepth += 1
+#         doutput += "\n%s%s" % (_indent(c),word)
+#         c.log.debug("\n\t\tword: %s" % word)
+#         c.op = word
+#         c.symbol = word.symbol # Symbol(word.name, Location())
+#         word(c)
+#         c.cdepth -= 1
+#         c.log.debug("\n\t\t%s c.stack.contents = %s." % (word,c.stack.contents()))
+
+#     if c.debug:
+#         c.log.debug(doutput)
+
+#     c.op = op
+#     c.symbol = symbol
+
 def op_execute_compiled_word(c: AF_Continuation) -> None:
-    c.log.debug("\nop_execute_compiled_word c.stack.contents = %s." % c.stack.contents())
-    op = c.op
-    symbol = c.symbol
-    words = op.words
-    doutput = _indent(c) + op.name + " : "
+    top_op = c.op
+    print("\n\n*** op_execute_compiled_word for op=%s. ***\n\n" % top_op.name)
+    
 
-    c.log.debug("\tExecuting %s words for %s : %s." % (len(words), op.name, words))
-    for word in words:
-        c.cdepth += 1
-        doutput += "\n%s%s" % (_indent(c),word)
-        c.log.debug("\n\t\tword: %s" % word)
-        c.op = word
-        c.symbol = word.symbol # Symbol(word.name, Location())
-        word(c)
-        c.cdepth -= 1
-        c.log.debug("\n\t\t%s c.stack.contents = %s." % (word,c.stack.contents()))
+    def ex(c: AF_Continuation) -> Iterator[Tuple[Operation,Symbol]]:
+        for word in c.op.words:
+            print("\nEX: word=%s, word.symbol=%s.\n\n" % (word.name, word.symbol))
+            yield (word, word.symbol)
 
-    if c.debug:
-        c.log.debug(doutput)
-
-    c.op = op
-    c.symbol = symbol
+    my_words = ex(c)
+    c.execute(my_words)

@@ -29,6 +29,8 @@ class PCSave:
 	val : int
 	count : int 
 	pc : Iterator[Tuple[int,Tuple[Operation,Symbol]]]
+	op : Operation
+	symbol : Symbol
 
 TPCSave = Type("PCSave")
 
@@ -79,12 +81,14 @@ make_word_context('rstack', op_rstack)
 
 
 def op_mov_to_rstack(c: AF_Continuation) -> None:
+	assert c.stack.depth() != 0
 	x = c.stack.pop()
 	c.rstack.push(x)
 make_word_context('to_rstack', op_mov_to_rstack, [TAny], [])
 
 
 def op_mov_to_dstack(c: AF_Continuation) -> None:
+	assert c.rstack.depth() != 0
 	x = c.rstack.pop()
 	c.stack.push(x)
 make_word_context('to_dstack', op_mov_to_dstack, [], [TAny])
@@ -94,7 +98,8 @@ def op_pcsave(c: AF_Continuation) -> None:
 	i = c.rstack.pop().value
 	assert i >= 0
 	c.pc, pc = tee(c.pc)
-	c.rstack.push(StackObject(value=PCSave(i,i,pc), stype=TPCSave))
+	#pc = c.pc
+	c.rstack.push(StackObject(value=PCSave(i,i,pc,c.op,c.symbol), stype=TPCSave))
 make_word_context('pcsave', op_pcsave)
 
 
@@ -114,11 +119,14 @@ def op_loop(c: AF_Continuation) -> None:
 	pcobj = c.rstack.tos()
 	assert pcobj != KStack.Empty and pcobj.stype == TPCSave
 	pc = pcobj.value
+	pc.count -=1
 	if pc.count == 0:
 		op_rdrop(c)
 	else:
-		pc.count -=1
-		c.pc = pc.pc
+		c.pc, pc.pc = tee(pc.pc)
+		#c.op = pc.op 
+		#c.symbol = pc.symbol
+		
 make_word_context('loop', op_loop)
 
 def op_loop_count(c: AF_Continuation) -> None:
@@ -127,3 +135,9 @@ def op_loop_count(c: AF_Continuation) -> None:
 	pc = pcobj.value
 	c.stack.push(StackObject(value=pc.val - (pc.val-pc.count), stype=TInt))
 make_word_context('lcount', op_loop_count, [], [TInt])	
+
+#def op_test_loop(c: AF_Continuation) -> None:
+#	count = c.stack.tos().value
+#	op_start_countdown(c)
+	
+
