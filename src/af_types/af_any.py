@@ -42,6 +42,7 @@ def print_words() -> None:
 
 def op_words(c: AF_Continuation) -> None:                
     print_words()
+
     if c.prompt:
         print(c.prompt,end='',flush=True)  
 make_word_context('words', op_words)

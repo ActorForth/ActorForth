@@ -6,18 +6,18 @@ INTRO 3 : The Continuation contains all state of the system except for the
           may be moved into the Continuation as well.)
 """
 
-from typing import Optional
+from typing import Optional, Iterator, Tuple
 
 from dataclasses import dataclass
 
 from stack import Stack, KStack
-from af_types import AF_Continuation, Symbol, TAny
+from af_types import AF_Continuation, Symbol, TAny, Tuple
 from operation import Operation, op_nop
 
 import logging
 import sys
 
-ROOT_LOGGING_DEFAULT = logging.WARNING # logging.DEBUG # 
+ROOT_LOGGING_DEFAULT = logging.DEBUG # logging.WARNING # logging.DEBUG # 
 LOGGING_DEFAULT = logging.DEBUG
 
 root_log = logging.getLogger()
@@ -61,23 +61,39 @@ class Continuation(AF_Continuation):
                 by which it will executed. If the stack is empty it will
                 default to the global 'Any' type word dictionary.
     """
-    def execute(self) -> None:
-        # Assume that we're an empty stack and will use the TAny op_handler.
-        type_context = TAny
-        tos = self.stack.tos()
-        if tos != KStack.Empty:
-            # Make the tos type's op_handler our context instead.
-            type_context = tos.stype
+    def execute(self, next_word : Iterator[Tuple[Operation,Symbol]] ) -> AF_Continuation:
 
-        """
-            INTRO 3.4 : Execute the operation according to our context.
-                        All Type handlers take a Continuation and return nothing.
-                        (See af_types/__init__.py for the default handler.)
+        try:
+            i = enumerate(iter(next_word))
+            while i:
 
-                        Continue to aftype.py for INTRO stage 4.
-        """
-        handler = type_context.handler()
-        return handler(self)
+                pos, (op, symbol) = next(i)
+                self.op = op
+                self.symbol = symbol
+                print("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos,self.op,self.symbol))
+
+                # Assume that we're an empty stack and will use the TAny op_handler.
+                type_context = TAny
+                tos = self.stack.tos()
+                if tos != KStack.Empty:
+                    # Make the tos type's op_handler our context instead.
+                    type_context = tos.stype
+
+
+                """
+                    INTRO 3.4 : Execute the operation according to our context.
+                                All Type handlers take a Continuation and return nothing.
+                                (See af_types/__init__.py for the default handler.)
+        
+                                Continue to aftype.py for INTRO stage 4.
+                """
+                handler = type_context.handler()
+                #return handler(self)
+                handler(self)
+        except StopIteration:
+            pass
+        print("RETURNING FROM EXECUTE")
+        return self
 
 
     def __str__(self) -> str:

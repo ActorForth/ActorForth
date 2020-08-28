@@ -62,8 +62,8 @@ def do_repl(filename: str, handle: TextIO):
 
     # Set Debug on or off initially.
     op_debug(cont)
-    op_off(cont)
-    #op_on(cont)
+    #op_off(cont)
+    op_on(cont)
 
     print("ActorForth interpreter. ^C to exit.")
     print_words()
@@ -82,7 +82,7 @@ def do_repl(filename: str, handle: TextIO):
         """
 
         try:
-            cont = interpret(cont, handle, filename, prompt=cont.prompt)
+            cont.execute(interpret(cont, handle, filename, prompt=cont.prompt))
 
 
             """

@@ -37,7 +37,6 @@ INTRO 5.1 : The default execution handler (kind of an inter interpreter in
             completely different.
 """
 def default_op_handler(cont): # Had to remove Python typing notation to get it to compile.
-    #cont.op, found = Type.op(cont.symbol.s_id, cont)
     cont.op(cont)
 
 
@@ -265,6 +264,7 @@ class Type(AF_Type):
     @staticmethod
     def op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, bool]:
         # TODO : Word lookup is not matching based on values. need to fix this to proceed.
+        cont.log.debug("op(name:%s, type_name:%s)." % (name,type_name))
         tos = cont.stack.tos()
         op : Operation = Operation("invalid_result!", make_atom)
         sig : TypeSignature = TypeSignature([],[])
@@ -272,10 +272,14 @@ class Type(AF_Type):
 
         if tos is not Stack.Empty:
             # We first look for an atom specialized for the type/value on TOS.
+            cont.log.debug("Stack isn't empty so look for something specialized for Type:%s." % tos.stype.name)
             op, found = Type.find_op(name, cont, tos.stype.name)
+        else:
+            cont.log.debug("Stack is empty.")
 
         if not found:
             # If Stack is empty or no specialized atom exists then search the global dictionary.
+            cont.log.debug("Not found thus far calling find_op(name:%s, cont, 'Any')." % name)
             op, found = Type.find_op(name, cont, "Any")
 
         if tos is not Stack.Empty and not found:

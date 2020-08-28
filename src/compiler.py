@@ -225,7 +225,8 @@ def compile_word_handler(c: AF_Continuation) -> None:
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature), CodeCompile(Operation')
 
     Given an Op_name, place it in the list of our Operation to be executed at runtime later.
-    TODO: Confirm Type Signatures in & out of found words to enforce type safety.
+    TODO: Confirm Type Signatures in & out of found words to enforce type safety. (Done?)
+    TODO: Retain Symbol information in the Operation to faciliate debugging, tracing, and code coverage.
     """
     c.log.debug("compile_word_handler starting")
     handled = compilation_word_handler(c)
@@ -317,8 +318,6 @@ def compile_word_handler(c: AF_Continuation) -> None:
         # WHAT'S OUR TYPESIGNATURE?!?!?!?!?
 
         c.stack.tos().value.add_word(Operation(op_name, matching_op))
-
-
 
         c.log.debug("Compiled pattern matching op for '%s' => %s." % (op_name, type_matched_words))
         return

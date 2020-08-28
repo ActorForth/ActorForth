@@ -26,8 +26,8 @@ class TestExecution(unittest.TestCase):
         Type.ctors = deepcopy(self.save_ctors)
 
     def execute(self, code) -> Any:
-        cont = interpret(self.cont, io.StringIO(code))
-        return cont.stack.tos().value
+        self.cont.execute(interpret(self.cont, io.StringIO(code)))
+        return self.cont.stack.tos().value
 
     def test_compile_double(self) -> None:
         code =  """
@@ -87,7 +87,7 @@ class TestExecution(unittest.TestCase):
                 """
         stack = Stack()
         cont = Continuation(stack)
-        cont = interpret(cont, io.StringIO(code))
+        cont = cont.execute(interpret(cont, io.StringIO(code)))
 
         op, found = Type.op("noinputnooutput", cont ) #, "Test")
 
@@ -105,7 +105,7 @@ class TestExecution(unittest.TestCase):
                 """
         stack = Stack()
         cont = Continuation(stack)
-        cont = interpret(cont, io.StringIO(code))
+        cont = cont.execute(interpret(cont, io.StringIO(code)))
 
         op, found = Type.op("multiinput", cont ) #, "Test")
 

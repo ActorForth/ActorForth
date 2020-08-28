@@ -22,65 +22,65 @@ class TestInterpreter(unittest.TestCase):
         code = """
         Junk Junk
         """
-        cont = interpret(self.cont, io.StringIO(code))
+        cont = self.cont.execute(interpret(self.cont, io.StringIO(code)))
 
         assert cont.stack.tos().value == "Junk"
         assert cont.stack.tos().stype == TAtom 
         assert cont.stack.depth() == 2
 
         # Pretend to be stdin.
-        cont = interpret(self.cont, io.StringIO(code), "stdin")
+        cont = self.cont.execute(interpret(self.cont, io.StringIO(code), "stdin"))
         assert cont.stack.depth() == 4
 
     def testInterpretIntOps(self) -> None:
         code = "14 int 28 int +"
-        cont = interpret(self.cont, io.StringIO(code))
+        cont = self.cont.execute(interpret(self.cont, io.StringIO(code)))
         assert cont.stack.tos().value == 42
-        cont = interpret(cont, io.StringIO("17 int -"))
+        cont = self.cont.execute(interpret(cont, io.StringIO("17 int -")))
         assert cont.stack.tos().value == 25
-        cont = interpret(cont, io.StringIO("5 int /"))
+        cont = self.cont.execute(interpret(cont, io.StringIO("5 int /")))
         assert cont.stack.pop().value == 0 # Our remainder
         assert cont.stack.tos().value == 5
-        cont = interpret(cont, io.StringIO("3 int *"))
+        cont = self.cont.execute(interpret(cont, io.StringIO("3 int *")))
         assert cont.stack.tos().value == 15
-        cont = interpret(cont, io.StringIO("0 int *"))
+        cont = self.cont.execute(interpret(cont, io.StringIO("0 int *")))
         assert cont.stack.tos().value == 0
 
     def testInterpretBoolOps(self) -> None:
         code = "14 int 28 int 2dup <"
-        cont = interpret(self.cont, io.StringIO(code))
+        cont = self.cont.execute(interpret(self.cont, io.StringIO(code)))
         assert cont.stack.pop().value is True
-        cont = interpret(cont, io.StringIO("2dup <="))
+        cont = cont.execute(interpret(cont, io.StringIO("2dup <=")))
         assert cont.stack.pop().value is True
-        cont = interpret(cont, io.StringIO("2dup =="))
+        cont = cont.execute(interpret(cont, io.StringIO("2dup ==")))
         assert cont.stack.pop().value is False
-        cont = interpret(cont, io.StringIO("2dup >"))
+        cont = cont.execute(interpret(cont, io.StringIO("2dup >")))
         assert cont.stack.pop().value is False
-        cont = interpret(cont, io.StringIO("2dup >="))
+        cont = cont.execute(interpret(cont, io.StringIO("2dup >=")))
         assert cont.stack.pop().value is False
-        cont = interpret(cont, io.StringIO("2dup !="))
+        cont = cont.execute(interpret(cont, io.StringIO("2dup !=")))
         assert cont.stack.pop().value is True
-        cont = interpret(cont, io.StringIO("dup dup =="))
+        cont = cont.execute(interpret(cont, io.StringIO("dup dup ==")))
         assert cont.stack.pop().value is True
-        cont = interpret(cont, io.StringIO("dup dup !="))
+        cont = cont.execute(interpret(cont, io.StringIO("dup dup !=")))
         assert cont.stack.pop().value is False
-        cont = interpret(cont, io.StringIO("True bool"))
+        cont = cont.execute(interpret(cont, io.StringIO("True bool")))
         assert cont.stack.tos().value is True
-        cont = interpret(cont, io.StringIO("not"))
+        cont = cont.execute(interpret(cont, io.StringIO("not")))
         assert cont.stack.pop().value is False
 
     def testInterpretInferenceBoolOps(self) -> None:
-        cont = interpret(self.cont, io.StringIO("False bool"))
+        cont = self.cont.execute(interpret(self.cont, io.StringIO("False bool")))
         assert cont.stack.tos().value is False
-        cont = interpret(cont, io.StringIO("False =="))
+        cont = self.cont.execute(interpret(cont, io.StringIO("False ==")))
         assert cont.stack.tos().value is True
 
     def testOverloadingBoolCtor(self) -> None:
         Type.register_ctor('Bool',Operation('bool',op_bool),[TBool])
-        cont = interpret(self.cont, io.StringIO("True bool"))
+        cont = self.cont.execute(interpret(self.cont, io.StringIO("True bool")))
         assert cont.stack.tos().stype == TBool
         assert cont.stack.tos().value is True
-        cont = interpret(cont, io.StringIO("bool"))
+        cont = self.cont.execute(interpret(cont, io.StringIO("bool")))
         assert cont.stack.tos().stype == TBool
         assert cont.stack.pop().value is True
 

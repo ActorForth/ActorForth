@@ -4,7 +4,7 @@ interpret.py - outer interpreter for ActorForth.
 INTRO 2 : The interpreter parses the input stream and executes it in 
           the context of the Continuation.
 """
-from typing import TextIO, Optional
+from typing import TextIO, Optional, Iterator, Tuple
 import traceback
 
 from continuation import Continuation 
@@ -21,7 +21,7 @@ from af_types.af_debug import *
 from af_types.af_see import *
 from compiler import *
 
-def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Continuation:    
+def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Iterator[Tuple[Operation,Symbol]]:
     """
     INTRO 2.2 : Setup a parser for the input stream (passed from repl.py).
     """
@@ -46,8 +46,11 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             print(prompt,end='',flush=True)    
             last_line += 1
 
-        cont.symbol = Symbol( s_id, Location(p.filename,linenum,column) ) 
-        cont.op, found = Type.op(cont.symbol.s_id, cont)
+        symbol = Symbol( s_id, Location(p.filename,linenum,column) ) 
+        op, found = Type.op(symbol.s_id, cont)
+        print ("INTERPRET looking up symbol: %s, found op:%s, found=%s." % (symbol, op,found))
+
+        yield (op, symbol)
 
         # Drop out to terminal input if we're asked to resume.
         if s_id == "resume": return cont
@@ -59,7 +62,7 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
             """
             INTRO 2.5 : Call execute on the Continuation...
             """
-            cont.execute()
+            ### cont.execute()
             if cont.debug: print("%s" % cont)
 
             """
