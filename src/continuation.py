@@ -17,7 +17,7 @@ from operation import Operation, op_nop
 import logging
 import sys
 
-ROOT_LOGGING_DEFAULT = logging.DEBUG # logging.WARNING # logging.DEBUG # 
+ROOT_LOGGING_DEFAULT = logging.WARNING # logging.DEBUG # 
 LOGGING_DEFAULT = logging.DEBUG
 
 root_log = logging.getLogger()
@@ -70,7 +70,7 @@ class Continuation(AF_Continuation):
                 pos, (op, symbol) = next(i)
                 self.op = op
                 self.symbol = symbol
-                print("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos,self.op,self.symbol))
+                self.log.debug("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos,self.op,self.symbol))
 
                 # Assume that we're an empty stack and will use the TAny op_handler.
                 type_context = TAny
@@ -92,7 +92,7 @@ class Continuation(AF_Continuation):
                 handler(self)
         except StopIteration:
             pass
-        print("RETURNING FROM EXECUTE")
+        self.log.debug("RETURNING FROM EXECUTE")
         return self
 
 

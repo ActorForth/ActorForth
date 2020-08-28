@@ -6,6 +6,7 @@ INTRO 2 : The interpreter parses the input stream and executes it in
 """
 from typing import TextIO, Optional, Iterator, Tuple
 import traceback
+import logging
 
 from continuation import Continuation 
 from parser import Parser
@@ -48,7 +49,7 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
 
         symbol = Symbol( s_id, Location(p.filename,linenum,column) ) 
         op, found = Type.op(symbol.s_id, cont)
-        print ("INTERPRET looking up symbol: %s, found op:%s, found=%s." % (symbol, op,found))
+        cont.log.debug("INTERPRET looking up symbol: %s, found op:%s, found=%s." % (symbol, op,found))
 
         yield (op, symbol)
 
