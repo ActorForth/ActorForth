@@ -65,7 +65,7 @@ class Continuation(AF_Continuation):
     """
     def execute(self, next_word : Iterator[Tuple[Operation,Symbol]] ) -> AF_Continuation:
 
-        print("ENTERING INTO EXECUTE.")
+        #print("ENTERING INTO EXECUTE.")
         try:
             self.pc = enumerate(iter(next_word))
             while self.pc:
@@ -97,7 +97,7 @@ class Continuation(AF_Continuation):
         except StopIteration:
             pass
         self.log.debug("RETURNING FROM EXECUTE: %s" % self.op.name)
-        print("RETURNING FROM EXECUTE: %s" % self.op.name)
+        #print("RETURNING FROM EXECUTE: %s" % self.op.name)
         return self
 
 

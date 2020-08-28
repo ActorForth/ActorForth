@@ -9,6 +9,7 @@ from itertools import zip_longest
 
 from af_types import *
 from af_types.af_any import op_swap, op_stack
+from af_types.af_branch import op_pcsave, op_pcreturn
 from operation import Operation_def, TypeSignature
 
 def sig_type_handler(c: AF_Continuation) -> None:
@@ -579,14 +580,17 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
 #     c.symbol = symbol
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
-    top_op = c.op
-    print("\n\n*** op_execute_compiled_word for op=%s. ***\n\n" % top_op.name)
+    op_pcsave(c)
+    #print("\n\n*** op_execute_compiled_word for op=%s. ***" % top_op.name)
     
+    #ops = [op.name for op in c.op.words]
+    #print("\tHere are its words: %s.\n\n" % ops)
 
     def ex(c: AF_Continuation) -> Iterator[Tuple[Operation,Symbol]]:
         for word in c.op.words:
-            print("\nEX: word=%s, word.symbol=%s.\n\n" % (word.name, word.symbol))
+            #print("\nEX: word=%s, word.symbol=%s.\n\n" % (word.name, word.symbol))
             yield (word, word.symbol)
 
     my_words = ex(c)
     c.execute(my_words)
+    op_pcreturn(c)

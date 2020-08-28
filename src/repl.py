@@ -100,6 +100,7 @@ def do_repl(filename: str, handle: TextIO):
                 #cont.stack.pop()
                 print_continuation_stats(cont)
             else:
+                print("Clean?? exit! cont.symbol = %s." % cont.symbol)
                 break
         except KeyboardInterrupt as x:
             print(" key interrupt.")
@@ -114,6 +115,8 @@ def do_repl(filename: str, handle: TextIO):
             """
             cont.log.error( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
             cont.log.error( "TRACEBACK : %s" % traceback.format_exc() )
+            print( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
+            print( "TRACEBACK : %s" % traceback.format_exc() )
 
             # Turn debug on automatically.
             op_debug(cont)

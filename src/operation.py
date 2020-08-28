@@ -156,8 +156,8 @@ class Operation:
         except AttributeError:
             pass         
         result = "Op{'%s' %s :(%s)" % (self.name, self.sig, qualified_name)
-        result += " words=%s" % str(self.words)
-        result += " from=%s" % self.symbol.location
+        #result += " words=%s" % str(self.words)
+        #result += " from=%s" % self.symbol.location
         result += "}"
         return result
 

@@ -26,11 +26,12 @@ loop : Int r:PC -> r:PC | r:None;
 
 @dataclass
 class PCSave:
-	val : int
-	count : int 
 	pc : Iterator[Tuple[int,Tuple[Operation,Symbol]]]
 	op : Operation
 	symbol : Symbol
+
+	val: Optional[int] = None
+	count: Optional[int] = None
 
 TPCSave = Type("PCSave")
 
@@ -95,17 +96,41 @@ make_word_context('to_dstack', op_mov_to_dstack, [], [TAny])
 
 
 def op_pcsave(c: AF_Continuation) -> None:
+	c.pc, pc = tee(c.pc)
+	c.rstack.push(StackObject(value=PCSave(pc,c.op,c.symbol), stype=TPCSave))
+	print("op_pcsave : %s" % c.op.name)
+make_word_context('pcsave', op_pcsave)
+
+
+def op_loop_pcsave(c: AF_Continuation) -> None:
 	i = c.rstack.pop().value
 	assert i >= 0
-	c.pc, pc = tee(c.pc)
-	#pc = c.pc
-	c.rstack.push(StackObject(value=PCSave(i,i,pc,c.op,c.symbol), stype=TPCSave))
-make_word_context('pcsave', op_pcsave)
+	op_pcsave(c)
+	c.rstack.tos().value.val = i
+	c.rstack.tos().value.count = i
+	print("op_loop_pcsave : %s" % i)
+
+
+def op_pcreturn(c: AF_Continuation) -> None:
+	assert c.rstack.tos().stype == TPCSave
+	loops = []
+	# Save any loop objects we encounter...
+	while c.rstack.depth() and c.rstack.tos().value.val is not None:
+		loops.append(c.rstack.pop())
+	pc = c.rstack.tos().value
+	c.pc, pc.pc = tee(pc.pc)
+	c.op = pc.op
+	c.symbol = pc.symbol
+	op_rdrop(c)
+	# Restore the loop objects.
+	for l in loops:
+		c.rstack.push(l)
+	print("op_pcreturn : %s" % c.op.name)
 
 
 def op_start_countdown(c: AF_Continuation) -> None:
 	op_mov_to_rstack(c)
-	op_pcsave(c)
+	op_loop_pcsave(c)
 make_word_context('countdown', op_start_countdown, [TInt], [])
 
 
@@ -116,16 +141,27 @@ make_word_context('countdown', op_start_countdown_atom, [TAtom], [])
 
 
 def op_loop(c: AF_Continuation) -> None:
+	returns = []
+	# Save any regular returns we encounter...
+	while c.rstack.tos().value.val is None:
+		returns.append(c.rstack.pop())
 	pcobj = c.rstack.tos()
 	assert pcobj != KStack.Empty and pcobj.stype == TPCSave
 	pc = pcobj.value
 	pc.count -=1
 	if pc.count == 0:
 		op_rdrop(c)
+		# Restore our returns.
+		for r in returns:
+			c.rstack.push(r)
+		print("op_loop continues...")
 	else:
 		c.pc, pc.pc = tee(pc.pc)
-		#c.op = pc.op 
-		#c.symbol = pc.symbol
+		c.op = pc.op 
+		c.symbol = pc.symbol
+		for r in returns[-1::]:
+			print("dropping return for : %s" % r.value.op.name)
+		print("op_loop loops back to : %s" % c.op.name)
 		
 make_word_context('loop', op_loop)
 
@@ -136,8 +172,5 @@ def op_loop_count(c: AF_Continuation) -> None:
 	c.stack.push(StackObject(value=pc.val - (pc.val-pc.count), stype=TInt))
 make_word_context('lcount', op_loop_count, [], [TInt])	
 
-#def op_test_loop(c: AF_Continuation) -> None:
-#	count = c.stack.tos().value
-#	op_start_countdown(c)
 	
 

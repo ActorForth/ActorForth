@@ -1,5 +1,5 @@
 deepest_say : -> ;
-	Say.
+	Saying.
 
 deeper_say : -> ;
 	deepest_say.
@@ -12,13 +12,12 @@ say : -> ;
     print.
 
 start : -> ;
-    Start
+    Starting
     print
     3 int
     countdown
-    rstack
-    Counting
-    print.
+    Counting print
+    lcount print.
 
 say_loop : -> ;
     Looping
@@ -37,3 +36,4 @@ testloop : -> ;
 
 testloop
 
+resume
