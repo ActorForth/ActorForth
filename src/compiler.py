@@ -5,7 +5,7 @@
 import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence, Iterator
 from dataclasses import dataclass
-from itertools import zip_longest
+from itertools import zip_longest, tee
 
 from af_types import *
 from af_types.af_any import op_swap, op_stack
@@ -580,7 +580,10 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
 #     c.symbol = symbol
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
-    op_pcsave(c)
+    #op_pcsave(c)
+    c.pc, pc = tee(c.pc)
+    op = c.op 
+    symbol = c.symbol
     #print("\n\n*** op_execute_compiled_word for op=%s. ***" % top_op.name)
     
     #ops = [op.name for op in c.op.words]
@@ -593,4 +596,8 @@ def op_execute_compiled_word(c: AF_Continuation) -> None:
 
     my_words = ex(c)
     c.execute(my_words)
-    op_pcreturn(c)
+
+    #op_pcreturn(c)
+    c.op = op
+    c.symbol = symbol 
+    c.pc, pc = tee(pc)

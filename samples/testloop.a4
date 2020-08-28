@@ -14,7 +14,7 @@ say : -> ;
 start : -> ;
     Starting
     print
-    3 int
+    5 int
     countdown
     Counting print
     lcount print.
