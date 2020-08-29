@@ -135,6 +135,7 @@ def op_pcreturn(c: AF_Continuation) -> None:
 
 
 def op_start_countdown(c: AF_Continuation) -> None:
+	assert c.stack.tos().value >= 0, "Cannot countdown from a negative number."
 	op_mov_to_rstack(c)
 	op_loop_pcsave(c)
 make_word_context('countdown', op_start_countdown, [TInt], [])
@@ -160,7 +161,7 @@ def op_loop(c: AF_Continuation) -> None:
 	pcobj = c.rstack.tos()
 	assert pcobj != KStack.Empty and pcobj.stype == TPCSave
 	pc = pcobj.value
-	pc.count -=1
+	if pc.count > 0 : pc.count -=1
 	if pc.count == 0:
 		op_rdrop(c)
 		# Restore our returns.
