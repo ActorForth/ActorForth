@@ -1,5 +1,6 @@
 import unittest
 import sys
+import io
 
 from parser import Parser, Type
 
@@ -76,3 +77,47 @@ class TestParser(unittest.TestCase):
         assert p.filename == "samples/square.a4"
 
 
+    def test_simple_string(self) -> None:
+        text =  """
+                "This is one string"
+                This is four tokens"Bonus string"
+                """
+        p = Parser()
+        p.open_handle(io.StringIO(text))
+        tokens = [t[0] for t in p.tokens()]
+        results = ['"This is one string"',
+                    "This", "is", "four", "tokens",
+                    '"Bonus string"']
+        test = [a==b for a,b in zip(tokens,results)]
+        assert all(test)
+
+    def test_multi_line_string(self) -> None:
+        test =  """
+"This
+    is
+        four
+            lines." """
+        p = Parser()
+        p.open_handle(io.StringIO(test))
+        i = iter(p.tokens())
+        t = next(i)[0]
+        print(test)
+        print(t)
+        assert t == test.strip()
+
+    def test_comment(self) -> None:
+        text =  """
+                Code
+                "A String"
+                # This is a comment
+                # This is a comment with a "string"!
+                Code# Comment
+                """
+        p = Parser()
+        p.open_handle(io.StringIO(text))
+        results = ["Code", '"A String"', "# This is a comment",
+                    '# This is a comment with a "string"!', "Code",
+                    "# Comment"]
+        tokens = [t[0] for t in p.tokens()]
+        test = [a==b for a,b in zip(tokens,results)]
+        assert all(test)

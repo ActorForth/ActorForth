@@ -50,10 +50,67 @@ class Parser:
         linenum = 1
         column = 1
         white_space = True
+        quotes = False
+        comment = False
 
         # TODO : we're not yet dealing with any quoted strings or escape characters.        
         while char := self.file_handle.read(1):
 
+            # Handle comments
+            if comment:
+                if char == '\n':
+                    column = 0
+                    linenum += 1
+                    # Comment Token ended via line feed. Send it.
+                    yield (token, linenum, token_column)
+                    token = ""
+                    token_column = column
+                    white_space = True
+                    comment = False
+                else:
+                    token += char
+                    column += 1
+                continue
+            elif char == '#':
+                comment = True
+                # Beginning a comment - which is always a new token.
+                if token:
+                    # Token ended via reserved punctuation. Send it.
+                    yield (token, linenum, token_column)
+                token = "".join(char)
+                column += 1
+                token_column = column
+                white_space = False
+                continue
+
+            # Handle quotes
+            if char == '"':
+                column += 1
+                white_space = False
+                if quotes:
+                    # Ending a string.
+                    token += char
+                    yield (token, linenum, token_column)
+                    token = ""
+                else:
+                    # Beginning a string - which is always a new token.
+                    if token:
+                        # Token ended via reserved punctuation. Send it.
+                        yield (token, linenum, token_column)
+                    token = "".join(char)
+                    token_column = column
+                quotes = not quotes
+                continue
+            elif quotes:
+                # While quotes are on we'll take every char there is.
+                column += 1
+                token += char
+                if char == '\n':
+                    column = 0
+                    linenum += 1
+                continue
+
+            # Handle white space first.
             if char == ' ' or char == '\t' or char == '\n':
                 column += 1 # \n will reset column later.
                 # Tabs are assumed to occur on every 4th character
@@ -73,7 +130,8 @@ class Parser:
                 token_column = column
                 column += 1
 
-            else: # Add this character to the current token.
+            # Add this regular character to the current token.
+            else: 
                 if white_space:
                     token_column = column
                 column += 1
