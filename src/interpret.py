@@ -21,6 +21,7 @@ from af_types.af_bool import *
 from af_types.af_debug import *
 from af_types.af_see import *
 from af_types.af_branch import *
+from af_types.af_environment import *
 from compiler import *
 
 def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Iterator[Tuple[Operation,Symbol]]:

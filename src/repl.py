@@ -15,6 +15,7 @@ from interpret import interpret
 
 from af_types.af_any import print_words
 from af_types.af_debug import op_debug, op_on, op_off
+from af_types.af_environment import op_checkpoint
 
 def print_continuation_stats(cont : Continuation):
     print("")
@@ -64,6 +65,9 @@ def do_repl(filename: str, handle: TextIO):
     op_debug(cont)
     op_off(cont)
     #op_on(cont)
+
+    # Checkpoint our initial setup.
+    op_checkpoint(cont)
 
     print("ActorForth interpreter. ^C to exit.")
     print_words()
