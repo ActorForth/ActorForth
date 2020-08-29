@@ -13,9 +13,21 @@ from io import StringIO
 from continuation import Continuation, Stack
 from interpret import interpret
 
-from af_types.af_any import print_words
-from af_types.af_debug import op_debug, op_on, op_off
-from af_types.af_environment import op_checkpoint
+#from af_types.af_any import print_words
+#from af_types.af_debug import op_debug, op_on, op_off
+#from af_types.af_environment import op_checkpoint
+
+""" 
+INTRO 2.1 : All types get imported imported here.""
+"""
+from af_types.af_any import *
+from af_types.af_int import *
+from af_types.af_bool import *
+from af_types.af_debug import *
+from af_types.af_see import *
+from af_types.af_branch import *
+from af_types.af_environment import *
+from compiler import *
 
 def print_continuation_stats(cont : Continuation):
     print("")

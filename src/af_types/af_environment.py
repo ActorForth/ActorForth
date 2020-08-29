@@ -9,7 +9,7 @@ from . import *
 from .af_int import *
 from stack import *
 from af_types.af_branch import op_pcsave, op_pcreturn
-#from interpret import interpret
+from interpret import interpret
 
 
 checkpoints = Stack()
@@ -56,7 +56,6 @@ make_word_context('system', op_system, [TAtom], [])
 
 
 def op_load(c: AF_Continuation) -> None:
-	global repl_interpret
 	filename = c.stack.pop().value
 	f = None
 	for file in [filename, filename + '.a4', 'lib/' + filename, 'lib/' + filename + '.a4']:
@@ -68,7 +67,7 @@ def op_load(c: AF_Continuation) -> None:
 		print("No file or module called '%s' found." % filename)
 	else:
 		op_pcsave(c)
-		c.execute(repl_interpret(c, f, filename))
+		c.execute(interpret(c, f, filename))
 		op_pcreturn(c)
 	if c.prompt:
 		print(c.prompt,end='',flush=True)
