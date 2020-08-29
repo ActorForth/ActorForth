@@ -14,13 +14,14 @@ make_word_context('print', op_print, [TAny])
 
 def op_stack(c: AF_Continuation) -> None:
     if c.stack.depth() == 0:
-        print("(stack empty)")
+        print("(data stack empty)")
     else:
         for n in reversed(c.stack.contents()):
             print('%s'%str(n))
     if c.prompt:
         print(c.prompt,end='',flush=True)
 make_word_context('stack', op_stack)
+make_word_context('.s', op_stack)
 
 
 def print_words() -> None:

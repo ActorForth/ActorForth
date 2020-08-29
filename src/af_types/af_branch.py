@@ -72,13 +72,14 @@ make_word_context('2rdup', op_2rdup)
 
 def op_rstack(c: AF_Continuation) -> None:
     if c.rstack.depth() == 0:
-        print("(stack empty)")
+        print("(return stack empty)")
     else:
         for n in reversed(c.rstack.contents()):
             print('%s'%str(n))
     if c.prompt:
         print(c.prompt,end='',flush=True)
 make_word_context('rstack', op_rstack)
+make_word_context('.r', op_rstack)
 
 
 def op_mov_to_rstack(c: AF_Continuation) -> None:
