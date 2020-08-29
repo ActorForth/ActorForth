@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from typing import Iterator, Tuple
 from copy import deepcopy
 from datetime import datetime
+from os import system
 
 from . import *
 from .af_int import *
@@ -42,3 +43,10 @@ def op_restore(c: AF_Continuation) -> None:
 	c.__init__(s, r)
 make_word_context('restore', op_restore, [], [])
 
+
+def op_system(c: AF_Continuation) -> None:
+	cmd = c.stack.pop().value
+	system(cmd)
+	if c.prompt:
+		print(c.prompt,end='',flush=True)
+make_word_context('system', op_system, [TAtom], [])
