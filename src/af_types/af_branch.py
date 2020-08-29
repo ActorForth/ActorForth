@@ -112,6 +112,12 @@ def op_loop_pcsave(c: AF_Continuation) -> None:
 
 
 def op_pcreturn(c: AF_Continuation) -> None:
+	"""
+	TODO: Forget about saving loop objects, alert
+		  on them and raise an error because it
+		  means we have looping cross-levels and 
+		  that won't work!
+	"""
 	assert c.rstack.tos().stype == TPCSave
 	loops = []
 	# Save any loop objects we encounter...
@@ -141,6 +147,12 @@ make_word_context('countdown', op_start_countdown_atom, [TAtom], [])
 
 
 def op_loop(c: AF_Continuation) -> None:
+	"""
+	TODO: Forget about saving return objects, alert
+		  on them and raise an error because it
+		  means we have looping cross-levels and 
+		  that won't work!
+	"""	
 	returns = []
 	# Save any regular returns we encounter...
 	while c.rstack.tos().value.val is None:

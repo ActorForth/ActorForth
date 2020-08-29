@@ -556,9 +556,10 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
 
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
-    c.pc, pc = tee(c.pc)
-    op = c.op 
-    symbol = c.symbol
+    # c.pc, pc = tee(c.pc)
+    # op = c.op 
+    # symbol = c.symbol
+    op_pcsave(c)
 
     def ex(c: AF_Continuation) -> Iterator[Tuple[Operation,Symbol]]:
         for word in c.op.words:
@@ -568,6 +569,7 @@ def op_execute_compiled_word(c: AF_Continuation) -> None:
     my_words = ex(c)
     c.execute(my_words)
 
-    c.op = op
-    c.symbol = symbol 
-    c.pc, pc = tee(pc)
+    # c.op = op
+    # c.symbol = symbol 
+    # c.pc, pc = tee(pc)
+    op_pcreturn(c)
