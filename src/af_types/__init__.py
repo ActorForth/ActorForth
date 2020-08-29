@@ -357,7 +357,11 @@ def make_atom(c: AF_Continuation) -> None:
     c.log.debug("make_atom c.symbol = '%s'" % c.symbol)
     if c.symbol is None:
         c.symbol = Symbol("Unknown", Location())
-    c.stack.push(StackObject(value=c.symbol.s_id,stype=TAtom))
+    text = c.symbol.s_id
+    if text.startswith('"') and text.endswith('"'):
+        # Strip off the quotes now. Strings are atoms for now.
+        text = text[1:-1]
+    c.stack.push(StackObject(value=text,stype=TAtom))
 
 
 def make_word_context(word_name: Op_name, op_def: Operation_def, in_seq: Sequence["Type"] = [], out_seq: Sequence["Type"] = [])  -> None: 
