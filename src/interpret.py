@@ -44,6 +44,14 @@ def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] 
                    Continuation's symbol.
         """
 
+        if s_id.startswith('#'):
+            # This is a comment.
+            if column == 1:
+                # No need to display a prompt if the entire line is a comment.
+                last_line = linenum
+            continue
+
+
         if prompt and linenum != last_line: 
             print(prompt,end='',flush=True)    
             last_line += 1

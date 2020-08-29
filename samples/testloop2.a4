@@ -1,3 +1,7 @@
+#
+# testloop2.a4
+#
+
 start : -> ;
 	Starting print.
 
