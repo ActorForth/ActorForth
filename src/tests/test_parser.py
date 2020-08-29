@@ -79,16 +79,19 @@ class TestParser(unittest.TestCase):
 
     def test_simple_string(self) -> None:
         text =  """
-                "This is one string"
-                This is four tokens"Bonus string"
+"This is one string"
+This is four tokens"Bonus string"
                 """
         p = Parser()
         p.open_handle(io.StringIO(text))
-        tokens = [t[0] for t in p.tokens()]
-        results = ['"This is one string"',
-                    "This", "is", "four", "tokens",
-                    '"Bonus string"']
+        tokens = [t for t in p.tokens()]
+        results = [('"This is one string"',2,1),
+                    ("This",3,1), ("is",3,6), ("four",3,9), 
+                    ("tokens",3,14), ('"Bonus string"',3,20)]
         test = [a==b for a,b in zip(tokens,results)]
+        #print("")
+        #print(tokens)
+        #print(results)
         assert all(test)
 
     def test_multi_line_string(self) -> None:
@@ -101,23 +104,26 @@ class TestParser(unittest.TestCase):
         p.open_handle(io.StringIO(test))
         i = iter(p.tokens())
         t = next(i)[0]
-        print(test)
-        print(t)
+        #print(test)
+        #print(t)
         assert t == test.strip()
 
     def test_comment(self) -> None:
         text =  """
-                Code
-                "A String"
-                # This is a comment
-                # This is a comment with a "string"!
-                Code# Comment
+Code
+"A String"
+# This is a comment
+# This is a comment with a "string"!
+Code# Comment
                 """
         p = Parser()
         p.open_handle(io.StringIO(text))
-        results = ["Code", '"A String"', "# This is a comment",
-                    '# This is a comment with a "string"!', "Code",
-                    "# Comment"]
-        tokens = [t[0] for t in p.tokens()]
+        results = [("Code",2,1), ('"A String"',3,1), ("# This is a comment",4,1),
+                    ('# This is a comment with a "string"!',5,1), ("Code",6,1),
+                    ("# Comment",6,5)]
+        tokens = [t for t in p.tokens()]
+        #print("")
+        #print(tokens)
+        #print(results)
         test = [a==b for a,b in zip(tokens,results)]
         assert all(test)

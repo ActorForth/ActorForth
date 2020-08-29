@@ -59,10 +59,11 @@ class Parser:
             # Handle comments
             if comment:
                 if char == '\n':
-                    column = 0
-                    linenum += 1
+                    
                     # Comment Token ended via line feed. Send it.
                     yield (token, linenum, token_column)
+                    column = 1
+                    linenum += 1
                     token = ""
                     token_column = column
                     white_space = True
@@ -78,20 +79,22 @@ class Parser:
                     # Token ended via reserved punctuation. Send it.
                     yield (token, linenum, token_column)
                 token = "".join(char)
-                column += 1
                 token_column = column
+                column += 1
                 white_space = False
                 continue
 
             # Handle quotes
             if char == '"':
-                column += 1
                 white_space = False
                 if quotes:
                     # Ending a string.
                     token += char
                     yield (token, linenum, token_column)
                     token = ""
+                    token_column = column
+                    column += 1
+                    
                 else:
                     # Beginning a string - which is always a new token.
                     if token:
@@ -99,6 +102,7 @@ class Parser:
                         yield (token, linenum, token_column)
                     token = "".join(char)
                     token_column = column
+                    column += 1
                 quotes = not quotes
                 continue
             elif quotes:
