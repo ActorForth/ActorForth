@@ -9,7 +9,7 @@ said license and do assign an unlimited, universal, non-exclusive
 license to the copyright holder and anyone else who agrees to abide by
 the license.
 
-Run `./setup` under a python 3.7+ virtual environment for best results.
+Run `./setup` under a python 3.8+ virtual environment for best results.
 
 Then run `./interpret samples/fundamentals01.a4` to see it run a simple
 script.
