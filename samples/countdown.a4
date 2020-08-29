@@ -1,0 +1,4 @@
+# countdown.a4
+# Counts down from 100,000 printing the current count along the way.
+
+100000 countdown lcount print loop

@@ -96,9 +96,11 @@ class Stack(KStack):
         self._depth_history = []
         self._push_count = 0
         self._pop_count = 0
+        self._max_depth = 0
 
     def _update_depth_history(self):
         stack_depth = self.depth()
+        if stack_depth > self._max_depth: self._max_depth = stack_depth
         assert stack_depth >= 0, "Error - somehow we got more pops(%s) than pushes(%s)!" % (self._push_count, self._pop_count)
         self._depth_history_count[stack_depth] = self._depth_history_count.get(stack_depth,0) + 1
         self._depth_history.append(stack_depth)
@@ -128,9 +130,7 @@ class Stack(KStack):
         up to 'history_limit' (if specified) or 'Stack.DEPTH_HISTORY'
         operations whichever is smaller.
         """
-        if self.depth_history(history_limit):
-            return max(self.depth_history(history_limit))
-        return 0
+        return self._max_depth
 
     def depth(self):
         """
