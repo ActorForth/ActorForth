@@ -110,3 +110,15 @@ def op_not(c: AF_Continuation) -> None:
     op1 = c.stack.tos().value = not c.stack.tos().value
 make_word_context('not', op_not, [TBool], [TBool])
 
+
+def op_assert(c: AF_Continuation) -> None:
+    predicate = c.stack.pop().value
+    assert predicate
+make_word_context('assert', op_assert, [TBool], [])
+
+
+def op_assert_msg(c: AF_Continuation) -> None:
+    msg = c.stack.pop().value
+    predicate = c.stack.pop().value
+    assert predicate, msg
+make_word_context('assert', op_assert_msg, [TBool, TAtom], [])

@@ -74,6 +74,7 @@ def op_dup(c: AF_Continuation) -> None:
     op1 = c.stack.tos()
     s = StackObject(value = copy(op1.value), stype=op1.stype)
     c.stack.push(s)
+    #c.stack.push(op1) # This allowed value object instance variables to be tied to each other across StackObjects!
 make_word_context('dup', op_dup, [t("Any")],[TAny, TAny])
 
 
