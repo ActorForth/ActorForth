@@ -182,7 +182,8 @@ class TestGenericTypeStuff(unittest.TestCase):
 
     def setUp(self) -> None:
         self.s = Stack()
-        self.c = Continuation(self.s, symbol = Symbol("Unknown", Location()))
+        self.r = Stack()
+        self.c = Continuation(self.s, self.r, symbol = Symbol("Unknown", Location()))
 
     def test_make_atom(self) -> None:
         self.c.symbol.s_id = "test"
@@ -198,11 +199,22 @@ class TestGenericTypeStuff(unittest.TestCase):
         assert self.c.stack.depth() == 0
 
     def test_op_dup(self) -> None:
-        self.test_make_atom()
+        @dataclass
+        class DupTest:
+            val : str
+        self.c.stack.push(StackObject(value=DupTest("Something"), stype=TAtom))
+        op_dup(self.c)
         op_dup(self.c)
         item1 = self.c.stack.pop()
+        self.c.stack.tos().value.val = "SomethingElse"
+        assert item1.value.val == "Something"
         item2 = self.c.stack.pop()
-        assert item1 == item2
+        assert item2.value.val == "SomethingElse"
+        assert item1 != item2
+        item3 = self.c.stack.pop()
+        assert item3.value.val == "Something"
+        assert item2 != item3
+        assert item1 == item3
 
     def test_op_swap(self) -> None:
         self.c.symbol.s_id = "first"
