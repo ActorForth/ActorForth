@@ -2,6 +2,7 @@ from itertools import tee
 from dataclasses import dataclass
 import binascii
 from typing import Iterator, Tuple
+from io import StringIO
 
 from . import *
 from .af_int import *
@@ -9,15 +10,15 @@ from .af_any import op_swap
 from stack import *
 
 """
-"data/rawbtctrans.hex" open # -> FStream
-4 bytes 					# -> FStream, bytes(count=4, val=None, endian='big')
-read 						# -> FStream, bytes(count=4, val=b'\x01\x00\x00\x00', endian='big')
+"data/rawbtctrans.hex" open # -> IStream
+4 bytes 					# -> IStream, bytes(count=4, val=None, endian='big')
+read 						# -> IStream, bytes(count=4, val=b'\x01\x00\x00\x00', endian='big')
 							# Knows there's two characters per byte.
-little						# -> FStream, bytes(count=4,  val=b'\x01\x00\x00\x00', endian='little')
-int 						# -> FStream, int(1)
+little						# -> IStream, bytes(count=4,  val=b'\x01\x00\x00\x00', endian='little')
+int 						# -> IStream, int(1)
 """
 
-TFStream = Type("FStream")
+TIStream = Type("IStream")
 TBytes = Type("Bytes")
 @dataclass
 class CBytes:
@@ -26,12 +27,18 @@ class CBytes:
 	endian : str = 'big'	
 
 
+def op_istream(c: AF_Continuation) -> None:
+	io = StringIO(c.stack.pop().value)
+	c.stack.push(StackObject(value=io, stype=TIStream))
+make_word_context('istream', op_istream, [TAtom], [TIStream])
+
+
 def op_open(c: AF_Continuation) -> None:
 	filename = c.stack.tos().value	
 	f = open(filename)
 	c.stack.pop()
-	c.stack.push(StackObject(value=f, stype=TFStream))
-make_word_context('open', op_open, [TAtom], [TFStream])
+	c.stack.push(StackObject(value=f, stype=TIStream))
+make_word_context('open', op_open, [TAtom], [TIStream])
 
 
 def op_bytes(c: AF_Continuation) -> None:
@@ -70,5 +77,5 @@ def op_read_bytes(c: AF_Continuation) -> None:
 	f = c.stack.tos().value
 	op_swap(c)
 	c.stack.tos().value.val = binascii.unhexlify(f.read(count*2)) # Two characters per byte.
-make_word_context('read', op_read_bytes, [TFStream, TBytes], [TFStream, TBytes])
+make_word_context('read', op_read_bytes, [TIStream, TBytes], [TIStream, TBytes])
 

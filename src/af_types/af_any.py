@@ -1,4 +1,5 @@
 from . import *
+from copy import copy
 
 # op_nop from continuation.
 make_word_context('nop', op_nop)
@@ -71,7 +72,8 @@ make_word_context('types', op_print_types)
 #
 def op_dup(c: AF_Continuation) -> None:
     op1 = c.stack.tos()
-    c.stack.push(op1)
+    s = StackObject(value = copy(op1.value), stype=op1.stype)
+    c.stack.push(s)
 make_word_context('dup', op_dup, [t("Any")],[TAny, TAny])
 
 
@@ -90,9 +92,11 @@ make_word_context('drop', op_drop, [TAny])
 
 def op_2dup(c: AF_Continuation) -> None:
     op1 = c.stack.tos()
+    s1 = StackObject(value = copy(op1.value), stype = op1.stype)
     op_swap(c)
     op2 = c.stack.tos()
+    s2 = StackObject(value = copy(op2.value), stype = op2.stype)
     op_swap(c)
-    c.stack.push(op2)
-    c.stack.push(op1)
+    c.stack.push(s2)
+    c.stack.push(s1)
 make_word_context('2dup', op_2dup, [t("_a"), t("_b")],[t("_a"), t("_b"), t("_a"), t("_b")])
