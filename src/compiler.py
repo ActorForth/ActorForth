@@ -557,5 +557,6 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
     op_pcsave(c)
+    print("EXECUTE '%s'." % c.symbol.s_id)
     c.execute(((word, word.symbol) for word in c.op.words))
     op_pcreturn(c)

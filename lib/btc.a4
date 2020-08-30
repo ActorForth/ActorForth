@@ -13,6 +13,7 @@ btchead : IStream -> IStream Int;
 	int 			# convert to an integer.
 	# Confirm this is Version 1.
 	#dup 1 int == "Only Version 1 Supported!" assert 
+	dup dup + -
 	.
 
 

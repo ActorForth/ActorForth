@@ -29,11 +29,14 @@ def op_bool(c: AF_Continuation) -> None:
     assert result.value is not None, "%s is not a valid Boolean value." % stack_object.value
 
     c.stack.push(result)
-Type.register_ctor('Bool',Operation('bool',op_bool),[StackObject(stype=TAny)])
+Type.register_ctor('Bool',Operation('bool',op_bool),[StackObject(stype=TAtom)])
+Type.register_ctor('Bool',Operation('bool',op_bool),[StackObject(stype=TBool)])
+
 
 ### TODO :  if issue 4 ( https://github.com/ActorForth/ActorForth/issues/4 ) 
 ###         is working properly then we shouldn't need this, right?
-make_word_context('bool', op_bool, [TAny], [TBool])
+make_word_context('bool', op_bool, [TAtom], [TBool])
+make_word_context('bool', op_bool, [TBool], [TBool])
 
 
 # TODO : issue #17 wait for created gerneralize type infer

@@ -16,7 +16,7 @@ def op_int(c: AF_Continuation) -> None:
     assert i > -999999999999, "int underflow < -999999999999"
     c.stack.push(StackObject(value=i, stype=TInt))
 #   Int dictionary
-Type.register_ctor('Int',Operation('int',op_int),[StackObject(stype=TAny)])
+# BDM HACK TODO - Type.register_ctor('Int',Operation('int',op_int),[StackObject(stype=TAny)])
 make_word_context('int', op_int, [TAny],[TInt])
 
 
