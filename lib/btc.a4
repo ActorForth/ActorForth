@@ -2,10 +2,63 @@
 #	btc.a4	- words for parsing BTC transactions
 #
 
+
+samplebtc : -> IStream;
+	"samples/data/rawbtctrans.hex" open.
+
+
 btchead : IStream -> IStream Int;
 	4 bytes 		# Grab 4 bytes from the istream.
 	read little		# read them as a little endian hexstream.
 	int 			# convert to an integer.
 	# Confirm this is Version 1.
-	dup 1 int = "Only Version 1 Supported!" assert 
+	#dup 1 int == "Only Version 1 Supported!" assert 
 	.
+
+
+# Just handy for going straight from btchead to xtinput.
+skip_to_first_input : IStream Int -> Int IStream;
+	swap
+	1 bytes read drop
+	.
+
+reset : -> IStream;
+	samplebtc
+	btchead
+	skip_to_first_input
+	.
+
+# Leaves: Bytes(Prior TX Hash) Int(Output Tx Index) Bytes(Unlock Script) Bytes(Seq#) IStream
+xtinput : IStream -> Bytes Int Bytes Bytes IStream;
+	# Bytes(Prior TX Hash), IStream
+	32 bytes read little swap 
+
+	# Bytes(Prior TX Hash), Int(Output Tx Index), IStream
+	4 bytes read little int swap 
+
+	# Size of rest of input. + Int(byte count for next read)
+	1 bytes read int 	
+
+	stack
+
+	# Bytes(Prior TX Hash), Int(Output Tx Index), Bytes(Unlock Script), IStream
+	bytes
+
+	"bytes" print
+	stack
+
+	read 
+
+	"read" print
+	stack 
+
+	swap		
+
+	"swap print"
+	stack
+
+	# Bytes(Prior TX Hash), Int(Output Tx Index), Bytes(Unlock Script), Bytes(Seq #), IStream
+	4 bytes read little swap 
+	.
+
+
