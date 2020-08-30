@@ -17,7 +17,7 @@ from compiler import *
 INTRO 2.1 : Interpreter
 """
 
-def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Iterator[Tuple[Operation,Symbol]]:
+def interpret(cont: AF_Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Iterator[Tuple[Operation,Symbol]]:
     """
     INTRO 2.2 : Setup a parser for the input stream (passed from repl.py).
     """

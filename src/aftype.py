@@ -88,3 +88,8 @@ class AF_Continuation:
     debug : bool = False
     cdepth : int = 0        # Depth of calls for debug tab output.
     log : logging.Logger = logging.getLogger()
+
+    ### BIG NASTY HACK FOR TYPING 
+    def execute(self, next_word ) -> "AF_Continuation":
+      print("NEED THE REAL CONTINUATION")
+      raise NotImplemented

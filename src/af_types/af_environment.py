@@ -10,6 +10,7 @@ from .af_int import *
 from stack import *
 from af_types.af_branch import op_pcsave, op_pcreturn
 from interpret import interpret
+from continuation import Continuation
 
 
 checkpoints = Stack()
@@ -44,7 +45,7 @@ def op_restore(c: AF_Continuation) -> None:
 	Type.ctors = checkpoint[1]
 	s = Stack()
 	r = Stack()
-	c.__init__(s, r)
+	c = Continuation(stack=s, rstack=r)
 make_word_context('restore', op_restore, [], [])
 
 
