@@ -44,17 +44,17 @@ xtinput : IStream -> Bytes Int Bytes Bytes IStream;
 	# Bytes(Prior TX Hash), Int(Output Tx Index), Bytes(Unlock Script), IStream
 	bytes
 
-	"bytes" print
+	#"bytes" print
 	stack
 
 	read 
 
-	"read" print
+	#"read" print
 	stack 
 
 	swap		
 
-	"swap print"
+	#"swap" print
 	stack
 
 	# Bytes(Prior TX Hash), Int(Output Tx Index), Bytes(Unlock Script), Bytes(Seq #), IStream

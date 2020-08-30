@@ -1,0 +1,63 @@
+
+onedot1 : Atom -> Atom ;
+	drop
+	"1.1" dup print.
+
+onedot2 : Atom -> Atom ;
+	drop
+	"1.2" dup print.
+
+onedot3 : Atom -> Atom;
+	drop
+	"1.3" dup print.
+
+onedot4 : Atom -> Atom;
+	drop
+	"1.4" dup print.
+
+one : -> Atom ;
+	"1" dup print
+	onedot1
+	onedot2
+	onedot3
+	onedot4
+	.
+
+twodot1 : -> ;
+	"2.1" print.
+
+twodot2 : -> ;
+	"2.2" print.
+
+twodot3dot1 : -> ;
+	"2.3.1" print.
+
+twodot3 : -> ;
+	"2.3" print
+	twodot3dot1
+	.
+
+twodot4 : -> ;
+	"2.4" print.
+
+two : Atom -> ;
+	drop
+	"2" print
+	twodot1
+	twodot2
+	twodot3
+	twodot4
+	.
+
+three : -> ;
+	"3" print.
+
+four : -> ;
+	"4" print.
+
+one2four : -> ;
+	one
+	two
+	three
+	four.
+
