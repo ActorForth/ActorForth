@@ -12,17 +12,10 @@ from continuation import Continuation
 from parser import Parser
 from af_types import Symbol, Location
 
-# """ 
-# INTRO 2.1 : All types get imported imported here.""
-# """
-# from af_types.af_any import *
-# from af_types.af_int import *
-# from af_types.af_bool import *
-# from af_types.af_debug import *
-# from af_types.af_see import *
-# from af_types.af_branch import *
-# from af_types.af_environment import *
 from compiler import *
+"""
+INTRO 2.1 : Interpreter
+"""
 
 def interpret(cont: Continuation, input_stream: TextIO, filename: Optional[str] = None, prompt: Optional[str] = None) -> Iterator[Tuple[Operation,Symbol]]:
     """

@@ -29,7 +29,8 @@ def op_checkpoints(c: AF_Continuation) -> None:
 		points = (checkpoints.contents()[::-1])
 		result = "\nCheckpoints:\n"
 		for count, point in enumerate(points):
-			result += "\t%s\t: %s\n" % (count+1,point[2])
+			ts = point[2].isoformat()[0:-7]
+			result += "\t%s\t: %s\n" % (count+1,ts)
 		print(result)
 	if c.prompt:
 		print(c.prompt,end='',flush=True)

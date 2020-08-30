@@ -18,7 +18,7 @@ from interpret import interpret
 #from af_types.af_environment import op_checkpoint
 
 """ 
-INTRO 2.1 : All types get imported imported here.""
+INTRO 1.1 : All types get imported imported here.""
 """
 from af_types.af_any import *
 from af_types.af_int import *
@@ -37,7 +37,7 @@ def print_continuation_stats(cont : Continuation):
     print("Stack total operations = %s" % cont.stack.total_operations())
 
 """
-INTRO 1.1 : Input always comes from a file whether that's the default
+INTRO 1.2 : Input always comes from a file whether that's the default
             stdin or a filename passed to the system.
 """
 def setup_stream_for_interpreter(force_stdio: bool = False) -> Tuple[str, TextIO]:
@@ -62,7 +62,7 @@ def afc(code: str) -> TextIO:
 
 
 """
-INTRO 1.2 : Establish our stack and build our stateful Continutaion from it.
+INTRO 1.3 : Establish our stack and build our stateful Continutaion from it.
 """
 
 stack = Stack()
@@ -90,7 +90,7 @@ def do_repl(filename: str, handle: TextIO):
     while True:
 
         """
-        INTRO 1.3 : Continuously call the Interpreter until ^C is hit, the
+        INTRO 1.4 : Continuously call the Interpreter until ^C is hit, the
                     input file runs out of tokens to parse, or an 
                     exception is encountered.
 
@@ -103,7 +103,7 @@ def do_repl(filename: str, handle: TextIO):
 
 
             """
-            INTRO 1.4 : If the last token in the input file is 'resume' 
+            INTRO 1.5 : If the last token in the input file is 'resume' 
                         then we re-establish stdin as our input file and
                         continue at the repl with everything intact. This
                         is a special hard-coded command.
@@ -124,11 +124,11 @@ def do_repl(filename: str, handle: TextIO):
             break
         except Exception as x:
             """
-            INTRO 1.5 : Uncaught exceptions will interupt the interpreter, print status output, 
+            INTRO 1.6 : Uncaught exceptions will interupt the interpreter, print status output, 
                         turn Debug on, reset the input to stdin and proceed again.
 
             
-            INTRO 1.6 : Continue in interpret.py for INTRO stage 2.
+            INTRO 1.7 : Continue in interpret.py for INTRO stage 2.
             """
             cont.log.error( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
             cont.log.error( "TRACEBACK : %s" % traceback.format_exc() )
