@@ -43,10 +43,14 @@ def op_restore(c: AF_Continuation) -> None:
 	checkpoint = checkpoints.pop()
 	Type.types = checkpoint[0]
 	Type.ctors = checkpoint[1]
+
 	## TODO : This doesn't seem to be resetting our stacks.
 	s = Stack()
 	r = Stack()
 	c = Continuation(stack=s, rstack=r)
+
+	if checkpoints.depth() == 0:
+		op_checkpoint(c)
 make_word_context('restore', op_restore, [], [])
 
 
