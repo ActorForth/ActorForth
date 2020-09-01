@@ -31,6 +31,7 @@ def op_bool(c: AF_Continuation) -> None:
     c.stack.push(result)
 Type.register_ctor('Bool',Operation('bool',op_bool),[StackObject(stype=TAtom)])
 Type.register_ctor('Bool',Operation('bool',op_bool),[StackObject(stype=TBool)])
+#Type.register_ctor('Bool',Operation('bool',op_bool),[StackObject(stype=TAny)]) # HACK BDM TODO NASTY!
 
 
 ### TODO :  if issue 4 ( https://github.com/ActorForth/ActorForth/issues/4 ) 
