@@ -6,7 +6,7 @@ import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence, Iterator
 from dataclasses import dataclass
 from itertools import zip_longest, tee
-from copy import copy
+from copy import deepcopy
 
 from af_types import *
 from af_types.af_any import op_swap, op_stack
@@ -317,7 +317,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
         # Need to do some runtime pattern matching...
         matching_op, matching_sig = match_and_execute_compiled_word(c, type_matched_words)        
 
-        c.stack.tos().value.add_word(Operation(op_name, matching_op ) ) # , sig= matching_sig))
+        c.stack.tos().value.add_word(Operation(op_name, matching_op, sig= matching_sig))
 
         c.log.debug("Compiled pattern matching op for '%s' => %s." % (op_name, type_matched_words))
         return
@@ -559,8 +559,8 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
     #   BDM TODO :  Need to qualify various generic types & their positions
     #               to ensure they're aligned and compatible with each other.
     #
-    in_sigs = [copy(op.sig.stack_in) for op in words]
-    out_sigs = [copy(op.sig.stack_out) for op in words]
+    in_sigs = [deepcopy(op.sig.stack_in) for op in words]
+    out_sigs = [deepcopy(op.sig.stack_out) for op in words]
 
     c.log.debug("Input sigs for our matched compiled words is: %s." % in_sigs)
     c.log.debug("Output sigs for our matched compiled words is: %s." % out_sigs)

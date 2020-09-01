@@ -12,8 +12,7 @@ btchead : IStream -> IStream Int; # Should only be one Int normally but we're ha
 	read little		# read them as a little endian hexstream.
 	int 			# convert to an integer.
 	# Confirm this is Version 1.
-	#dup 1 int == "Only Version 1 Supported!" assert 
-	dup +
+	dup 1 int == "Only Version 1 Supported!" assert 
 	.
 
 
@@ -40,23 +39,11 @@ xtinput : IStream -> Bytes Int Bytes Bytes IStream;
 	# Size of rest of input. + Int(byte count for next read)
 	1 bytes read int 	
 
-	stack
-
 	# Bytes(Prior TX Hash), Int(Output Tx Index), Bytes(Unlock Script), IStream
 	bytes
-
-	#"bytes" print
-	stack
-
 	read 
 
-	#"read" print
-	stack 
-
 	swap		
-
-	#"swap" print
-	stack
 
 	# Bytes(Prior TX Hash), Int(Output Tx Index), Bytes(Unlock Script), Bytes(Seq #), IStream
 	4 bytes read little swap 
