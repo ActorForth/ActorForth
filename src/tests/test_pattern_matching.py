@@ -34,6 +34,7 @@ class TestPatternMatching(unittest.TestCase):
         self.any_pattern = StackObject(stype=TAny)
         self.true_pattern = StackObject(stype=TBool, value=True)
         self.false_pattern = StackObject(stype=TBool, value=False)
+        self.int_pattern = StackObject(stype=TInt)
 
         op_debug(self.cont)
         op_on(self.cont)
@@ -47,8 +48,8 @@ class TestPatternMatching(unittest.TestCase):
     #     return cont.stack.tos().value
 
     def test_curry_match_and_execute(self) -> None:
-        words = [Operation("test", op_gen(StackObject(stype=TInt,value=99),1), sig = TypeSignature([self.zero_pattern]))]
-        curry = match_and_execute_compiled_word(words)
+        words = [Operation("test", op_gen(StackObject(stype=TInt,value=99),1), sig = TypeSignature([self.zero_pattern],[self.int_pattern]))]
+        curry, sig = match_and_execute_compiled_word(self.cont, words)
         
         self.cont.stack.push(StackObject(stype=TInt,value=0))
         curry(self.cont)
@@ -59,13 +60,13 @@ class TestPatternMatching(unittest.TestCase):
         with self.assertRaises(Exception) as x:
             curry(self.cont)
 
-        words.append( Operation("test", op_gen(StackObject(stype=TInt,value=101),1), sig = TypeSignature([self.one_pattern])))
+        words.append( Operation("test", op_gen(StackObject(stype=TInt,value=101),1), sig = TypeSignature([self.one_pattern],[self.int_pattern])))
 
         curry(self.cont)
 
         assert self.cont.stack.pop().value == 101
 
-        words.append( Operation("test", op_gen(StackObject(stype=TInt,value=76),1), sig = TypeSignature([self.any_pattern])))       
+        words.append( Operation("test", op_gen(StackObject(stype=TInt,value=76),1), sig = TypeSignature([self.any_pattern],[self.int_pattern])))       
 
         self.cont.stack.push(StackObject(stype=TInt,value=0))
         self.cont.stack.push(StackObject(stype=TInt,value=42))

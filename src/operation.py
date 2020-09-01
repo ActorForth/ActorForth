@@ -55,25 +55,6 @@ class TypeSignature:
             result_sig.insert(0,m_s)
         return result_sig
 
-    @stacicmethod
-    def more_general_type_seq_than(sig1: Sequence[StackObject], sig2: Sequence[StackObject]) -> bool:
-        """
-        Returns True if sig1 is more general than sig2 otherwise False.
-        """
-        assert len(sig1) == len(sig2), "Error! Different lengths %s:%s vs %s:%s!" % (len(sig1),sig1,len(sig2),sig2)
-        
-
-
-    def most_general_input(self, sig: TypeSignature) -> TypeSignature:
-        which = TypeSignature.most_general_type_seq(self.stack_in.contents(), sig.stack_in.contents())
-        if which: return self
-        return sig
-
-    def most_general_output(self, sig: TypeSignature) -> TypeSignature:
-        which = TypeSignature.most_general_type_seq(self.stack_out.contents(), sig.stack_out.contents())
-        if which: return self
-        return sig
-
 
     # Used by the runtime interpreter to check for mathing types for words.
     def match_in(self, stack: Stack) -> bool:

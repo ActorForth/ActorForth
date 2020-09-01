@@ -6,6 +6,7 @@ import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence, Iterator
 from dataclasses import dataclass
 from itertools import zip_longest, tee
+from copy import copy
 
 from af_types import *
 from af_types.af_any import op_swap, op_stack
@@ -314,11 +315,9 @@ def compile_word_handler(c: AF_Continuation) -> None:
             return
 
         # Need to do some runtime pattern matching...
-        matching_op = match_and_execute_compiled_word(type_matched_words)        
+        matching_op, matching_sig = match_and_execute_compiled_word(c, type_matched_words)        
 
-        # WHAT'S OUR TYPESIGNATURE?!?!?!?!?
-
-        c.stack.tos().value.add_word(Operation(op_name, matching_op))
+        c.stack.tos().value.add_word(Operation(op_name, matching_op ) ) # , sig= matching_sig))
 
         c.log.debug("Compiled pattern matching op for '%s' => %s." % (op_name, type_matched_words))
         return
@@ -521,7 +520,7 @@ def compile_and_complete_pattern_to_word(c: AF_Continuation) -> None:
 make_word_context('.', compile_and_complete_pattern_to_word, [TWordDefinition, TOutputTypeSignature, TOutputPatternMatch], [])            
 
 
-def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Continuation"],None]:
+def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) -> Tuple[Callable[["AF_Continuation"],None], TypeSignature]:
     def op_curry_match_and_execute(c: AF_Continuation) -> None:
         c.log.debug("Attempting to pattern match with words = %s and this stack: %s." % (words,c.stack))
         word_sig : Sequence["StackObject"]
@@ -556,9 +555,41 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
     match_op = op_curry_match_and_execute
 
     # Now figure out what the TypeSignature properly is for this Operation.
-    
-    
-    return match_op, match_sig
+    #
+    #   BDM TODO :  Need to qualify various generic types & their positions
+    #               to ensure they're aligned and compatible with each other.
+    #
+    in_sigs = [copy(op.sig.stack_in) for op in words]
+    out_sigs = [copy(op.sig.stack_out) for op in words]
+
+    c.log.debug("Input sigs for our matched compiled words is: %s." % in_sigs)
+    c.log.debug("Output sigs for our matched compiled words is: %s." % out_sigs)
+
+    assert all(in_sigs[0].depth()==s.depth() for s in in_sigs), "Error - input Signatures are not of uniform length!"
+    assert all(out_sigs[0].depth()==s.depth() for s in out_sigs), "Error - output Signatures are not of uniform length!"    
+
+    inputs : List["StackObject"] = []
+    outputs : List["StackObject"] = []
+
+    def most_general(sigs):
+        a = sigs[0].tos()
+        for sig in sigs:
+            b = sig.pop()
+            if b.stype.is_generic(): a = b
+            elif not a.stype.is_generic():            
+                assert a.stype == b.stype, "Error! '%s' & '%s' are not same types!" % (a.stype, b.stype)
+                if b.value is None: a =  b
+        return a
+
+    while in_sigs[0].depth():
+        inputs.insert(0,most_general(in_sigs))
+
+    while out_sigs[0].depth():
+        outputs.insert(0,most_general(out_sigs))
+
+    sig = TypeSignature(inputs,outputs)    
+    c.log.debug("Returning matching operator with TypeSignature: %s." % (sig))
+    return match_op, sig
 
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
