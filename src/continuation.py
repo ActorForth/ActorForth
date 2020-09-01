@@ -74,7 +74,7 @@ class Continuation(AF_Continuation):
                 self.op = op
                 self.symbol = symbol
                 self.log.debug("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos+1,self.op.name,self.symbol))
-                print("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos+1,self.op.name,self.symbol))
+                #print("EXECUTING WORD #%s: Op=%s, Symbol=%s." % (pos+1,self.op.name,self.symbol))
 
                 # Assume that we're an empty stack and will use the TAny op_handler.
                 type_context = TAny

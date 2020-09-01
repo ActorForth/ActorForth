@@ -264,7 +264,7 @@ class Type(AF_Type):
     @staticmethod
     def op(name: Op_name, cont: AF_Continuation, type_name: Type_name = "Any") -> Tuple[Operation, bool]:
         # TODO : Word lookup is not matching based on values. need to fix this to proceed.
-        cont.log.debug("op(name:%s, type_name:%s)." % (name,type_name))
+        cont.log.debug("op(name:'%s', type_name:'%s')." % (name,type_name))
         tos = cont.stack.tos()
         op : Operation = Operation("invalid_result!", make_atom)
         sig : TypeSignature = TypeSignature([],[])

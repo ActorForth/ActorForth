@@ -238,7 +238,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
     op_name : Op_name = c.symbol.s_id
     found : bool = False
 
-    op : Operation = c.stack.tos().value
+    op : Operation = c.stack.tos().value ## BDM - This is the parent Operation????
     maybe_recursive_op : Optional[Operation] = None
     if op_name == op.name:  # This is potentially a recursive call.
         maybe_recursive_op = op
@@ -552,11 +552,17 @@ def match_and_execute_compiled_word(words: List[Operation]) -> Callable[["AF_Con
         # If we got here then nothing matched!
         c.log.error("No matches found!")
         raise Exception("No matches found!")
-    return op_curry_match_and_execute
+
+    match_op = op_curry_match_and_execute
+
+    # Now figure out what the TypeSignature properly is for this Operation.
+    
+    
+    return match_op, match_sig
 
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
     op_pcsave(c)
-    print("EXECUTE '%s'." % c.symbol.s_id)
+    #print("EXECUTE '%s'." % c.symbol.s_id)
     c.execute(((word, word.symbol) for word in c.op.words))
     op_pcreturn(c)

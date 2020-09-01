@@ -7,13 +7,13 @@ samplebtc : -> IStream;
 	"samples/data/rawbtctrans.hex" open.
 
 
-btchead : IStream -> IStream Int;
+btchead : IStream -> IStream Int; # Should only be one Int normally but we're hacking stuff.
 	4 bytes 		# Grab 4 bytes from the istream.
 	read little		# read them as a little endian hexstream.
 	int 			# convert to an integer.
 	# Confirm this is Version 1.
 	#dup 1 int == "Only Version 1 Supported!" assert 
-	dup dup + -
+	dup +
 	.
 
 
