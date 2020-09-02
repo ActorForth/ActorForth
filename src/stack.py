@@ -79,7 +79,14 @@ class Stack(KStack):
     DEPTH_HISTORY = 1000
 
     def __str__(self):
-        return str(self.contents())
+        result = "\nstack:\n"
+        if self.depth() == 0:
+            result += "\t(stack empty)"
+        else:
+            for n in reversed(self.contents()):
+                result +='\t%s\n'%str(n)        
+        return result
+
 
     def __repr__(self):
         return self.__str__()

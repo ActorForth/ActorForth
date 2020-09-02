@@ -11,3 +11,14 @@ fib	: Int -> Int
         2 int -
         fib
         +.
+
+debug on
+
+f : Int -> Int;
+    dup print fib.
+
+27 int fib
+
+f
+
+f

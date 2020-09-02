@@ -96,9 +96,11 @@ def op_mov_to_dstack(c: AF_Continuation) -> None:
 make_word_context('to_dstack', op_mov_to_dstack, [], [TAny])
 
 
-def op_pcsave(c: AF_Continuation) -> None:
+def op_pcsave(c: AF_Continuation) -> None:	
+	c.log.debug("pcsave stack before op:%s sym:%s stack:%s." % (c.op.name, c.symbol.s_id, c.rstack))
 	c.pc, pc = tee(c.pc)
 	c.rstack.push(StackObject(value=PCSave(pc,c.op,c.symbol), stype=TPCSave))
+	c.log.debug("pcsave stack after op:%s sym:%s stack:%s." % (c.op.name, c.symbol.s_id, c.rstack))
 	#print("op_pcsave : %s" % c.op.name)
 make_word_context('pcsave', op_pcsave)
 
@@ -119,20 +121,22 @@ def op_pcreturn(c: AF_Continuation) -> None:
 		  means we have looping cross-levels and 
 		  that won't work!
 	"""
+	c.log.debug("pcreturn stack before op:%s sym:%s stack:%s." % (c.op.name, c.symbol.s_id, c.rstack))
 	assert c.rstack.tos().stype == TPCSave
-	loops = []
-	# Save any loop objects we encounter...
-	while c.rstack.depth() and c.rstack.tos().value.val is not None:
-		loops.append(c.rstack.pop())
+	# loops = []
+	# # Save any loop objects we encounter...
+	# while c.rstack.depth() and c.rstack.tos().value.val is not None:
+	# 	loops.append(c.rstack.pop())
 	pc = c.rstack.tos().value
 	c.pc, pc.pc = tee(pc.pc)
 	c.op = pc.op
 	c.symbol = pc.symbol
 	op_rdrop(c)
-	# Restore the loop objects.
-	for l in loops:
-		c.rstack.push(l)
+	# # Restore the loop objects.
+	# for l in loops:
+	# 	c.rstack.push(l)
 	#print("op_pcreturn : %s" % c.op.name)
+	c.log.debug("pcreturn stack after op:%s sym:%s stack:%s." % (c.op.name, c.symbol.s_id, c.rstack))
 
 
 def op_start_countdown(c: AF_Continuation) -> None:
