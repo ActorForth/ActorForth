@@ -141,16 +141,18 @@ class Type(AF_Type):
     def find_ctor(name: Type_name, inputs : List["StackObject"]) -> Optional[Operation]:
         # Given a stack of input types, find the first matching ctor.
         logging.debug("Attempting to find a ctor for Type '%s' using the following input types: %s." % (name, inputs))
-        logging.debug("Type '%s' has the following ctors: %s." % (name, Type.ctors))
+        logging.debug("Type '%s' has the following %s ctors: %s." % (name, len(Type.ctors.get(name,[])),Type.ctors.get(name,[])))
 
         for type_sig in Type.ctors.get(name,[]):
 
+            logging.debug("Trying against type_sig = %s." % str(type_sig))
             matching = False
             inputs = inputs.copy()
             try:
                 ctor_obj : StackObject
                 for ctor_obj in type_sig[0]:
                     in_obj = inputs.pop(0)
+                    logging.debug("ctor_obj candidate: %s vs in_obj: %s." % (ctor_obj, in_obj))
                     # Match against value first.
                     if ctor_obj.value is not None:
                         if ctor_obj.value != in_obj.value:
