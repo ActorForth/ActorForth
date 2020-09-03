@@ -12,13 +12,9 @@ fib	: Int -> Int
         fib
         +.
 
-debug on
-
 f : Int -> Int;
     dup print fib.
 
-27 int fib
+12 int f "fib = " print print
 
-f
 
-f

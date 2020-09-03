@@ -69,7 +69,7 @@ class TypeSignature:
 
 
     def __str__(self) -> str:
-        out = "TSig["
+        out = "TSig(["
         for t in self.stack_in.contents():
             out += "t=%s" % t.stype.name
             if t.value is not None:
@@ -83,7 +83,7 @@ class TypeSignature:
             if t.value is not None:
                 out += ", v='%s'" % t.value
             out += ', '
-        out += "]"
+        out += "])"
         return out
 
     def __repr__(self):

@@ -77,8 +77,8 @@ def do_repl(filename: str, handle: TextIO):
 
     # Set Debug on or off initially.
     op_debug(cont)
-    #op_off(cont)
-    op_on(cont)
+    op_off(cont)
+    #op_on(cont)
 
     # Checkpoint our initial setup.
     op_checkpoint(cont)

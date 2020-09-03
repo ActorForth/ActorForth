@@ -236,7 +236,7 @@ class Type(AF_Type):
         sigs_found : List[TypeSignature] = []
         if type_def:
             op_list = type_def.ops_list
-            cont.log.debug("\top_list = %s" % ["name:'%s', sig:%s" % (op.name,op.sig.stack_in) for op in op_list])
+            cont.log.debug("\top_list = %s" % [op for op in op_list])
             for op in op_list:
                 if op.name == name:
                     name_found = True

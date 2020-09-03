@@ -523,10 +523,12 @@ make_word_context('.', compile_and_complete_pattern_to_word, [TWordDefinition, T
 def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) -> Tuple[Callable[["AF_Continuation"],None], TypeSignature]:
     def op_curry_match_and_execute(c: AF_Continuation) -> None:
         c.log.debug("Attempting to pattern match with words = %s and this stack: %s." % (words,c.stack))
+
         word_sig : Sequence["StackObject"]
         #op : Optional[Operation]
+        matches : bool = True
         for word in words:
-            matches : bool = True
+            matches = True
             # Copy as many items off the stack as our pattern to match against.
             stack_frame = c.stack.contents(word.sig.stack_in.depth())
             word_sig = word.sig.stack_in.contents()
@@ -547,10 +549,15 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
             # Everything matches - this is our op. Call it.
             if matches: 
                 c.log.debug("Matched! Call the operator.")                
-                return word(c)
-        # If we got here then nothing matched!
-        c.log.error("No matches found!")
-        raise Exception("No matches found!")
+                c.op = word
+                c.symbol = word.symbol
+                word(c)
+                break
+
+        if not matches:
+            # If we got here then nothing matched!
+            c.log.error("No matches found!")
+            raise Exception("No matches found!")
 
     match_op = op_curry_match_and_execute
 
@@ -593,7 +600,8 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
 
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
+    c.log.debug("EXECUTE op_execute_compiled_word : '%s'." % c.symbol.s_id)
     op_pcsave(c)
-    #print("EXECUTE '%s'." % c.symbol.s_id)
+    
     c.execute(((word, word.symbol) for word in c.op.words))
     op_pcreturn(c)
