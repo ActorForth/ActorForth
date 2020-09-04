@@ -6,20 +6,21 @@
 samplebtc : -> IStream;
 	"samples/data/rawbtctrans.hex" open.
 
-
-btchead : IStream -> IStream Int; # Should only be one Int normally but we're hacking stuff.
+# Leaves : Int(Version)
+btchead : IStream -> Int IStream; # Should only be one Int normally but we're hacking stuff.
 	4 bytes 		# Grab 4 bytes from the istream.
 	read little		# read them as a little endian hexstream.
 	int 			# convert to an integer.
 	# Confirm this is Version 1.
 	dup 1 int == "Only Version 1 Supported!" assert 
+	swap
 	.
 
 
 # Just handy for going straight from btchead to xtinput.
-skip_to_first_input : IStream Int -> Int IStream;
+skip_to_first_input : IStream Int -> Int Int IStream;
 	swap
-	1 bytes read drop
+	1 bytes read int swap
 	.
 
 reset : -> IStream;
@@ -28,13 +29,19 @@ reset : -> IStream;
 	skip_to_first_input
 	.
 
+txhash : IStream -> Bytes IStream;
+	# Bytes(Prior TX Hash), IStream
+	32 bytes read little swap.
+
+txindex : IStream -> Int IStream;
+	# Bytes(Prior TX Hash) + Int(Output Tx Index), IStream
+	4 bytes read little int swap.
+
 # Leaves: Bytes(Prior TX Hash) Int(Output Tx Index) Bytes(Unlock Script) Bytes(Seq#) IStream
 xtinput : IStream -> Bytes Int Bytes Bytes IStream;
-	# Bytes(Prior TX Hash), IStream
-	32 bytes read little swap 
+	txhash
 
-	# Bytes(Prior TX Hash), Int(Output Tx Index), IStream
-	4 bytes read little int swap 
+	txindex
 
 	# Size of rest of input. + Int(byte count for next read)
 	1 bytes read int 	

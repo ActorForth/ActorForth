@@ -1,4 +1,5 @@
 from . import *
+from .af_int import *
 from copy import copy
 
 # op_nop from continuation.
@@ -23,6 +24,11 @@ def op_stack(c: AF_Continuation) -> None:
         print(c.prompt,end='',flush=True)
 make_word_context('stack', op_stack)
 make_word_context('.s', op_stack)
+
+
+def op_stack_depth(c: AF_Continuation) -> None:
+    c.stack.push(StackObject(value=c.stack.depth(), stype=TInt))
+make_word_context('.d', op_stack_depth, [], [TInt])
 
 
 def print_words() -> None:
