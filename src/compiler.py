@@ -4,7 +4,6 @@
 
 import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence, Iterator
-from dataclasses import dataclass
 from itertools import zip_longest, tee
 from copy import deepcopy
 
@@ -348,7 +347,6 @@ def compile_pattern_handler(c: AF_Continuation) -> None:
 
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature).
 
-
     Allows for entry of Types and Typed Values which match the pattern of the OutputTypeSignature.
     """
     c.log.debug("compile_pattern_handler starting")
@@ -387,7 +385,6 @@ def compile_pattern_handler(c: AF_Continuation) -> None:
 
         # Append this type to the current pattern.
         current_sig.push( StackObject(stype=_type) )
-
 
     # If not a Type match then is there a ctor for this value as an atom for the Type?
     else:
@@ -578,7 +575,7 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
     inputs : List["StackObject"] = []
     outputs : List["StackObject"] = []
 
-    def most_general(sigs):
+    def most_general_of(sigs):
         a = sigs[0].tos()
         for sig in sigs:
             b = sig.pop()
@@ -589,10 +586,10 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
         return a
 
     while in_sigs[0].depth():
-        inputs.insert(0,most_general(in_sigs))
+        inputs.insert(0,most_general_of(in_sigs))
 
     while out_sigs[0].depth():
-        outputs.insert(0,most_general(out_sigs))
+        outputs.insert(0,most_general_of(out_sigs))
 
     sig = TypeSignature(inputs,outputs)    
     c.log.debug("Returning matching operator with TypeSignature: %s." % (sig))
@@ -602,6 +599,5 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
     c.log.debug("EXECUTE op_execute_compiled_word : '%s'." % c.symbol.s_id)
     op_pcsave(c)
-    
     c.execute(((word, word.symbol) for word in c.op.words))
     op_pcreturn(c)

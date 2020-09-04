@@ -64,7 +64,6 @@ def optionally_infer_type_from_atom(c: AF_Continuation) -> StackObject:
         ctor = Type.find_ctor( (sobj2.stype.name), c.stack.contents() )
         assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.stype, sobj1)
         # Call the ctor and put its result on the stack.
-        #c.stack.push(sobj1)
         ctor(c)
         sobj1 = c.stack.pop()
         c.stack.push(sobj2)
