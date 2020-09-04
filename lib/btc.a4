@@ -18,8 +18,7 @@ btchead : IStream -> Int IStream; # Should only be one Int normally but we're ha
 
 
 # Just handy for going straight from btchead to xtinput.
-skip_to_first_input : IStream Int -> Int Int IStream;
-	swap
+skip_to_first_input : Int IStream -> Int Int IStream;
 	1 bytes read int swap
 	.
 
@@ -37,12 +36,7 @@ txindex : IStream -> Int IStream;
 	# Bytes(Prior TX Hash) + Int(Output Tx Index), IStream
 	4 bytes read little int swap.
 
-# Leaves: Bytes(Prior TX Hash) Int(Output Tx Index) Bytes(Unlock Script) Bytes(Seq#) IStream
-xtinput : IStream -> Bytes Int Bytes Bytes IStream;
-	txhash
-
-	txindex
-
+unlock_script : IStream -> Bytes IStream;
 	# Size of rest of input. + Int(byte count for next read)
 	1 bytes read int 	
 
@@ -50,10 +44,21 @@ xtinput : IStream -> Bytes Int Bytes Bytes IStream;
 	bytes
 	read 
 
-	swap		
+	swap.
 
+
+insequence : IStream -> Bytes IStream;
+	4 bytes read little swap.
+
+
+
+# Leaves: Bytes(Prior TX Hash) Int(Output Tx Index) Bytes(Unlock Script) Bytes(Seq#) IStream
+xtinput : IStream -> Bytes Int Bytes Bytes IStream;
+	txhash
+	txindex
+	unlock_script		
 	# Bytes(Prior TX Hash), Int(Output Tx Index), Bytes(Unlock Script), Bytes(Seq #), IStream
-	4 bytes read little swap 
+	insequence
 	.
 
 
