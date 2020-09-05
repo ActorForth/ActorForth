@@ -1,5 +1,6 @@
 from . import *
 from .af_int import *
+from .af_branch import *
 from copy import copy
 
 # op_nop from continuation.
@@ -29,6 +30,19 @@ make_word_context('.s', op_stack)
 def op_stack_depth(c: AF_Continuation) -> None:
     c.stack.push(StackObject(value=c.stack.depth(), stype=TInt))
 make_word_context('.d', op_stack_depth, [], [TInt])
+
+
+# TODO : Words like reset can't work because there's no stack pattern
+#        that can be declared for them.
+# def op_reset(c: AF_Continuation) -> None:
+#     op_stack_depth(c)
+#     op_dup(c)
+#     op_print(c)
+#     op_start_countdown(c)
+#     op_drop(c)
+#     op_loop(c)
+# # Not actually an honest stack picture since it clears everything off the stack.
+# make_word_context('.reset', op_reset, [], [])
 
 
 def print_words() -> None:

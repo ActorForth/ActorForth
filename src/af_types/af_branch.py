@@ -159,10 +159,10 @@ def op_loop(c: AF_Continuation) -> None:
 		  means we have looping cross-levels and 
 		  that won't work!
 	"""	
-	returns = []
+	#returns = []
 	# Save any regular returns we encounter...
-	while c.rstack.tos().value.val is None:
-		returns.append(c.rstack.pop())
+	#while c.rstack.tos().value.val is None:
+	#	returns.append(c.rstack.pop())
 	pcobj = c.rstack.tos()
 	assert pcobj != KStack.Empty and pcobj.stype == TPCSave
 	pc = pcobj.value
@@ -170,17 +170,16 @@ def op_loop(c: AF_Continuation) -> None:
 	if pc.count == 0:
 		op_rdrop(c)
 		# Restore our returns.
-		for r in returns:
-			c.rstack.push(r)
-		#print("op_loop continues...")
+		#for r in returns:
+		#	c.rstack.push(r)
+		print("op_loop continues...")
 	else:
 		c.pc, pc.pc = tee(pc.pc)
 		c.op = pc.op 
 		c.symbol = pc.symbol
-		for r in returns[-1::]:
-			print("dropping return for : %s" % r.value.op.name)
-		#print("op_loop loops back to : %s" % c.op.name)
-		
+		#for r in returns[-1::]:
+		#	print("dropping return for : %s" % r.value.op.name)
+		print("op_loop loops back to : %s" % c.op.name)
 make_word_context('loop', op_loop)
 
 def op_loop_count(c: AF_Continuation) -> None:
