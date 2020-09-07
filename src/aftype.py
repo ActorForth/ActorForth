@@ -67,8 +67,8 @@ class StackObject:
 
     def __str__(self):
       if self.value is not None:
-        return "SObject(t='%s',v='%s')" % (self.stype, self.value)
-      return "SObject(t='%s')" % self.stype
+        return "SO(t='%s',v='%s')" % (self.stype, self.value)
+      return "SO(t='%s')" % self.stype
 
     def __repr__(self):
       return self.__str__()
