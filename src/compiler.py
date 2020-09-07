@@ -4,7 +4,6 @@
 
 import logging
 from typing import Dict, List, Tuple, Callable, Any, Optional, Sequence, Iterator
-from dataclasses import dataclass
 from itertools import zip_longest, tee
 from copy import deepcopy
 
@@ -348,7 +347,6 @@ def compile_pattern_handler(c: AF_Continuation) -> None:
 
     WordDefinition(Op_name), OutputTypeSignature(TypeSignature), OutputPatternMatch(TypeSignature).
 
-
     Allows for entry of Types and Typed Values which match the pattern of the OutputTypeSignature.
     """
     c.log.debug("compile_pattern_handler starting")
@@ -387,7 +385,6 @@ def compile_pattern_handler(c: AF_Continuation) -> None:
 
         # Append this type to the current pattern.
         current_sig.push( StackObject(stype=_type) )
-
 
     # If not a Type match then is there a ctor for this value as an atom for the Type?
     else:
@@ -523,10 +520,12 @@ make_word_context('.', compile_and_complete_pattern_to_word, [TWordDefinition, T
 def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) -> Tuple[Callable[["AF_Continuation"],None], TypeSignature]:
     def op_curry_match_and_execute(c: AF_Continuation) -> None:
         c.log.debug("Attempting to pattern match with words = %s and this stack: %s." % (words,c.stack))
+
         word_sig : Sequence["StackObject"]
         #op : Optional[Operation]
+        matches : bool = True
         for word in words:
-            matches : bool = True
+            matches = True
             # Copy as many items off the stack as our pattern to match against.
             stack_frame = c.stack.contents(word.sig.stack_in.depth())
             word_sig = word.sig.stack_in.contents()
@@ -547,10 +546,15 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
             # Everything matches - this is our op. Call it.
             if matches: 
                 c.log.debug("Matched! Call the operator.")                
-                return word(c)
-        # If we got here then nothing matched!
-        c.log.error("No matches found!")
-        raise Exception("No matches found!")
+                c.op = word
+                c.symbol = word.symbol
+                word(c)
+                break
+
+        if not matches:
+            # If we got here then nothing matched!
+            c.log.error("No matches found!")
+            raise Exception("No matches found!")
 
     match_op = op_curry_match_and_execute
 
@@ -571,7 +575,7 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
     inputs : List["StackObject"] = []
     outputs : List["StackObject"] = []
 
-    def most_general(sigs):
+    def most_general_of(sigs):
         a = sigs[0].tos()
         for sig in sigs:
             b = sig.pop()
@@ -582,10 +586,10 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
         return a
 
     while in_sigs[0].depth():
-        inputs.insert(0,most_general(in_sigs))
+        inputs.insert(0,most_general_of(in_sigs))
 
     while out_sigs[0].depth():
-        outputs.insert(0,most_general(out_sigs))
+        outputs.insert(0,most_general_of(out_sigs))
 
     sig = TypeSignature(inputs,outputs)    
     c.log.debug("Returning matching operator with TypeSignature: %s." % (sig))
@@ -593,7 +597,7 @@ def match_and_execute_compiled_word(c: AF_Continuation, words: List[Operation]) 
 
 
 def op_execute_compiled_word(c: AF_Continuation) -> None:
+    c.log.debug("EXECUTE op_execute_compiled_word : '%s'." % c.symbol.s_id)
     op_pcsave(c)
-    #print("EXECUTE '%s'." % c.symbol.s_id)
     c.execute(((word, word.symbol) for word in c.op.words))
     op_pcreturn(c)

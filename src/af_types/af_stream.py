@@ -24,7 +24,7 @@ TBytes = Type("Bytes")
 class CBytes:
 	count : int
 	val : Optional[str] = None
-	endian : str = 'big'	
+	endian : str = 'little'	
 
 
 def op_istream(c: AF_Continuation) -> None:

@@ -2,6 +2,8 @@
 
 from . import *
 from aftype import StackObject
+from af_types.af_debug import *
+
 
 TBool = Type("Bool")
 
@@ -42,6 +44,9 @@ make_word_context('bool', op_bool, [TBool], [TBool])
 
 # TODO : issue #17 wait for created gerneralize type infer
 def optionally_infer_type_from_atom(c: AF_Continuation) -> StackObject:
+    #op_debug(c)
+    #op_on(c)
+
     sobj1 = c.stack.pop()
     sobj2 = c.stack.tos()
 
@@ -53,12 +58,15 @@ def optionally_infer_type_from_atom(c: AF_Continuation) -> StackObject:
         # Pass along the entire list of types from the stack
         # in case the type's ctor takes multiple parameters.
         
+        sobj2 = c.stack.pop()
+        c.stack.push(sobj1)
+
         ctor = Type.find_ctor( (sobj2.stype.name), c.stack.contents() )
         assert ctor, "Couldn't find a ctor to infer a new %s type from %s." % (sobj2.stype, sobj1)
         # Call the ctor and put its result on the stack.
-        c.stack.push(sobj1)
         ctor(c)
         sobj1 = c.stack.pop()
+        c.stack.push(sobj2)
         c.log.debug("Converted from %s to %s." % (sobj1,c.stack.tos().stype))
 
     return sobj1

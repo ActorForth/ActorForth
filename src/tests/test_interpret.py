@@ -5,6 +5,7 @@ from copy import deepcopy
 from continuation import Continuation, Stack
 from interpret import *
 from af_types.af_bool import *
+from af_types.af_debug import *
 
 class TestInterpreter(unittest.TestCase):
 
@@ -13,6 +14,8 @@ class TestInterpreter(unittest.TestCase):
         self.cont = Continuation(self.stack)
         self.save_types = deepcopy(Type.types)
         self.save_ctors = deepcopy(Type.ctors)
+        #op_debug(self.cont)
+        #op_on(self.cont)
 
     def tearDown(self) -> None:
         Type.types = deepcopy(self.save_types)
