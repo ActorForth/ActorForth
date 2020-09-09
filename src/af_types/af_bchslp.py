@@ -284,6 +284,13 @@ def parse_slp(f : StringIO) -> Iterator[Tuple[str,Any]]:
         for x in trans(f): yield x
     else:
         raise Exception("Don't recognize SLP '%s' Transaction Type." % result[1])
+    
+    try:
+        while True:
+            extra = read_bytes(f,1)
+            yield("Extra Byte", extra)        
+    except StopIteration:
+        pass
 
 
 if __name__ == "__main__":
