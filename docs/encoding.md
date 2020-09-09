@@ -11,8 +11,8 @@ Goals:
 Basic Encoding:
 
 	Inspired by Smalltalk State Representation Protocol.
-	UTF-8 encoding has similar octet encoding features. Also the Microcore forth CPU as apparently 
-	inspired by Transmeta's CPU.
+	UTF-8 encoding has similar octet encoding features. Also the Microcore forth 
+	CPU as apparently inspired by Transmeta's CPU.
 
 	Octets: 
 
