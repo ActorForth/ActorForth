@@ -158,8 +158,6 @@ class NFT1Type(Enum):
     NFT1_CHILD = b"\x41"
 
 
-
-
 # Given an unhexlify'd byte code, return the OP string code.
 def decode(byte : str) -> Optional[str]:
     try:
@@ -177,7 +175,6 @@ def decode_push(byte : str) -> int:
     if op >= 81 and op <= 96: return op - 80
     assert False, "raw:'%s' value: %s is not a valid PUSH OP." % (byte, op)
 
-
 def read_bytes(f : StringIO, count : int) -> str:
     bytes = f.read(count*2)
     if bytes == '': raise StopIteration
@@ -185,11 +182,11 @@ def read_bytes(f : StringIO, count : int) -> str:
     return raw
 
 def read_counted_string( f: StringIO ) -> str:
-    bytes = read_bytes(f,1)
+    byte = read_bytes(f,1)
     try:
-        count = decode_push(bytes)
+        count = decode_push(byte)
     except AssertionError:
-        count = int.from_bytes(bytes, byteorder = 'little')
+        count = int.from_bytes(byte, byteorder = 'little')
     return read_bytes(f,count)
 
 def parse_slp_genesis( f: StringIO ) -> Iterator[Tuple[str,Any]]:
@@ -203,40 +200,26 @@ def parse_slp_genesis( f: StringIO ) -> Iterator[Tuple[str,Any]]:
     yield("Token Name", name.decode('ascii'))
 
     # URI
-    # raw = read_bytes(f,1)
-    # #print("raw = %s" % raw)
-    # op = decode_push(raw)
-    # uri = read_bytes(f, op)
     uri = read_counted_string(f)
     if uri == b'\x00' : uri = ''
     yield("URI", uri)
 
     # Document Hash
-    # raw = read_bytes(f,1)
-    # #print("raw = %s" % raw)
-    # op = decode_push(raw)
-    # hash = read_bytes(f, op)
     hash = read_counted_string(f)
     if hash == b'\x00' : hash = ''
     yield("Document Hash", hash)    
-
 
     # Decimals
     decimals = int.from_bytes(read_counted_string(f), byteorder = 'little')
     yield("Decimals", decimals)
 
-
     # Unknown
-    # op = decode_push(read_bytes(f,1))
-    # unknown = read_bytes(f, op)
     unknown = read_counted_string(f)
     yield("Unknown", unknown)
-
 
     # Coins
     coin_str = read_counted_string(f)
     coins = int.from_bytes(coin_str, byteorder = 'big')
-    #print("raw = %s, int = %s" % (coin_str, coins))
     yield("Coins", coins)
 
 def parse_slp_send(f : StringIO ) -> Iterator[Tuple[str,Any]]:
@@ -248,7 +231,6 @@ def parse_slp_send(f : StringIO ) -> Iterator[Tuple[str,Any]]:
         while(True):
             coin_str = read_counted_string(f)
             coins = int.from_bytes(coin_str, byteorder = 'big')
-            #print("raw = %s, int = %s" % (coin_str, coins))
             yield("Coins", coins)
     except StopIteration:
         pass
@@ -291,18 +273,6 @@ def parse_slp(f : StringIO) -> Iterator[Tuple[str,Any]]:
     elif result[1] == 'SEND':
         trans = parse_slp_send(f)
 
-    # if NFT1Type(token_type) == NFT1Type['NFT1_GROUP_MINTING']:
-    #     if result[1] == 'GENESIS':
-    #         trans = parse_slp_genesis(f)
-    #     elif result[1] == 'SEND':
-    #         trans = parse_slp_send(f)
-        
-    # elif NFT1Type(token_type) == NFT1Type['NFT1_CHILD']:
-    #     if result[1] == 'GENESIS':
-    #         trans = parse_slp_child_genesis(f)
-    #     elif result[1] == 'SEND':
-    #         trans = parse_slp_child_send(f)
-
     if trans:
         for x in trans: yield x
     else:
@@ -327,5 +297,3 @@ if __name__ == "__main__":
     for x in tokens.keys():
         print("\nToken: %s" % x) 
         [print("\t%s:%s" % (i,j)) for i,j in parse_slp(StringIO(tokens[x]))]
-
-  
