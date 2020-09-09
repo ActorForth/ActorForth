@@ -235,11 +235,17 @@ def parse_slp_send(f : StringIO ) -> Iterator[Tuple[str,Any]]:
     except StopIteration:
         pass
 
-def parse_slp_child_genesis(f : StringIO ) -> Iterator[Tuple[str,Any]]:
-    return parse_slp_genesis(f)
+def parse_slp_mint(f : StringIO ) -> Iterator[Tuple[str,Any]]:
+    parent_tx_id = read_counted_string(f)
+    yield("Parent TXID", parent_tx_id)
 
-def parse_slp_child_send(f : StringIO ) -> Iterator[Tuple[str,Any]]:
-    return parse_slp_send(f)
+    unknown = read_counted_string(f)
+    yield("Unknown", unknown)
+
+    coin_str = read_counted_string(f)
+    coins = int.from_bytes(coin_str, byteorder = 'big')
+    yield("Coins", coins)
+
 
 def parse_slp(f : StringIO) -> Iterator[Tuple[str,Any]]:
 
@@ -267,14 +273,15 @@ def parse_slp(f : StringIO) -> Iterator[Tuple[str,Any]]:
     result = ("Transaction Type", transaction_type.decode('ascii'))
     yield result
 
-    trans = None
-    if result[1] == 'GENESIS':
-        trans = parse_slp_genesis(f)
-    elif result[1] == 'SEND':
-        trans = parse_slp_send(f)
+    TransTypes = { 
+                    'GENESIS' : parse_slp_genesis,
+                    'SEND' : parse_slp_send,
+                    'MINT' : parse_slp_mint,
+                 }
+    trans = TransTypes.get(result[1])
 
     if trans:
-        for x in trans: yield x
+        for x in trans(f): yield x
     else:
         raise Exception("Don't recognize SLP '%s' Transaction Type." % result[1])
 
@@ -282,16 +289,15 @@ def parse_slp(f : StringIO) -> Iterator[Tuple[str,Any]]:
 if __name__ == "__main__":
 
     tokens = {
-
         'btx_genesis' : "6a04534c500001810747454e45534953034146430f4163746f72466f72746820436f696e4c004c0001004c0008000000000000000a",
         'btx_nft_send' : "6a04534c500001810453454e4420025aab14154371b9c900afd8b629104d5c8b41f0bbf3146577cc26da09080e3f080000000000000001080000000000000001080000000000000001080000000000000001080000000000000001080000000000000001080000000000000001080000000000000001080000000000000001080000000000000001",
         'btx_child_genesis' : "6a04534c500001410747454e455349534c00076368696c6430314c004c0001004c00080000000000000001",
         'btx_child_send' : "6a04534c500001410453454e44208bedb11c0852aec2781cf76c2b928ead655281df019f80c47701319d50bad02c080000000000000001",
-        #'nick_mint_50k_more' : "6a04534c50000181044d494e54205e3f0a1f6b42ad3b45e9cbc1320284223e299fa8b588aec67b725638d120ad3e010208000000000000c350",
         'nick_genesis_uri' : "6a04534c500001810747454e45534953034254540d4269745472617368546f6b656e1b687474703a2f2f7777772e626974636f696e7375636b732e636f6d20c4cf9ce4bfa0685a0de7098422af0d214660d58398422af0d214660d5fffffff010001020800000000000f4240",
         'nick_child_genesis' : "6a04534c500001410747454e45534953035442310a547261736842616279311d687474703a2f2f7777772e7472617368746f6b656e626162792e636f6d200000ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff01004c00080000000000000001",
         'nick_fan_out' : "6a04534c500001810453454e44205e3f0a1f6b42ad3b45e9cbc1320284223e299fa8b588aec67b725638d120ad3e0800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000000010800000000000f422e",
         'nick_child_send' : "6a04534c500001410453454e4420dde01ec279e9007b25c882d171004e30edf82d80bc87189f344b953f2d96637f080000000000000001",
+        'nick_mint_50k_more' : "6a04534c50000181044d494e54205e3f0a1f6b42ad3b45e9cbc1320284223e299fa8b588aec67b725638d120ad3e010208000000000000c350",
     }
 
     for x in tokens.keys():
