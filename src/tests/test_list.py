@@ -1,4 +1,5 @@
 import io
+import sys
 import unittest
 from copy import deepcopy
 
@@ -35,5 +36,32 @@ class TestList(unittest.TestCase):
                 """
         assert self.execute(code).stype == TList
         assert self.cont.stack.tos().value.ltype == TInt
+        assert self.cont.stack.tos().value.value == []
 
+    def test_list_append(self) -> None:
+        code = """
+                Int list
+                4 int append
+                3 int append
+                2 int append 
+                1 int append
+                """
+        assert self.execute(code).stype == TList                
+        assert self.cont.stack.tos().value.value == [4,3,2,1]
+        assert self.cont.stack.tos().value.ltype == TInt
+
+    def test_list_print(self) -> None:
+        for prompt in ['',"ok: "]:
+            self.cont.prompt = prompt
+            self.test_list_append()
+            code = "print"
+            # Save old stdout.
+            oldstdout = sys.stdout
+            with io.StringIO() as out:
+                sys.stdout = out
+                self.execute(code)
+                sys.stdout = oldstdout
+                out.seek(0)
+                output = out.read()
+                assert output == '[4, 3, 2, 1]\n' + prompt
 
