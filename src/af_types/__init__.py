@@ -63,7 +63,11 @@ class Type(AF_Type):
     INTRO 5.5 : The core words in ActorForth are stored in the special generic
                 "Any" Type. This is the global dictionary for words.
     """
-    types : Dict[Type_name, TypeDefinition] = {"Any" : TypeDefinition(ops_list=[])}
+    types : Dict[Type_name, TypeDefinition] = {
+                                                "Type" : TypeDefinition(ops_list=[]),
+                                                "Any" : TypeDefinition(ops_list=[]),
+                                                "Atom" : TypeDefinition(ops_list=[]),
+                                              }
 
     """
     INTRO 5.6 : Constructors (ctors) are special words that take one or
@@ -91,6 +95,10 @@ class Type(AF_Type):
             if not Type.types.get(self.name, False):
                 t_def = TypeDefinition(ops_list=[], op_handler=handler)
                 Type.types[self.name] = t_def    
+
+            if typename != "Type":
+                s = Stack()
+                Type.add_op(Operation(typename, lambda c: c.stack.push(StackObject(value=typename,stype=Type("Type"))), sig=TypeSignature([],[StackObject(stype=Type("Type"))])),s)
 
     @staticmethod
     def is_generic_name(name: Type_name) -> bool:
@@ -194,9 +202,9 @@ class Type(AF_Type):
         # we're going to enforce that the input signature length's be identical 
         # for now on.      
         all_named_words = chain(Type.find_named_ops_for_scope(op.name, type_def), 
-                             Type.find_named_ops_for_scope(op.name, TAny))
+                             Type.find_named_ops_for_scope(op.name, Type("Any"))) #TAny))
         if type_def.is_generic():
-            all_named_words = chain(Type.find_named_ops_for_scope(op.name, TAny))
+            all_named_words = chain(Type.find_named_ops_for_scope(op.name, Type("Any"))) #TAny))
         existing_words = [o for o in all_named_words if o.sig.stack_in.depth()!=op.sig.stack_in.depth()]
         if existing_words:
             assert existing_words, "ERROR - there are existing words of lengths other than %s : %s." \
@@ -327,6 +335,9 @@ class Type(AF_Type):
         return hash(self.name)
 
 
+
+
+
 """
 INTRO 5.7 : The Atom Type is what gets created any time a new Symbol
             shows up that the Interpreter does not recognize. Ultimately
@@ -343,6 +354,7 @@ INTRO 5.8 : The Any Type is a special Type that will match ALL other types.
             the Any type in terms of dictionary access.
 """
 TAny = Type("Any")
+TType = Type("Type")
 
 
 #

@@ -53,7 +53,6 @@ class TestTypeSignature(unittest.TestCase):
 
         assert sig.match_in(s) == False
 
-
     def test_find_ctor(self) -> None:
         l = [StackObject(stype=TParm1)]
         assert Type.find_ctor("Test",l).the_op == TOp

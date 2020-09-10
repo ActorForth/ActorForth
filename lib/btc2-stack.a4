@@ -1,0 +1,79 @@
+#
+#   btc2-stack.a4  - Words for parsing BTC Transactions via stack.
+#
+
+"btc2" load
+
+
+btchead : IStream -> IStream Int; # Should only be one Int normally but we're hacking stuff.
+    4 bytes         # Grab 4 bytes from the istream.
+    read little     # read them as a little endian hexstream.
+    int             # convert to an integer.
+    # Confirm this is Version 1.
+    dup 1 int == "Only Version 1 Supported!" assert 
+    .
+
+
+# Leaves: Bytes(Prior TX Hash) Int(Output Tx Index) Bytes(Unlock Script) Bytes(Seq#) IStream
+xtinput : IStream -> Bytes Int Bytes Bytes IStream;
+    # Bytes(Prior TX Hash), IStream
+    32 bytes read little swap 
+
+    # Bytes(Prior TX Hash), Int(Output Tx Index), IStream
+    4 bytes read little int swap 
+
+    # Size of rest of input. + Int(byte count for next read)
+    1 bytes read int                # This is really a VarInt
+
+    # Bytes(Prior TX Hash), Int(Output Tx Index), Bytes(Unlock Script), IStream
+    bytes
+    read 
+
+    swap        
+
+    # Bytes(Prior TX Hash), Int(Output Tx Index), Bytes(Unlock Script), Bytes(Seq #), IStream
+    4 bytes read little swap.
+
+
+# Leaves: Int(Satoshis) Bytes(Lock Script) IStream
+xtoutput : IStream -> Int Bytes IStream;
+    8 bytes read little int swap    # Int IStream
+    1 bytes read int                # This is really a VarInt.
+    bytes read                      # Int Stream Bytes
+    swap.
+
+
+read : BTCTransaction IStream  -> BTCTransaction IStream;
+    btchead # BTC IStream Int
+    to_rstack # BTC IStream / Int
+    swap    # IStream BTC / Int
+    -> version to_dstack = # IStream BTC
+
+    # How many inputs?
+    swap
+    1 bytes read int    # BTC IStream Int (This is really a VarInt)
+    countdown           # BTC IStream
+        xtinput         # BTC Bytes(Prior TX Hash) Int(Output Tx Index) Bytes(Unlock Script) Bytes(Seq#) IStream
+        to_rstack
+        btcinput        # BTC BTCInput / IStream
+        swap -> inputs append # BTC / IStream (STACK ERROR?)
+        to_dstack       # BTC IStream
+    loop
+
+    # How many outputs?
+    1 bytes read int    # BTC IStream Int (This is really a VarInt)
+    countdown           # BTC IStream
+        xtoutput
+        to_rstack
+        btcoutput 
+        -> outputs append
+        to_dstack       # BTC IStream
+    loop
+
+    # LockTime
+    4 bytes read int    # BTC IStream Int
+    to_rstack 
+    swap
+    -> locktime to_dstack = # IStream BTC 
+    swap.
+
