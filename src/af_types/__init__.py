@@ -354,6 +354,7 @@ INTRO 5.8 : The Any Type is a special Type that will match ALL other types.
             the Any type in terms of dictionary access.
 """
 TAny = Type("Any")
+TType = Type("Type")
 
 
 #

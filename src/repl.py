@@ -28,6 +28,7 @@ from af_types.af_see import *
 from af_types.af_branch import *
 from af_types.af_environment import *
 from af_types.af_stream import *
+from af_types.af_list import *
 from compiler import *
 
 def print_continuation_stats(cont : Continuation):
