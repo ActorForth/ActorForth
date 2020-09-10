@@ -5,7 +5,6 @@ from io import StringIO
 from enum import Enum
 
 
-
 OPS = {
     "OP_0": b"\x00",
     "OP_PUSHDATA1": B"\x4c",

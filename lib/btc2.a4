@@ -16,8 +16,8 @@ BTCOutput type :
 
 BTCTransaction type :
     version int (1 int ==)
-    inputs list of BTCInput
-    outputs list of BTCOutput
+    inputs BTCInput list
+    outputs BTCOutput list
     locktime bytes (count 4 int ==).
 
 

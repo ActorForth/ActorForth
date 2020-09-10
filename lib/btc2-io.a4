@@ -1,5 +1,5 @@
 #
-#   btc2-io.a4  - Words for parsing BTC Transactions via IO method.
+#   btc2-io.a4  - Words for parsing BTC Transactions via IO method. TODO
 #
 
 "btc2" load
