@@ -49,22 +49,22 @@ class TestUserType(unittest.TestCase):
                     hash
                 """        
         assert self.execute(code).stype == TTypeAttribute
-        assert self.cont.stack.tos().value == "hash"
+        assert self.cont.stack.tos().value.name == "hash"
 
     def test_typedef_first_attribute_type(self) -> None:
         code = """
                 MyType type
                     hash Bytes
-                """
-        #self.test_typedef_first_attribute_name()
-        assert self.execute(code).stype == TTypeDefinition
-        #print("\n\n%s\n\n" %self.cont.stack.tos())
-        assert self.cont.stack.tos().value.values.get("hash") == TBytes
+                """    
+        assert self.execute(code).stype == TTypeAttribute
 
     def test_typedef_completion(self) -> None:
         code = """
                 MyType type
-                    hash Bytes.
+                    hash Bytes
+                    .
                 """
         self.execute(code)
+        print("test_typedef_completion: %s" % self.cont.stack)
+        assert self.cont.stack.depth() == 0
         assert Type("MyType").is_udt()

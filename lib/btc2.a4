@@ -3,21 +3,21 @@
 #
 
 BTCInput type 
-    hash Bytes (count 32 int ==)
+    hash Bytes #(count 32 int ==)
     index Int
     unlock_script Bytes 
-    sequence Bytes (count 4 int ==).
+    sequence Bytes. #(count 4 int ==).
 
 
 BTCOutput type 
-    satoshis int 
-    lock_script bytes.
+    satoshis Int 
+    lock_script Bytes.
 
 
-BTCTransaction type 
-    version int (1 int ==)
+BTCTransaction type
+    version Int #(1 int ==)
     inputs BTCInput list
     outputs BTCOutput list
-    locktime bytes (count 4 int ==).
+    locktime Bytes. #(count 4 int ==).
 
 
