@@ -84,6 +84,9 @@ class Type(AF_Type):
     """
     ctors : Dict[Type_name, Op_map] = {"Any":[]}
 
+
+    udts : Dict[Type_name, dict] = {}
+
     def __init__(self, typename: Type_name, handler = None):
         assert Type.types["Any"]
         if handler is None:
@@ -110,7 +113,17 @@ class Type(AF_Type):
     def is_generic(self) -> bool:        
         return Type.is_generic_name(self.name)
         #print("is_generic for %s is: %s." % (self.name, result))
-        
+    
+
+    @staticmethod
+    def is_udt_name(name: Type_name) -> bool:
+        udt = Type.udts.get(name)
+        if udt: return True
+        return False    
+
+
+    def is_udt(self) -> bool:
+        return Type.is_udt_name(self.name)
 
 
     def words(self) -> Op_list:

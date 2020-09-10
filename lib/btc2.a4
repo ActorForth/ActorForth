@@ -2,19 +2,19 @@
 #   btc2.a4  - BTC Transaction Types
 #
 
-BTCInput type :
-    hash bytes (count 32 int ==)
-    index int
-    unlock_script bytes 
-    sequence bytes (count 4 int ==).
+BTCInput type 
+    hash Bytes (count 32 int ==)
+    index Int
+    unlock_script Bytes 
+    sequence Bytes (count 4 int ==).
 
 
-BTCOutput type :
+BTCOutput type 
     satoshis int 
     lock_script bytes.
 
 
-BTCTransaction type :
+BTCTransaction type 
     version int (1 int ==)
     inputs BTCInput list
     outputs BTCOutput list
