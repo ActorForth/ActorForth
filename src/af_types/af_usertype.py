@@ -90,7 +90,7 @@ def compile_type_attribute(c: AF_Continuation) -> None:
     Depending on whether or not the attribute definition is complete.
     This can be due to the type being specialized like a List.
     """
-    c.log.warning("Evaluating symbol '%s' for TypeAttribute against %s." % (c.symbol.s_id,c.stack))
+    c.log.debug("Evaluating symbol '%s' for TypeAttribute against %s." % (c.symbol.s_id,c.stack))
     if compilation_word_handler(c): return
     s_id = c.symbol.s_id
     td : Optional[TypeDefinition] = Type.types.get(s_id)
@@ -102,7 +102,7 @@ def compile_type_attribute(c: AF_Continuation) -> None:
     op_swap(c)
     if attrib_so.value.udta_type is None:
         # This is a new attribute that has no type yet.
-        c.log.warning("\nBrand new attribute without a type : %s." % attrib_so)
+        c.log.debug("\nBrand new attribute without a type : %s." % attrib_so)
         assert td, "'%s' is not a valid Type." % s_id
         attrib : Optional[Type] = udt.values.get(attrib_so.value.name)
         assert attrib is None, "An attribute '%s' already exists for UDT %s." % (attrib_so.value, udt.name)
@@ -110,7 +110,7 @@ def compile_type_attribute(c: AF_Continuation) -> None:
     else:
         attrib_t = attrib_so.value.udta_type
         if attrib_t is not None:
-            c.log.warning("\nSpecialized type? symbol='%s' %s" % (s_id,c.stack))
+            c.log.debug("\nSpecialized type? symbol='%s' %s" % (s_id,c.stack))
             # This could be a specialized type such as List.        
             tmp_stack = Stack()
             tmp_stack.push(StackObject(stype=TType, value=attrib_t.name))
@@ -119,10 +119,10 @@ def compile_type_attribute(c: AF_Continuation) -> None:
             op, found = Type.op(s_id, tmp_cont)
             #assert found, "There is no ctor for word '%s' that takes a %s." % (s_id,attrib_t)
             if found:
-                c.log.warning("Calling %s with %s" % (op,tmp_cont.stack))
+                c.log.debug("Calling %s with %s" % (op,tmp_cont.stack))
                 op(tmp_cont)
 
-                c.log.warning("Executed conversion and got: %s" % tmp_cont.stack)
+                c.log.debug("Executed conversion and got: %s" % tmp_cont.stack)
                 attrib_so.value.udta_type = tmp_cont.stack.tos().stype
             else:
                 # Not specialized - starting a new attribute.

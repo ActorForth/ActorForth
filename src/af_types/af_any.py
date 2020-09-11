@@ -43,7 +43,7 @@ def print_words() -> None:
     for type_name in Type.types.keys():
         if not Type.is_generic_name(type_name):
             _t_def = Type.types.get(type_name,None)
-            if _t_def:
+            if _t_def and _t_def.ops_list:   # Don't print empty word lists.
                 _ops = _t_def.ops_list
                 print("%s Dictionary : %s" % (type_name,list(set([op.short_name() for op in _ops]))) )
 
