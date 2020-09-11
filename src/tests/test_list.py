@@ -14,6 +14,7 @@ from af_types.af_int import *
 from af_types.af_bool import *
 from af_types.af_any import *
 from af_types.af_list import *
+from af_types.af_debug import *
 
 TTest = Type("Test")
 TParm1 = Type("Parm1")
@@ -25,6 +26,9 @@ class TestList(unittest.TestCase):
     def setUp(self) -> None:
         self.stack = Stack()
         self.cont = Continuation(self.stack)
+        #op_debug(self.cont)
+        #op_on(self.cont)
+
 
     def execute(self, code) -> StackObject:
         self.cont.execute(interpret(self.cont, io.StringIO(code)))

@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
 from . import *
+from af_types.af_debug import *
 from af_types.af_any import op_swap
 from compiler import compilation_word_handler
+from continuation import Continuation
 
 @dataclass
 class AF_UserType:
@@ -48,9 +50,7 @@ def op_finish_type(c: AF_Continuation) -> None:
 make_word_context('.', op_finish_type, [TTypeDefinition], [])
 
 
-def op_finish_attribute_then_type(c: AF_Continuation) -> None:
-    #print("\nop_finish_attribute_then_type %s" % c.stack)
-    
+def compile_finish_attribute(c: AF_Continuation) -> None:
     obj : StackObject = c.stack.tos()
     op_swap(c)
     udt : AF_UserType = c.stack.tos().value
@@ -58,8 +58,12 @@ def op_finish_attribute_then_type(c: AF_Continuation) -> None:
 
     # This is a new attribute or end of TypeDefinition. Close it up.
     c.stack.pop()
-    udt.values[obj.value.name] = obj.value.udta_type
+    udt.values[obj.value.name] = obj.value.udta_type    
 
+
+def op_finish_attribute_then_type(c: AF_Continuation) -> None:
+    #print("\nop_finish_attribute_then_type %s" % c.stack)
+    compile_finish_attribute(c)
     op_finish_type(c)
 make_word_context('.', op_finish_attribute_then_type, [TTypeDefinition, TTypeAttribute], [])    
 
@@ -86,26 +90,49 @@ def compile_type_attribute(c: AF_Continuation) -> None:
     Depending on whether or not the attribute definition is complete.
     This can be due to the type being specialized like a List.
     """
+    c.log.warning("Evaluating symbol '%s' for TypeAttribute against %s." % (c.symbol.s_id,c.stack))
     if compilation_word_handler(c): return
-    td : Optional[TypeDefinition] = Type.types.get(c.symbol.s_id)
+    s_id = c.symbol.s_id
+    td : Optional[TypeDefinition] = Type.types.get(s_id)
 
     # Is this a new attribute or one being modified?
-    obj : StackObject = c.stack.tos()
+    attrib_so : StackObject = c.stack.tos()
     op_swap(c)
     udt : AF_UserType = c.stack.tos().value
     op_swap(c)
-    if obj.value.udta_type is None:
+    if attrib_so.value.udta_type is None:
         # This is a new attribute that has no type yet.
-        print("\nBrand new attribute without a type : %s." % obj)
-        assert td, "'%s' is not a valid Type." % c.symbol.s_id
-        attrib : Optional[Type] = udt.values.get(obj.value.name)
-        assert attrib is None, "An attribute '%s' already exists for UDT %s." % (obj.value, udt.name)
-        obj.value.udta_type = Type(c.symbol.s_id)
+        c.log.warning("\nBrand new attribute without a type : %s." % attrib_so)
+        assert td, "'%s' is not a valid Type." % s_id
+        attrib : Optional[Type] = udt.values.get(attrib_so.value.name)
+        assert attrib is None, "An attribute '%s' already exists for UDT %s." % (attrib_so.value, udt.name)
+        attrib_so.value.udta_type = Type(s_id)
     else:
-        if td is not None:
-            print("\nSpecialized type? symbol='%s' %s" % (c.symbol.s_id,c.stack))
+        attrib_t = attrib_so.value.udta_type
+        if attrib_t is not None:
+            c.log.warning("\nSpecialized type? symbol='%s' %s" % (s_id,c.stack))
             # This could be a specialized type such as List.        
-            pass
+            tmp_stack = Stack()
+            tmp_stack.push(StackObject(stype=TType, value=attrib_t.name))
+            tr_stack = Stack()
+            tmp_cont = Continuation(tmp_stack, tr_stack)
+            op, found = Type.op(s_id, tmp_cont)
+            #assert found, "There is no ctor for word '%s' that takes a %s." % (s_id,attrib_t)
+            if found:
+                c.log.warning("Calling %s with %s" % (op,tmp_cont.stack))
+                op(tmp_cont)
+
+                c.log.warning("Executed conversion and got: %s" % tmp_cont.stack)
+                attrib_so.value.udta_type = tmp_cont.stack.tos().stype
+            else:
+                # Not specialized - starting a new attribute.
+                # Finish this one off.
+                compile_finish_attribute(c)
+                # Now treat the symbol as a new one.
+                compile_type_definition(c)
+        else:
+            c.log.error("New attribute or end of TypeDefinition.")
+            assert False
         # else:
         #     # This is a new attribute or end of TypeDefinition. Close it up.
         #     print("\nNew attribute or end of TypeDefinition.")

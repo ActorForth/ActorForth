@@ -10,10 +10,14 @@ class AF_List:
 TList = Type("List")
 
 def op_list(c: AF_Continuation) -> None:
-    ltype = c.stack.pop().value
-    assert Type(ltype).is_generic() is False, "ERROR: Generic types not supported for Lists."
+    c.log.debug("op_list called with '%s' on the stack." % c.stack.tos())
+    c.log.debug("type for SO.value %s is %s." % (c.stack.tos().value, type(c.stack.tos().value)))
+    ltype : Type = Type(c.stack.pop().value)
+
+    assert ltype.is_generic() is False, "ERROR: Generic types not supported for Lists."
     _list = AF_List(ltype,[])
     c.stack.push(StackObject(value=_list, stype=TList))
+    c.log.debug("Pushed onto the stack as follows: %s" % c.stack)
 make_word_context('list', op_list, [TType], [TList])    
 
 

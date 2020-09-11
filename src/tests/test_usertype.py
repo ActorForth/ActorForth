@@ -68,3 +68,38 @@ class TestUserType(unittest.TestCase):
         print("test_typedef_completion: %s" % self.cont.stack)
         assert self.cont.stack.depth() == 0
         assert Type("MyType").is_udt()
+
+    def test_specialized_attribute(self) -> None:
+        code = """
+                MyType type
+                    values Int list
+                """
+        self.execute(code)
+        print("test_specialized_attribute: %s" % self.cont.stack)
+        assert self.cont.stack.depth() == 2
+        assert self.cont.stack.tos().stype == TTypeAttribute
+        op_drop(self.cont)
+        assert self.cont.stack.tos().stype == TTypeDefinition
+
+    def test_specialized_typedef_completion(self) -> None:
+        code = """
+                MyType type
+                    values Int list
+                    .
+                """
+        self.execute(code)
+        print("test_specialized_typedef_completion: %s" % self.cont.stack)
+        assert self.cont.stack.depth() == 0
+        assert Type("MyType").is_udt()        
+
+    def test_two_attribute_completion(self) -> None:
+        code = """
+                MyType type
+                    values Int 
+                    active Bool
+                    .
+                """
+        self.execute(code)
+        print("test_two_attribute_completion: %s" % self.cont.stack)
+        assert self.cont.stack.depth() == 0
+        assert Type("MyType").is_udt()          
