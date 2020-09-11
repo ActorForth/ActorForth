@@ -32,6 +32,7 @@ make_word_context('.d', op_stack_depth, [], [TInt])
 
 
 def print_words() -> None:
+    word_count : int = 0
     _t_def = Type.types.get("Any",None)
     _ops : Op_list = []
     if not _t_def:
@@ -39,13 +40,20 @@ def print_words() -> None:
         _ops = _t_def.ops_list
     else:
         _ops = _t_def.ops_list
-    print("Global Dictionary : %s" % list(set([op.short_name() for op in _ops])) )
+    # By using the set of op short names we don't list overloaded
+    # words more than once for the same dictionary.
+    globals = list(set([op.short_name() for op in _ops]))
+    print("Global Dictionary : %s" % globals )
+    word_count += len(globals)
     for type_name in Type.types.keys():
         if not Type.is_generic_name(type_name):
             _t_def = Type.types.get(type_name,None)
             if _t_def and _t_def.ops_list:   # Don't print empty word lists.
                 _ops = _t_def.ops_list
-                print("%s Dictionary : %s" % (type_name,list(set([op.short_name() for op in _ops]))) )
+                locals = list(set([op.short_name() for op in _ops]))
+                word_count += len(locals)
+                print("%s Dictionary : %s" % (type_name, locals) )
+    print("%s total words." % word_count)                
 
 
 def op_words(c: AF_Continuation) -> None:                

@@ -117,7 +117,6 @@ def compile_type_attribute(c: AF_Continuation) -> None:
             tr_stack = Stack()
             tmp_cont = Continuation(tmp_stack, tr_stack)
             op, found = Type.op(s_id, tmp_cont)
-            #assert found, "There is no ctor for word '%s' that takes a %s." % (s_id,attrib_t)
             if found:
                 c.log.debug("Calling %s with %s" % (op,tmp_cont.stack))
                 op(tmp_cont)
@@ -133,12 +132,3 @@ def compile_type_attribute(c: AF_Continuation) -> None:
         else:
             c.log.error("New attribute or end of TypeDefinition.")
             assert False
-        # else:
-        #     # This is a new attribute or end of TypeDefinition. Close it up.
-        #     print("\nNew attribute or end of TypeDefinition.")
-        #     print("New begin: %s" % c.stack)
-        #     c.stack.pop()
-        #     udt.values[obj.value.name] = obj.value.udta_type
-        #     print("New end: %s" % c.stack)
-      
-
