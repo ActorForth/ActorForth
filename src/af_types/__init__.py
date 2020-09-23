@@ -268,16 +268,22 @@ class Type(AF_Type):
             op_list = type_def.ops_list
             cont.log.debug("\top_list = %s" % [op for op in op_list])
             for op in op_list:
+                #if name == "append": print("\nFound '%s' searching for 'append'." % op.name)
                 if op.name == name:
                     name_found = True
                     sigs_found.append(op.sig)
+                    # if name == "append": print("Found one! Adding op: %s" % op)
                     # Now try to match the input stack...
                     try:
-                        if op.check_stack_effect(cont.stack): # TODO - are we doing the right thing with this return types?
+                        # if name == "append": print("Checking match against stack: %s" % cont.stack)
+                        #effect, matched =  op.check_stack_effect(cont.stack) # TODO - are we doing the right thing with this return types?
+                        effect, matched =  op.check_stack_effect(force_composite = True)
+                        #if name == "append": print("effect = %s" % effect)
+                        if matched:
                             cont.log.debug("Found! Returning %s, %s, %s" % (op, op.sig, True))
                             return op, True
                     except SigValueTypeMismatchException:
-                        # We found the name but not the right value/type sig. Keep looking.
+                        cont.log.debug("We found the name but not the right value/type sig. Keep looking.")
                         pass
         # Not found.
         if name_found:

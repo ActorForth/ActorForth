@@ -74,8 +74,8 @@ read : IStream  -> BTCTransaction IStream;
     loop
 
     # LockTime
-    4 bytes read int    # Int List<BTCInput> List<BTCOutput> IStream Int
-    swap to_rstack      # Int List<BTCInput> List<BTCOutput> Int / IStream
+    4 bytes read        # Int List<BTCInput> List<BTCOutput> IStream Bytes
+    swap to_rstack      # Int List<BTCInput> List<BTCOutput> Bytes / IStream
     btctransaction      # BTCTransaction / IStream
     to_dstack swap.     # IStream BTCTransaction     
 

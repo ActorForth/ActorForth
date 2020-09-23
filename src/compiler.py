@@ -180,6 +180,18 @@ def _indent(c: AF_Continuation) -> str:
     return ''.join(['\t' for n in range(c.cdepth)])
 
 
+def op_show_stack_picture(c: AF_Continuation) -> None:
+    op = c.stack.tos().value
+    sp, match = op.check_stack_effect(force_composite = True)
+    result = "Defining op: '%s' in:%s -> out:%s" % (op.name, str(op.sig.stack_in), str(sp))
+    if match:
+        result += " MATCHED."
+    else:
+        result += " not yet matched for %s." % str(op.sig.stack_out)
+    print(result)
+make_word_context('.sp', op_show_stack_picture,[TCodeCompile],[TCodeCompile])
+
+
 # For executing COMPILE TIME words only!
 def compilation_word_handler(c: AF_Continuation) -> bool:
     c.log.debug("compilation_word_handler")
