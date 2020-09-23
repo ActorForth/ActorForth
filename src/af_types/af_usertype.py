@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from copy import deepcopy
 
 from . import *
 from af_types.af_debug import *
 from af_types.af_any import op_swap
 from compiler import compilation_word_handler
 from continuation import Continuation
+from operation import Operation_def
 
 @dataclass
 class AF_UserType:
@@ -15,6 +17,16 @@ class AF_UserType:
 class UDTAttribute:
     name: str
     udta_type: Optional[Type]
+
+
+#
+#   An instance of an AF_UserType on the stack will be like:
+#
+#   StackObject( stype = Type(name=<TypeName>), 
+#                value = Dict{ attribute_name : 
+#                              StackObject( stype = Type(name=<Attribute Type),
+#                                           value = <value>)
+#                             } )    
 
 def type_definition_handler(c: AF_Continuation) -> None:
     compile_type_definition(c)
@@ -31,6 +43,7 @@ def op_type(c: AF_Continuation) -> None:
     Atom -> TypeDefinition(AF_UserType)
     """
     obj = AF_UserType(name=c.stack.tos().value, values = dict())
+    assert obj.name != obj.name.lower(), "ERROR - Type can't have only lower case letters as this prevents creation of ctor."
     c.stack.tos().stype = TTypeDefinition
     c.stack.tos().value = obj
 make_word_context('type', op_type, [TAtom], [TTypeDefinition])     
@@ -47,6 +60,32 @@ def op_finish_type(c: AF_Continuation) -> None:
     Type.udts[s] = c.stack.tos().value.values
     assert udt.is_udt(), "ERROR: Don't know how this isn't a UDT now: %s." % c.stack.tos()
     c.stack.pop()
+
+    # # Now construct a ctor for this UDT.
+    # ctor_name = udt.name.lower()
+
+    # attribute_types = []
+    # for t in udt.values.values():
+    #     assert t.udta_type is not None, "Attribute %s for UDT %s has no type!" % (udt.name, t.name)
+    #     attribute_types.append(t.udta_type)
+
+    # def get_udt_ctor(name : str, attribs : dict_values) -> Operation_def:
+
+    #     _attrib_list = deepcopy(list(attribs))
+    #     _attrib_list.reverse()
+
+    #     def udt_ctor(c: AF_Continuation) -> None:
+    #         _attribs = {}
+    #         for a in _attrib_list:
+    #             _attribs[a.name] = c.stack.pop().value
+    #         # BDM - Make sure we're dealing with an object instance
+    #         #       rather than the type class instance here.
+    #         _udt = AF_UserType(name, _attribs) 
+    #         c.stack.push(StackObject(stype=Type(name), value=_udt))
+
+    #     return udt_ctor
+
+    # make_word_context(ctor_name, get_udt_ctor(udt.name, udt.values.values()),attribute_types,[udt] )
 make_word_context('.', op_finish_type, [TTypeDefinition], [])
 
 
