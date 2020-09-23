@@ -110,11 +110,9 @@ class TestUserType(unittest.TestCase):
                 Int list 
                 17 int append
                 True bool
-                mytype
-                #values
-
-                #17 int == assert
+                mytype               
+                active
                 """ 
         self.execute(code)
-        assert self.cont.stack.tos().stype == Type("MyType")
-        #assert self.cont.stack.tos().value == True
+        #assert self.cont.stack.tos().stype == Type("MyType")
+        assert self.cont.stack.tos().value == True

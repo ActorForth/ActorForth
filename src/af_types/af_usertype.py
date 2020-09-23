@@ -78,6 +78,15 @@ def op_finish_type(c: AF_Continuation) -> None:
             c.stack.push(StackObject(stype=Type(s), value=_values))
 
         return udt_ctor
+
+    # Now make a word to access each attribute of our User Defined Type.
+    for attrib_name, attrib_type in list(Type.udts[s].items()):
+        def getter(c: AF_Continuation) -> None:
+            so : StackObject = c.stack.tos().value[attrib_name]
+            attrib_type = Type.udts[s][attrib_name]
+            c.stack.push(StackObject(stype = attrib_type, value = so.value))
+        make_word_context(attrib_name, getter, [Type(s)], [attrib_type])
+
     attribute_types = list(Type.udts[s].values())
     make_word_context(ctor_name, get_udt_ctor(),attribute_types,[udt] )
 make_word_context('.', op_finish_type, [TTypeDefinition], [])

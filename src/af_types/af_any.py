@@ -115,3 +115,13 @@ def op_2dup(c: AF_Continuation) -> None:
     c.stack.push(s2)
     c.stack.push(s1)
 make_word_context('2dup', op_2dup, [t("_a"), t("_b")],[t("_a"), t("_b"), t("_a"), t("_b")])
+
+
+def op_assign(c: AF_Continuation) -> None:
+    new_val = c.stack.pop()
+    target = c.stack.tos()
+    if new_val.stype != target.stype:
+        # See if there's a ctor to convert us automagically.
+        assert False, "%s value of type %s is not assignable to a %s type." % (new_val.value, new_val.stype, target.stype)
+    target.value = new_val.value
+make_word_context('=', op_assign, [t("_a"), t("_b")], [t("_b")])
