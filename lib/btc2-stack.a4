@@ -47,7 +47,7 @@ xtoutput : IStream -> Int Bytes IStream;
     swap.
 
 
-read : IStream  -> BTCTransaction IStream;
+txread : IStream  -> BTCTransaction IStream;
     btchead             # IStream Int
     swap                # Int IStream
 
@@ -77,5 +77,6 @@ read : IStream  -> BTCTransaction IStream;
     4 bytes read        # Int List<BTCInput> List<BTCOutput> IStream Bytes
     swap to_rstack      # Int List<BTCInput> List<BTCOutput> Bytes / IStream
     btctransaction      # BTCTransaction / IStream
-    to_dstack swap.     # IStream BTCTransaction     
+    to_dstack swap      # IStream BTCTransaction     
+    .
 

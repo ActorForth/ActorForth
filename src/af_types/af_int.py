@@ -11,7 +11,12 @@ TInt = Type("Int")
 # Constructors
 def op_int(c: AF_Continuation) -> None:
     #print("\nop_int c.stack.contents = %s." % c.stack.contents())
-    i = int(c.stack.pop().value)
+    try:
+        v = c.stack.pop().value
+        i = int(v)
+    except ValueError:
+        c.log.error("Can't convert value '%s' into an int!" % v)
+        raise
     assert i <  999999999999, "int overflow > 999999999999"
     assert i > -999999999999, "int underflow < -999999999999"
     c.stack.push(StackObject(value=i, stype=TInt))
