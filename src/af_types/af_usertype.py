@@ -36,6 +36,7 @@ def type_attribute_handler(c: AF_Continuation) -> None:
 
 TTypeDefinition = Type("TypeDefinition", handler = type_definition_handler)
 TTypeAttribute = Type("TypeAttribute", handler = type_attribute_handler)
+TAttrReference = Type("AttrReference")
 
 
 def op_type(c: AF_Continuation) -> None:
@@ -89,6 +90,31 @@ def op_finish_type(c: AF_Continuation) -> None:
 
     attribute_types = list(Type.udts[s].values())
     make_word_context(ctor_name, get_udt_ctor(),attribute_types,[udt] )
+
+    # Now make a reference operation.
+    make_word_context('->', lambda c: c.stack.push(StackObject(stype=TAttrReference, value=Type(s))), [Type(s)], [Type(s), TAttrReference])
+
+    # Now make a word to refereemce each attribute of our User Defined Type.
+    for attrib_name, attrib_type in list(Type.udts[s].items()):
+        def ref_getter(c: AF_Continuation) -> None:
+            c.stack.pop()
+            so : Dict[str,StackObject] = c.stack.tos().value
+            attrib_type = Type.udts[s][attrib_name]
+
+            def ref_attrib(val: Any) -> Any:
+                if val is not None:
+                    so[attrib_name].value = val
+                #c.log.warning("so of type %s == %s" % (type(so),so))
+                return so[attrib_name].value
+
+
+            c.stack.push(StackObject(stype = attrib_type, value = ref_attrib))
+
+        make_word_context(attrib_name, ref_getter, [Type(s), TAttrReference], [Type(s), attrib_type])
+
+    attribute_types = list(Type.udts[s].values())
+    make_word_context(ctor_name, get_udt_ctor(),attribute_types,[udt] )
+
 make_word_context('.', op_finish_type, [TTypeDefinition], [])
 
 

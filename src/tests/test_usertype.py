@@ -116,3 +116,14 @@ class TestUserType(unittest.TestCase):
         self.execute(code)
         #assert self.cont.stack.tos().stype == Type("MyType")
         assert self.cont.stack.tos().value == True
+
+    def test_assign_reference(self) -> None:
+        self.test_construct_typedef()
+        code = """
+                drop
+                -> active
+                False bool
+                =
+               """
+        self.execute(code)
+        assert self.cont.stack.tos().value == False
