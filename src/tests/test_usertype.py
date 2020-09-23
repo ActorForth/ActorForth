@@ -95,11 +95,26 @@ class TestUserType(unittest.TestCase):
     def test_two_attribute_completion(self) -> None:
         code = """
                 MyType type
-                    values Int 
+                    values Int list
                     active Bool
                     .
                 """
         self.execute(code)
         print("test_two_attribute_completion: %s" % self.cont.stack)
         assert self.cont.stack.depth() == 0
-        assert Type("MyType").is_udt()          
+        assert Type("MyType").is_udt()         
+
+    def test_construct_typedef(self) -> None:
+        self.test_two_attribute_completion()
+        code = """
+                Int list 
+                17 int append
+                True bool
+                mytype
+                #values
+
+                #17 int == assert
+                """ 
+        self.execute(code)
+        assert self.cont.stack.tos().stype == Type("MyType")
+        #assert self.cont.stack.tos().value == True

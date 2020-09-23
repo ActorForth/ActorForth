@@ -85,6 +85,13 @@ class Type(AF_Type):
     ctors : Dict[Type_name, Op_map] = {"Any":[]}
 
 
+    """
+    udts : Dict{ Type_name :
+                 Dict{ attribute_name:
+                       attribute_type
+                     }
+                }
+    """
     udts : Dict[Type_name, dict] = {}
 
     def __init__(self, typename: Type_name, handler = None):
