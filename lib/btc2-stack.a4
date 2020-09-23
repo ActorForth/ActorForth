@@ -5,6 +5,10 @@
 "btc2" load
 
 
+samplebtc : -> IStream;
+    "samples/data/rawbtctrans.hex" open.
+
+
 btchead : IStream -> IStream Int; # Should only be one Int normally but we're hacking stuff.
     4 bytes         # Grab 4 bytes from the istream.
     read little     # read them as a little endian hexstream.
@@ -20,7 +24,7 @@ xtinput : IStream -> Bytes Int Bytes Bytes IStream;
     32 bytes read little swap 
 
     # Bytes(Prior TX Hash), Int(Output Tx Index), IStream
-    4 bytes read little int swap 
+    4 bytes read little int swap  
 
     # Size of rest of input. + Int(byte count for next read)
     1 bytes read int                # This is really a VarInt
@@ -43,37 +47,35 @@ xtoutput : IStream -> Int Bytes IStream;
     swap.
 
 
-read : BTCTransaction IStream  -> BTCTransaction IStream;
-    btchead # BTC IStream Int
-    to_rstack # BTC IStream / Int
-    swap    # IStream BTC / Int
-    -> version to_dstack = # IStream BTC
+read : IStream  -> BTCTransaction IStream;
+    btchead             # IStream Int
+    swap                # Int IStream
 
     # How many inputs?
-    swap
-    1 bytes read int    # BTC IStream Int (This is really a VarInt)
-    countdown           # BTC IStream
-        xtinput         # BTC Bytes(Prior TX Hash) Int(Output Tx Index) Bytes(Unlock Script) Bytes(Seq#) IStream
-        to_rstack
-        btcinput        # BTC BTCInput / IStream
-        swap -> inputs append # BTC / IStream (STACK ERROR?)
-        to_dstack       # BTC IStream
+    BTCInput list swap  # Int List<BTCInput> IStream
+    1 bytes read int    # Int List<BTCInput> IStream Int (This is really a VarInt)
+    countdown           # Int List<BTCInput> IStream
+        xtinput         # Int List<BTCInput> Bytes(Prior TX Hash) Int(Output Tx Index) Bytes(Unlock Script) Bytes(Seq#) IStream
+        to_rstack       # Int List<BTCInput> Bytes(Prior TX Hash) Int(Output Tx Index) Bytes(Unlock Script) Bytes(Seq#) / IStream
+        btcinput        # Int List<BTCInput> BTCInput / IStream
+        append          # Int List<BTCInput> / IStream        
+        to_dstack       # Int List<BTCInput> IStream
     loop
 
     # How many outputs?
-    1 bytes read int    # BTC IStream Int (This is really a VarInt)
-    countdown           # BTC IStream
-        xtoutput
-        to_rstack
-        btcoutput 
-        -> outputs append
-        to_dstack       # BTC IStream
+    BTCOutput list swap # Int List<BTCInput> List<BTCOutput> IStream
+    1 bytes read int    # Int List<BTCInput> List<BTCOutput> IStream Int (This is really a VarInt)
+    countdown           # Int List<BTCInput> List<BTCOutput> IStream
+        xtoutput        # Int List<BTCInput> List<BTCOutput> Int(Satoshis) Bytes(Lock Script) IStream 
+        to_rstack       # Int List<BTCInput> List<BTCOutput> Int(Satoshis) Bytes(Lock Script) / IStream 
+        btcoutput       # Int List<BTCInput> List<BTCOutput> BTCOutput / IStream 
+        append          # Int List<BTCInput> List<BTCOutput> / IStream 
+        to_dstack       # Int List<BTCInput> List<BTCOutput> IStream 
     loop
 
     # LockTime
-    4 bytes read int    # BTC IStream Int
-    to_rstack 
-    swap
-    -> locktime to_dstack = # IStream BTC 
-    swap.
+    4 bytes read int    # Int List<BTCInput> List<BTCOutput> IStream Int
+    swap to_rstack      # Int List<BTCInput> List<BTCOutput> Int / IStream
+    btctransaction      # BTCTransaction / IStream
+    to_dstack swap.     # IStream BTCTransaction     
 

@@ -89,7 +89,7 @@ def op_finish_type(c: AF_Continuation) -> None:
         make_word_context(attrib_name, getter, [Type(s)], [attrib_type])
 
     attribute_types = list(Type.udts[s].values())
-    make_word_context(ctor_name, get_udt_ctor(),attribute_types,[udt] )
+    make_word_context(ctor_name, get_udt_ctor(), attribute_types, [udt] )
 
     # Now make a reference operation.
     make_word_context('->', lambda c: c.stack.push(StackObject(stype=TAttrReference, value=Type(s))), [Type(s)], [Type(s), TAttrReference])

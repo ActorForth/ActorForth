@@ -70,6 +70,7 @@ def op_load(c: AF_Continuation) -> None:
 	for file in [filename, filename + '.a4', 'lib/' + filename, 'lib/' + filename + '.a4']:
 		try:
 			f = open(file)
+			break
 		except FileNotFoundError:
 			pass
 	if not f:

@@ -298,7 +298,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
     #[value_some_matched_words.remove(word) for word in value_exact_matched_words]
 
     if value_exact_matched_words:
-        assert len(value_exact_matched_words) == 1, "ERROR : more than one exact match! Not possible!"
+        assert len(value_exact_matched_words) == 1, "\nERROR : more than one exact match! Not possible! %s : %s" % (len(value_exact_matched_words), ["\n\n%s" % str(op) for op in value_exact_matched_words])
         c.stack.tos().value.add_word(value_exact_matched_words[0])
         c.log.debug("Compiled exact match for '%s' => %s." % (op_name, value_exact_matched_words[0]))
         return

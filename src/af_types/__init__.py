@@ -106,9 +106,9 @@ class Type(AF_Type):
                 t_def = TypeDefinition(ops_list=[], op_handler=handler)
                 Type.types[self.name] = t_def    
 
-            if typename != "Type":
-                s = Stack()
-                Type.add_op(Operation(typename, lambda c: c.stack.push(StackObject(value=typename,stype=Type("Type"))), sig=TypeSignature([],[StackObject(stype=Type("Type"))])),s)
+                if typename != "Type":
+                    s = Stack()
+                    Type.add_op(Operation(typename, lambda c: c.stack.push(StackObject(value=typename,stype=Type("Type"))), sig=TypeSignature([],[StackObject(stype=Type("Type"))])),s)
 
     @staticmethod
     def is_generic_name(name: Type_name) -> bool:
