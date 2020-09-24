@@ -127,3 +127,19 @@ class TestUserType(unittest.TestCase):
                """
         self.execute(code)
         assert self.cont.stack.tos().value == False
+
+    def test_broken_attributes(self) -> None:
+        code = """
+                MyType type
+                    one Int
+                    two Int
+                    three Int.
+
+                1 int 2 int 3 int
+                mytype
+                dup print
+                three 3 int == "three != 3" assert
+                two 2 int == "two != 2" assert
+                one 1 int == "one != 1" assert 
+               """
+        self.execute(code)
