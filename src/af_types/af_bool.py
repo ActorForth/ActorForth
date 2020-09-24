@@ -77,7 +77,7 @@ def op_equals(c: AF_Continuation) -> None:
     # Now we pop off whatever is the ultimate object that's
     # possibly been inferred.
     sobj2 = c.stack.pop()
-    c.stack.push(StackObject(value=(sobj1 == sobj2), stype=TBool))
+    c.stack.push(StackObject(value=(sobj1.get_value() == sobj2.get_value()), stype=TBool))
 make_word_context('==', op_equals, [TAny,TAny], [TBool])
 
 
@@ -91,35 +91,35 @@ make_word_context('!=', op_not_equals, [TAny,TAny], [TBool])
 def op_less_than(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
-    c.log.debug("is %s (%s) < %s (%s)?" % (sobj2.value, type(sobj2.value), sobj1.value, type(sobj1.value)))
-    c.stack.push(StackObject(value=(sobj2.value < sobj1.value), stype=TBool))
+    c.log.debug("is %s (%s) < %s (%s)?" % (sobj2.get_value(), type(sobj2.value), sobj1.get_value(), type(sobj1.value)))
+    c.stack.push(StackObject(value=(sobj2.get_value() < sobj1.get_value()), stype=TBool))
 make_word_context('<', op_less_than, [TAny,TAny], [TBool])
 
 
 def op_greater_than(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
-    c.stack.push(StackObject(value=(sobj2.value > sobj1.value), stype=TBool))
+    c.stack.push(StackObject(value=(sobj2.get_value() > sobj1.get_value()), stype=TBool))
 make_word_context('>', op_greater_than, [TAny,TAny], [TBool])
 
 
 def op_less_than_or_equal_to(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
-    c.stack.push(StackObject(value=(sobj2.value <= sobj1.value), stype=TBool))
+    c.stack.push(StackObject(value=(sobj2.get_value() <= sobj1.get_value()), stype=TBool))
 make_word_context('<=', op_less_than_or_equal_to, [TAny,TAny], [TBool])
 
 
 def op_greater_than_or_equal_to(c: AF_Continuation) -> None:
     sobj1 = optionally_infer_type_from_atom(c)
     sobj2 = c.stack.pop()
-    c.stack.push(StackObject(value=(sobj2.value >= sobj1.value), stype=TBool))
+    c.stack.push(StackObject(value=(sobj2.get_value() >= sobj1.get_value()), stype=TBool))
 make_word_context('>=', op_greater_than_or_equal_to, [TAny,TAny], [TBool])
 
 
 def op_not(c: AF_Continuation) -> None:
     # Restrict to only workong on Bools!
-    op1 = c.stack.tos().value = not c.stack.tos().value
+    op1 = c.stack.tos().set_value( not c.stack.tos().get_value() )
 make_word_context('not', op_not, [TBool], [TBool])
 
 
