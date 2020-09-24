@@ -82,11 +82,16 @@ def op_finish_type(c: AF_Continuation) -> None:
 
     # Now make a word to access each attribute of our User Defined Type.
     for attrib_name, attrib_type in list(Type.udts[s].items()):
-        def getter(c: AF_Continuation) -> None:
-            so : StackObject = c.stack.tos().value[attrib_name]
-            attrib_type = Type.udts[s][attrib_name]
-            c.stack.push(StackObject(stype = attrib_type, value = so.value))
-        make_word_context(attrib_name, getter, [Type(s)], [attrib_type])
+        c.log.debug("COMPILE TIME: Creating attribute word: '%s' of type: '%s'." % (attrib_name, attrib_type))
+        def make_getter( attrib_name : str, attrib_type : Type):
+            def getter(c: AF_Continuation) -> None:
+                c.log.debug("RUNTIME: getter for '%s'." % attrib_name)
+                so : StackObject = c.stack.tos().value[attrib_name]
+                attrib_type = Type.udts[s][attrib_name]
+                c.log.debug("RUNTIME: attribute name: '%s' returning value: %s." % (attrib_name,so))
+                c.stack.push(StackObject(stype = attrib_type, value = so.value))
+            return getter
+        make_word_context(attrib_name, make_getter(attrib_name, attrib_type), [Type(s)], [attrib_type])
 
     attribute_types = list(Type.udts[s].values())
     make_word_context(ctor_name, get_udt_ctor(), attribute_types, [udt] )
@@ -96,21 +101,21 @@ def op_finish_type(c: AF_Continuation) -> None:
 
     # Now make a word to refereemce each attribute of our User Defined Type.
     for attrib_name, attrib_type in list(Type.udts[s].items()):
-        def ref_getter(c: AF_Continuation) -> None:
-            c.stack.pop()
-            so : Dict[str,StackObject] = c.stack.tos().value
-            attrib_type = Type.udts[s][attrib_name]
+        def make_ref_getter( attrib_name : str, attrib_type : Type):
+            def ref_getter(c: AF_Continuation) -> None:
+                c.stack.pop()
+                so : Dict[str,StackObject] = c.stack.tos().value
+                attrib_type = Type.udts[s][attrib_name]
 
-            def ref_attrib(val: Any) -> Any:
-                if val is not None:
-                    so[attrib_name].value = val
-                #c.log.warning("so of type %s == %s" % (type(so),so))
-                return so[attrib_name].value
+                def ref_attrib(val: Any) -> Any:
+                    if val is not None:
+                        so[attrib_name].value = val
+                    #c.log.warning("so of type %s == %s" % (type(so),so))
+                    return so[attrib_name].value
+                c.stack.push(StackObject(stype = attrib_type, value = ref_attrib))
 
-
-            c.stack.push(StackObject(stype = attrib_type, value = ref_attrib))
-
-        make_word_context(attrib_name, ref_getter, [Type(s), TAttrReference], [Type(s), attrib_type])
+            return ref_getter
+        make_word_context(attrib_name, make_ref_getter(attrib_name, attrib_type), [Type(s), TAttrReference], [Type(s), attrib_type])
 
     attribute_types = list(Type.udts[s].values())
     make_word_context(ctor_name, get_udt_ctor(),attribute_types,[udt] )
