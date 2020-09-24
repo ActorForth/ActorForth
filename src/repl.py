@@ -28,6 +28,8 @@ from af_types.af_see import *
 from af_types.af_branch import *
 from af_types.af_environment import *
 from af_types.af_stream import *
+from af_types.af_list import *
+from af_types.af_usertype import *
 from compiler import *
 
 def print_continuation_stats(cont : Continuation):
@@ -132,9 +134,9 @@ def do_repl(filename: str, handle: TextIO):
             INTRO 1.7 : Continue in interpret.py for INTRO stage 2.
             """
             cont.log.error( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
-            cont.log.error( "TRACEBACK : %s" % traceback.format_exc() )
-            print( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
-            print( "TRACEBACK : %s" % traceback.format_exc() )
+            #cont.log.error( "TRACEBACK : %s" % traceback.format_exc() )
+            #print( "REPL EXCEPTION TYPE %s : %s" % (type(x),x) )
+            #print( "TRACEBACK : %s" % traceback.format_exc() )
 
             # Turn debug on automatically.
             op_debug(cont)

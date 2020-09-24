@@ -63,7 +63,11 @@ class Type(AF_Type):
     INTRO 5.5 : The core words in ActorForth are stored in the special generic
                 "Any" Type. This is the global dictionary for words.
     """
-    types : Dict[Type_name, TypeDefinition] = {"Any" : TypeDefinition(ops_list=[])}
+    types : Dict[Type_name, TypeDefinition] = {
+                                                "Type" : TypeDefinition(ops_list=[]),
+                                                "Any" : TypeDefinition(ops_list=[]),
+                                                "Atom" : TypeDefinition(ops_list=[]),
+                                              }
 
     """
     INTRO 5.6 : Constructors (ctors) are special words that take one or
@@ -80,6 +84,16 @@ class Type(AF_Type):
     """
     ctors : Dict[Type_name, Op_map] = {"Any":[]}
 
+
+    """
+    udts : Dict{ Type_name :
+                 Dict{ attribute_name:
+                       attribute_type
+                     }
+                }
+    """
+    udts : Dict[Type_name, dict] = {}
+
     def __init__(self, typename: Type_name, handler = None):
         assert Type.types["Any"]
         if handler is None:
@@ -92,6 +106,10 @@ class Type(AF_Type):
                 t_def = TypeDefinition(ops_list=[], op_handler=handler)
                 Type.types[self.name] = t_def    
 
+                if typename != "Type":
+                    s = Stack()
+                    Type.add_op(Operation(typename, lambda c: c.stack.push(StackObject(value=typename,stype=Type("Type"))), sig=TypeSignature([],[StackObject(stype=Type("Type"))])),s)
+
     @staticmethod
     def is_generic_name(name: Type_name) -> bool:
         # Any types names "Any" or that start with underscore, '_', refer to 
@@ -102,7 +120,17 @@ class Type(AF_Type):
     def is_generic(self) -> bool:        
         return Type.is_generic_name(self.name)
         #print("is_generic for %s is: %s." % (self.name, result))
-        
+    
+
+    @staticmethod
+    def is_udt_name(name: Type_name) -> bool:
+        udt = Type.udts.get(name)
+        if udt: return True
+        return False    
+
+
+    def is_udt(self) -> bool:
+        return Type.is_udt_name(self.name)
 
 
     def words(self) -> Op_list:
@@ -194,9 +222,9 @@ class Type(AF_Type):
         # we're going to enforce that the input signature length's be identical 
         # for now on.      
         all_named_words = chain(Type.find_named_ops_for_scope(op.name, type_def), 
-                             Type.find_named_ops_for_scope(op.name, TAny))
+                             Type.find_named_ops_for_scope(op.name, Type("Any"))) #TAny))
         if type_def.is_generic():
-            all_named_words = chain(Type.find_named_ops_for_scope(op.name, TAny))
+            all_named_words = chain(Type.find_named_ops_for_scope(op.name, Type("Any"))) #TAny))
         existing_words = [o for o in all_named_words if o.sig.stack_in.depth()!=op.sig.stack_in.depth()]
         if existing_words:
             assert existing_words, "ERROR - there are existing words of lengths other than %s : %s." \
@@ -240,16 +268,22 @@ class Type(AF_Type):
             op_list = type_def.ops_list
             cont.log.debug("\top_list = %s" % [op for op in op_list])
             for op in op_list:
+                #if name == "append": print("\nFound '%s' searching for 'append'." % op.name)
                 if op.name == name:
                     name_found = True
                     sigs_found.append(op.sig)
+                    # if name == "append": print("Found one! Adding op: %s" % op)
                     # Now try to match the input stack...
                     try:
-                        if op.check_stack_effect(cont.stack): # TODO - are we doing the right thing with this return types?
+                        # if name == "append": print("Checking match against stack: %s" % cont.stack)
+                        #effect, matched =  op.check_stack_effect(cont.stack) # TODO - are we doing the right thing with this return types?
+                        effect, matched =  op.check_stack_effect(force_composite = True)
+                        #if name == "append": print("effect = %s" % effect)
+                        if matched:
                             cont.log.debug("Found! Returning %s, %s, %s" % (op, op.sig, True))
                             return op, True
                     except SigValueTypeMismatchException:
-                        # We found the name but not the right value/type sig. Keep looking.
+                        cont.log.debug("We found the name but not the right value/type sig. Keep looking.")
                         pass
         # Not found.
         if name_found:
@@ -327,6 +361,9 @@ class Type(AF_Type):
         return hash(self.name)
 
 
+
+
+
 """
 INTRO 5.7 : The Atom Type is what gets created any time a new Symbol
             shows up that the Interpreter does not recognize. Ultimately
@@ -343,6 +380,7 @@ INTRO 5.8 : The Any Type is a special Type that will match ALL other types.
             the Any type in terms of dictionary access.
 """
 TAny = Type("Any")
+TType = Type("Type")
 
 
 #

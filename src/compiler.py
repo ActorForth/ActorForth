@@ -180,6 +180,18 @@ def _indent(c: AF_Continuation) -> str:
     return ''.join(['\t' for n in range(c.cdepth)])
 
 
+def op_show_stack_picture(c: AF_Continuation) -> None:
+    op = c.stack.tos().value
+    sp, match = op.check_stack_effect(force_composite = True)
+    result = "Defining op: '%s' in:%s -> out:%s" % (op.name, str(op.sig.stack_in), str(sp))
+    if match:
+        result += " MATCHED."
+    else:
+        result += " not yet matched for %s." % str(op.sig.stack_out)
+    print(result)
+make_word_context('.sp', op_show_stack_picture,[TCodeCompile],[TCodeCompile])
+
+
 # For executing COMPILE TIME words only!
 def compilation_word_handler(c: AF_Continuation) -> bool:
     c.log.debug("compilation_word_handler")
@@ -298,7 +310,7 @@ def compile_word_handler(c: AF_Continuation) -> None:
     #[value_some_matched_words.remove(word) for word in value_exact_matched_words]
 
     if value_exact_matched_words:
-        assert len(value_exact_matched_words) == 1, "ERROR : more than one exact match! Not possible!"
+        assert len(value_exact_matched_words) == 1, "\nERROR : more than one exact match! Not possible! %s : %s" % (len(value_exact_matched_words), ["\n\n%s" % str(op) for op in value_exact_matched_words])
         c.stack.tos().value.add_word(value_exact_matched_words[0])
         c.log.debug("Compiled exact match for '%s' => %s." % (op_name, value_exact_matched_words[0]))
         return

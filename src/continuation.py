@@ -14,6 +14,8 @@ from stack import Stack, KStack
 from af_types import AF_Continuation, Symbol, TAny, Tuple
 from operation import Operation, op_nop
 
+from af_types.af_list import *
+
 import logging
 import sys
 

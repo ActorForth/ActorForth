@@ -60,18 +60,43 @@ INTRO 4.3 : Stacks strictly contain StackObjects. Every StackObject
 
            Continue to af_types/__init__.py for INTRO stage 5.             
 """
+
 @dataclass
 class StackObject:
     stype: AF_Type
-    value: Any = None
+    _value: Any = None
+
+
+    def __init__(self, stype: AF_Type, value: Any = None):
+        """
+        Value can be a value or a function that gets and (optionally)
+        sets the value of a referenced object.
+            def fun(v=None) -> Any
+        """
+        self.stype = stype      
+        self._value = value 
+
+    def get_value(self) -> Any:
+        if isinstance(self._value, type(lambda z:z)):
+            return self._value(None)
+        return self._value
+
+    def set_value(self, value: Any) -> None:
+        if isinstance(self._value, type(lambda z:z)):
+            return self._value(value)
+        self._value = value
+
+    value = property(get_value, set_value)
+
+
 
     def __str__(self):
-      if self.value is not None:
-        return "SObject(t='%s',v='%s')" % (self.stype, self.value)
-      return "SObject(t='%s')" % self.stype
+        if self.value is not None:
+            return "SO(t='%s',v='%s')" % (self.stype, self.value)
+        return "SO(t='%s')" % self.stype
 
     def __repr__(self):
-      return self.__str__()
+        return self.__str__()
 
 
 @dataclass 
@@ -93,3 +118,4 @@ class AF_Continuation:
     def execute(self, next_word ) -> "AF_Continuation":
       print("NEED THE REAL CONTINUATION")
       raise NotImplemented
+
