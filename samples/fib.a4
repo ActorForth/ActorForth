@@ -12,9 +12,9 @@ fib	: Int -> Int
         fib
         +.
 
-f : Int -> Int;
-    dup print fib.
+#f : Int -> Int;
+#    dup print fib.
 
-12 int f "fib = " print print
+# 12 int f "fib = " print print
 
 
