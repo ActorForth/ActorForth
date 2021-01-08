@@ -14,3 +14,5 @@ credentials.txt
 runtests-pat
 
 docs/.directory
+
+cpp/bin/*

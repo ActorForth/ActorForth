@@ -1,0 +1,1 @@
+clang++-10 -v -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham src/parse.cpp -stdlib=libc++ -o bin/parse

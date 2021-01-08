@@ -1,0 +1,3 @@
+[submodule "cpp/makham"]
+	path = cpp/makham
+	url = git@github.com:Felspar/makham.git
