@@ -3,6 +3,7 @@
 //
 
 #include <iostream>
+#include <variant>
 #include <vector>
 #include <string>
 #include <fstream>
@@ -13,12 +14,29 @@
 
 using felspar::makham::generator;
 
+class Parser
+{
+public:
+	Parser(const std::string filename ) : input( std::ifstream(filename, std::ios::binary) )
+	{;}
+
+	char get() {return input.get();}
+	operator bool() const {return static_cast<bool>(input);}
+
+
+private:
+	//std::variant<std::ifstream, std::istringstream> input;
+	std::ifstream input;
+};
+
 int main()
 {
-	std::ifstream codetext("tests/data/parseme.a4", std::ios::binary);
+	const std::string name = "tests/data/parseme.a4";
+	Parser codetext(name); 
+
 	while(codetext)
 	{
-		std::cout << static_cast<char>(codetext.get());
+		std::cout << codetext.get();
 	}
 
 	return 0;
