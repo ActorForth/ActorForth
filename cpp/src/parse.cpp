@@ -73,8 +73,11 @@ public:
 		Characters(void) = delete;
 		Characters(char c, FilePosition& pos)
 		{ token.value.push_back(c); token.location = pos; }
+		~Characters(void) { co_yield(token); }
 		State consume(const char c, FilePosition& pos)
 		{
+			if(isspace(c)) return Whitespace(c, pos);
+			Token.value.push_back(c);
 			return *this;
 		}
 
@@ -92,23 +95,6 @@ public:
 			state = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
 			location.update(c);
 
-			/*
-			if (n=='\n')
-			{
-				Token result = {"\\n", location};
-				co_yield result;
-				location.linenumber += 1;
-				location.column = 1;
-			}
-			else
-			{
-				std::stringstream s;
-				s << n;
-				Token result = { s.str(), location };
-				co_yield result;
-				location.column += 1;
-			}
-			*/
 			c = input.get();
 
 		} while (not input.eof());
