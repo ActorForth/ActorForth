@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include <fstream>
+#include <sstream>
 
 #include <experimental/coroutine>
 
@@ -29,15 +30,15 @@ public:
 	{
 		FilePosition() : filename("=Unknown="), linenumber(1), column(1) {;}
 		FilePosition(const std::string& name) : filename(name), linenumber(1), column(1) {;}
-		const std::string filename;
+		std::string filename;
 		unsigned linenumber;
 		unsigned column;
 	};
 
 	struct Token
 	{
-		const std::string value;
-		const FilePosition location;
+		std::string value;
+		FilePosition location;
 	};
 
 	generator<Token> tokens()
@@ -48,10 +49,18 @@ public:
 			char n = input.get();
 			if (n=='\n')
 			{
-				location.column = 1;
-				Token result = {"\n", location};
+				Token result = {"\\n", location};
 				co_yield result;
 				location.linenumber += 1;
+				location.column = 1;
+			}
+			else
+			{
+				std::stringstream s;
+				s << n;
+				Token result = { s.str(), location};
+				co_yield result;
+				location.column += 1;
 			}
 
 		}
@@ -66,14 +75,21 @@ private:
 	FilePosition location;
 };
 
+std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
+{
+	out << token.value << " [ line: " << token.location.linenumber << ", col: " << token.location.column << " ]";
+	return out;
+}
+
 int main()
 {
 	const std::string name = "tests/data/parseme.a4";
 	Parser codetext(name); 
 
-	while(codetext)
+	for(auto n: codetext.tokens())
 	{
-		std::cout << codetext.get();
+		//std::cout << codetext.get();
+		std::cout << n << std::endl;
 	}
 
 	return 0;
