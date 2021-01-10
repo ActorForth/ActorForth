@@ -2,6 +2,8 @@
 // parse.cpp	- parser implementation for ActorForth
 //
 
+#include <ctype.h>
+
 #include <iostream>
 #include <variant>
 #include <vector>
@@ -30,6 +32,18 @@ public:
 	{
 		FilePosition() : filename("=Unknown="), linenumber(1), column(1) {;}
 		FilePosition(const std::string& name) : filename(name), linenumber(1), column(1) {;}
+		void update(const char c)
+		{
+			switch(c)
+			{
+				case '\n' :
+					linenumber +=1;
+					column = 1;
+					break;
+				default:
+					column += 1;
+			}
+		}
 		std::string filename;
 		unsigned linenumber;
 		unsigned column;
@@ -41,11 +55,43 @@ public:
 		FilePosition location;
 	};
 
+	struct Whitespace;
+	struct Characters;
+	typedef std::variant<Whitespace, Characters> State;
+
+	struct Whitespace 
+	{
+		State consume(const char c, FilePosition& pos)
+		{
+			if(isspace(c)) return *this;
+			return Characters(c, pos);
+		}
+	};
+
+	struct Characters
+	{	
+		Characters(void) = delete;
+		Characters(char c, FilePosition& pos)
+		{ token.value.push_back(c); token.location = pos; }
+		State consume(const char c, FilePosition& pos)
+		{
+			return *this;
+		}
+
+		Token token;
+	};
+
 	generator<Token> tokens()
 	{
-		char n = input.get();
+		
+		State state = Whitespace();
+		char c = input.get();
 		do
 		{
+			state = state.consume(c, location);
+			location.update(c);
+
+			/*
 			if (n=='\n')
 			{
 				Token result = {"\\n", location};
@@ -57,11 +103,12 @@ public:
 			{
 				std::stringstream s;
 				s << n;
-				Token result = { s.str(), location};
+				Token result = { s.str(), location };
 				co_yield result;
 				location.column += 1;
 			}
-			n = input.get();
+			*/
+			c = input.get();
 
 		} while (not input.eof());
 	}
@@ -69,8 +116,6 @@ public:
 private:
 	//std::variant<std::ifstream, std::istringstream> input;
 	std::ifstream input;
-
-
 
 	FilePosition location;
 };
