@@ -43,10 +43,9 @@ public:
 
 	generator<Token> tokens()
 	{
-		while(true)
+		char n = input.get();
+		do
 		{
-			if (not input) break;
-			char n = input.get();
 			if (n=='\n')
 			{
 				Token result = {"\\n", location};
@@ -62,8 +61,9 @@ public:
 				co_yield result;
 				location.column += 1;
 			}
+			n = input.get();
 
-		}
+		} while (not input.eof());
 	}
 
 private:
