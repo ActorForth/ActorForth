@@ -88,7 +88,8 @@ public:
 		char c = input.get();
 		do
 		{
-			state = std::visit([](auto&& sarg, char c, FilePosition location) { return sarg.consume(c, location); }, state, c, location);
+			//state = std::visit([](auto&& sarg, char c, FilePosition location) { return sarg.consume(c, location); }, state, c, location);
+			state = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
 			location.update(c);
 
 			/*
