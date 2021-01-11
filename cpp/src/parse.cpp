@@ -27,9 +27,6 @@ public:
 		  location(filename)
 	{;}
 
-	char get() {return input.get();}
-	explicit operator bool() const {return static_cast<bool>(input);}
-
 	struct FilePosition
 	{
 		FilePosition() : filename("=Unknown="), linenumber(1), column(1) {;}
@@ -44,6 +41,7 @@ public:
 					break;
 				case '\t' :
 					column += 4;
+					break;
 				default:
 					column += 1;
 			}
@@ -57,7 +55,7 @@ public:
 	{
 		Token() {;}
 		Token(const char c, const FilePosition& pos) 
-		{ value.push_back(c); location = pos; }
+			{ value.push_back(c); location = pos; }
 		std::string value;
 		FilePosition location;
 	};
@@ -85,7 +83,7 @@ public:
 	struct Characters
 	{	
 		Characters(char c, const FilePosition& pos)
-		{ token.value.push_back(c); token.location = pos; }
+			{ token.value.push_back(c); token.location = pos; }
 
 		StateMaybeToken consume(const char c, const FilePosition& pos)
 		{
@@ -124,7 +122,6 @@ public:
 
 	generator<Token> tokens()
 	{
-		
 		State state = Whitespace();
 		char c = input.get();
 		do
@@ -149,13 +146,13 @@ private:
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
 {
-	out << "'" << token.value << "'" << "\t\t[ file : " << token.location.filename << ", line: " << token.location.linenumber << ", col: " << token.location.column << " ]";
+	out << "'" << token.value << "'" << "\t\t\t[ file : " << token.location.filename << ", line: " << token.location.linenumber << ", col: " << token.location.column << " ]";
 	return out;
 }
 
 int main()
 {
-	const std::string name = "tests/data/parseme.a4";
+	std::string const name = "tests/data/parseme.a4";
 	Parser codetext(name); 
 
 	for(auto n: codetext.tokens())
