@@ -55,6 +55,9 @@ public:
 
 	struct Token
 	{
+		Token() {;}
+		Token(const char c, const FilePosition& pos) 
+		{ value.push_back(c); location = pos; }
 		std::string value;
 		FilePosition location;
 	};
@@ -72,7 +75,7 @@ public:
 		StateMaybeToken consume(const char c, const FilePosition& pos)
 		{
 			if(isspace(c)) return { *this, {} };
-			if(c=='.' or c==';' or c==':') return { Whitespace(), {} };
+			if(c=='.' or c==';' or c==':') return { Whitespace(), Token(c,pos) };
 			if(c=='"') return { String(pos), {} };
 			if(c=='#') return { Comment(), {} };
 			return { Characters(c, pos), {} };
@@ -88,7 +91,7 @@ public:
 		{
 			if(isspace(c)) return { Whitespace(), token };
 			if(c=='"') return { String(pos), token };
-			if(c=='.' or c==';' or c==':') return { Whitespace(), token };
+			if(c=='.' or c==';' or c==':') return { Characters(c, pos), token };
 			if(c=='#') return { Comment(), token };
 			token.value.push_back(c);
 			return { *this, {} };
