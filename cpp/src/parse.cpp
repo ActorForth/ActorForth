@@ -6,7 +6,9 @@
 
 #include <iostream>
 #include <variant>
+#include <optional>
 #include <vector>
+#include <utility> // std::pair
 #include <string>
 #include <fstream>
 #include <sstream>
@@ -58,13 +60,15 @@ public:
 	struct Whitespace;
 	struct Characters;
 	typedef std::variant<Whitespace, Characters> State;
+	//typedef std::pair<State, std::optional<Token> > StateMaybeToken;
+	using StateMaybeToken = std::pair<State, std::optional<Token> >;
 
 	struct Whitespace 
 	{		
-		State consume(const char c, FilePosition& pos)
+		StateMaybeToken consume(const char c, FilePosition& pos)
 		{
-			if(isspace(c)) return *this;
-			return Characters(c, pos);
+			if(isspace(c)) return { *this, {} };
+			return { Characters(c, pos), {} };
 		}
 	};
 
@@ -73,17 +77,12 @@ public:
 		Characters(void) = delete;
 		Characters(char c, FilePosition& pos)
 		{ token.value.push_back(c); token.location = pos; }
-		~Characters(void) { send_token(); }
-		State consume(const char c, FilePosition& pos)
-		{
-			if(isspace(c)) return Whitespace();
-			token.value.push_back(c);
-			return *this;
-		}
 
-		generator<Token> send_token(void) const
+		StateMaybeToken consume(const char c, FilePosition& pos)
 		{
-			co_yield(token);
+			if(isspace(c)) return { Whitespace(), token };
+			token.value.push_back(c);
+			return { *this, {} };
 		}
 
 		Token token;
@@ -97,7 +96,9 @@ public:
 		do
 		{
 			//state = std::visit([](auto&& sarg, char c, FilePosition location) { return sarg.consume(c, location); }, state, c, location);
-			state = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
+			StateMaybeToken state_maybe_token = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
+			state = state_maybe_token.first;
+			if (state_maybe_token.second.has_value()) co_yield( state_maybe_token.second.value() );
 			location.update(c);
 
 			c = input.get();
