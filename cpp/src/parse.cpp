@@ -60,7 +60,7 @@ public:
 	typedef std::variant<Whitespace, Characters> State;
 
 	struct Whitespace 
-	{
+	{		
 		State consume(const char c, FilePosition& pos)
 		{
 			if(isspace(c)) return *this;
@@ -73,12 +73,17 @@ public:
 		Characters(void) = delete;
 		Characters(char c, FilePosition& pos)
 		{ token.value.push_back(c); token.location = pos; }
-		~Characters(void) { co_yield(token); }
+		~Characters(void) { send_token(); }
 		State consume(const char c, FilePosition& pos)
 		{
-			if(isspace(c)) return Whitespace(c, pos);
-			Token.value.push_back(c);
+			if(isspace(c)) return Whitespace();
+			token.value.push_back(c);
 			return *this;
+		}
+
+		generator<Token> send_token(void) const
+		{
+			co_yield(token);
 		}
 
 		Token token;
