@@ -28,7 +28,7 @@ public:
 	{;}
 
 	char get() {return input.get();}
-	operator bool() const {return static_cast<bool>(input);}
+	explicit operator bool() const {return static_cast<bool>(input);}
 
 	struct FilePosition
 	{
@@ -77,6 +77,8 @@ public:
 		Characters(void) = delete;
 		Characters(char c, FilePosition& pos)
 		{ token.value.push_back(c); token.location = pos; }
+
+		~Characters(void) { std::cout << "Characters::dtor!\n"; }
 
 		StateMaybeToken consume(const char c, FilePosition& pos)
 		{
