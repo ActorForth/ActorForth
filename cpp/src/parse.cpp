@@ -42,6 +42,8 @@ public:
 					linenumber +=1;
 					column = 1;
 					break;
+				case '\t' :
+					column += 4;
 				default:
 					column += 1;
 			}
@@ -60,7 +62,9 @@ public:
 	struct Whitespace;
 	struct Characters;
 	struct String;
-	using State = std::variant<Whitespace, Characters, String>;
+	struct Comment;
+
+	using State = std::variant<Whitespace, Characters, String, Comment>;
 	using StateMaybeToken = std::pair<State, std::optional<Token> >;
 
 	struct Whitespace 
@@ -68,7 +72,9 @@ public:
 		StateMaybeToken consume(const char c, const FilePosition& pos)
 		{
 			if(isspace(c)) return { *this, {} };
+			if(c=='.' or c==';' or c==':') return { Whitespace(), {} };
 			if(c=='"') return { String(pos), {} };
+			if(c=='#') return { Comment(), {} };
 			return { Characters(c, pos), {} };
 		}
 	};
@@ -82,6 +88,8 @@ public:
 		{
 			if(isspace(c)) return { Whitespace(), token };
 			if(c=='"') return { String(pos), token };
+			if(c=='.' or c==';' or c==':') return { Whitespace(), token };
+			if(c=='#') return { Comment(), token };
 			token.value.push_back(c);
 			return { *this, {} };
 		}
@@ -100,6 +108,15 @@ public:
 		}
 
 		Token token;
+	};
+
+	struct Comment
+	{
+		StateMaybeToken consume(const char c, const FilePosition& pos)
+		{
+			if(c=='\n') return { Whitespace(), {} };
+			return { *this, {} };
+		}
 	};
 
 	generator<Token> tokens()
