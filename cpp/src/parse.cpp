@@ -64,7 +64,7 @@ public:
 
 	struct Whitespace 
 	{		
-		StateMaybeToken consume(const char c, FilePosition& pos)
+		StateMaybeToken consume(const char c, const FilePosition& pos)
 		{
 			if(isspace(c)) return { *this, {} };
 			return { Characters(c, pos), {} };
@@ -73,10 +73,10 @@ public:
 
 	struct Characters
 	{	
-		Characters(char c, FilePosition& pos)
+		Characters(char c, const FilePosition& pos)
 		{ token.value.push_back(c); token.location = pos; }
 
-		StateMaybeToken consume(const char c, FilePosition& pos)
+		StateMaybeToken consume(const char c, const FilePosition& pos)
 		{
 			if(isspace(c)) return { Whitespace(), token };
 			token.value.push_back(c);
