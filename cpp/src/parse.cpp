@@ -59,8 +59,7 @@ public:
 
 	struct Whitespace;
 	struct Characters;
-	typedef std::variant<Whitespace, Characters> State;
-	//typedef std::pair<State, std::optional<Token> > StateMaybeToken;
+	using State = std::variant<Whitespace, Characters>;
 	using StateMaybeToken = std::pair<State, std::optional<Token> >;
 
 	struct Whitespace 
@@ -74,11 +73,8 @@ public:
 
 	struct Characters
 	{	
-		Characters(void) = delete;
 		Characters(char c, FilePosition& pos)
 		{ token.value.push_back(c); token.location = pos; }
-
-		~Characters(void) { std::cout << "Characters::dtor!\n"; }
 
 		StateMaybeToken consume(const char c, FilePosition& pos)
 		{
@@ -97,10 +93,10 @@ public:
 		char c = input.get();
 		do
 		{
-			//state = std::visit([](auto&& sarg, char c, FilePosition location) { return sarg.consume(c, location); }, state, c, location);
-			StateMaybeToken state_maybe_token = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
-			state = state_maybe_token.first;
-			if (state_maybe_token.second.has_value()) co_yield( state_maybe_token.second.value() );
+			std::optional< Token > maybe_token;
+			std::tie(state, maybe_token) = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
+
+			if (maybe_token.has_value()) co_yield( maybe_token.value() );
 			location.update(c);
 
 			c = input.get();
@@ -117,7 +113,7 @@ private:
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
 {
-	out << token.value << " [ line: " << token.location.linenumber << ", col: " << token.location.column << " ]";
+	out << "'" << token.value << "'" << "\t\t[ file : " << token.location.filename << ", line: " << token.location.linenumber << ", col: " << token.location.column << " ]";
 	return out;
 }
 
