@@ -59,7 +59,8 @@ public:
 
 	struct Whitespace;
 	struct Characters;
-	using State = std::variant<Whitespace, Characters>;
+	struct String;
+	using State = std::variant<Whitespace, Characters, String>;
 	using StateMaybeToken = std::pair<State, std::optional<Token> >;
 
 	struct Whitespace 
@@ -67,6 +68,7 @@ public:
 		StateMaybeToken consume(const char c, const FilePosition& pos)
 		{
 			if(isspace(c)) return { *this, {} };
+			if(c=='"') return { String(pos), {} };
 			return { Characters(c, pos), {} };
 		}
 	};
@@ -79,6 +81,20 @@ public:
 		StateMaybeToken consume(const char c, const FilePosition& pos)
 		{
 			if(isspace(c)) return { Whitespace(), token };
+			if(c=='"') return { String(pos), token };
+			token.value.push_back(c);
+			return { *this, {} };
+		}
+
+		Token token;
+	};
+
+	struct String
+	{
+		String(const FilePosition& pos) { token.location = pos; }
+		StateMaybeToken consume( const char c, const FilePosition& pos)
+		{
+			if(c=='"') return { Whitespace(), token };
 			token.value.push_back(c);
 			return { *this, {} };
 		}
