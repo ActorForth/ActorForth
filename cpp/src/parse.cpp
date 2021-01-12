@@ -146,13 +146,15 @@ private:
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
 {
-	out << "'" << token.value << "'" << "\t\t\t[ file : " << token.location.filename << ", line: " << token.location.linenumber << ", col: " << token.location.column << " ]";
+	out << "'" << token.value << "'" << "\t\t\t[ file : " << token.location.filename 
+	    << ", line: " << token.location.linenumber << ", col: " << token.location.column << " ]";
 	return out;
 }
 
 int main()
 {
-	std::string const name = "tests/data/parseme.a4";
+	std::string const name = "../../../develop/cpp/data/SampleTextFile_1000kb.txt"; // "tests/data/parseme.a4";
+	//std::string const name = "tests/data/parseme.a4";
 	Parser codetext(name); 
 
 	for(auto n: codetext.tokens())
