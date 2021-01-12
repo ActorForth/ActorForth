@@ -25,7 +25,20 @@ public:
 	Parser(const std::string filename ) 
 		: input( std::ifstream(filename, std::ios::binary) ),
 		  location(filename)
-	{;}
+		{ 
+			try 
+			{
+        		input.exceptions(input.failbit);        		
+    		} 
+    		catch (const std::ios_base::failure& e)
+    		{
+        		std::cout 	<< "Caught an ios_base::failure.\n"
+                  			<< "Explanatory string: " << e.what() << '\n'
+                  			<< "Error code: " << e.code() << '\n';
+				throw;                  			
+    		}
+    		input.exceptions(input.badbit);
+		}
 
 	struct FilePosition
 	{
@@ -122,6 +135,7 @@ public:
 
 	generator<Token> tokens()
 	{
+		//if(! input) std::cerr << "Input file not valid." << std::endl; return;
 		State state = Whitespace();
 		char c = input.get();
 		do
@@ -153,8 +167,8 @@ std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
 
 int main()
 {
-	std::string const name = "../../../develop/cpp/data/SampleTextFile_1000kb.txt"; // "tests/data/parseme.a4";
-	//std::string const name = "tests/data/parseme.a4";
+	//std::string const name = "../../../develop/cpp/data/SampleTextFile_1000kb.txt"; // "tests/data/parseme.a4";
+	std::string const name = "tests/data/parseme.a4";
 	Parser codetext(name); 
 
 	for(auto n: codetext.tokens())
