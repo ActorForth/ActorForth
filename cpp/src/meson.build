@@ -1,0 +1,2 @@
+
+source += files(['parser.cpp'])
