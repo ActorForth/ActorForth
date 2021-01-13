@@ -153,8 +153,9 @@ std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
 
 int main()
 {
-	std::string const name = "../../../develop/cpp/data/SampleTextFile_1000kb.txt"; // "tests/data/parseme.a4";
-	//std::string const name = "tests/data/parseme.a4";
+	//std::string const name = "../../../develop/cpp/data/SampleTextFile_1000kb.txt"; 
+	//std::string const name = "../../../develop/cpp/data/orig_SampleTextFile_1000b.txt";
+	std::string const name = "tests/data/parseme.a4"; 
 	Parser codetext(name); 
 
 	for(auto n: codetext.tokens())
