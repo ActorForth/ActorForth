@@ -16,3 +16,5 @@ runtests-pat
 docs/.directory
 
 cpp/bin/*
+perf.*
+tmp.*
