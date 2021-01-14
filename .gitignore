@@ -18,4 +18,4 @@ docs/.directory
 cpp/bin/*
 perf.*
 tmp.*
-builddir
+#builddir
