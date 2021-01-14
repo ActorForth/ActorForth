@@ -1,5 +1,5 @@
 //
-// parser.hpp	- parser implementation for ActorForth
+// 	parser.hpp	- Parser declaration for ActorForth.
 //
 
 #pragma once
@@ -39,7 +39,7 @@ public:
 
 	struct Token
 	{
-		Token() {;}
+		Token() = default;
 		Token(const char c, const FilePosition& pos) 
 			{ value.push_back(c); location = pos; }
 		std::string value;
