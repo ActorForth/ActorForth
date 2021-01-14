@@ -18,6 +18,6 @@ int main(void)
 
 	Stack<char> stack;
 	std::cout << "Made a stack!" << std::endl;
-	//std::cout << "It's capacity is " << stack._stack.capacity() << std::endl;
+
 	return 0;
 }

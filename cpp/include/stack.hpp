@@ -6,35 +6,29 @@
 
 #include <stdexcept>
 #include <variant>
-#include <utility> // std::pair
-#include <optional>
 #include <vector>
 
 template <class T> class Stack
 {
 public:
+
 	struct Underflow : public std::out_of_range {;};
+
+	Stack(void) : _stack(Empty()) {;} 
+	Stack(const Stack&) = default;
+
+private:
 
 	struct Empty;
 	struct NonEmpty;
 	using MaybeEmpty = std::variant<Empty, NonEmpty>;
 
-	//using StackResult = std::pair<MaybeEmpty, T&>;
-
 	struct Empty
 	{
 		T& tos(void) const { throw Underflow(); }	
 		MaybeEmpty pop(void) { throw Underflow(); }
-		MaybeEmpty push( const T& value )
-		{ 
-			auto r = NonEmpty(value); 
-			return { r, r.tos() };
-		}
-		MaybeEmpty push( const T&& value )
-		{ 
-			auto r = NonEmpty(value); 
-			return { r, r.tos() };
-		}
+		MaybeEmpty push( const T& value ) { return NonEmpty(value); }
+		MaybeEmpty push( const T&& value ) { return NonEmpty(value); }
 	};
 
 	struct NonEmpty
@@ -53,12 +47,6 @@ public:
 		std::vector<T> _data;
 	};
 
-	
 
-	Stack(void) : _stack(Empty()) {;} // { _stack = Empty();}
-	Stack(const Stack&) = default;
-
-
-//private:
 	MaybeEmpty _stack;
 };

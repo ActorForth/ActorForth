@@ -8,4 +8,6 @@
 
 
 # test_stack
+rm bin/test_stack
 clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham tests/test_stack.cpp -stdlib=libc++ -o bin/test_stack
+bin/test_stack
