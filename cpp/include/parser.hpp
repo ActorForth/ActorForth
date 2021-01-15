@@ -24,6 +24,7 @@ using felspar::makham::generator;
 class Parser
 {
 public:
+	
 	Parser(const std::string filename );
 
 	struct FilePosition
@@ -45,6 +46,10 @@ public:
 		std::string value;
 		FilePosition location;
 	};
+
+	generator<Token> tokens();
+
+private:
 
 	struct Whitespace;
 	struct Characters;
@@ -82,9 +87,6 @@ public:
 		StateMaybeToken consume(const char c, const FilePosition& pos);
 	};
 
-	generator<Token> tokens();
-
-private:
 	//std::variant<std::ifstream, std::istringstream> input;
 	std::ifstream input;
 
