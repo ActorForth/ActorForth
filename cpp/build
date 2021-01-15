@@ -1,10 +1,12 @@
 #clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham src/parser.cpp -stdlib=libc++ -o bin/parser
 
 # test_parser
-#clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham src/parser.cpp -stdlib=libc++ -o bin/libparser.o
-#llvm-ar-10 -rc bin/libparser.a bin/libparser.o 
+clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham src/parser.cpp -stdlib=libc++ -o bin/libparser.o
+llvm-ar-10 -rc bin/libparser.a bin/libparser.o 
 
-#clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham tests/test_parser.cpp -stdlib=libc++ bin/libparser.a -o bin/test_parser
+rm bin/test_parser
+clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham tests/test_parser.cpp -stdlib=libc++ bin/libparser.a -o bin/test_parser
+bin/test_parser
 
 
 # test_stack

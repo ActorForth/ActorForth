@@ -1,5 +1,5 @@
 //
-//	stack.hpp	- Stack declaration for ActorForth.
+//	stack.hpp	- Stack definition for ActorForth.
 //
 
 #pragma once

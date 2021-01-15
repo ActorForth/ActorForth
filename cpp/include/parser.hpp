@@ -82,23 +82,7 @@ public:
 		StateMaybeToken consume(const char c, const FilePosition& pos);
 	};
 
-	generator<Token> tokens()
-	{
-		//if(! input) std::cerr << "Input file not valid." << std::endl; return;
-		State state = Whitespace();
-		char c = input.get();
-		do
-		{
-			std::optional< Token > maybe_token;
-			std::tie(state, maybe_token) = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
-
-			if (maybe_token.has_value()) co_yield( maybe_token.value() );
-			location.update(c);
-
-			c = input.get();
-
-		} while (not input.eof());
-	}
+	generator<Token> tokens();
 
 private:
 	//std::variant<std::ifstream, std::istringstream> input;
