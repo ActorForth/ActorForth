@@ -12,12 +12,13 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 	return out;
 }
 
-Type::ID Type::priorID;
+std::vector<Type> Type::Types;
+std::map<const std::string&, const Type::ID&> Type::TypeIDs;
 
 int main(void)
 {
-	Type A("A Type");
-	Type B("B Type");
+	Type A = Type::find_or_make("A Type");
+	Type B = Type::find_or_make("B Type");
 
 	std::cout << "Here is our A Type: " << A << "." << std::endl;
 	std::cout << "Here is our B Type: " << B << "." << std::endl;
