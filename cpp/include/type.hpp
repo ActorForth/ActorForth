@@ -21,7 +21,7 @@ public:
 	static Type& from_id( const ID& id );
 
 protected:
-	Type( const std::string& n, const Operation::Handler& h ) : name(n), id(Types.size()), handler(h) {;}
+	Type( const std::string& n, const Operation::Handler& h = Operation::default_handler ) : name(n), id(Types.size()), handler(h) {;}
 
 private:
 	const std::string name;

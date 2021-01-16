@@ -12,6 +12,7 @@ int main(void)
 	{
 		std::cout << "\nType ID 0 is " << Type::from_id(0) << std::endl;
 	}
+	// This can't happen any longer since the "Any" type is initialized globally for Type at compile time.
 	catch (const std::out_of_range& err)
 	{
 		std::cout << err.what() << "\n" << std::endl;
@@ -21,14 +22,14 @@ int main(void)
 	Type B = Type::find_or_make("BType");
 
 	std::cout << "Here is our AType: " << A << "." << std::endl;
-	std::cout << "Here is our BType: " << B << "." << std::endl;
-
-	std::cout << "\nType ID 0 is " << Type::from_id(0) << std::endl;
-	std::cout << "Type ID 1 is " << Type::from_id(1) << std::endl;
+	std::cout << "Here is our BType: " << B << ".\n" << std::endl;
 
 	try
 	{
-		std::cout << "\nType ID 2 is " << Type::from_id(2) << std::endl;
+		std::cout << "Type ID 0 is " << Type::from_id(0) << std::endl;
+		std::cout << "Type ID 1 is " << Type::from_id(1) << std::endl;
+		std::cout << "Type ID 2 is " << Type::from_id(2) << std::endl;
+		std::cout << "Type ID 3 is " << Type::from_id(3) << std::endl;
 	}
 	catch (const std::out_of_range& err)
 	{
