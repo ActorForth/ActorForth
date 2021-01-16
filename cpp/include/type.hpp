@@ -8,6 +8,8 @@
 #include <vector>
 #include <map>
 #include <iostream>
+#include <sstream>
+#include <stdexcept>
 
 class Type
 {
@@ -22,6 +24,21 @@ public:
 		auto t = Type(n);
 		Types.push_back(t);
 		return Types[t.id];
+	}
+
+	static Type& from_id( const ID& id ) 
+	{ 		
+		if(id < Types.size()) return Types[id]; 
+		std::stringstream err;
+		if (Types.size())
+		{
+			err << "out_of_range exception: Request for TypeID : " << id << " is beyond largest type id of " << Types.size() - 1;
+		}
+		else
+		{
+			err << "out_of_range exception: No types exist.";
+		}
+		throw std::out_of_range(err.str());
 	}
 
 protected:
