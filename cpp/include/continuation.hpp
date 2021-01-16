@@ -16,7 +16,3 @@ public:
 //private:	
 	Operation op;
 };
-
-
-
-

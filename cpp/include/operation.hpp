@@ -1,3 +1,7 @@
+//
+//	operation.hpp	-	Declarations for Operation in ActorForth.
+//
+
 #pragma once
 
 #include <functional>
@@ -14,7 +18,7 @@ public:
 	using Handler = std::function<void(Continuation&)>;
 	static Handler default_handler;
 
-	Operation(Handler h = Operation::default_handler) : handler(h) {;}
+	Operation(const std::string name, Handler h = Operation::default_handler) : name(name), handler(h) {;}
 
 	// How do we const this?
 	void operator()(Continuation& c) {handler(c);}
