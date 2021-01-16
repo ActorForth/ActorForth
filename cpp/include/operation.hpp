@@ -10,6 +10,7 @@
 #include <optional>
 #include <utility> // std::pair
 #include <any>
+#include <map>
 
 #include "parser.hpp"
 #include "type.hpp"
@@ -30,7 +31,6 @@ class Operation
 {
 public:
 
-
 	Operation(const std::string name, Type::Handler h = Type::default_handler) : name(name), handler(h) {;}
 
 	// How do we const this?
@@ -42,4 +42,10 @@ private:
 	std::vector<const Operation> words;
 	const Parser::Token token;
 	Signature sig;
+
+	// Holds the global vocabularies of all Operations for each Type.
+	static std::map<Type::ID,std::vector<Operation>> TypeOps;
+
+	// Holds all of the Constructors for various Types.
+	static std::map<Type::ID,std::vector<Operation>> TypeCtors;
 };

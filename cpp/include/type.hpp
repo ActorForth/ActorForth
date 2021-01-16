@@ -11,6 +11,7 @@
 #include <iostream>
 
 class Continuation;
+class Operation;
 
 class Type
 {
