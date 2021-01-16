@@ -16,8 +16,13 @@
 
 
 # Type
-clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham src/type.cpp -stdlib=libc++ -o bin/libtype.o
-llvm-ar-10 -rc bin/libtype.a bin/libtype.o 
+rm bin/type.o
+rm bin/operation.o
+rm bin/libtype.a
+clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham src/type.cpp -stdlib=libc++ -o bin/type.o
+clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham src/operation.cpp -stdlib=libc++ -o bin/operation.o
+
+llvm-ar-10 -rc bin/libtype.a bin/type.o bin/operation.o
 
 # test_type
 rm bin/test_type

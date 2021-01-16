@@ -23,11 +23,11 @@ Type& Type::from_id( const ID& id )
 	std::stringstream err;
 	if (Types.size())
 	{
-		err << "out_of_range exception: Request for TypeID : " << id << " is beyond largest type id of " << Types.size() - 1;
+		err << "<exception: out_of_range> Request for TypeID : " << id << " is beyond largest type id of " << Types.size() - 1;
 	}
 	else
 	{
-		err << "out_of_range exception: No types exist.";
+		err << "<exception: out_of_range> No types exist.";
 	}
 	throw std::out_of_range(err.str());
 }	

@@ -10,6 +10,9 @@
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
+#include <functional>
+
+#include "continuation.hpp"
 
 class Type
 {
@@ -33,6 +36,3 @@ private:
 	static std::map<const std::string, const Type::ID> TypeIDs;
 	friend std::ostream& operator<<(std::ostream& out, const Type& type);
 };
-
-
-std::ostream& operator<<(std::ostream& out, const Type& type);
