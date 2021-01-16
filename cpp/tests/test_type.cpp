@@ -6,15 +6,6 @@
 
 #include "type.hpp"
 
-std::ostream& operator<<(std::ostream& out, const Type& type)
-{
-	out << "'" << type.name << "'|ID:" << type.id << "|";
-	return out;
-}
-
-std::vector<Type> Type::Types;
-std::map<const std::string, const Type::ID> Type::TypeIDs;
-
 int main(void)
 {
 	try

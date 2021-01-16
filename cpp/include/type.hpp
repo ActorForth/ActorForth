@@ -1,5 +1,5 @@
 //
-//	type.hpp	- Type definition for ActorForth.
+//	type.hpp	- Type declaration for ActorForth.
 //
 
 #pragma once
@@ -16,30 +16,9 @@ class Type
 public:
 
 	using ID = size_t;
-	static Type& find_or_make( const std::string& n )
-	{
-		auto search = TypeIDs.find(n);
-		if (search != TypeIDs.end()) return Types[search->second];
-		// BDM TODO : potential race condiction here. mutex required? too slow!
-		auto t = Type(n);
-		Types.push_back(t);
-		return Types[t.id];
-	}
+	static Type& find_or_make( const std::string& n );
 
-	static Type& from_id( const ID& id ) 
-	{ 		
-		if(id < Types.size()) return Types[id]; 
-		std::stringstream err;
-		if (Types.size())
-		{
-			err << "out_of_range exception: Request for TypeID : " << id << " is beyond largest type id of " << Types.size() - 1;
-		}
-		else
-		{
-			err << "out_of_range exception: No types exist.";
-		}
-		throw std::out_of_range(err.str());
-	}
+	static Type& from_id( const ID& id );
 
 protected:
 	Type( const std::string& n ) : name(n), id(Types.size()) {;}
