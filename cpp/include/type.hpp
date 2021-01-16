@@ -17,8 +17,8 @@ public:
 	static Type& find_or_make( const std::string& n )
 	{
 		auto search = TypeIDs.find(n);
-		if (search != Types.end()) return Types[search->second];
-		// potential race condiction here. mutex required? too slow!
+		if (search != TypeIDs.end()) return Types[search->second];
+		// BDM TODO : potential race condiction here. mutex required? too slow!
 		auto t = Type(n);
 		Types.push_back(t);
 		return Types[t.id];
