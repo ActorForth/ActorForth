@@ -36,3 +36,8 @@ private:
 
 	friend std::ostream& operator<<(std::ostream& out, const Type& type);
 };
+
+//
+//	Initialize built-in Types here. Order matters!
+//
+#include "types/any.hpp"

@@ -20,8 +20,10 @@ int main(void)
 
 	Type A = Type::find_or_make("AType");
 	Type B = Type::find_or_make("BType");
+	Type AA = Type::find_or_make("AType");
 
 	std::cout << "Here is our AType: " << A << "." << std::endl;
+	std::cout << "Here is our AAType: " << AA << "." << std::endl;
 	std::cout << "Here is our BType: " << B << ".\n" << std::endl;
 
 	try

@@ -7,16 +7,30 @@
 
 #include "type.hpp"
 
+/*
 std::vector<Type> Type::Types(1, Type("Any"));
 std::map<const std::string, const Type::ID> Type::TypeIDs = { {"Any",0} };
+*/
+std::vector<Type> Type::Types(1, Type("Any"));
+std::map<const std::string, const Type::ID> Type::TypeIDs = { {"Any",0} };
+
 
 Type& Type::find_or_make( const std::string& n, const Operation::Handler& h )
 {
 	// TODO : automatically treat all types that begin with _ as generic Any types.
 	auto search = TypeIDs.find(n);
-	if (search != TypeIDs.end()) return Types[search->second];
+	if (search != TypeIDs.end())
+	{ 
+		std::cout << "Found '" << n << "'!" << std::endl;
+		return Types[search->second];
+	}
+	else
+	{
+		std::cout << "Didn't find '" << n << "' so will create new type." << std::endl;
+	}
 	// BDM TODO : potential race condition here. mutex required? too slow! 
 	// 			  probably just need to preallocate the vector for max allowed types.
+	TypeIDs.insert( {n, Types.size()} );
 	auto t = Type(n, h);
 	Types.push_back(t);
 	return Types[t.id];
