@@ -13,7 +13,7 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 }
 
 std::vector<Type> Type::Types;
-std::map<const std::string&, const Type::ID&> Type::TypeIDs;
+std::map<const std::string, const Type::ID> Type::TypeIDs;
 
 int main(void)
 {

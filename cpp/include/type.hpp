@@ -34,7 +34,7 @@ private:
 	// A Type name can only be instantiated once and its position in the Types vector is its ID.
 	static std::vector<Type> Types;
 	// TypeIDs maps the type name to the offset position of the Types vector.
-	static std::map<const std::string&, const Type::ID&> TypeIDs;
+	static std::map<const std::string, const Type::ID> TypeIDs;
 	friend std::ostream& operator<<(std::ostream& out, const Type& type);
 };
 
