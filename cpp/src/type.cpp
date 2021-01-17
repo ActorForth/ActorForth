@@ -2,6 +2,8 @@
 //	type.cpp	- Type definition for ActorForth.
 //
 
+#include <doctest/doctest.h>
+
 #include <sstream>
 #include <stdexcept>
 

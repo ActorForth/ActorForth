@@ -2,41 +2,49 @@
 //	test_type.cpp	- Test code for Type class.
 //
 
+#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
+#include <doctest/doctest.h>
+
 #include <iostream>
 
 #include "type.hpp"
 
-int main(void)
+
+
+TEST_CASE("Registering and querying types.")
 {
-	try
+
+	SUBCASE("Type ID 0 is for the generic 'Any' Type.")
 	{
-		std::cout << "\nType ID 0 is " << Type::from_id(0) << std::endl;
-	}
-	// This can't happen any longer since the "Any" type is initialized globally for Type at compile time.
-	catch (const std::out_of_range& err)
-	{
-		std::cout << err.what() << "\n" << std::endl;
+		CHECK(Type::from_id(0).name == "Any");
 	}
 
-	Type A = Type::find_or_make("AType");
-	Type B = Type::find_or_make("BType");
-	Type AA = Type::find_or_make("AType");
+	Type::ID max_id = 0;
 
-	std::cout << "Here is our AType: " << A << "." << std::endl;
-	std::cout << "Here is our AAType: " << AA << "." << std::endl;
-	std::cout << "Here is our BType: " << B << ".\n" << std::endl;
-
-	try
+	SUBCASE("Registering New Types")
 	{
-		std::cout << "Type ID 0 is " << Type::from_id(0) << std::endl;
-		std::cout << "Type ID 1 is " << Type::from_id(1) << std::endl;
-		std::cout << "Type ID 2 is " << Type::from_id(2) << std::endl;
-		std::cout << "Type ID 3 is " << Type::from_id(3) << std::endl;
-	}
-	catch (const std::out_of_range& err)
-	{
-		std::cout << err.what() << std::endl;
+		
+		Type A = Type::find_or_make("AType");
+		max_id = A.id;
+		CHECK(Type::from_id(max_id) == A);
+
+		Type B = Type::find_or_make("BType");
+		max_id = B.id;
+		CHECK(Type::from_id(max_id) == B);
+
+		SUBCASE("Name collissions return the prior type.")
+		{
+			Type AAgain = Type::find_or_make("AType");
+			CHECK(Type::from_id(AAgain.id) == A);
+		}
+
+		SUBCASE("Getting a type beyond the number of registered types throws std::out_of_range.")
+		{
+			CHECK_THROWS_AS(Type::from_id(max_id + 1), const std::out_of_range);
+		}
 	}
 
-	return 0;
+
 }
+
+TEST_CASE("main") {;}

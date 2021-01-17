@@ -1,3 +1,6 @@
 [submodule "cpp/makham"]
 	path = cpp/makham
 	url = git@github.com:Felspar/makham.git
+[submodule "cpp/doctest"]
+	path = cpp/doctest
+	url = git@github.com:onqtam/doctest.git

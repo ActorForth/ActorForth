@@ -26,6 +26,7 @@ public:
 
 	static Type& from_id( const ID& id );
 
+	bool operator==(const Type& t) const { return id == t.id; }
 
 	const std::string name;
 	const ID id;
