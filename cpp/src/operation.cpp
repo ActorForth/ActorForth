@@ -2,6 +2,8 @@
 //	operation.cpp	-	Definition for Operation in ActorForth.
 //
 
+#include <variant>
+
 #include <operation.hpp>
 #include <continuation.hpp>
 
@@ -40,14 +42,25 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 }
 
 
-Operation* _search_vocabulary(const std::string& op_name, const std::vector<Operation*>& list)
+Operation* _search_vocabulary(const std::string& op_name, const Stack<StackObject>& stack, const std::vector<Operation*>& list)
 {
+	Operation* result = 0;
 	std::vector<Operation*> results;
 
 	// Search in reverse order for all Operations with name, 'op_name'.
-	std::for_each(list.rbegin(), list.rend(), [op_name, results](Operation* op) {if(op->name == op_name) results.push_back(op);} );
+	std::for_each(list.rbegin(), list.rend(), [&op_name, &result, &stack](Operation* op) 
+	{
+		if(op->name != op_name) return;
 
-	return (Operation*) 0;	
+		// Do we have a signature match with the stack?
+		if(not op->sig.matches(stack)) return;
+
+		// Is this the longest match we've found?
+		if(result and op->sig.in_seq.depth() > result->sig.in_seq.depth()) result = op;
+	} );
+
+
+	return result;	
 }
 
 // find -	Returns an Operation given a name based on the context of a stack and

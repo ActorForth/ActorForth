@@ -25,6 +25,8 @@ struct Signature
 {
 	Stack<StackSig> in_seq;
 	Stack<StackSig> out_seq;
+
+	bool matches(const Stack<StackObject>&) const { return false; }
 };
 
 class Operation
@@ -58,7 +60,7 @@ protected:
 		Operation& operator=(const Operation&) = delete;
 
 private:
-	
+
 	Type::Handler handler;
 
 	// For user defined Operations only. Default handler ignores.

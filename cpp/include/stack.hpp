@@ -23,6 +23,8 @@ public:
 	T& tos(void) { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 	const T& tos(void) const { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 
+	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
+
 private:
 
 	struct Empty;
