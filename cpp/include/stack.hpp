@@ -20,7 +20,7 @@ public:
 	Stack(void) : _stack(Empty()) {;} 
 	Stack(const Stack&) = default;
 
-	//T& tos(void) { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
+	T& tos(void) { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 	const T& tos(void) const { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 
 private:
@@ -31,7 +31,7 @@ private:
 
 	struct Empty
 	{
-		//T& tos(void) { throw Underflow(); }	
+		T& tos(void) { throw Underflow(); }	
 		const T& tos(void) const { throw Underflow(); }	
 		MaybeEmpty pop(void) { throw Underflow(); }
 		MaybeEmpty push( const T& value ) { return NonEmpty(value); }
