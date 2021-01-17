@@ -26,9 +26,8 @@ struct Signature
 	Stack<StackSig> in_seq;
 	Stack<StackSig> out_seq;
 
-	// TODO : Implement these for real!!
-	bool matches(const Stack<StackObject>&) const { return false; }
-	bool matches(const Stack<StackSig>&) const { return false; }
+	bool matches(const Stack<StackObject>& sobject) const;
+	bool matches(const Stack<StackSig>& sig) const;
 };
 
 class Operation

@@ -13,6 +13,23 @@ std::map<Type::ID,std::vector<Operation*>> Operation::TypeOps;
 // Holds all of the Constructors for various Types.
 std::map<Type::ID,std::vector<const Operation*>> Operation::TypeCtors;
 
+// TODO : Implement these for real!!
+bool Signature::matches(const Stack<StackObject>& sobject) const 
+{ 
+	// If the Signature is longer than the size of the Stack then we're not a match.
+	if(in_seq.depth() > sobject.depth()) return false;
+
+	return false; 
+}
+
+bool Signature::matches(const Stack<StackSig>& sig) const 
+{ 
+	// Input Signature's must be of identical length.
+	if(in_seq.depth() != sig.depth()) return false;
+
+	return false; 
+}
+
 // add -	Adds a new Operation to the appropriate vocabularies based on the
 //			stack signature. Also automatically detects and registers constuctors
 //			operations that have the same name as the Type except lower case and
