@@ -16,6 +16,12 @@ Type::Handler Type::default_handler = [](Continuation& c) { c.op(c); };
 std::vector<Type> Type::Types(1, Type("Any"));
 std::map<const std::string, const Type::ID> Type::TypeIDs = { {"Any",0} };
 
+/*
+Type& Type::find( const std::string& n )
+{
+
+}
+*/
 
 Type& Type::find_or_make( const std::string& n, const Handler& h )
 {

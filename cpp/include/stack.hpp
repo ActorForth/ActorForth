@@ -12,11 +12,15 @@ template <class T> class Stack
 {
 public:
 
-	struct Underflow : public std::out_of_range {;};
+	struct Underflow : public std::out_of_range 
+	{
+		Underflow() : std::out_of_range("<exception: Stack Underflow> Empty stack!") {;}
+	};
 
 	Stack(void) : _stack(Empty()) {;} 
 	Stack(const Stack&) = default;
 
+	T tos(void) const { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 private:
 
 	struct Empty;
@@ -25,7 +29,7 @@ private:
 
 	struct Empty
 	{
-		T& tos(void) const { throw Underflow(); }	
+		T tos(void) const { throw Underflow(); }	
 		MaybeEmpty pop(void) { throw Underflow(); }
 		MaybeEmpty push( const T& value ) { return NonEmpty(value); }
 		MaybeEmpty push( const T&& value ) { return NonEmpty(value); }
@@ -35,7 +39,7 @@ private:
 	{
 		NonEmpty( const T& value ) : _data(1,value) {;}
 		NonEmpty( const T&& value ) { _data.emplace_back(value); }
-		T& tos(void) const { return _data.back(); }	
+		T tos(void) const { return _data.back(); }	
 		MaybeEmpty pop(void) const
 		{ 
 			_data.pop_back(); 

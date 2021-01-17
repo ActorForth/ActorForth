@@ -8,6 +8,7 @@
 
 #include <parser.hpp>
 #include <operation.hpp>
+#include <stack.hpp>
 
 class Continuation
 {
