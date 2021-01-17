@@ -26,7 +26,9 @@ struct Signature
 	Stack<StackSig> in_seq;
 	Stack<StackSig> out_seq;
 
+	// TODO : Implement these for real!!
 	bool matches(const Stack<StackObject>&) const { return false; }
+	bool matches(const Stack<StackSig>&) const { return false; }
 };
 
 class Operation
@@ -45,7 +47,7 @@ public:
 	// find -	Returns an Operation given a name based on the context of a stack and
 	//			the Operation's type signature if such exists. Operations with the
 	//			longest type signature have priority.
-	static Operation* find(const std::string& op_name, const Stack<StackObject>& stack);
+	template<class T> static Operation* find(const std::string& op_name, const Stack<T>& stack);
 
 	const std::string name;
 	const Parser::Token token;

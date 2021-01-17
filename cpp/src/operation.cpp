@@ -17,13 +17,9 @@ std::map<Type::ID,std::vector<const Operation*>> Operation::TypeCtors;
 //			stack signature. Also automatically detects and registers constuctors
 //			operations that have the same name as the Type except lower case and
 //			their only return value is an instance of that Type.
+//			Returns 0 if a conflicting Operation already exists.
 Operation* Operation::add(const std::string& name, const Parser::Token& token, const Signature& sig, const Type::Handler& h, const bool force_global )
 {
-	// TODO : check to see the operation doesn't already exist first.
-
-	// Once created an Operation is never deleted.
-	Operation* new_op = new Operation(name, token, sig, h);
-
 	// Which Type vocabulary does it belong?
 	Type::ID type = 0; // Default to Global 'Any' vocabulary.
 	try
@@ -34,6 +30,12 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 	}
 	catch( const Stack<StackSig>::Underflow& x ) {;} // Empty stack means Global 'Any' vocabulary.
 
+	// Check to see the operation doesn't already exist first.
+	if(Operation::find(name, sig.in_seq)) return 0;
+
+	// Once created an Operation is never deleted.
+	Operation* new_op = new Operation(name, token, sig, h);
+
 	// Insert Operation into type vocabulary.
 	TypeOps[type].push_back(new_op);
 
@@ -41,8 +43,7 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 	return new_op;
 }
 
-
-Operation* _search_vocabulary(const std::string& op_name, const Stack<StackObject>& stack, const std::vector<Operation*>& list)
+template<class T> Operation* _search_vocabulary(const std::string& op_name, const Stack<T>& stack, const std::vector<Operation*>& list)
 {
 	Operation* result = 0;
 	std::vector<Operation*> results;
@@ -59,17 +60,14 @@ Operation* _search_vocabulary(const std::string& op_name, const Stack<StackObjec
 		if(result and op->sig.in_seq.depth() > result->sig.in_seq.depth()) result = op;
 	} );
 
-
 	return result;	
 }
 
 // find -	Returns an Operation given a name based on the context of a stack and
 //			the Operation's type signature if such exists. Operations with the
 //			longest type signature have priority.
-Operation* Operation::find(const std::string& op_name, const Stack<StackObject>& stack)
+template<class T> Operation* Operation::find(const std::string& op_name, const Stack<T>& stack)
 {
-	Operation* op = 0;
-
 	// Default to global 'Any' Type vocabulary.
 	Type::ID type = 0;
 	try
@@ -79,9 +77,21 @@ Operation* Operation::find(const std::string& op_name, const Stack<StackObject>&
 	}
 	catch( const Stack<StackObject>::Underflow& x ) {;} // Empty stack means Global 'Any' vocabulary.
 
+	Operation* op = _search_vocabulary(op_name, stack, TypeOps[type]);
 
+	// Was this result from the global vocabulary? If so we're done.
+	if(type == 0) return op;
 
+	// Check and see if we have a better alternative in the global 'Any' vocabulary.
+	Operation* global_op = _search_vocabulary(op_name, stack, TypeOps[0]);
 
+	// If there is only a global result then return it.
+	if(not op and global_op) return global_op;
+
+	// If there is both a specialized op and global op return the one with longest 
+	// type signature, prioritizing the specialized one if equal.
+	if(op and global_op) return (op->sig.in_seq.depth() < global_op->sig.in_seq.depth()) ? global_op : op;
+
+	// Seems we didn't find anything.
 	return op;
 }
-
