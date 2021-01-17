@@ -42,8 +42,9 @@ private:
 	{
 		NonEmpty( const T& value ) : _data(1,value) {;}
 		// NonEmpty( const T&& value ) { _data.emplace_back(value); }
-		const T& tos(void) const { return _data.back(); }
 		T& tos(void) { return _data.back(); }	
+		const T& tos(void) const { return _data.back(); }
+		
 		MaybeEmpty pop(void) const
 		{ 
 			_data.pop_back(); 
