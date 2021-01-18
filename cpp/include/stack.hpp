@@ -72,9 +72,10 @@ private:
 
 
 using StackSig = std::pair< Type,std::optional<std::any> >;
+std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 
-StackSig make_sig(const Type& type);
-template <class T> StackSig make_sig(const Type& type, T& val ) 
+StackSig make_stacksig(const Type& type);
+template <class T> StackSig make_stacksig(const Type& type, T& val ) 
 {
 	return std::make_pair(type, std::make_optional< std::any >( std::make_any<T>(val) ));
 }

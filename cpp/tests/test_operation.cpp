@@ -28,8 +28,8 @@ TEST_CASE("Signature Checks")
 		Type B = Type::find_or_make("BType");
 
 		//auto a = std::make_pair(A, std::make_optional<std::any>());
-		auto a = make_sig(A);
-		//std::cout << a << std::endl;
+		auto a = make_stacksig(A);
+		std::cout << a << std::endl;
 
 		sig.in_seq.push( a );
 		//sig.in_seq.push_back(B);
