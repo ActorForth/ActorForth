@@ -29,10 +29,13 @@ public:
 	Stack(void) : _stack(Empty()) {;}
 	Stack(const Stack&) = default;
 
-	T& tos(void) { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
-	const T& tos(void) const { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
+	T tos(void) { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
+	const T tos(void) const { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 
-	Stack<T>::MaybeEmpty push( const T& value ) { return std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }
+	Stack<T>::MaybeEmpty pop( const T& value ) { _stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); }
+
+	Stack<T>::MaybeEmpty push( const T& value ) { _stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }	
+	//Stack<T>::MaybeEmpty push( const T& value ) { _stack = std::visit([&value](auto& sarg) -> Stack<T>::MaybeEmpty { return sarg.push(value); }, _stack); }	
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
@@ -40,19 +43,19 @@ public:
 
 	struct Empty
 	{
-		T& tos(void) { throw Underflow(); }	
-		const T& tos(void) const { throw Underflow(); }	
+		T tos(void) { throw Underflow(); }	
+		const T tos(void) const { throw Underflow(); }	
 		MaybeEmpty pop(void) { throw Underflow(); }
 		MaybeEmpty push( const T& value ) { return NonEmpty(value); }
-		MaybeEmpty push( const T&& value ) { return NonEmpty(value); }
+		//MaybeEmpty push( const T&& value ) { return NonEmpty(value); }
 	};
 
 	struct NonEmpty
 	{
 		NonEmpty( const T& value ) : _data(1,value) {;}
 		// NonEmpty( const T&& value ) { _data.emplace_back(value); }
-		T& tos(void) { return _data.back(); }	
-		const T& tos(void) const { return _data.back(); }
+		T tos(void) { return _data.back(); }	
+		const T tos(void) const { return _data.back(); }
 		
 		MaybeEmpty pop(void) const
 		{ 
@@ -60,8 +63,8 @@ public:
 			if(_data.empty()) return Empty();
 			return *this;
 		}
-		MaybeEmpty push( const T& value ) { _data.emplace_back(value); return *this; }
-		MaybeEmpty push( const T&& value ) { _data.emplace_back(value); return *this; }
+		MaybeEmpty push( const T& value ) { _data.push_back(value); return *this; }
+		//MaybeEmpty push( const T&& value ) { _data.emplace_back(value); return *this; }
 		std::vector<T> _data;
 	};
 
