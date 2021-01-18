@@ -3,6 +3,7 @@
 //
 
 #include <iostream>
+#include <variant>
 
 #include "type.hpp"
 #include "stack.hpp"
@@ -17,6 +18,10 @@ StackSig make_sig(const Type& type)
 std::ostream& operator<<(std::ostream& out, const Signature& sig)
 {
 	out << "Sig|in=";
-	//std::for_each(sig.in_seq.begin(), sig.in_seq.end(), [&out](const StackSig& s) { out << s << ","});
+
+	auto v = std::get_if<Stack<StackSig>::NonEmpty>(sig.in_seq._stack);
+	if(not v) return out;
+
+	std::for_each(v->_data.begin(), v->_data.end(), [&out](const StackSig& s) { out << s << ","});
 	return out;
 }
