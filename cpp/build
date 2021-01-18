@@ -28,6 +28,11 @@ clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I 
 llvm-ar-10 -rc bin/libtype.a bin/type.o bin/operation.o
 
 # test_type
-rm bin/test_type
-clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_type.cpp -stdlib=libc++ bin/libtype.a -o bin/test_type
-bin/test_type -s -d
+#rm bin/test_type
+#clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_type.cpp -stdlib=libc++ bin/libtype.a -o bin/test_type
+#bin/test_type -s -d
+
+# test_type
+rm bin/test_operation
+clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_operation.cpp -stdlib=libc++ bin/libtype.a -o bin/test_operation
+bin/test_operation -s -d

@@ -10,6 +10,7 @@
 #include <optional>
 #include <utility> // std::pair
 #include <any>
+#include <iostream>
 #include <map>
 
 #include "parser.hpp"
@@ -18,17 +19,7 @@
 
 class Continuation;
 
-using StackSig = std::pair< Type,std::optional<std::any> >;
-using StackObject = std::pair< Type,std::any >;
 
-struct Signature
-{
-	Stack<StackSig> in_seq;
-	Stack<StackSig> out_seq;
-
-	bool matches(const Stack<StackObject>& sobject) const;
-	bool matches(const Stack<StackSig>& sig) const;
-};
 
 class Operation
 {

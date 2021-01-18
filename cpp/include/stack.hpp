@@ -7,9 +7,16 @@
 #include <stdexcept>
 #include <variant>
 #include <vector>
+#include <optional>
+#include <utility> // std::pair
+#include <any>
+
 
 template <class T> class Stack
 {
+	struct Empty;
+	struct NonEmpty;
+	using MaybeEmpty = std::variant<Empty, NonEmpty>;
 public:
 
 	struct Underflow : public std::out_of_range 
@@ -23,13 +30,11 @@ public:
 	T& tos(void) { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 	const T& tos(void) const { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 
+	Stack<T>::MaybeEmpty push( const T& value ) { return std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }
+
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
 private:
-
-	struct Empty;
-	struct NonEmpty;
-	using MaybeEmpty = std::variant<Empty, NonEmpty>;
 
 	struct Empty
 	{
@@ -61,3 +66,18 @@ private:
 
 	MaybeEmpty _stack;
 };
+
+
+using StackSig = std::pair< Type,std::optional<std::any> >;
+using StackObject = std::pair< Type,std::any >;
+
+struct Signature
+{
+	Stack<StackSig> in_seq;
+	Stack<StackSig> out_seq;
+
+	bool matches(const Stack<StackObject>& sobject) const;
+	bool matches(const Stack<StackSig>& sig) const;
+};
+
+//std::ostream& operator<<(std::ostream& out, const Signature& sig);
