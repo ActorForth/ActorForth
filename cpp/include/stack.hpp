@@ -15,17 +15,18 @@ struct Signature;
 
 template <class T> class Stack
 {
+public:
 	struct Empty;
 	struct NonEmpty;
 	using MaybeEmpty = std::variant<Empty, NonEmpty>;
 public:
 
-	struct Underflow : public std::out_of_range 
+	struct Underflow : public std::out_of_range
 	{
 		Underflow() : std::out_of_range("<exception: Stack Underflow> Empty stack!") {;}
 	};
 
-	Stack(void) : _stack(Empty()) {;} 
+	Stack(void) : _stack(Empty()) {;}
 	Stack(const Stack&) = default;
 
 	T& tos(void) { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
@@ -35,7 +36,7 @@ public:
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
-private:
+//private:
 
 	struct Empty
 	{
