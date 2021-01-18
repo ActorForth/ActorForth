@@ -5,9 +5,9 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
-#include <utility>	// make_pair
-#include <any>
-#include <optional>
+//#include <utility>	// make_pair
+//#include <any>
+//#include <optional>
 
 #include "operation.hpp"
 
@@ -27,7 +27,8 @@ TEST_CASE("Signature Checks")
 		Type A = Type::find_or_make("AType");
 		Type B = Type::find_or_make("BType");
 
-		auto a = std::make_pair(A, std::make_optional<std::any>());
+		//auto a = std::make_pair(A, std::make_optional<std::any>());
+		auto a = make_sig(A);
 		//std::cout << a << std::endl;
 
 		sig.in_seq.push( a );

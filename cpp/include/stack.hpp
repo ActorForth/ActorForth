@@ -11,6 +11,7 @@
 #include <utility> // std::pair
 #include <any>
 
+struct Signature;
 
 template <class T> class Stack
 {
@@ -65,10 +66,18 @@ private:
 
 
 	MaybeEmpty _stack;
+
+	friend std::ostream& operator<<(std::ostream& out, const Signature& sig);
 };
 
 
 using StackSig = std::pair< Type,std::optional<std::any> >;
+
+StackSig make_sig(const Type& type);
+template <class T> StackSig make_sig(const Type& type, T& val ) 
+{
+	return std::make_pair(type, std::make_optional< std::any >( std::make_any<T>(val) ));
+}
 using StackObject = std::pair< Type,std::any >;
 
 struct Signature
@@ -80,4 +89,4 @@ struct Signature
 	bool matches(const Stack<StackSig>& sig) const;
 };
 
-//std::ostream& operator<<(std::ostream& out, const Signature& sig);
+

@@ -32,14 +32,7 @@ bool Signature::matches(const Stack<StackSig>& sig) const
 	return false; 
 }
 
-/*
-std::ostream& operator<<(std::ostream& out, const Signature& sig)
-{
-	out << "Sig|in=";
-	std::for_each(sig.in_seq.begin(), sig.in_seq.end(), [&out](const StackSig& s) { out << s << ","});
-	return out;
-}
-*/
+
 
 // add -	Adds a new Operation to the appropriate vocabularies based on the
 //			stack signature. Also automatically detects and registers constuctors
