@@ -58,7 +58,7 @@ public:
 		T tos(void) { return _data.back(); }	
 		const T tos(void) const { return _data.back(); }
 		
-		MaybeEmpty pop(void) const
+		MaybeEmpty pop(void) 
 		{ 
 			_data.pop_back(); 
 			if(_data.empty()) return Empty();

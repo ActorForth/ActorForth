@@ -12,7 +12,20 @@
 TEST_CASE("Stack")
 {
 	Stack<char> stack;
-	CHECK(stack.depth() == 0);
+	SUBCASE("Empty stack has no depth.")
+	{
+		CHECK(stack.depth() == 0);
+	}
+
+	SUBCASE("Empty stack has no tos.")
+	{
+		CHECK_THROWS_AS(stack.tos(), const Stack<char>::Underflow);
+	}
+
+	SUBCASE("Empty stack can't pop.")
+	{
+		CHECK_THROWS_AS(stack.pop(), const Stack<char>::Underflow);
+	}
 }
 
 TEST_CASE("Signature Checks")
