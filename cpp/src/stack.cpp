@@ -6,7 +6,6 @@
 #include <variant>
 #include <utility>
 
-#include "type.hpp"
 #include "stack.hpp"
 
 

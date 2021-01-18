@@ -11,6 +11,8 @@
 #include <utility> // std::pair
 #include <any>
 
+#include "type.hpp"
+
 struct Signature;
 
 template <class T> class Stack
@@ -73,7 +75,6 @@ public:
 	friend std::ostream& operator<<(std::ostream& out, const Signature& sig);
 };
 
-class Type;
 using StackSig = std::pair< Type,std::optional<std::any> >;
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 
