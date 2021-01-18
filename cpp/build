@@ -1,21 +1,24 @@
 #clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham src/parser.cpp -stdlib=libc++ -o bin/parser
 
-## libparser.a
-# rm bin/parser.o
-# rm bin/libparser.a
-#clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham src/parser.cpp -stdlib=libc++ -o bin/parser.o
-#llvm-ar-10 -rc bin/libparser.a bin/parser.o 
 
-## test_parser
-#rm bin/test_parser
-#clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham tests/test_parser.cpp -stdlib=libc++ bin/libparser.a -o bin/test_parser
-#bin/test_parser
+# -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic
+
+# libparser.a
+rm bin/parser.o
+rm bin/libparser.a
+clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham src/parser.cpp -stdlib=libc++ -o bin/parser.o
+llvm-ar-10 -rc bin/libparser.a bin/parser.o 
+
+# test_parser
+rm bin/test_parser
+clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham tests/test_parser.cpp -stdlib=libc++ bin/libparser.a -o bin/test_parser
+perf stat bin/test_parser
 
 
-## test_stack
-#rm bin/test_stack
-#clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham tests/test_stack.cpp -stdlib=libc++ -o bin/test_stack
-#bin/test_stack
+# test_stack
+rm bin/test_stack
+clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham tests/test_stack.cpp -stdlib=libc++ -o bin/test_stack
+perf stat bin/test_stack
 
 
 # libtype.a
@@ -24,17 +27,17 @@ rm bin/operation.o
 rm bin/stack.o
 #rm bin/continuation.o
 rm bin/libtype.a
-clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
-clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham -I doctest src/operation.cpp -stdlib=libc++ -o bin/operation.o
-clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham -I doctest src/stack.cpp -stdlib=libc++ -o bin/stack.o
+clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
+clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/operation.cpp -stdlib=libc++ -o bin/operation.o
+clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/stack.cpp -stdlib=libc++ -o bin/stack.o
 llvm-ar-10 -rc bin/libtype.a bin/stack.o bin/type.o bin/operation.o
 
 # test_type
-#rm bin/test_type
-#clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_type.cpp -stdlib=libc++ bin/libtype.a -o bin/test_type
-#bin/test_type -s -d
+rm bin/test_type
+clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_type.cpp -stdlib=libc++ bin/libtype.a -o bin/test_type
+perf stat bin/test_type -s -d
 
 # test_type
 rm bin/test_operation
-clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_operation.cpp -stdlib=libc++ bin/libtype.a -o bin/test_operation
-bin/test_operation -s -d
+clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_operation.cpp -stdlib=libc++ bin/libtype.a -o bin/test_operation
+perf stat bin/test_operation -s -d

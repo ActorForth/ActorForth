@@ -12,7 +12,7 @@
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig) 
 { 
-	out << "StackSig:" << sig.first; 
+	out << "<StackSig>{" << sig.first << "}"; 
 	return out; 
 }
 
@@ -25,15 +25,16 @@ StackSig make_stacksig(const Type& type)
 
 std::ostream& operator<<(std::ostream& out, const Signature& sig)
 {
-	out << "Sig|in=";
+	out << "<Signature>{in=";
 
 	auto v = std::get_if<Stack<StackSig>::NonEmpty>(&(sig.in_seq._stack));
 	if(not v)
 	{
-		out << "<empty>|";
+		out << "<empty>}";
 		return out;
 	}
 
 	std::for_each(v->_data.begin(), v->_data.end(), [&out](const StackSig& s) { out << s << ","; } );
+	out << "}";	
 	return out;
 }

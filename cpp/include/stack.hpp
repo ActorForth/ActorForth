@@ -32,10 +32,9 @@ public:
 	T tos(void) { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 	const T tos(void) const { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 
-	Stack<T>::MaybeEmpty pop( const T& value ) { _stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); }
+	void pop(void) { _stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); }
 
-	void push( const T& value ) { _stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }	
-	//Stack<T>::MaybeEmpty push( const T& value ) { _stack = std::visit([&value](auto& sarg) -> Stack<T>::MaybeEmpty { return sarg.push(value); }, _stack); }	
+	void push( const T& value ) { _stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }		
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
@@ -74,7 +73,7 @@ public:
 	friend std::ostream& operator<<(std::ostream& out, const Signature& sig);
 };
 
-
+class Type;
 using StackSig = std::pair< Type,std::optional<std::any> >;
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 
