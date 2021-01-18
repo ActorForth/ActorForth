@@ -5,15 +5,10 @@
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include <doctest/doctest.h>
 
-#include <iostream>
-
 #include "type.hpp"
-
-
 
 TEST_CASE("Registering and querying types.")
 {
-
 	SUBCASE("Type ID 0 is for the generic 'Any' Type.")
 	{
 		CHECK(Type::from_id(0).name == "Any");
@@ -22,8 +17,7 @@ TEST_CASE("Registering and querying types.")
 	Type::ID max_id = 0;
 
 	SUBCASE("Registering New Types")
-	{
-		
+	{	
 		Type A = Type::find_or_make("AType");
 		max_id = A.id;
 		CHECK(Type::from_id(max_id) == A);
@@ -43,8 +37,6 @@ TEST_CASE("Registering and querying types.")
 			CHECK_THROWS_AS(Type::from_id(max_id + 1), const std::out_of_range);
 		}
 	}
-
-
 }
 
 TEST_CASE("main") {;}

@@ -59,3 +59,5 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 	out << "'" << type.name << "'|ID:" << type.id << "|";
 	return out;
 }
+
+TEST_CASE("Test embedded in type.cpp.") {;}
