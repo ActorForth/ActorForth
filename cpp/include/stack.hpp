@@ -43,12 +43,12 @@ public:
 	//const T& tos(void) const { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
 	const T& tos(void) const 
 	{ 
-		/*
+		
 		auto n = std::get_if<NonEmpty>(&_stack);
 		if(n) return n->tos();
 		return std::get<Empty>(_stack).tos();
-		*/
-		return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); 
+		
+		//return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); 
 	}	
 
 	void pop(void) { _stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); }
