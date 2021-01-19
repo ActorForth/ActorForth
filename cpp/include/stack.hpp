@@ -17,7 +17,7 @@ struct Signature;
 
 template <class T> class Stack
 {
-public:
+//public:
 	struct Empty;
 	struct NonEmpty;
 	using MaybeEmpty = std::variant<Empty, NonEmpty>;
@@ -31,25 +31,8 @@ public:
 	Stack(void) : _stack(Empty()) {;}
 	Stack(const Stack&) = default;
 
-	//T& tos(void) { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
-	T& tos(void)
-	{ 
-		auto n = std::get_if<NonEmpty>(&_stack);
-		if(n) return n->tos();
-		return std::get<Empty>(_stack).tos();
-		//return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack);
-	}	
-
-	//const T& tos(void) const { return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); }
-	const T& tos(void) const 
-	{ 
-		/*
-		auto n = std::get_if<NonEmpty>(&_stack);
-		if(n) return n->tos();
-		return std::get<Empty>(_stack).tos();
-		*/
-		return std::visit([&](auto& sarg) { return sarg.tos(); }, _stack); 
-	}	
+	T& tos(void) { return std::visit([&](auto& sarg) -> T& { return sarg.tos(); }, _stack); }
+	const T& tos(void) const { return std::visit([&](const auto & sarg) -> const T& { return sarg.tos(); }, _stack); }	
 
 	void pop(void) { _stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); }
 
@@ -57,7 +40,7 @@ public:
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
-//private:
+private:
 
 	struct Empty
 	{
@@ -65,13 +48,13 @@ public:
 		const T& tos(void) const { throw Underflow(); }	
 		MaybeEmpty pop(void) { throw Underflow(); }
 		MaybeEmpty push( const T& value ) { return NonEmpty(value); }
-		//MaybeEmpty push( const T&& value ) { return NonEmpty(value); }
+		MaybeEmpty push( const T&& value ) { return NonEmpty(value); }
 	};
 
 	struct NonEmpty
 	{
 		NonEmpty( const T& value ) : _data(1,value) {;}
-		// NonEmpty( const T&& value ) { _data.emplace_back(value); }
+		NonEmpty( const T&& value ) { _data.emplace_back(value); }
 		T& tos(void) { return _data.back(); }	
 		const T& tos(void) const { return _data.back(); }
 		
@@ -82,7 +65,7 @@ public:
 			return *this;
 		}
 		MaybeEmpty push( const T& value ) { _data.push_back(value); return *this; }
-		//MaybeEmpty push( const T&& value ) { _data.emplace_back(value); return *this; }
+		MaybeEmpty push( const T&& value ) { _data.emplace_back(value); return *this; }
 		std::vector<T> _data;
 	};
 

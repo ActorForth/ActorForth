@@ -50,17 +50,6 @@ TEST_CASE("Signature Checks")
 		sig.in_seq.push( a );
 		//sig.in_seq.push_back(B);
 
-		auto ss = std::get_if<Stack<StackSig>::NonEmpty>(&(sig.in_seq._stack));
-
-		if(ss)
-		{
-			std::cout << "Signature size: " << ss->_data.size() << std::endl;
-		}
-		else
-		{
-			std::cout << "Signature empty." << std::endl;
-		}
-
 		CHECK(sig.in_seq.depth() == 1);
 	}
 }
