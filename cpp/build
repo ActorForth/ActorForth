@@ -15,20 +15,20 @@
 #perf stat bin/test_parser
 
 
-# libtype.a
-rm bin/type.o
-rm bin/operation.o
-rm bin/stack.o
-rm bin/libtype.a
-clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
-clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/operation.cpp -stdlib=libc++ -o bin/operation.o
-clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/stack.cpp -stdlib=libc++ -o bin/stack.o
-llvm-ar-10 -rc bin/libtype.a bin/stack.o bin/type.o bin/operation.o
+## libtype.a
+#rm bin/type.o
+#rm bin/operation.o
+#rm bin/stack.o
+#rm bin/libtype.a
+#clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
+#clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/operation.cpp -stdlib=libc++ -o bin/operation.o
+#clang++-10 -v -c -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/stack.cpp -stdlib=libc++ -o bin/stack.o
+#llvm-ar-10 -rc bin/libtype.a bin/stack.o bin/type.o bin/operation.o
 
-# test_stack
-rm bin/test_stack
-clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_stack.cpp -stdlib=libc++ bin/libtype.a -o bin/test_stack
-perf stat bin/test_stack -s -d
+## test_stack
+#rm bin/test_stack
+#clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_stack.cpp -stdlib=libc++ bin/libtype.a -o bin/test_stack
+#perf stat bin/test_stack -s -d
 
 ## test_type
 #rm bin/test_type
@@ -39,3 +39,24 @@ perf stat bin/test_stack -s -d
 #rm bin/test_operation
 #clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_operation.cpp -stdlib=libc++ bin/libtype.a -o bin/test_operation
 #perf stat bin/test_operation -s -d
+
+
+# libtype.a
+rm bin/type.o
+rm bin/operation.o
+rm bin/stack.o
+rm bin/libtype.a
+clang++-10 -v -c -fprofile-instr-generate -fcoverage-mapping -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
+clang++-10 -v -c -fprofile-instr-generate -fcoverage-mapping -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/operation.cpp -stdlib=libc++ -o bin/operation.o
+clang++-10 -v -c -fprofile-instr-generate -fcoverage-mapping -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/stack.cpp -stdlib=libc++ -o bin/stack.o
+llvm-ar-10 -rc bin/libtype.a bin/stack.o bin/type.o bin/operation.o
+
+# test_stack
+rm bin/test_stack
+rm bin/test_stack.profraw
+clang++-10 -v -fprofile-instr-generate -fcoverage-mapping -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_stack.cpp -stdlib=libc++ bin/libtype.a -o bin/test_stack
+LLVM_PROFILE_FILE="bin/test_stack.profraw" bin/test_stack
+
+llvm-profdata-10 merge -sparse bin/test_stack.profraw -o bin/test_stack.llvm-profdata
+llvm-cov-10 show -ignore-filename-regex=makham* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation* bin/test_stack -instr-profile=bin/test_stack.llvm-profdata
+llvm-cov-10 report -ignore-filename-regex=makham* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation* bin/test_stack -instr-profile=bin/test_stack.llvm-profdata

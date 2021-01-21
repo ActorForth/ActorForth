@@ -36,7 +36,7 @@ public:
 
 	void pop(void) { _stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); }
 
-	void push( const T& value ) { _stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }		
+	void push( const T& value ) { _stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
