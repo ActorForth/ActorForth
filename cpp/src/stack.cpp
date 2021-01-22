@@ -31,11 +31,24 @@ std::ostream& operator<<(std::ostream& out, const Signature& sig)
 	auto v = std::get_if<Stack<StackSig>::NonEmpty>(&(sig.in_seq._stack));
 	if(not v)
 	{
-		out << "<empty>}";
-		return out;
+		out << "<empty>} out=";
+	}
+	else
+	{
+		std::for_each(v->_data.begin(), v->_data.end(), [&out](const StackSig& s) { out << s << ","; } );
+		out << "} out=";	
 	}
 
-	std::for_each(v->_data.begin(), v->_data.end(), [&out](const StackSig& s) { out << s << ","; } );
-	out << "}";	
+	v = std::get_if<Stack<StackSig>::NonEmpty>(&(sig.out_seq._stack));
+	if(not v)
+	{
+		out << "<empty>}";
+	}
+	else
+	{
+		std::for_each(v->_data.begin(), v->_data.end(), [&out](const StackSig& s) { out << s << ","; } );
+		out << "}";	
+	}
+
 	return out;
 }

@@ -75,16 +75,21 @@ TEST_CASE("Signature Checks")
 
 		//auto a = std::make_pair(A, std::make_optional<std::any>());
 		auto a = make_stacksig(A);
-		std::cout << a << std::endl;
+		std::cout << "Stack Sig: " << a << std::endl;
 
 		sig.in_seq.push( a );
-		//sig.in_seq.push_back(B);
-
 		CHECK(sig.in_seq.depth() == 1);
 
-		std::cout << sig << std::endl;
+		sig.in_seq.push(make_stacksig(B));
+
+		std::cout << "Signature with In but not Out: " << sig << std::endl;
+
+		sig.out_seq.push(make_stacksig(B));
+		sig.out_seq.push(make_stacksig(A));
+
+		std::cout << "Signature with In & Out: " << sig << std::endl;
 
 		// Empty Signature output.
-		std::cout << Signature() << std::endl;
+		std::cout << "Empty Signature: " << Signature() << std::endl;
 	}
 }
