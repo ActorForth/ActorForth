@@ -26,6 +26,36 @@ TEST_CASE("Stack")
 	{
 		CHECK_THROWS_AS(stack.pop(), const Stack<char>::Underflow);
 	}
+
+	SUBCASE("Putting things on the stack.")
+	{
+		stack.push('a');
+		CHECK(stack.tos() == 'a');
+		stack.push('b');
+		CHECK(stack.tos() == 'b');
+		CHECK(stack.depth() == 2);
+
+		SUBCASE("Taking things off the stack.")
+		{
+			stack.pop();
+			CHECK(stack.tos() == 'a');
+			CHECK(stack.depth() == 1);
+			stack.pop();
+			CHECK(stack.depth() == 0);
+			CHECK_THROWS_AS(stack.tos(), const Stack<char>::Underflow);
+			CHECK_THROWS_AS(stack.pop(), const Stack<char>::Underflow);
+		}
+
+		SUBCASE("Altering content on the stack.")
+		{
+			stack.tos() = 'c';
+			CHECK(stack.tos() == 'c');
+			stack.pop();
+			CHECK(stack.tos() == 'a');
+			stack.pop();
+			CHECK_THROWS_AS(stack.tos() = 'd';, const Stack<char>::Underflow);
+		}
+	}
 }
 
 TEST_CASE("Signature Checks")

@@ -2,6 +2,8 @@
 //	stack.cpp	- Stack implementation for ActorForth.
 //
 
+#include <doctest/doctest.h>
+
 #include <iostream>
 #include <variant>
 #include <utility>
