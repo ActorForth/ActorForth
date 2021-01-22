@@ -94,4 +94,4 @@ struct Signature
 	bool matches(const Stack<StackSig>& sig) const;
 };
 
-
+std::ostream& operator<<(std::ostream& out, const Signature& sig);

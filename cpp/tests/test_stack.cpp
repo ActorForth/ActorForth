@@ -68,7 +68,7 @@ TEST_CASE("Signature Checks")
 		CHECK(sig.out_seq.depth() == 0);
 	}
 
-	SUBCASE("Adding Stack Signatures")
+	SUBCASE("Adding Stack Sigs")
 	{
 		Type A = Type::find_or_make("AType");
 		Type B = Type::find_or_make("BType");
@@ -81,5 +81,10 @@ TEST_CASE("Signature Checks")
 		//sig.in_seq.push_back(B);
 
 		CHECK(sig.in_seq.depth() == 1);
+
+		std::cout << sig << std::endl;
+
+		// Empty Signature output.
+		std::cout << Signature() << std::endl;
 	}
 }
