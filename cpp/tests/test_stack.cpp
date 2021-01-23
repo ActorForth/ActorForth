@@ -90,6 +90,49 @@ TEST_CASE("Signature Checks")
 		std::cout << "Signature with In & Out: " << sig << std::endl;
 
 		// Empty Signature output.
-		std::cout << "Empty Signature: " << Signature() << std::endl;
+		auto empty_sig = Signature();
+		std::cout << "Empty Signature: " << empty_sig << std::endl;
+
+		SUBCASE("Matching Signatures")
+		{
+			auto alt_longer_match_sig = Signature();
+			alt_longer_match_sig.in_seq.push(StackSig::make_stacksig(A));
+			alt_longer_match_sig.in_seq.push(StackSig::make_stacksig(A));
+			alt_longer_match_sig.in_seq.push(StackSig::make_stacksig(B));
+
+			auto alt_mismatch_sig = Signature();
+			alt_mismatch_sig.in_seq.push(StackSig::make_stacksig(A));
+			alt_mismatch_sig.in_seq.push(StackSig::make_stacksig(A));
+			alt_mismatch_sig.in_seq.push(StackSig::make_stacksig(A));
+
+			CHECK(sig.matches(sig.in_seq) == true);
+			CHECK(sig.matches(empty_sig.in_seq) == false);
+
+			CHECK(sig.matches(alt_longer_match_sig.in_seq) == true);
+			CHECK(sig.matches(alt_mismatch_sig.in_seq) == false);
+
+			CHECK(empty_sig.matches(sig.in_seq) == true);
+
+		}
+
+		SUBCASE("Matching StackObjects")
+		{
+			Stack<StackObject> match_stack;
+
+			match_stack.push( StackObject::make_stackobj(A, 1) );
+			match_stack.push( StackObject::make_stackobj(B, 1) );		
+
+
+			Stack<StackObject> short_stack;
+			short_stack.push( StackObject::make_stackobj(A, 1) );
+
+			std::cout << "sig = " << sig << std::endl;
+			//std::cout << "match_stack = " << match_stack << std::endl;
+			CHECK(sig.matches(match_stack) == true);
+
+			CHECK(empty_sig.matches(match_stack) == true);
+
+			CHECK(sig.matches(short_stack) == false);
+		}
 	}
 }

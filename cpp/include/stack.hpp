@@ -9,7 +9,6 @@
 #include <vector>
 #include <optional>
 #include <utility> // std::pair
-#include <any>
 
 #include "type.hpp"
 
@@ -17,7 +16,6 @@ struct Signature;
 
 template <class T> class Stack
 {
-//public:
 	struct Empty;
 	struct NonEmpty;
 	using MaybeEmpty = std::variant<Empty, NonEmpty>;
@@ -39,18 +37,17 @@ public:
 	void push( const T& value ) { _stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
+
 	auto rbegin(void) const 
 	{ 
 		auto result = std::get_if<NonEmpty>(&_stack);
-		if (result) return result->_data.rbegin();
-		throw Underflow();
+		return (result) ? result->_data.rbegin() : AlwaysEmpty.rbegin();
 	}
 
 	auto rend(void) const 
 	{ 
 		auto result = std::get_if<NonEmpty>(&_stack);
-		if (result) return result->_data.rend();
-		throw Underflow();
+		return (result) ? result->_data.rend() : AlwaysEmpty.rend();
 	}
 
 private:
@@ -85,6 +82,11 @@ private:
 
 	MaybeEmpty _stack;
 
+	// This is used to guarantee that even empty Stacks don't throw
+	// exceptions when rbegin and rend are called. They'll just be
+	// const iterators to an empty vector.
+	static const std::vector<T> AlwaysEmpty;
+
 	friend std::ostream& operator<<(std::ostream& out, const Signature& sig);
 };
 
@@ -92,26 +94,40 @@ using AnyValue = std::variant< bool, int, unsigned, std::string >;
 
 struct StackObject : std::pair< Type, AnyValue >
 {
+	StackObject( std::pair< Type, AnyValue >&& x ) : std::pair< Type, AnyValue >(x) {;}
 
+	template<class T> static StackObject make_stackobj(const Type& type, const T& val )
+	{
+		return StackObject( std::make_pair(type, val ));		
+	}
 };
+
+std::ostream& operator<<(std::ostream& out, const StackObject& obj);
 
 struct StackSig : public std::pair< Type,std::optional<AnyValue> >
 {
 	// Note - Generic types will always ignore a specified value.
-	StackSig( std::pair< Type,std::optional<AnyValue> >& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
+	//StackSig( std::pair< Type,std::optional<AnyValue> >& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
 	StackSig( std::pair< Type,std::optional<AnyValue> >&& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
 
 	static StackSig make_stacksig(const Type& type);
+	template<class T> static StackSig make_stacksig(const Type& type, const T& val ) 
+	{
+		return StackSig( std::make_pair(type, std::make_optional< AnyValue >( val )) );
+	}
 
+	bool operator==(const StackSig& o) const;
 	bool operator==(const StackObject& o) const;
 };
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 
-template <class T> StackSig make_stacksig(const Type& type, T& val ) 
+/*
+template <class T> StackSig make_stacksig(const Type& type, const T& val ) 
 {
 	return std::make_pair(type, std::make_optional< AnyValue >( std::make_any<T>(val) ));
 }
+*/
 
 
 
