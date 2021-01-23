@@ -20,7 +20,7 @@ std::ostream& operator<<(std::ostream& out, const StackSig& sig)
 
 StackSig StackSig::make_stacksig(const Type& type)  
 {
-	return StackSig( std::make_pair(type, std::make_optional<std::any>()) );
+	return StackSig( std::make_pair(type, std::make_optional<AnyValue>()) );
 }
 
 
@@ -52,6 +52,22 @@ std::ostream& operator<<(std::ostream& out, const Signature& sig)
 
 	return out;
 }
+
+
+bool StackSig::operator==(const StackObject& o) const
+{
+	// Generic Types always match.
+	if(first.id == 0) return true;
+
+	// Different Types fail.
+	if(first.id != o.first.id) return false;
+
+	// If our signature specifies a value check it as well.
+	if(second.has_value() and second.value() != o.second) return false;
+
+	return true;
+}
+
 
 // Confirms whether or not the inbound stack complies with this Signature.
 // Only the last n stack entries are checked where n = in_seq.depth().

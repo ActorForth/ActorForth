@@ -75,25 +75,32 @@ private:
 	friend std::ostream& operator<<(std::ostream& out, const Signature& sig);
 };
 
-struct StackSig : public std::pair< Type,std::optional<std::any> >
+using AnyValue = std::variant< bool, int, unsigned, std::string >;
+
+struct StackObject : std::pair< Type, AnyValue >
 {
-	StackSig( std::pair< Type,std::optional<std::any> >& x ) : std::pair< Type,std::optional<std::any> >(x) {;}
-	StackSig( std::pair< Type,std::optional<std::any> >&& x ) : std::pair< Type,std::optional<std::any> >(x) {;}
+
+};
+
+struct StackSig : public std::pair< Type,std::optional<AnyValue> >
+{
+	// Note - Generic types will always ignore a specified value.
+	StackSig( std::pair< Type,std::optional<AnyValue> >& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
+	StackSig( std::pair< Type,std::optional<AnyValue> >&& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
 
 	static StackSig make_stacksig(const Type& type);
+
+	bool operator==(const StackObject& o) const;
 };
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 
 template <class T> StackSig make_stacksig(const Type& type, T& val ) 
 {
-	return std::make_pair(type, std::make_optional< std::any >( std::make_any<T>(val) ));
+	return std::make_pair(type, std::make_optional< AnyValue >( std::make_any<T>(val) ));
 }
 
-struct StackObject : std::pair< Type,std::any >
-{
-	
-};
+
 
 struct Signature
 {
