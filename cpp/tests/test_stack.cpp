@@ -74,18 +74,18 @@ TEST_CASE("Signature Checks")
 		Type B = Type::find_or_make("BType");
 
 		//auto a = std::make_pair(A, std::make_optional<std::any>());
-		auto a = make_stacksig(A);
+		auto a = StackSig::make_stacksig(A);
 		std::cout << "Stack Sig: " << a << std::endl;
 
 		sig.in_seq.push( a );
 		CHECK(sig.in_seq.depth() == 1);
 
-		sig.in_seq.push(make_stacksig(B));
+		sig.in_seq.push(StackSig::make_stacksig(B));
 
 		std::cout << "Signature with In but not Out: " << sig << std::endl;
 
-		sig.out_seq.push(make_stacksig(B));
-		sig.out_seq.push(make_stacksig(A));
+		sig.out_seq.push(StackSig::make_stacksig(B));
+		sig.out_seq.push(StackSig::make_stacksig(A));
 
 		std::cout << "Signature with In & Out: " << sig << std::endl;
 

@@ -18,9 +18,9 @@ std::ostream& operator<<(std::ostream& out, const StackSig& sig)
 }
 
 
-StackSig make_stacksig(const Type& type)  
+StackSig StackSig::make_stacksig(const Type& type)  
 {
-	return std::make_pair(type, std::make_optional<std::any>());
+	return StackSig( std::make_pair(type, std::make_optional<std::any>()) );
 }
 
 
@@ -51,4 +51,28 @@ std::ostream& operator<<(std::ostream& out, const Signature& sig)
 	}
 
 	return out;
+}
+
+// Confirms whether or not the inbound stack complies with this Signature.
+// Only the last n stack entries are checked where n = in_seq.depth().
+bool Signature::matches(const Stack<StackObject>& sobjects) const
+{
+	// Is sobject long enough?
+	if(sobjects.depth() < in_seq.depth()) return false;
+	/*
+	auto o = sobjects.rbegin();
+	for(auto s in_seq.rbegin(); s !=in_seq.rend();++)
+	{
+
+	}
+	*/
+
+	return true;
+}
+	
+
+bool Signature::matches(const Stack<StackSig>& sig) const
+{
+	if(sig.depth() < in_seq.depth()) return false;
+	return true;
 }

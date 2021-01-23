@@ -75,22 +75,32 @@ private:
 	friend std::ostream& operator<<(std::ostream& out, const Signature& sig);
 };
 
-using StackSig = std::pair< Type,std::optional<std::any> >;
+struct StackSig : public std::pair< Type,std::optional<std::any> >
+{
+	StackSig( std::pair< Type,std::optional<std::any> >& x ) : std::pair< Type,std::optional<std::any> >(x) {;}
+	StackSig( std::pair< Type,std::optional<std::any> >&& x ) : std::pair< Type,std::optional<std::any> >(x) {;}
+
+	static StackSig make_stacksig(const Type& type);
+};
+
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 
-StackSig make_stacksig(const Type& type);
 template <class T> StackSig make_stacksig(const Type& type, T& val ) 
 {
 	return std::make_pair(type, std::make_optional< std::any >( std::make_any<T>(val) ));
 }
-using StackObject = std::pair< Type,std::any >;
+
+struct StackObject : std::pair< Type,std::any >
+{
+	
+};
 
 struct Signature
 {
 	Stack<StackSig> in_seq;
 	Stack<StackSig> out_seq;
 
-	bool matches(const Stack<StackObject>& sobject) const;
+	bool matches(const Stack<StackObject>& sobjects) const;
 	bool matches(const Stack<StackSig>& sig) const;
 };
 
