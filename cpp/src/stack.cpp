@@ -73,15 +73,18 @@ bool StackSig::operator==(const StackObject& o) const
 // Only the last n stack entries are checked where n = in_seq.depth().
 bool Signature::matches(const Stack<StackObject>& sobjects) const
 {
+	// If our signature is empty then it's a match!
+	if(sobjects.depth() == 0) return true;
+	
 	// Is sobject long enough?
 	if(sobjects.depth() < in_seq.depth()) return false;
-	/*
+	
 	auto o = sobjects.rbegin();
-	for(auto s in_seq.rbegin(); s !=in_seq.rend();++)
+	for(auto s = in_seq.rbegin(); s != in_seq.rend();++s)
 	{
-
+		++o;
 	}
-	*/
+	
 
 	return true;
 }

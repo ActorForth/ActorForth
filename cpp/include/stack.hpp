@@ -39,6 +39,19 @@ public:
 	void push( const T& value ) { _stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
+	auto rbegin(void) const 
+	{ 
+		auto result = std::get_if<NonEmpty>(&_stack);
+		if (result) return result->_data.rbegin();
+		throw Underflow();
+	}
+
+	auto rend(void) const 
+	{ 
+		auto result = std::get_if<NonEmpty>(&_stack);
+		if (result) return result->_data.rend();
+		throw Underflow();
+	}
 
 private:
 
