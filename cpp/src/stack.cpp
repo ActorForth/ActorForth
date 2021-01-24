@@ -49,33 +49,6 @@ std::ostream& operator<<(std::ostream& out, const StackSig& sig)
 	return out; 
 }
 
-/*
-void instantiate(void)
-{
-	Stack<StackSig> _inst_stacksig;
-	Stack<StackObject> _inst_stackobj;
-	std::cout << "here is my empty stackobj: " << _inst_stackobj;
-}
-*/
-
-template<class T> std::ostream& operator<<(std::ostream& out, const Stack<T>& stack)
-//std::ostream& operator<<(std::ostream& out, const Stack<StackObject>& stack)
-{
-	out << "Stack: [";
-
-	auto v = std::get_if<Stack<StackObject>::NonEmpty>(&(stack._stack));
-	if(not v)
-	{
-		out << "<empty>";
-	}
-	else
-	{
-		std::for_each(v->_data.begin(), v->_data.end(), [&out](const T& t) { out << t << ","; } );	
-	}
-	out << "]";
-
-	return out;
-}
 
 std::ostream& operator<<(std::ostream& out, const Signature& sig)
 {

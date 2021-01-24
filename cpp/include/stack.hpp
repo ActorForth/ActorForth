@@ -91,6 +91,24 @@ private:
 	friend std::ostream& operator<<(std::ostream& out, const Signature& sig);
 };
 
+template<class T> std::ostream& operator<<(std::ostream& out, const Stack<T>& stack)
+{
+	out << "Stack: [";
+
+	auto v = std::get_if<Stack<T>::NonEmpty>(&(stack._stack));
+	if(not v)
+	{
+		out << "<empty>";
+	}
+	else
+	{
+		std::for_each(v->_data.begin(), v->_data.end(), [&out](const T& t) { out << t << ","; } );	
+	}
+	out << "]";
+
+	return out;
+}
+
 using AnyValue = std::variant< bool, int, unsigned, std::string >;
 
 struct StackObject : std::pair< Type, AnyValue >
