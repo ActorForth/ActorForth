@@ -143,8 +143,8 @@ TEST_CASE("Signature Checks")
 			match_stack.push( StackObject::make_stackobj(A, 1) );
 			match_stack.push( StackObject::make_stackobj(B, 1) );		
 
-			mis_match_stack.push( StackObject::make_stackobj(B, 1) );	
-			mis_match_stack.push( StackObject::make_stackobj(B, 1) );
+			mis_match_stack.push( StackObject::make_stackobj(A, 1) );	
+			mis_match_stack.push( StackObject::make_stackobj(A, 1) );
 
 
 			Stack<StackObject> short_stack;
@@ -166,7 +166,7 @@ TEST_CASE("Signature Checks")
 				sig.in_seq.pop();
 				sig.in_seq.push(StackSig::make_stacksig(Any));
 
-				std::cout << "Trying generic signature match of " << sig.in_seq << " against " << mis_match_stack << "." << std::endl;
+				//std::cout << "Trying generic signature match of " << sig.in_seq << " against " << mis_match_stack << "." << std::endl;
 
 				// Now it should match the prior mismatched one.
 				CHECK(sig.matches(mis_match_stack) == true);
