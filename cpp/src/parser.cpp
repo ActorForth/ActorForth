@@ -4,16 +4,13 @@
 
 #include "parser.hpp"
 
-Parser::Parser(std::istream&& is) 
-{
-	i = is;
-	input = &i;
-}
+Parser::Parser(void)
+	: input(&std::cin) {;}
 
 Parser::Parser(const std::string filename ) 
 	: 	f( std::ifstream(filename, std::ios::binary) ),
 		input(0),
-		location(filename)
+		location(std::move(filename))
 { 
 	try 
 	{
@@ -29,6 +26,22 @@ Parser::Parser(const std::string filename )
     f.exceptions(f.badbit);
     input = &f;
 }
+
+/*
+Parser::Parser(const std::string filename, const std::string content)
+	: 	s(),
+		//input(0),
+		location(std::move(filename))
+{
+	//s = std::stringstream();
+	std::cout << "Parser sstream ctor." << std::endl;
+	s << content ;
+	std::cout << "Streamed in the content." << std::endl;
+	input = &s;
+	std::cout << "Input pointer set." << std::endl;
+}
+*/
+
 
 void Parser::FilePosition::update(const char c)
 {

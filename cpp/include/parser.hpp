@@ -25,8 +25,10 @@ class Parser
 {
 public:
 	
-	Parser(std::istream&& is);
+	Parser(void);
 	Parser(const std::string filename );
+	//Parser(const std::string filename, const std::string content);
+
 	~Parser() {;}
 
 	struct FilePosition
@@ -91,8 +93,7 @@ private:
 
 	union
 	{ 
-		//_Stream(std::ifstream&& s) : f(s) {;}
-		std::istream i; 
+		std::stringstream s; 
 		std::ifstream f; 
 	};
 	std::istream* input;

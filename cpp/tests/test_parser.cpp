@@ -19,15 +19,19 @@ int main()
 		std::cout << n << std::endl;
 	}
 
+	/*
 	std::string s = "This is some text from a stringstream (istream).";
+	
+	std::cout << "Here's the string we'll parse: '" << s << "'" << std::endl;
+	Parser parse_istream("no file name", s);
 
-	Parser parse_istream(std::stringstream(s);
-
+	std::cout << "Now parse the tokens." << std::endl;
 	for(auto n: parse_istream.tokens())
 	{
 		//std::cout << codetext.get();
 		std::cout << n << std::endl;
 	}
+	*/
 
 	return 0;
 }
