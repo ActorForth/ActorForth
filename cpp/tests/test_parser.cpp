@@ -19,5 +19,15 @@ int main()
 		std::cout << n << std::endl;
 	}
 
+	std::string s = "This is some text from a stringstream (istream).";
+
+	Parser parse_istream(std::stringstream(s);
+
+	for(auto n: parse_istream.tokens())
+	{
+		//std::cout << codetext.get();
+		std::cout << n << std::endl;
+	}
+
 	return 0;
 }

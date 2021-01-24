@@ -25,7 +25,9 @@ class Parser
 {
 public:
 	
+	Parser(std::istream&& is);
 	Parser(const std::string filename );
+	~Parser() {;}
 
 	struct FilePosition
 	{
@@ -87,8 +89,13 @@ private:
 		StateMaybeToken consume(const char c, const FilePosition& pos);
 	};
 
-	//std::variant<std::ifstream, std::istringstream> input;
-	std::ifstream input;
+	union
+	{ 
+		//_Stream(std::ifstream&& s) : f(s) {;}
+		std::istream i; 
+		std::ifstream f; 
+	};
+	std::istream* input;
 
 	FilePosition location;
 };

@@ -4,13 +4,20 @@
 
 #include "parser.hpp"
 
+Parser::Parser(std::istream&& is) 
+{
+	i = is;
+	input = &i;
+}
+
 Parser::Parser(const std::string filename ) 
-	: 	input( std::ifstream(filename, std::ios::binary) ),
+	: 	f( std::ifstream(filename, std::ios::binary) ),
+		input(0),
 		location(filename)
 { 
 	try 
 	{
-  		input.exceptions(input.failbit);        		
+  		f.exceptions(f.failbit);        		
 	} 
 	catch (const std::ios_base::failure& e)
 	{
@@ -19,7 +26,8 @@ Parser::Parser(const std::string filename )
            			<< "Error code: " << e.code() << '\n';
 		throw;                  			
     }
-    input.exceptions(input.badbit);
+    f.exceptions(f.badbit);
+    input = &f;
 }
 
 void Parser::FilePosition::update(const char c)
@@ -74,7 +82,7 @@ generator<Parser::Token> Parser::tokens()
 {
 	//if(! input) std::cerr << "Input file not valid." << std::endl; return;
 	State state = Whitespace();
-	char c = input.get();
+	char c = input->get();
 	do
 	{
 		std::optional< Token > maybe_token;
@@ -83,9 +91,9 @@ generator<Parser::Token> Parser::tokens()
 		if (maybe_token.has_value()) co_yield( maybe_token.value() );
 		location.update(c);
 
-		c = input.get();
+		c = input->get();
 
-	} while (not input.eof());
+	} while (not input->eof());
 }
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
