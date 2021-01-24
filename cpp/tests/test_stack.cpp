@@ -72,6 +72,7 @@ TEST_CASE("Signature Checks")
 	{
 		Type A = Type::find_or_make("AType");
 		Type B = Type::find_or_make("BType");
+		Type Any = Type::find_or_make("Any");
 
 		//auto a = std::make_pair(A, std::make_optional<std::any>());
 		auto a = StackSig::make_stacksig(A);
@@ -109,18 +110,41 @@ TEST_CASE("Signature Checks")
 			CHECK(sig.matches(empty_sig.in_seq) == false);
 
 			CHECK(sig.matches(alt_longer_match_sig.in_seq) == true);
+
 			CHECK(sig.matches(alt_mismatch_sig.in_seq) == false);
 
 			CHECK(empty_sig.matches(sig.in_seq) == true);
 
+			SUBCASE("Matching Generic Signatures.")
+			{
+				// Replace the top object in sig with a generic signature.
+				sig.in_seq.pop();
+				sig.in_seq.push(StackSig::make_stacksig(Any));
+
+				// Now it should match the prior mismatched one.
+				CHECK(sig.matches(alt_mismatch_sig.in_seq) == true);
+			}
+
+			SUBCASE("Matching filtered value signatures.")
+			{
+				sig.in_seq.tos().second = 1;
+				CHECK(sig.matches(alt_longer_match_sig.in_seq) == true);
+
+				alt_longer_match_sig.in_seq.tos().second = 2;
+				CHECK(sig.matches(alt_longer_match_sig.in_seq) == false);
+			}
 		}
 
 		SUBCASE("Matching StackObjects")
 		{
 			Stack<StackObject> match_stack;
+			Stack<StackObject> mis_match_stack;
 
 			match_stack.push( StackObject::make_stackobj(A, 1) );
 			match_stack.push( StackObject::make_stackobj(B, 1) );		
+
+			mis_match_stack.push( StackObject::make_stackobj(B, 1) );	
+			mis_match_stack.push( StackObject::make_stackobj(B, 1) );
 
 
 			Stack<StackObject> short_stack;
@@ -132,7 +156,30 @@ TEST_CASE("Signature Checks")
 
 			CHECK(empty_sig.matches(match_stack) == true);
 
+			CHECK(sig.matches(mis_match_stack) == false);
+
 			CHECK(sig.matches(short_stack) == false);
+
+			SUBCASE("Matching Generic Signatures.")
+			{
+				// Replace the top object in sig with a generic signature.
+				sig.in_seq.pop();
+				sig.in_seq.push(StackSig::make_stacksig(Any));
+
+				std::cout << "Trying generic signature match of " << sig.in_seq << " against " << mis_match_stack << "." << std::endl;
+
+				// Now it should match the prior mismatched one.
+				CHECK(sig.matches(mis_match_stack) == true);
+			}
+
+			SUBCASE("Matching filtered value signatures.")
+			{
+				sig.in_seq.tos().second = 1;
+				CHECK(sig.matches(match_stack) == true);
+
+				match_stack.tos().second = 2;
+				CHECK(sig.matches(match_stack) == false);
+			}
 		}
 	}
 }

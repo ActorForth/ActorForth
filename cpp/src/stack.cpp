@@ -7,6 +7,7 @@
 #include <iostream>
 #include <variant>
 #include <utility>
+#include <optional>
 
 #include "stack.hpp"
 
@@ -15,7 +16,10 @@ template<class T> const std::vector<T> Stack<T>::AlwaysEmpty;
 
 StackSig StackSig::make_stacksig(const Type& type)  
 {
-	return StackSig( std::make_pair(type, std::make_optional<AnyValue>()) );
+	// NOTE - turns out make_optional will construct the optional with a default
+	//		  ctor of the first listed type! Not what we expected/wanted!
+	//return StackSig( std::make_pair(type, std::make_optional<AnyValue>()) );
+	return StackSig( std::make_pair(type, std::optional<AnyValue>() ) );
 }
 
 std::ostream& operator<<(std::ostream& out, const StackObject& obj)
@@ -43,6 +47,34 @@ std::ostream& operator<<(std::ostream& out, const StackSig& sig)
 	}
 	out << "}"; 
 	return out; 
+}
+
+/*
+void instantiate(void)
+{
+	Stack<StackSig> _inst_stacksig;
+	Stack<StackObject> _inst_stackobj;
+	std::cout << "here is my empty stackobj: " << _inst_stackobj;
+}
+*/
+
+template<class T> std::ostream& operator<<(std::ostream& out, const Stack<T>& stack)
+//std::ostream& operator<<(std::ostream& out, const Stack<StackObject>& stack)
+{
+	out << "Stack: [";
+
+	auto v = std::get_if<Stack<StackObject>::NonEmpty>(&(stack._stack));
+	if(not v)
+	{
+		out << "<empty>";
+	}
+	else
+	{
+		std::for_each(v->_data.begin(), v->_data.end(), [&out](const T& t) { out << t << ","; } );	
+	}
+	out << "]";
+
+	return out;
 }
 
 std::ostream& operator<<(std::ostream& out, const Signature& sig)
@@ -92,6 +124,7 @@ bool StackSig::operator==(const StackSig& s) const
 
 bool StackSig::operator==(const StackObject& o) const
 {
+	std::cout << "Comparing " << *this << " with " << o << "." << std::endl;
 	// Generic Types always match.
 	if(first.id == 0) return true;
 

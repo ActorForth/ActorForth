@@ -87,6 +87,7 @@ private:
 	// const iterators to an empty vector.
 	static const std::vector<T> AlwaysEmpty;
 
+	friend std::ostream& operator<<(std::ostream& out, const Stack<T>& stack);
 	friend std::ostream& operator<<(std::ostream& out, const Signature& sig);
 };
 
