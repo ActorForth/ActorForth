@@ -10,7 +10,7 @@
 #include "type.hpp"
 #include "continuation.hpp"
 
-Type::Handler Type::default_handler = [](Continuation& c) { c.op(c); };
+Type::Handler Type::default_handler = [](Continuation& c) { (*(c.op))(c); };
 
 //
 //	Any type is a special generic type that matches all other types.

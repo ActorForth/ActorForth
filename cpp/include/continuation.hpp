@@ -18,6 +18,6 @@ public:
 	Stack<StackObject> stack;	// data stack
 	Stack<StackObject> rstack;	// return stack
 
-	Operation op;
+	Operation* op;
 
 };

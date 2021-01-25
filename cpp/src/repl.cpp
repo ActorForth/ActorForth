@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
 
 	Stack<StackObject> dstack;
 	Stack<StackObject> rstack;
-	//Continuation cont = { dstack, rstack };
+	Continuation cont = { dstack, rstack, op_nop };
 
 	Parser input = open_file(argc,argv);
 

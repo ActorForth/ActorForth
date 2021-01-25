@@ -63,4 +63,4 @@ private:
 	static std::map<Type::ID,std::vector<const Operation*>> TypeCtors;
 };
 
-extern Operation& op_nop;
+extern Operation* const op_nop;

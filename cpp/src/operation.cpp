@@ -1,9 +1,6 @@
 //
 //	operation.cpp	-	Definition for Operation in ActorForth.
 //
-
-#include <doctest/doctest.h>
-
 #include <variant>
 
 #include <operation.hpp>
@@ -47,8 +44,17 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 		// which will indicate another Type's vocabulary to store this Operation into.
 		if(not force_global) type = sig.in_seq.tos().first.id;
 	}
-	catch( const Stack<StackSig>::Underflow& x ) {;} // Empty stack means Global 'Any' vocabulary.
-
+	catch( Stack<StackSig>::Underflow& x ) 
+	{
+		//std::cout << "HERE'S OUR Stack<StackSig> ERROR!" << std::endl;
+	} // Empty stack means Global 'Any' vocabulary.
+	/*
+	catch( std::exception& x )
+	{
+		std::cout << "HERE'S AN UNKNOWN EXCEPTION!" << std::endl;
+	}
+	*/
+	
 	// Check to see the operation doesn't already exist first.
 	if(Operation::find(name, sig.in_seq)) return 0;
 
@@ -94,7 +100,9 @@ template<class T> Operation* Operation::find(const std::string& op_name, const S
 		// Does the top of our stack indicate a Type vocabulary we should check first/
 		type = stack.tos().first.id;
 	}
-	catch( const Stack<StackObject>::Underflow& x ) {;} // Empty stack means Global 'Any' vocabulary.
+	catch( const Stack<StackSig>::Underflow& x ) {;} // Empty stack means Global 'Any' vocabulary.
+	catch( const Stack<StackObject>::Underflow& x ) {;}
+	//catch( std::exception& x ) {;}
 
 	Operation* op = _search_vocabulary(op_name, stack, TypeOps[type]);
 
@@ -116,4 +124,5 @@ template<class T> Operation* Operation::find(const std::string& op_name, const S
 }
 
 
-Operation& op_nop = *Operation::add("nop",{},Signature(), [](Continuation&) {;});
+//Operation* const op_nop = reinterpret_cast<Operation* const>(0); // Operation::add("nop",{},Signature(), [](Continuation&) {;}, true);
+Operation* const op_nop = Operation::add("nop",{},Signature(), [](Continuation&) {;}, true);
