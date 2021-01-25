@@ -91,11 +91,10 @@ private:
 		StateMaybeToken consume(const char c, const FilePosition& pos);
 	};
 
-	union
-	{ 
-		std::stringstream s; 
-		std::ifstream f; 
-	};
+	// s or f may or may not be active according to the ctor called.
+	// DO NOT USE THEM. Only reference the input pointer.
+	std::stringstream s;
+	std::ifstream f;
 	std::istream* input;
 
 	FilePosition location;
