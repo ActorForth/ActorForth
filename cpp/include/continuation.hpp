@@ -19,5 +19,7 @@ public:
 	Stack<StackObject> rstack;	// return stack
 
 	Operation* op;
+	Parser::Token token;
 
+	void execute( Continuation& cont ) { (*op)(cont); }
 };

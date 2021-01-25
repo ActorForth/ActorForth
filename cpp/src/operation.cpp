@@ -54,7 +54,7 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 		std::cout << "HERE'S AN UNKNOWN EXCEPTION!" << std::endl;
 	}
 	*/
-	
+
 	// Check to see the operation doesn't already exist first.
 	if(Operation::find(name, sig.in_seq)) return 0;
 
@@ -123,6 +123,4 @@ template<class T> Operation* Operation::find(const std::string& op_name, const S
 	return op;
 }
 
-
-//Operation* const op_nop = reinterpret_cast<Operation* const>(0); // Operation::add("nop",{},Signature(), [](Continuation&) {;}, true);
 Operation* const op_nop = Operation::add("nop",{},Signature(), [](Continuation&) {;}, true);

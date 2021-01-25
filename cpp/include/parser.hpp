@@ -53,6 +53,8 @@ public:
 
 	// consult good() to see if potential tokens are available.
 	bool good(void) const { return input->good(); }
+ 
+	bool is_stdin(void) const { return input == &std::cin; }
 
 	// Returns tokens one by one until eof or additionally, for cin inputs, until a linefeed is reached.
 	generator<Token> tokens();

@@ -13,3 +13,5 @@
 
 
 int main(int argc, char *argv[]);
+
+extern Operation* const op_interpret;

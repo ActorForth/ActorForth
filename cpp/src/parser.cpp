@@ -107,7 +107,7 @@ generator<Parser::Token> Parser::tokens()
 		location.update(c);
 
 		// If we're reading from std::cin we'll only pull in one line at a time.
-		if(input == &std::cin and c == '\n') break;
+		if(is_stdin() and c == '\n') break;
 
 		input->get(c);
 		
