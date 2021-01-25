@@ -19,6 +19,7 @@ int main()
 		std::cout << n << std::endl;
 	}
 
+	/*
 	std::string s = "This is some text from a stringstream (istream).";
 	
 	std::cout << "Here's the string we'll parse: '" << s << "'" << std::endl;
@@ -30,6 +31,7 @@ int main()
 		//std::cout << codetext.get();
 		std::cout << n << std::endl;
 	}
+	*/
 
 	std::cout << "Will try to read from cin if anything was passed in." << std::endl;
 

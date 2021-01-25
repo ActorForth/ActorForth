@@ -29,6 +29,7 @@ Parser::Parser(const std::string filename )
     input = &f;
 }
 
+
 Parser::Parser(const std::string filename, const std::string content)
 	: 	s(content),
 		//input(0),
@@ -41,6 +42,7 @@ Parser::Parser(const std::string filename, const std::string content)
 	input = &s;
 	std::cout << "Input pointer set." << std::endl;
 }
+
 
 void Parser::FilePosition::update(const char c)
 {
