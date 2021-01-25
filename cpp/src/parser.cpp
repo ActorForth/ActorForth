@@ -94,11 +94,11 @@ generator<Parser::Token> Parser::tokens()
 	//if(! input) std::cerr << "Input file not valid." << std::endl; return;
 	State state = Whitespace();
 	char c;
-	input->get(c);
 
 	using namespace std;
 	//cout << "Tokens read char '" << c << "'." << endl;
-	do
+
+	while(input->get(c))
 	{
 		std::optional< Token > maybe_token;
 		std::tie(state, maybe_token) = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
@@ -109,12 +109,8 @@ generator<Parser::Token> Parser::tokens()
 		// If we're reading from std::cin we'll only pull in one line at a time
 		// unless we're already inside a string.
 		if(is_stdin() and c == '\n' and not std::holds_alternative<String>(state)) break;
-
-		input->get(c);
-		
 		//cout << "Tokens read char '" << c << "'." << endl;
-
-	} while (not input->eof());
+	}
 }
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
