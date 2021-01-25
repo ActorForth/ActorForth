@@ -60,4 +60,9 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 	return out;
 }
 
+
+const Type& Any = Type::find_or_make("Any");
+const Type& Atom = Type::find_or_make("Atom");
+
 TEST_CASE("Test embedded in type.cpp.") {;}
+

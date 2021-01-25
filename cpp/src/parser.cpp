@@ -106,8 +106,9 @@ generator<Parser::Token> Parser::tokens()
 		if (maybe_token.has_value()) co_yield( maybe_token.value() );
 		location.update(c);
 
-		// If we're reading from std::cin we'll only pull in one line at a time.
-		if(is_stdin() and c == '\n') break;
+		// If we're reading from std::cin we'll only pull in one line at a time
+		// unless we're already inside a string.
+		if(is_stdin() and c == '\n' and not std::holds_alternative<String>(state)) break;
 
 		input->get(c);
 		

@@ -50,3 +50,5 @@ private:
 //	Initialize built-in Types here. Order matters!
 //
 // #include "types/any.hpp"
+extern const Type& Any;
+extern const Type& Atom;

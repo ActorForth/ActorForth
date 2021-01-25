@@ -123,4 +123,4 @@ template<class T> Operation* Operation::find(const std::string& op_name, const S
 	return op;
 }
 
-Operation* const op_nop = Operation::add("nop",{},Signature(), [](Continuation&) {;}, true);
+Operation* const op_nop = Operation::add("nop", {}, Signature(), [](Continuation&) {;}, true);

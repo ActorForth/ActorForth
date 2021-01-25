@@ -7,7 +7,6 @@
 
 #include "repl.hpp"
 
-
 int help(char *argv[])
 {
 	using namespace std;
@@ -35,13 +34,10 @@ void _interpret( Continuation& c )
 	std::cout << "Interpreting : " << c.token << std::endl;
 }
 
-//Operation* const op_interpret;
-
 int main(int argc, char *argv[])
 {
-
 	//std::cout << "Startup" << std::endl;
-	Operation* const op_interpret = Operation::add("interpret",{},Signature(), _interpret, true);
+	Operation* const op_interpret = Operation::add("interpret", {}, Signature(), _interpret, true);
 	//std::cout << "op_interpret got address " << (void*) op_interpret << std::endl;
 
 	if (!op_interpret or !op_nop) { std::cout << "ERROR primitive ops not ready!" << std::endl; exit(-1); }
