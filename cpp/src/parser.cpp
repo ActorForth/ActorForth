@@ -4,10 +4,7 @@
 
 #include "parser.hpp"
 
-Parser::Parser(void)
-	{
-		input = &std::cin;
-	}
+Parser::Parser(void) : input(&std::cin) {;}
 
 Parser::Parser(const std::string filename ) 
 	: 	f( std::ifstream(filename, std::ios::binary) ),
@@ -16,7 +13,7 @@ Parser::Parser(const std::string filename )
 { 
 	try 
 	{
-  		f.exceptions(f.failbit);        		
+  		f.exceptions(f.failbit);
 	} 
 	catch (const std::ios_base::failure& e)
 	{
@@ -109,9 +106,11 @@ generator<Parser::Token> Parser::tokens()
 		if (maybe_token.has_value()) co_yield( maybe_token.value() );
 		location.update(c);
 
-		input->get(c);
 		// If we're reading from std::cin we'll only pull in one line at a time.
 		if(input == &std::cin and c == '\n') break;
+
+		input->get(c);
+		
 		//cout << "Tokens read char '" << c << "'." << endl;
 
 	} while (not input->eof());

@@ -3,6 +3,7 @@
 //
 
 #include <iostream>
+#include <filesystem>
 
 #include "repl.hpp"
 
@@ -10,24 +11,73 @@
 int help(char *argv[])
 {
 	using namespace std;
-	cout << "\n" << argv[0] << " <ActorForth File Path/Name> or \n";
+	cout << "help" << endl;
+	cout << "\n" << argv[0] << " <optional: ActorForth File Path/Name> or \n";
 	cout << setw(strlen(argv[0])) << "" << " --help for instructions.\n";
+	return 0;
+}
+
+
+Parser open_file(int argc, char *argv[])
+{
+	//std::cout << "open_file" << std::endl;
+
+	// Open a file if we can find it.
+	if( argc > 1)
+	{
+		if(std::filesystem::exists(argv[1]))
+		{
+			return Parser(argv[1]);
+		}
+		else
+		{
+			std::cout << "\n ERROR - file '" << argv[1] << "' not found." << std::endl;
+			exit(-1);
+		}
+	}
+
+	std::cout << "ActorForth ready. ^D to exit." << std::endl;
+	// Defaults to reading from std::cin.
+	return Parser();
+
 }
 
 int main(int argc, char *argv[])
 {
+	using namespace std;
+	/*
 	for(int i=0;i<argc;++i)
 	{
 		std::cout << "argv[" << i << "] = " << argv[i] << std::endl;
 	}
+	*/
+	//cout << "argc == " << argc << endl;
 
-	std::string filename="stdin";
-	std::istream input = std::cin;
+	//cout << "Check for help." << endl;
+	if(argc > 1) 
+	{
+		//cout << "Really checking for help." << endl;
+	 	if(std::string(argv[1]) == "--help") return help(argv);	
+	}
 
-	if(string(argv[1] == "--help")) return help(argv);
+	//cout << "Get parser." << endl;
+	Parser input = open_file(argc,argv);
 
-	
+	while(input.good())
+	{
+		std::cout << "ok ";
 
+		//cout << "Start reading tokens." << endl;
+		for(auto n: input.tokens())
+		{
+			//std::cout << codetext.get();
+			//std::cout << n.value << " ";
+		}
+
+		
+	}
+
+	std::cout << "\nend of line..." << endl;
 
 	return 0;
 }

@@ -7,6 +7,7 @@
 
 
 #include "continuation.hpp"
+#include "parser.hpp"
 
 
 
