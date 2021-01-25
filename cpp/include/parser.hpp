@@ -27,7 +27,7 @@ public:
 	
 	Parser(void);
 	Parser(const std::string filename );
-	//Parser(const std::string filename, const std::string content);
+	Parser(const std::string filename, const std::string content);
 
 	~Parser() {;}
 

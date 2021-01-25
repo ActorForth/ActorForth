@@ -29,21 +29,18 @@ Parser::Parser(const std::string filename )
     input = &f;
 }
 
-/*
 Parser::Parser(const std::string filename, const std::string content)
-	: 	s(),
+	: 	s(content),
 		//input(0),
 		location(std::move(filename))
 {
 	//s = std::stringstream();
 	std::cout << "Parser sstream ctor." << std::endl;
-	s << content ;
-	std::cout << "Streamed in the content." << std::endl;
+	//s << content ;
+	//std::cout << "Streamed in the content." << std::endl;
 	input = &s;
 	std::cout << "Input pointer set." << std::endl;
 }
-*/
-
 
 void Parser::FilePosition::update(const char c)
 {
