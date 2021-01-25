@@ -51,6 +51,10 @@ public:
 		FilePosition location;
 	};
 
+	// consult good() to see if potential tokens are available.
+	bool good(void) const { return input->good(); }
+
+	// Returns tokens one by one until eof or additionally, for cin inputs, until a linefeed is reached.
 	generator<Token> tokens();
 
 private:

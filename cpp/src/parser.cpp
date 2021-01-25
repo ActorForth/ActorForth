@@ -98,8 +98,9 @@ generator<Parser::Token> Parser::tokens()
 	State state = Whitespace();
 	char c;
 	input->get(c);
+
 	using namespace std;
-	cout << "Tokens read char '" << c << "'." << endl;
+	//cout << "Tokens read char '" << c << "'." << endl;
 	do
 	{
 		std::optional< Token > maybe_token;
@@ -109,7 +110,9 @@ generator<Parser::Token> Parser::tokens()
 		location.update(c);
 
 		input->get(c);
-		cout << "Tokens read char '" << c << "'." << endl;
+		// If we're reading from std::cin we'll only pull in one line at a time.
+		if(input == &std::cin and c == '\n') break;
+		//cout << "Tokens read char '" << c << "'." << endl;
 
 	} while (not input->eof());
 }
