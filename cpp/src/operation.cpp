@@ -32,8 +32,6 @@ bool Signature::matches(const Stack<StackSig>& sig) const
 	return false; 
 }
 
-
-
 // add -	Adds a new Operation to the appropriate vocabularies based on the
 //			stack signature. Also automatically detects and registers constuctors
 //			operations that have the same name as the Type except lower case and
@@ -116,3 +114,6 @@ template<class T> Operation* Operation::find(const std::string& op_name, const S
 	// Seems we didn't find anything.
 	return op;
 }
+
+
+Operation& op_nop = *Operation::add("nop",{},Signature(), [](Continuation&) {;});

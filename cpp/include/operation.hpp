@@ -19,8 +19,6 @@
 
 class Continuation;
 
-
-
 class Operation
 {
 public:
@@ -64,3 +62,5 @@ private:
 	// Holds all of the Constructors for various Types.
 	static std::map<Type::ID,std::vector<const Operation*>> TypeCtors;
 };
+
+extern Operation& op_nop;

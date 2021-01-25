@@ -17,11 +17,8 @@ int help(char *argv[])
 	return 0;
 }
 
-
 Parser open_file(int argc, char *argv[])
 {
-	//std::cout << "open_file" << std::endl;
-
 	// Open a file if we can find it.
 	if( argc > 1)
 	{
@@ -37,47 +34,33 @@ Parser open_file(int argc, char *argv[])
 	}
 
 	std::cout << "ActorForth ready. ^D to exit." << std::endl;
+	
 	// Defaults to reading from std::cin.
 	return Parser();
-
 }
 
 int main(int argc, char *argv[])
 {
-	using namespace std;
-	/*
-	for(int i=0;i<argc;++i)
-	{
-		std::cout << "argv[" << i << "] = " << argv[i] << std::endl;
-	}
-	*/
-	//cout << "argc == " << argc << endl;
+	if(argc > 1 and std::string(argv[1]) == "--help") return help(argv);
 
-	//cout << "Check for help." << endl;
-	if(argc > 1) 
-	{
-		//cout << "Really checking for help." << endl;
-	 	if(std::string(argv[1]) == "--help") return help(argv);	
-	}
+	Stack<StackObject> dstack;
+	Stack<StackObject> rstack;
+	//Continuation cont = { dstack, rstack };
 
-	//cout << "Get parser." << endl;
 	Parser input = open_file(argc,argv);
 
 	while(input.good())
 	{
 		std::cout << "ok ";
 
-		//cout << "Start reading tokens." << endl;
 		for(auto n: input.tokens())
 		{
 			//std::cout << codetext.get();
 			//std::cout << n.value << " ";
-		}
-
-		
+		}		
 	}
 
-	std::cout << "\nend of line..." << endl;
+	std::cout << "\nend of line..." << std::endl;
 
 	return 0;
 }
