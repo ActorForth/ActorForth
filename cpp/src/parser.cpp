@@ -5,7 +5,9 @@
 #include "parser.hpp"
 
 Parser::Parser(void)
-	: input(&std::cin) {;}
+	{
+		input = &std::cin;
+	}
 
 Parser::Parser(const std::string filename ) 
 	: 	f( std::ifstream(filename, std::ios::binary) ),
@@ -95,7 +97,10 @@ generator<Parser::Token> Parser::tokens()
 {
 	//if(! input) std::cerr << "Input file not valid." << std::endl; return;
 	State state = Whitespace();
-	char c = input->get();
+	char c;
+	input->get(c);
+	using namespace std;
+	cout << "Tokens read char '" << c << "'." << endl;
 	do
 	{
 		std::optional< Token > maybe_token;
@@ -104,7 +109,8 @@ generator<Parser::Token> Parser::tokens()
 		if (maybe_token.has_value()) co_yield( maybe_token.value() );
 		location.update(c);
 
-		c = input->get();
+		input->get(c);
+		cout << "Tokens read char '" << c << "'." << endl;
 
 	} while (not input->eof());
 }

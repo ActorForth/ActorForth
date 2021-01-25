@@ -12,8 +12,12 @@ llvm-ar-10 -rc bin/libparser.a bin/parser.o
 # test_parser
 rm bin/test_parser
 clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham  -I doctest tests/test_parser.cpp -stdlib=libc++ bin/libparser.a -o bin/test_parser
-perf stat bin/test_parser
+perf stat bin/test_parser < tests/data/parseme.a4
 
+# test_cin
+rm bin/test_cin
+clang++-10 -v -O3 -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham  -I doctest tests/test_cin.cpp -stdlib=libc++ -o bin/test_cin
+#perf stat bin/test_cin 
 
 ## libtype.a
 #rm bin/type.o
