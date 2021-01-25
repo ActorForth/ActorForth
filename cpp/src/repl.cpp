@@ -51,6 +51,7 @@ int main(int argc, char *argv[])
 
 	while(input.good())
 	{
+		// For stdin we write an acknowledgement prompt as a Forthwright should expect.
 		if(input.is_stdin()) std::cout << "ok ";
 
 		for(auto n: input.tokens())

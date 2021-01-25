@@ -52,3 +52,6 @@ private:
 // #include "types/any.hpp"
 extern const Type& Any;
 extern const Type& Atom;
+extern const Type& Bool;
+extern const Type& Int;
+extern const Type& String;  // BDM : Should we just use Atoms?
