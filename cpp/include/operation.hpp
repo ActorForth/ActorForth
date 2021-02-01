@@ -37,7 +37,7 @@ public:
 	//			longest type signature have priority.
 	template<class T> static Operation* find(const std::string& op_name, const Stack<T>& stack)
 	{
-		std::cout << "Looking for Operation named : " << op_name << std::endl;
+		std::cout << "Looking for Operation named : '" << op_name << "'" << std::endl;
 		// Default to global 'Any' Type vocabulary.
 		Type::ID type = 0;
 		try
@@ -108,17 +108,36 @@ private:
 		Operation* result = 0;
 		std::vector<Operation*> results;
 
+		std::cout << "_search_vocabulary" << std::endl;
+
 		// Search in reverse order for all Operations with name, 'op_name'.
 		//std::for_each(list.rbegin(), list.rend(), [&op_name, &result, &stack](Operation* op) 
-		for(auto op=list.rbegin(); op != list.rend(); ++op)
+		//for(auto op=list.rbegin(); op != list.rend(); ++op)
+		for(auto op=list.rbegin(); op != list.rend(); op++)
 		{
-			if((*op)->name != op_name) break;
+			std::cout << "\tchecking '" << (*op)->name << "'";
+			if((*op)->name != op_name)
+			{ 
+				std::cout << " no match." << std::endl;
+				break;
+			}
+
+			std::cout << " matched.\n\t\tsig match? " << (*op)->sig << " vs " << stack;
 
 			// Do we have a signature match with the stack?
-			if(not (*op)->sig.matches(stack)) break;
+			if(not (*op)->sig.matches(stack))
+			{
+				std::cout << " no match." << std::endl; 	
+				break;
+			}
+
+			std::cout << " matched!" << std::endl;
 
 			// Is this the longest match we've found?
 			if(result and (*op)->sig.in_seq.depth() > result->sig.in_seq.depth()) result = (*op);
+
+			// If this is the first time matching then take it.
+			if(!result) result = (*op);
 		};
 
 		return result;	

@@ -49,6 +49,9 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 
 	std::cout << "Just added operator " << *new_op << std::endl;
 
+	const Type& the_type = Type::from_id(type);
+	std::cout << the_type << " has " << Operation::TypeOps[type].size() << " words." << std::endl;
+
 	// BDM TODO : Detect whether or not this is also a Constructor.
 	return new_op;
 }

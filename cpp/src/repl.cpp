@@ -59,7 +59,7 @@ void _interpret( Continuation& c )
 	Operation* op = Operation::find(word, c.stack);
 	if(op)
 	{
-		std::cout << "Found an Operation : " << *op << "." << std::endl;
+		std::cout << "Found an Operation : " << *op << ". EXECUTING!" << std::endl;
 		c.op = op;
 		c.execute( c );
 		return;
