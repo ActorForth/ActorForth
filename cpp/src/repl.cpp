@@ -31,6 +31,10 @@ Parser open_file(int argc, char *argv[])
 
 void _interpret( Continuation& c )
 {
+	// BDM - 	call interpret inside the interpreter immediately goes into an infinite loop.
+	// TODO -	consider putting the tokens stream in the Continuation and allowing
+	//			devs to update the token stream and/or write their own interpreter word
+	//			to act as a little DSL.
 	std::cout << "Interpreting : " << c.token << std::endl;
 
 	const std::string& word = c.token.value;
@@ -41,7 +45,7 @@ void _interpret( Continuation& c )
 		// return if successful.
 		int i = std::stoi(word);
 		c.stack.push( StackObject( Int, i ) );
-		std::cout << "Found a Int : " << c.stack.tos() << "." << std::endl;
+		std::cout << "\tFound a Int : " << c.stack.tos() << "." << std::endl;
 		return;
 	}	
 	catch( const std::invalid_argument& ) {;}
@@ -51,7 +55,7 @@ void _interpret( Continuation& c )
 	if(word == "true" or word == "false") 
 	{
 		c.stack.push( StackObject( { Bool, (word == "true") ? true : false} ) );
-		std::cout << "Found a Bool : " << c.stack.tos() << "." << std::endl;
+		std::cout << "\tFound a Bool : " << c.stack.tos() << "." << std::endl;
 		return;
 	}
 
@@ -59,7 +63,7 @@ void _interpret( Continuation& c )
 	Operation* op = Operation::find(word, c.stack);
 	if(op)
 	{
-		std::cout << "Found an Operation : " << *op << ". EXECUTING!" << std::endl;
+		std::cout << "\tFound an Operation : " << *op << ". EXECUTING!" << std::endl;
 		c.op = op;
 		c.execute( c );
 		return;
@@ -67,7 +71,7 @@ void _interpret( Continuation& c )
 
 	// Otherwise create an Atom.
 	c.stack.push( StackObject( Atom, word ) );
-	std::cout << "Found an Atom : " << c.stack.tos() << "." << std::endl;
+	std::cout << "\tFound an Atom : " << c.stack.tos() << "." << std::endl;
 }
 
 int main(int argc, char *argv[])
