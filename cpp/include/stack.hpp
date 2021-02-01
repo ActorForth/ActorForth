@@ -34,16 +34,25 @@ public:
 
 	void pop(void) 
 	{ 
-		//_stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); 
+		_stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); 
+		/*
 		MaybeEmpty m = std::visit([](auto& sarg) { return sarg.pop(); }, _stack);
 		if(_stack.index() != m.index()) _stack = m;
+		*/
 	}
 
 	void push( const T& value ) 
 	{ 
-		//_stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); 
+		_stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); 
+		/*
 		MaybeEmpty m = std::visit([&value](auto& sarg) { return sarg.push(value); }, _stack);
-		if(_stack.index() != m.index()) _stack = m;
+		if(_stack.index() != m.index())
+		{
+			std::cout << "Updating Stack State!" << std::endl;
+			_stack = m;
+		}
+		std::cout << "tos() = " << tos() << std::endl;
+		*/
 	}
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
@@ -67,13 +76,23 @@ private:
 		T& tos(void) { throw Underflow(); }	
 		const T& tos(void) const { throw Underflow(); }	
 		MaybeEmpty pop(void) { throw Underflow(); }
-		MaybeEmpty push( const T& value ) { return NonEmpty(value); }
+		MaybeEmpty push( const T& value ) 
+		{ 
+			//std::cout << "Pushing " << value << " onto empty stack." << std::endl;
+			return NonEmpty(value); 
+		}
 		//MaybeEmpty push( T&& value ) { return NonEmpty(value); }
 	};
 
 	struct NonEmpty
 	{
-		NonEmpty( const T& value ) : _data(1,value) {;}
+		NonEmpty( const T& value ) : _data(1,value) 
+		{
+			/*
+			_data.push_back(value);
+			std::cout << "NonEmpty ctor receiving " << value << " now has " << _data.back() << std::endl;
+			*/
+		}
 		//NonEmpty( const T&& value ) { _data.emplace_back(value); }
 		T& tos(void) { return _data.back(); }	
 		const T& tos(void) const { return _data.back(); }
@@ -84,7 +103,12 @@ private:
 			if(_data.empty()) return Empty();
 			return *this;
 		}
-		MaybeEmpty push( const T& value ) { _data.push_back(value); return *this; }
+		MaybeEmpty push( const T& value ) 
+		{ 
+			_data.push_back(value); 
+			// std::cout << "NonEmpty push receiving " << value << std::endl;
+			return *this;
+		}
 		//MaybeEmpty push( T&& value ) { _data.emplace_back(value); return *this; }
 		std::vector<T> _data;
 	};

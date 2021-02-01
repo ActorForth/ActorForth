@@ -192,10 +192,11 @@ void display_stack(Stack<StackObject>& stack)
 	if(not stack.depth()) std::cout << "<empty>" << std::endl;
 	while(stack.depth())
 	{
-		if(not count++) std::cout << "\tTOS: \t"; else std::cout << "\t\t";
-		const StackObject& so = stack.tos();
+		if(not count) std::cout << "\tTOS: \t"; else std::cout << "\t\t";
+		const StackObject so = stack.tos();
+		std::cout << std::setw(2) << std::dec << count++ << "\t" << so << std::endl;
+
 		stack.pop();
-		std::cout << std::setw(2) << std::dec << count << "\t" << so << std::endl;
 	}
 }
 
@@ -220,6 +221,12 @@ TEST_CASE("StackObjects & Stacks")
 	SUBCASE("Moving StackObjects to Stack.")
 	{
 		stack.push(b);
+
+		display_stack(stack);
+
+		stack.push(b);
+		stack.push(c);
+		stack.push(i);
 
 		display_stack(stack);
 
