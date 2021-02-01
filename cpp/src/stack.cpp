@@ -17,7 +17,7 @@ template<class T> const std::vector<T> Stack<T>::AlwaysEmpty;
 
 std::ostream& operator<<(std::ostream& out, const AnyValue& val)
 {
-	if(auto v = std::get_if<bool>(&val)) out << *v;
+	if(auto v = std::get_if<bool>(&val)) out << std::boolalpha << *v;
 	else if(auto v = std::get_if<int>(&val)) out << *v;
 	else if(auto v = std::get_if<unsigned>(&val)) out << *v;
 	else if(auto v = std::get_if<std::string>(&val)) out << *v;
@@ -40,7 +40,7 @@ StackSig StackSig::make_stacksig(const Type& type)
 	// NOTE - turns out make_optional will construct the optional with a default
 	//		  ctor of the first listed type! Not what we expected/wanted!
 	//return StackSig( std::make_pair(type, std::make_optional<AnyValue>()) );
-	return StackSig( std::make_pair(type, std::optional<AnyValue>() ) );
+	return StackSig( type, std::optional<AnyValue>() );
 }
 
 

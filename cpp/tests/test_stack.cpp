@@ -183,3 +183,48 @@ TEST_CASE("Signature Checks")
 		}
 	}
 }
+
+
+void display_stack(Stack<StackObject>& stack)
+{
+	std::cout << "\nStack remaining :\n";
+	size_t count = 0;
+	if(not stack.depth()) std::cout << "<empty>" << std::endl;
+	while(stack.depth())
+	{
+		if(not count++) std::cout << "\tTOS: \t"; else std::cout << "\t\t";
+		const StackObject& so = stack.tos();
+		stack.pop();
+		std::cout << std::setw(2) << std::dec << count << "\t" << so << std::endl;
+	}
+}
+
+TEST_CASE("StackObjects & Stacks")
+{
+	Stack<StackObject> stack;
+
+	StackObject b = StackObject::make_stackobj(Bool, true);
+	StackObject c = StackObject::make_stackobj(Bool, false);
+
+	StackObject i = StackObject::make_stackobj(Int, 42);
+
+	std::cout << "StackObject::make_stackobj(Bool, true) = " << b << "." << std::endl;
+	std::cout << "StackObject::make_stackobj(Bool, false) = " << c << "." << std::endl;
+
+	std::cout << "\nStackObject::make_stackobj(Int, 42) = " << i << "." << std::endl;
+
+	CHECK(std::get<bool>(b.second) == true);
+	CHECK(std::get<bool>(c.second) == false);
+	CHECK(std::get<int>(i.second) == 42);
+
+	SUBCASE("Moving StackObjects to Stack.")
+	{
+		stack.push(b);
+
+		display_stack(stack);
+
+		CHECK(std::get<bool>(b.second) == true);
+		CHECK(std::get<bool>(c.second) == false);
+		CHECK(std::get<int>(i.second) == 42);
+	}
+}

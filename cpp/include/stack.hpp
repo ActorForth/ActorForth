@@ -32,9 +32,19 @@ public:
 	T& tos(void) { return std::visit([&](auto& sarg) -> T& { return sarg.tos(); }, _stack); }
 	const T& tos(void) const { return std::visit([&](const auto & sarg) -> const T& { return sarg.tos(); }, _stack); }	
 
-	void pop(void) { _stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); }
+	void pop(void) 
+	{ 
+		//_stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); 
+		MaybeEmpty m = std::visit([](auto& sarg) { return sarg.pop(); }, _stack);
+		if(_stack.index() != m.index()) _stack = m;
+	}
 
-	void push( const T& value ) { _stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); }
+	void push( const T& value ) 
+	{ 
+		//_stack = std::visit([&](auto& sarg) { return sarg.push(value); }, _stack); 
+		MaybeEmpty m = std::visit([&value](auto& sarg) { return sarg.push(value); }, _stack);
+		if(_stack.index() != m.index()) _stack = m;
+	}
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
@@ -58,13 +68,13 @@ private:
 		const T& tos(void) const { throw Underflow(); }	
 		MaybeEmpty pop(void) { throw Underflow(); }
 		MaybeEmpty push( const T& value ) { return NonEmpty(value); }
-		//MaybeEmpty push( const T&& value ) { return NonEmpty(value); }
+		//MaybeEmpty push( T&& value ) { return NonEmpty(value); }
 	};
 
 	struct NonEmpty
 	{
 		NonEmpty( const T& value ) : _data(1,value) {;}
-		NonEmpty( const T&& value ) { _data.emplace_back(value); }
+		//NonEmpty( const T&& value ) { _data.emplace_back(value); }
 		T& tos(void) { return _data.back(); }	
 		const T& tos(void) const { return _data.back(); }
 		
@@ -75,7 +85,7 @@ private:
 			return *this;
 		}
 		MaybeEmpty push( const T& value ) { _data.push_back(value); return *this; }
-		//MaybeEmpty push( const T&& value ) { _data.emplace_back(value); return *this; }
+		//MaybeEmpty push( T&& value ) { _data.emplace_back(value); return *this; }
 		std::vector<T> _data;
 	};
 
@@ -116,33 +126,49 @@ using AnyValue = std::variant< bool, int, unsigned, std::string >;
 std::ostream& operator<<(std::ostream& out, const AnyValue& val);
 std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);
 
-struct StackObject : std::pair< Type, AnyValue >
+struct StackObject
 {
 	// BDM StackObject( std::pair< Type, AnyValue >&& x ) : std::pair< Type, AnyValue >(x) {;}
-	StackObject( const std::pair< Type, AnyValue >& x ) : std::pair< Type, AnyValue >(x) {;}
+	StackObject( const Type& t, const AnyValue& x ) : first(t), second(x) {;}
 
 	template<class T> static StackObject make_stackobj(const Type& type, const T& val )
 	{
-		return StackObject( std::make_pair(type, val ));		
+		return StackObject( type, val );		
 	}
+
+	Type first;
+	AnyValue second;
 };
 
 std::ostream& operator<<(std::ostream& out, const StackObject& obj);
 
-struct StackSig : public std::pair< Type,std::optional<AnyValue> >
+struct StackSig
 {
 	// Note - Generic types will always ignore a specified value.
-	//StackSig( std::pair< Type,std::optional<AnyValue> >& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
-	StackSig( std::pair< Type,std::optional<AnyValue> >&& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
+	StackSig( const Type& t, const std::optional<AnyValue>& x ) : first(t), second(x) {;}
+	StackSig( const StackSig& s ) = default;
+
+	/*
+	StackSig& operator=(const StackSig& s) 
+	{
+		first = s.first;
+		second = s.second;
+		return *this;
+	}
+	*/
+	// BDM StackSig( std::pair< Type,std::optional<AnyValue> >&& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
 
 	static StackSig make_stacksig(const Type& type);
 	template<class T> static StackSig make_stacksig(const Type& type, const T& val ) 
 	{
-		return StackSig( std::make_pair(type, std::make_optional< AnyValue >( val )) );
+		return StackSig(type, std::make_optional< AnyValue >( val ));
 	}
 
 	bool operator==(const StackSig& o) const;
 	bool operator==(const StackObject& o) const;
+
+	Type first;
+	std::optional<AnyValue> second;
 };
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
