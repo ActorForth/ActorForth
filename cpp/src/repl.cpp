@@ -39,7 +39,10 @@ void _interpret( Continuation& c )
 	try
 	{
 		// return if successful.
-		;
+		int i = std::stoi(word);
+		c.stack.push( StackObject( Int, i ) );
+		std::cout << "Found a Int : " << c.stack.tos() << "." << std::endl;
+		return;
 	}	
 	catch( const std::invalid_argument& ) {;}
 	catch( const std::out_of_range& ) {;}
@@ -47,10 +50,8 @@ void _interpret( Continuation& c )
 	// Next check if it's a boolean.
 	if(word == "true" or word == "false") 
 	{
-		std::cout << "Found a Bool : " << word << "." << std::endl;
-		const bool bval = (word == "true") ? true : false;
-		// c.stack.push( StackObject( { Bool, bval} ) );
-		c.stack.push( StackObject::make_stackobj( Bool, bval ) );
+		c.stack.push( StackObject( { Bool, (word == "true") ? true : false} ) );
+		std::cout << "Found a Bool : " << c.stack.tos() << "." << std::endl;
 		return;
 	}
 
@@ -58,13 +59,15 @@ void _interpret( Continuation& c )
 	Operation* op = Operation::find(word, c.stack);
 	if(op)
 	{
+		std::cout << "Found an Operation : " << *op << "." << std::endl;
 		c.op = op;
 		c.execute( c );
 		return;
 	}
 
 	// Otherwise create an Atom.
-
+	c.stack.push( StackObject( Atom, word ) );
+	std::cout << "Found an Atom : " << c.stack.tos() << "." << std::endl;
 }
 
 int main(int argc, char *argv[])
@@ -103,8 +106,8 @@ int main(int argc, char *argv[])
 	{
 		if(not count++) std::cout << "\tTOS: \t"; else std::cout << "\t\t";
 		const StackObject& so = cont.stack.tos();
-		cont.stack.pop();
 		std::cout << std::setw(2) << std::dec << count << "\t" << so << std::endl;
+		cont.stack.pop();		
 	}
 	std::cout << "\nend of line..." << std::endl;
 

@@ -4,4 +4,5 @@ Then # We got a comment.
 ...end of line.
 
 14 7 + .
+nop nop
 true false . .

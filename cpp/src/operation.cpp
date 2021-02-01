@@ -29,7 +29,7 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 	}
 	catch( Stack<StackSig>::Underflow& x ) 
 	{
-		//std::cout << "HERE'S OUR Stack<StackSig> ERROR!" << std::endl;
+		std::cout << "HERE'S OUR Stack<StackSig> ERROR!" << std::endl;
 	} // Empty stack means Global 'Any' vocabulary.
 	/*
 	catch( std::exception& x )
@@ -47,7 +47,9 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 	// Insert Operation into type vocabulary.
 	TypeOps[type].push_back(new_op);
 
-	// TODO : Detect whether or not this is also a Constructor.
+	std::cout << "Just added operator " << *new_op << std::endl;
+
+	// BDM TODO : Detect whether or not this is also a Constructor.
 	return new_op;
 }
 
@@ -73,6 +75,11 @@ template<class T> Operation* _search_vocabulary(const std::string& op_name, cons
 }
 */
 
+std::ostream& operator<<(std::ostream& out, const Operation& op)
+{
+	out << "Op: '" << op.name << "' @ " << op.token << " with " << op.sig;
+	return out;
+}
 
 
 Operation* const op_nop = Operation::add("nop", {}, Signature(), [](Continuation&) {;}, true);

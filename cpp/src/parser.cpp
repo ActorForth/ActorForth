@@ -115,7 +115,7 @@ generator<Parser::Token> Parser::tokens()
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
 {
-	out << "'" << token.value << "'" << "\t\t\t[ file : " << token.location.filename 
+	out << "'" << token.value << "'" << " [ file : " << token.location.filename 
 	    << ", line: " << token.location.linenumber << ", col: " << token.location.column << " ]";
 	return out;
 }
