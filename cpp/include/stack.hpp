@@ -58,7 +58,7 @@ private:
 		const T& tos(void) const { throw Underflow(); }	
 		MaybeEmpty pop(void) { throw Underflow(); }
 		MaybeEmpty push( const T& value ) { return NonEmpty(value); }
-		MaybeEmpty push( const T&& value ) { return NonEmpty(value); }
+		//MaybeEmpty push( const T&& value ) { return NonEmpty(value); }
 	};
 
 	struct NonEmpty
@@ -75,7 +75,7 @@ private:
 			return *this;
 		}
 		MaybeEmpty push( const T& value ) { _data.push_back(value); return *this; }
-		MaybeEmpty push( const T&& value ) { _data.emplace_back(value); return *this; }
+		//MaybeEmpty push( const T&& value ) { _data.emplace_back(value); return *this; }
 		std::vector<T> _data;
 	};
 
@@ -118,7 +118,8 @@ std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);
 
 struct StackObject : std::pair< Type, AnyValue >
 {
-	StackObject( std::pair< Type, AnyValue >&& x ) : std::pair< Type, AnyValue >(x) {;}
+	// BDM StackObject( std::pair< Type, AnyValue >&& x ) : std::pair< Type, AnyValue >(x) {;}
+	StackObject( const std::pair< Type, AnyValue >& x ) : std::pair< Type, AnyValue >(x) {;}
 
 	template<class T> static StackObject make_stackobj(const Type& type, const T& val )
 	{

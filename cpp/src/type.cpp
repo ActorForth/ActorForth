@@ -2,7 +2,7 @@
 //	type.cpp	- Type definition for ActorForth.
 //
 
-#include <doctest/doctest.h>
+//#include <doctest/doctest.h>
 
 #include <sstream>
 #include <stdexcept>
@@ -67,5 +67,5 @@ const Type& Bool = Type::find_or_make("Bool");
 const Type& Int = Type::find_or_make("Int");
 const Type& String = Type::find_or_make("String");
 
-TEST_CASE("Test embedded in type.cpp.") {;}
+// TEST_CASE("Test embedded in type.cpp.") {;}
 

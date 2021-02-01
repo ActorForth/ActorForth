@@ -32,6 +32,39 @@ Parser open_file(int argc, char *argv[])
 void _interpret( Continuation& c )
 {
 	std::cout << "Interpreting : " << c.token << std::endl;
+
+	const std::string& word = c.token.value;
+
+	// First check if it's an integer.
+	try
+	{
+		// return if successful.
+		;
+	}	
+	catch( const std::invalid_argument& ) {;}
+	catch( const std::out_of_range& ) {;}
+
+	// Next check if it's a boolean.
+	if(word == "true" or word == "false") 
+	{
+		std::cout << "Found a Bool : " << word << "." << std::endl;
+		const bool bval = (word == "true") ? true : false;
+		// c.stack.push( StackObject( { Bool, bval} ) );
+		c.stack.push( StackObject::make_stackobj( Bool, bval ) );
+		return;
+	}
+
+	// Finally check if it's an existing value word.	
+	Operation* op = Operation::find(word, c.stack);
+	if(op)
+	{
+		c.op = op;
+		c.execute( c );
+		return;
+	}
+
+	// Otherwise create an Atom.
+
 }
 
 int main(int argc, char *argv[])
@@ -63,6 +96,16 @@ int main(int argc, char *argv[])
 		}		
 	}
 
+	std::cout << "\nStack remaining :\n";
+	size_t count = 0;
+	if(not cont.stack.depth()) std::cout << "<empty>" << std::endl;
+	while(cont.stack.depth())
+	{
+		if(not count++) std::cout << "\tTOS: \t"; else std::cout << "\t\t";
+		const StackObject& so = cont.stack.tos();
+		cont.stack.pop();
+		std::cout << std::setw(2) << std::dec << count << "\t" << so << std::endl;
+	}
 	std::cout << "\nend of line..." << std::endl;
 
 	return 0;
