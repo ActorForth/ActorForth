@@ -28,7 +28,8 @@ public:
 
 	bool operator==(const Type& t) const { return id == t.id; }
 
-	/*
+	//Type( const Type&& ) = default;
+	
 	Type( const Type& t ) = default;
 	Type& operator=(const Type& t) 
 	{
@@ -37,7 +38,7 @@ public:
 		if(&handler != &t.handler) throw std::exception();
 		return *this;
 	}
-	*/
+	
 
 	const std::string name;
 	const ID id;
