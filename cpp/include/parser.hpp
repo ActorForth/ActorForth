@@ -25,7 +25,11 @@ class Parser
 {
 public:
 	
+	Parser(void);
 	Parser(const std::string filename );
+	Parser(const std::string filename, const std::string content);
+
+	~Parser() {;}
 
 	struct FilePosition
 	{
@@ -47,6 +51,12 @@ public:
 		FilePosition location;
 	};
 
+	// consult good() to see if potential tokens are available.
+	bool good(void) const { return input->good(); }
+ 
+	bool is_stdin(void) const { return input == &std::cin; }
+
+	// Returns tokens one by one until eof or additionally, for cin inputs, until a linefeed is reached.
 	generator<Token> tokens();
 
 private:
@@ -87,8 +97,11 @@ private:
 		StateMaybeToken consume(const char c, const FilePosition& pos);
 	};
 
-	//std::variant<std::ifstream, std::istringstream> input;
-	std::ifstream input;
+	// s or f may or may not be active according to the ctor called.
+	// DO NOT USE THEM. Only reference the input pointer.
+	std::stringstream s;
+	std::ifstream f;
+	std::istream* input;
 
 	FilePosition location;
 };

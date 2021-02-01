@@ -4,13 +4,16 @@
 
 #include "parser.hpp"
 
+Parser::Parser(void) : input(&std::cin) {;}
+
 Parser::Parser(const std::string filename ) 
-	: 	input( std::ifstream(filename, std::ios::binary) ),
-		location(filename)
+	: 	f( std::ifstream(filename, std::ios::binary) ),
+		input(0),
+		location(std::move(filename))
 { 
 	try 
 	{
-  		input.exceptions(input.failbit);        		
+  		f.exceptions(f.failbit);
 	} 
 	catch (const std::ios_base::failure& e)
 	{
@@ -19,8 +22,24 @@ Parser::Parser(const std::string filename )
            			<< "Error code: " << e.code() << '\n';
 		throw;                  			
     }
-    input.exceptions(input.badbit);
+    f.exceptions(f.badbit);
+    input = &f;
 }
+
+
+Parser::Parser(const std::string filename, const std::string content)
+	: 	s(content),
+		//input(0),
+		location(std::move(filename))
+{
+	//s = std::stringstream();
+	std::cout << "Parser sstream ctor." << std::endl;
+	//s << content ;
+	//std::cout << "Streamed in the content." << std::endl;
+	input = &s;
+	std::cout << "Input pointer set." << std::endl;
+}
+
 
 void Parser::FilePosition::update(const char c)
 {
@@ -74,8 +93,12 @@ generator<Parser::Token> Parser::tokens()
 {
 	//if(! input) std::cerr << "Input file not valid." << std::endl; return;
 	State state = Whitespace();
-	char c = input.get();
-	do
+	char c;
+
+	using namespace std;
+	//cout << "Tokens read char '" << c << "'." << endl;
+
+	while(input->get(c))
 	{
 		std::optional< Token > maybe_token;
 		std::tie(state, maybe_token) = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
@@ -83,9 +106,11 @@ generator<Parser::Token> Parser::tokens()
 		if (maybe_token.has_value()) co_yield( maybe_token.value() );
 		location.update(c);
 
-		c = input.get();
-
-	} while (not input.eof());
+		// If we're reading from std::cin we'll only pull in one line at a time
+		// unless we're already inside a string.
+		if(is_stdin() and c == '\n' and not std::holds_alternative<String>(state)) break;
+		//cout << "Tokens read char '" << c << "'." << endl;
+	}
 }
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token)

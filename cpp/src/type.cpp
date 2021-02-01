@@ -2,7 +2,7 @@
 //	type.cpp	- Type definition for ActorForth.
 //
 
-#include <doctest/doctest.h>
+//#include <doctest/doctest.h>
 
 #include <sstream>
 #include <stdexcept>
@@ -10,7 +10,7 @@
 #include "type.hpp"
 #include "continuation.hpp"
 
-Type::Handler Type::default_handler = [](Continuation& c) { c.op(c); };
+Type::Handler Type::default_handler = [](Continuation& c) { (*(c.op))(c); };
 
 //
 //	Any type is a special generic type that matches all other types.
@@ -60,4 +60,12 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 	return out;
 }
 
-TEST_CASE("Test embedded in type.cpp.") {;}
+
+const Type& Any = Type::find_or_make("Any");
+const Type& Atom = Type::find_or_make("Atom");
+const Type& Bool = Type::find_or_make("Bool");
+const Type& Int = Type::find_or_make("Int");
+const Type& String = Type::find_or_make("String");
+
+// TEST_CASE("Test embedded in type.cpp.") {;}
+

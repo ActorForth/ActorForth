@@ -28,6 +28,18 @@ public:
 
 	bool operator==(const Type& t) const { return id == t.id; }
 
+	//Type( const Type&& ) = default;
+	
+	Type( const Type& t ) = default;
+	Type& operator=(const Type& t) 
+	{
+		if(name != t.name) throw std::exception();
+		if(id != t.id) throw std::exception();
+		if(&handler != &t.handler) throw std::exception();
+		return *this;
+	}
+	
+
 	const std::string name;
 	const ID id;
 
@@ -35,6 +47,7 @@ protected:
 	Type( const std::string& n, const Handler& h = default_handler ) : name(n), id(Types.size()), handler(h) {;}
 
 private:
+
 	const Handler handler;
 
 	// A Type name can only be instantiated once and its position in the Types vector is its ID.
@@ -50,3 +63,8 @@ private:
 //	Initialize built-in Types here. Order matters!
 //
 // #include "types/any.hpp"
+extern const Type& Any;
+extern const Type& Atom;
+extern const Type& Bool;
+extern const Type& Int;
+extern const Type& String;  // BDM : Should we just use Atoms?
