@@ -113,6 +113,9 @@ private:
 
 using AnyValue = std::variant< bool, int, unsigned, std::string >;
 
+std::ostream& operator<<(std::ostream& out, const AnyValue& val);
+std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);
+
 struct StackObject : std::pair< Type, AnyValue >
 {
 	StackObject( std::pair< Type, AnyValue >&& x ) : std::pair< Type, AnyValue >(x) {;}
@@ -142,15 +145,6 @@ struct StackSig : public std::pair< Type,std::optional<AnyValue> >
 };
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
-
-/*
-template <class T> StackSig make_stacksig(const Type& type, const T& val ) 
-{
-	return std::make_pair(type, std::make_optional< AnyValue >( std::make_any<T>(val) ));
-}
-*/
-
-
 
 struct Signature
 {

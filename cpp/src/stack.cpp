@@ -14,6 +14,27 @@
 
 template<class T> const std::vector<T> Stack<T>::AlwaysEmpty;
 
+
+std::ostream& operator<<(std::ostream& out, const AnyValue& val)
+{
+	if(auto v = std::get_if<bool>(&val)) out << *v;
+	else if(auto v = std::get_if<int>(&val)) out << *v;
+	else if(auto v = std::get_if<unsigned>(&val)) out << *v;
+	else if(auto v = std::get_if<std::string>(&val)) out << *v;
+	else out << "UNKNOWN VALUE TYPE!";
+	return out;
+}
+
+
+std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val)
+{
+	if(val.has_value()) out << val.value();
+	else
+		out << "<no value>";
+	return out;
+}
+
+
 StackSig StackSig::make_stacksig(const Type& type)  
 {
 	// NOTE - turns out make_optional will construct the optional with a default
@@ -22,30 +43,17 @@ StackSig StackSig::make_stacksig(const Type& type)
 	return StackSig( std::make_pair(type, std::optional<AnyValue>() ) );
 }
 
+
 std::ostream& operator<<(std::ostream& out, const StackObject& obj)
 {
-	out << "<StackObject>{" << obj.first << ", val: ";
-	//out << obj.second;
-	out << "VALUE?";
-
-	out << "}";
+	out << "<StackObject>{" << obj.first << ", val: " << obj.second << "}";	
 	return out;
 }
 
+
 std::ostream& operator<<(std::ostream& out, const StackSig& sig) 
 { 
-	out << "<StackSig>{" << sig.first << ", ";
-	if(sig.second.has_value())
-	{
-		out << "filter val:";
-		//out << sig.second.value();
-		out << "VALUE?";
-	}
-	else
-	{
-		out << "<no filter>";
-	}
-	out << "}"; 
+	out << "<StackSig>{" << sig.first << ", " << sig.second << "}";
 	return out; 
 }
 
