@@ -87,3 +87,12 @@ std::ostream& operator<<(std::ostream& out, const Operation& op)
 Operation* const op_nop = Operation::add("nop", {}, Signature(), [](Continuation&) {;}, true);
 
 #include "types/any.hpp"
+
+
+
+Operation* t[] = 
+	{ 
+		op_print, 
+		op_empty_print, 
+		op_stack 
+	};

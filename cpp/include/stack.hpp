@@ -57,12 +57,14 @@ public:
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
+	//std::vector<T>::const_reverse_iterator 
 	auto rbegin(void) const 
 	{ 
 		auto result = std::get_if<NonEmpty>(&_stack);
 		return (result) ? result->_data.rbegin() : AlwaysEmpty.rbegin();
 	}
 
+	//std::vector<T>::const_reverse_iterator 
 	auto rend(void) const 
 	{ 
 		auto result = std::get_if<NonEmpty>(&_stack);
@@ -144,7 +146,6 @@ private:
 
 //template<class T> inline std::ostream& operator<<(std::ostream& out, const Stack<T>& stack)
 
-
 using AnyValue = std::variant< bool, int, unsigned, std::string >;
 
 std::ostream& operator<<(std::ostream& out, const AnyValue& val);
@@ -210,3 +211,7 @@ struct Signature
 };
 
 std::ostream& operator<<(std::ostream& out, const Signature& sig);
+
+
+template<> const std::vector<StackObject> Stack<StackObject>::AlwaysEmpty;
+template<> const std::vector<StackSig> Stack<StackSig>::AlwaysEmpty;

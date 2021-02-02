@@ -108,9 +108,9 @@ int main(int argc, char *argv[])
 	if(not cont.stack.depth()) std::cout << "<empty>" << std::endl;
 	while(cont.stack.depth())
 	{
-		if(not count++) std::cout << "\tTOS: \t"; else std::cout << "\t\t";
+		if(not count) std::cout << "\tTOS: \t"; else std::cout << "\t\t";
 		const StackObject& so = cont.stack.tos();
-		std::cout << std::setw(2) << std::dec << count << "\t" << so << std::endl;
+		std::cout << std::setw(2) << std::dec << count++ << "\t" << so << std::endl;
 		cont.stack.pop();		
 	}
 	std::cout << "\nend of line..." << std::endl;

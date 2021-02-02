@@ -12,7 +12,8 @@
 #include "stack.hpp"
 
 
-template<class T> const std::vector<T> Stack<T>::AlwaysEmpty;
+template<> const std::vector<StackObject> Stack<StackObject>::AlwaysEmpty = std::vector<StackObject>();
+template<> const std::vector<StackSig> Stack<StackSig>::AlwaysEmpty  = std::vector<StackSig>();
 
 
 std::ostream& operator<<(std::ostream& out, const AnyValue& val)
