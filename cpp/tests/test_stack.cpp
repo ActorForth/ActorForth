@@ -99,8 +99,8 @@ TEST_CASE("Signature Checks")
 			Signature s = { {A,A}, {B,B} };
 			std::cout << "Signature s = { {A,A}, {B,B} } = " << s << std::endl;
 
-			CHECK(s.in_seq.tos().first == A);
-			CHECK(s.out_seq.tos().first == B);
+			CHECK(s.in_seq.tos().type == A);
+			CHECK(s.out_seq.tos().type == B);
 		}
 
 		SUBCASE("Matching Signatures")
@@ -136,10 +136,10 @@ TEST_CASE("Signature Checks")
 
 			SUBCASE("Matching filtered value signatures.")
 			{
-				sig.in_seq.tos().second = 1;
+				sig.in_seq.tos().maybe_value = 1;
 				CHECK(sig.matches(alt_longer_match_sig.in_seq) == true);
 
-				alt_longer_match_sig.in_seq.tos().second = 2;
+				alt_longer_match_sig.in_seq.tos().maybe_value = 2;
 				CHECK(sig.matches(alt_longer_match_sig.in_seq) == false);
 			}
 		}
@@ -183,10 +183,10 @@ TEST_CASE("Signature Checks")
 
 			SUBCASE("Matching filtered value signatures.")
 			{
-				sig.in_seq.tos().second = 1;
+				sig.in_seq.tos().maybe_value = 1;
 				CHECK(sig.matches(match_stack) == true);
 
-				match_stack.tos().second = 2;
+				match_stack.tos().value = 2;
 				CHECK(sig.matches(match_stack) == false);
 			}
 		}
@@ -213,19 +213,27 @@ TEST_CASE("StackObjects & Stacks")
 {
 	Stack<StackObject> stack;
 
+	std::cout << "About to make_stackobj." << std::endl;
 	StackObject b = StackObject::make_stackobj(Bool, true);
+
+	std::cout << "Past first one." << std::endl;
+
+	StackObject i = StackObject(Int, 42); // StackObject::make_stackobj(Int, 42);
+
+	std::cout << "Past second one." << std::endl;
+
 	StackObject c = StackObject::make_stackobj(Bool, false);
 
-	StackObject i = StackObject::make_stackobj(Int, 42);
+	std::cout << "Past third one." << std::endl;
 
 	std::cout << "StackObject::make_stackobj(Bool, true) = " << b << "." << std::endl;
 	std::cout << "StackObject::make_stackobj(Bool, false) = " << c << "." << std::endl;
 
 	std::cout << "\nStackObject::make_stackobj(Int, 42) = " << i << "." << std::endl;
 
-	CHECK(std::get<bool>(b.second) == true);
-	CHECK(std::get<bool>(c.second) == false);
-	CHECK(std::get<int>(i.second) == 42);
+	CHECK(std::get<bool>(b.value) == true);
+	CHECK(std::get<bool>(c.value) == false);
+	CHECK(std::get<int>(i.value) == 42);
 
 	SUBCASE("Moving StackObjects to Stack.")
 	{
@@ -239,8 +247,8 @@ TEST_CASE("StackObjects & Stacks")
 
 		display_stack(stack);
 
-		CHECK(std::get<bool>(b.second) == true);
-		CHECK(std::get<bool>(c.second) == false);
-		CHECK(std::get<int>(i.second) == 42);
+		CHECK(std::get<bool>(b.value) == true);
+		CHECK(std::get<bool>(c.value) == false);
+		CHECK(std::get<int>(i.value) == 42);
 	}
 }

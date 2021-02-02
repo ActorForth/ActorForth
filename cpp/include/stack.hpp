@@ -154,15 +154,15 @@ std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);
 struct StackObject
 {
 	// BDM StackObject( std::pair< Type, AnyValue >&& x ) : std::pair< Type, AnyValue >(x) {;}
-	StackObject( const Type& t, const AnyValue& x ) : first(t), second(x) {;}
+	StackObject( const Type& t, const AnyValue& x ) : type(t), value(x) {;}
 
 	template<class T> static StackObject make_stackobj(const Type& type, const T& val )
 	{
 		return StackObject( type, val );		
 	}
 
-	Type first;
-	AnyValue second;
+	Type type;
+	AnyValue value;
 };
 
 std::ostream& operator<<(std::ostream& out, const StackObject& obj);
@@ -170,17 +170,9 @@ std::ostream& operator<<(std::ostream& out, const StackObject& obj);
 struct StackSig
 {
 	// Note - Generic types will always ignore a specified value.
-	StackSig( const Type& t, const std::optional<AnyValue>& x ) : first(t), second(x) {;}
+	StackSig( const Type& t, const std::optional<AnyValue>& x ) : type(t), maybe_value(x) {;}
 	StackSig( const StackSig& s ) = default;
 
-	/*
-	StackSig& operator=(const StackSig& s) 
-	{
-		first = s.first;
-		second = s.second;
-		return *this;
-	}
-	*/
 	// BDM StackSig( std::pair< Type,std::optional<AnyValue> >&& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
 
 	static StackSig make_stacksig(const Type& type);
@@ -192,8 +184,8 @@ struct StackSig
 	bool operator==(const StackSig& o) const;
 	bool operator==(const StackObject& o) const;
 
-	Type first;
-	std::optional<AnyValue> second;
+	Type type;
+	std::optional<AnyValue> maybe_value;
 };
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);

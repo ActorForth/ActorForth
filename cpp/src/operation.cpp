@@ -25,7 +25,7 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 	{
 		// If we're not forcing global 'Any' scope then see if there's a stack context
 		// which will indicate another Type's vocabulary to store this Operation into.
-		if(not force_global) type = sig.in_seq.tos().first.id;
+		if(not force_global) type = sig.in_seq.tos().type.id;
 	}
 	catch( Stack<StackSig>::Underflow& x ) 
 	{

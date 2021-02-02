@@ -47,14 +47,14 @@ StackSig StackSig::make_stacksig(const Type& type)
 
 std::ostream& operator<<(std::ostream& out, const StackObject& obj)
 {
-	out << "<StackObject>{" << obj.first.name << ", val: " << obj.second << "}";	
+	out << "<StackObject>{" << obj.type << ", val: " << obj.value << "}";	
 	return out;
 }
 
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig) 
 { 
-	out << "<Spec>{" << sig.first << ", " << sig.second << "}";
+	out << "<Spec>{" << sig.type << ", " << sig.maybe_value << "}";
 	return out; 
 }
 
@@ -69,13 +69,13 @@ std::ostream& operator<<(std::ostream& out, const Signature& sig)
 bool StackSig::operator==(const StackSig& s) const
 {
 	// Generic Types always match.
-	if(first.id == 0) return true;
+	if(type.id == 0) return true;
 
 	// Different Types fail.
-	if(first.id != s.first.id) return false;
+	if(type.id != s.type.id) return false;
 
 	// If both our signatures specifies a value check it as well.
-	if(second.has_value() and s.second.has_value() and second.value() != s.second.value()) return false;
+	if(maybe_value.has_value() and s.maybe_value.has_value() and maybe_value.value() != s.maybe_value.value()) return false;
 
 	return true;
 }
@@ -85,13 +85,13 @@ bool StackSig::operator==(const StackObject& o) const
 {
 	std::cout << "Comparing " << *this << " with " << o << "." << std::endl;
 	// Generic Types always match.
-	if(first.id == 0) return true;
+	if(type.id == 0) return true;
 
 	// Different Types fail.
-	if(first.id != o.first.id) return false;
+	if(type.id != o.type.id) return false;
 
 	// If our signature specifies a value check it as well.
-	if(second.has_value() and second.value() != o.second) return false;
+	if(maybe_value.has_value() and maybe_value.value() != o.value) return false;
 
 	return true;
 }

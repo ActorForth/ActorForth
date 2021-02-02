@@ -39,4 +39,13 @@ TEST_CASE("Registering and querying types.")
 	}
 }
 
-TEST_CASE("main") {;}
+TEST_CASE("main") 
+{
+
+	CHECK(Bool.name == "Bool");
+
+	CHECK(Any.name == "Any");
+
+	CHECK(Int.name == "Int");
+
+}

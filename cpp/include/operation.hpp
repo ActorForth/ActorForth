@@ -44,7 +44,7 @@ public:
 		try
 		{
 			// Does the top of our stack indicate a Type vocabulary we should check first/
-			type = stack.tos().first.id;
+			type = stack.tos().type.id;
 		}
 		catch( const Stack<StackSig>::Underflow& x ) {;} // Empty stack means Global 'Any' vocabulary.
 		catch( const Stack<StackObject>::Underflow& x ) {;}
