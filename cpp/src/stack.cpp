@@ -54,7 +54,7 @@ std::ostream& operator<<(std::ostream& out, const StackObject& obj)
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig) 
 { 
-	out << "<Spec>{" << sig.first.name << ", " << sig.second << "}";
+	out << "<Spec>{" << sig.first << ", " << sig.second << "}";
 	return out; 
 }
 

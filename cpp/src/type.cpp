@@ -17,7 +17,7 @@ Type::Handler Type::default_handler = [](Continuation& c) { (*(c.op))(c); };
 //	Any type is a special generic type that matches all other types.
 //
 //std::vector<Type> Type::Types(1, Type("Any"));
-std::vector<Type> Type::Types = { "Any" };
+std::vector<Type> Type::Types = { {"Any"} };
 std::map<const std::string, const Type::ID> Type::TypeIDs = { {"Any",0} };
 
 
