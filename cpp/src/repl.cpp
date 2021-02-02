@@ -89,6 +89,12 @@ int main(int argc, char *argv[])
 
 	Parser input = open_file(argc,argv);
 
+	std::cout << "Any    = " << Any << std::endl;
+	std::cout << "Int    = " << Int << std::endl;
+	std::cout << "Bool   = " << Bool << std::endl;
+	std::cout << "Atom   = " << Atom << std::endl;
+	std::cout << "String = " << String << std::endl;
+
 	while(input.good())
 	{
 		// For stdin we write an acknowledgement prompt as a Forthwright should expect.

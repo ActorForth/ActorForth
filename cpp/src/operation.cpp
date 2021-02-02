@@ -94,5 +94,8 @@ Operation* t[] =
 	{ 
 		op_print, 
 		op_empty_print, 
-		op_stack 
+		op_stack,
+		op_depth,
+		op_words,
+		
 	};

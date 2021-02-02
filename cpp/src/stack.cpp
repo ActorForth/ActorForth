@@ -47,14 +47,14 @@ StackSig StackSig::make_stacksig(const Type& type)
 
 std::ostream& operator<<(std::ostream& out, const StackObject& obj)
 {
-	out << "<StackObject>{" << obj.first << ", val: " << obj.second << "}";	
+	out << "<StackObject>{" << obj.first.name << ", val: " << obj.second << "}";	
 	return out;
 }
 
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig) 
 { 
-	out << "<StackSig>{" << sig.first << ", " << sig.second << "}";
+	out << "<Spec>{" << sig.first.name << ", " << sig.second << "}";
 	return out; 
 }
 

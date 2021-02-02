@@ -4,6 +4,7 @@
 
 //#include <doctest/doctest.h>
 
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 
@@ -15,15 +16,10 @@ Type::Handler Type::default_handler = [](Continuation& c) { (*(c.op))(c); };
 //
 //	Any type is a special generic type that matches all other types.
 //
-std::vector<Type> Type::Types(1, Type("Any"));
+//std::vector<Type> Type::Types(1, Type("Any"));
+std::vector<Type> Type::Types = { "Any" };
 std::map<const std::string, const Type::ID> Type::TypeIDs = { {"Any",0} };
 
-/*
-Type& Type::find( const std::string& n )
-{
-
-}
-*/
 
 Type& Type::find_or_make( const std::string& n, const Handler& h )
 {
@@ -62,10 +58,7 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 
 
 const Type& Any = Type::find_or_make("Any");
-const Type& Atom = Type::find_or_make("Atom");
-const Type& Bool = Type::find_or_make("Bool");
 const Type& Int = Type::find_or_make("Int");
+const Type& Bool = Type::find_or_make("Bool");
+const Type& Atom = Type::find_or_make("Atom");
 const Type& String = Type::find_or_make("String");
-
-// TEST_CASE("Test embedded in type.cpp.") {;}
-
