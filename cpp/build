@@ -26,16 +26,19 @@ export BUILD_PARAM="-fprofile-instr-generate -fcoverage-mapping -fdiagnostics-sh
 
 echo BUILD_PARAM = $BUILD_PARAM
 
+rm bin/parser.o
 rm bin/type.o
 rm bin/operation.o
 rm bin/stack.o
-rm bin/parser.o
+rm bin/any.o
 rm bin/libtype.a
-clang++-10 -v -c -fcoroutines-ts $BUILD_PARAM -std=c++20 -Werror -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
+clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/parser.cpp -stdlib=libc++ -o bin/parser.o
+clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
 clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/operation.cpp -stdlib=libc++ -o bin/operation.o
 clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest src/stack.cpp -stdlib=libc++ -o bin/stack.o
-clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/parser.cpp -stdlib=libc++ -o bin/parser.o
-llvm-ar-10 -rc bin/libtype.a bin/stack.o bin/type.o bin/operation.o bin/parser.o
+clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/types/any.cpp -stdlib=libc++ -o bin/any.o
+
+llvm-ar-10 -rc bin/libtype.a bin/parser.o bin/stack.o bin/type.o bin/operation.o bin/any.o
 
 ## test_stack
 #rm bin/test_stack

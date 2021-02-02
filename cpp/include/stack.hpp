@@ -199,6 +199,9 @@ std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 
 struct Signature
 {
+	Signature() = default;
+	Signature(const Signature&) = default;
+	Signature(const std::vector<Type>& in, const std::vector<Type>& out = {});
 	Stack<StackSig> in_seq;
 	Stack<StackSig> out_seq;
 

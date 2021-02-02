@@ -94,6 +94,15 @@ TEST_CASE("Signature Checks")
 		auto empty_sig = Signature();
 		std::cout << "Empty Signature: " << empty_sig << std::endl;
 
+		SUBCASE("Creating Signatures quickly")
+		{
+			Signature s = { {A,A}, {B,B} };
+			std::cout << "Signature s = { {A,A}, {B,B} } = " << s << std::endl;
+
+			CHECK(s.in_seq.tos().first == A);
+			CHECK(s.out_seq.tos().first == B);
+		}
+
 		SUBCASE("Matching Signatures")
 		{
 			auto alt_longer_match_sig = Signature();

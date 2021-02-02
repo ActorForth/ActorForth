@@ -3,4 +3,4 @@
 #include "type.hpp"
 
 
-//extern Type& Any; = Type::find_or_make("Any");
+extern Operation* const op_print;

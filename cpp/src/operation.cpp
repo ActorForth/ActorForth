@@ -47,9 +47,9 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 	// Insert Operation into type vocabulary.
 	TypeOps[type].push_back(new_op);
 
-	//std::cout << "Just added operator " << *new_op << std::endl;
+	std::cout << "Just added operator " << *new_op << std::endl;
 
-	//std::cout << Type::from_id(type) << " has " << Operation::TypeOps[type].size() << " words." << std::endl;
+	std::cout << Type::from_id(type) << " has " << Operation::TypeOps[type].size() << " words." << std::endl;
 
 	// BDM TODO : Detect whether or not this is also a Constructor.
 	return new_op;
@@ -85,3 +85,5 @@ std::ostream& operator<<(std::ostream& out, const Operation& op)
 
 
 Operation* const op_nop = Operation::add("nop", {}, Signature(), [](Continuation&) {;}, true);
+
+#include "types/any.hpp"

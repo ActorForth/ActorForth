@@ -132,3 +132,17 @@ bool Signature::matches(const Stack<StackSig>& sig) const
 
 	return true;
 }
+
+
+Signature::Signature(const std::vector<Type>& in, const std::vector<Type>& out)
+{
+	for(auto i=in.begin();i!=in.end();++i)
+	{
+		in_seq.push( StackSig::make_stacksig(*i) );
+	}
+
+	for(auto i=out.begin();i!=out.end();++i)
+	{
+		out_seq.push( StackSig::make_stacksig(*i) );
+	}
+}
