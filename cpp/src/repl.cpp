@@ -7,6 +7,10 @@
 
 #include "repl.hpp"
 
+#include "type.hpp"
+using namespace Types;
+
+
 int help(char *argv[])
 {
 	using namespace std;
@@ -74,8 +78,12 @@ void _interpret( Continuation& c )
 	std::cout << "\tFound an Atom : " << c.stack.tos() << "." << std::endl;
 }
 
+
+
 int main(int argc, char *argv[])
 {
+	Types::initialize();
+
 	//std::cout << "Startup" << std::endl;
 	Operation* const op_interpret = Operation::add("interpret", {}, Signature(), _interpret, true);
 	//std::cout << "op_interpret got address " << (void*) op_interpret << std::endl;
@@ -89,11 +97,11 @@ int main(int argc, char *argv[])
 
 	Parser input = open_file(argc,argv);
 
-	std::cout << "Any    = " << Any << std::endl;
-	std::cout << "Int    = " << Int << std::endl;
-	std::cout << "Bool   = " << Bool << std::endl;
-	std::cout << "Atom   = " << Atom << std::endl;
-	std::cout << "String = " << String << std::endl;
+	std::cout << "Any    = " << Types::Any << std::endl;
+	std::cout << "Int    = " << Types::Int << std::endl;
+	std::cout << "Bool   = " << Types::Bool << std::endl;
+	std::cout << "Atom   = " << Types::Atom << std::endl;
+	std::cout << "String = " << Types::String << std::endl;
 
 	while(input.good())
 	{

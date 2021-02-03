@@ -11,6 +11,9 @@
 #include "type.hpp"
 #include "continuation.hpp"
 
+namespace Types
+{
+
 Type::Handler Type::default_handler = [](Continuation& c) { (*(c.op))(c); };
 
 //
@@ -56,9 +59,13 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 	return out;
 }
 
+void initialize(void) 
+{ };
+	const Type Any = Type::find_or_make("Any");
+	const Type Int = Type::find_or_make("Int");
+	const Type Bool = Type::find_or_make("Bool");
+	const Type Atom = Type::find_or_make("Atom");
+	const Type String = Type::find_or_make("String");
+//};
 
-const Type& Any = Type::find_or_make("Any");
-const Type& Int = Type::find_or_make("Int");
-const Type& Bool = Type::find_or_make("Bool");
-const Type& Atom = Type::find_or_make("Atom");
-const Type& String = Type::find_or_make("String");
+}

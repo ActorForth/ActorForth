@@ -6,6 +6,7 @@
 #include <doctest/doctest.h>
 
 #include "type.hpp"
+using namespace Types;
 
 TEST_CASE("Registering and querying types.")
 {

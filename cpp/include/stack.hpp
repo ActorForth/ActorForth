@@ -12,6 +12,8 @@
 
 #include "type.hpp"
 
+using namespace Types;
+
 struct Signature;
 
 template <class T> class Stack
