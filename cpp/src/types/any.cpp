@@ -33,6 +33,21 @@ Operation* const op_stack = Operation::add("/s", {}, {{},{}}, _stack, true);
 
 Operation* const op_depth = Operation::add("/d", {}, {{},{}}, [](Continuation& c) { c.stack.push( { Int, static_cast<int>(c.stack.depth()) } ); }, true );
 
+
+void _print_type_words( Continuation& c )
+{
+	const Type& t = c.stack.tos().type;
+	const std::vector<Operation*>& ops = Operation::TypeOps[t.id];
+	std::cout << "\n\t" << t.name << ":";
+	for( auto op=ops.rbegin(); op!=ops.rend(); ++op)
+	{
+		std::cout << "\n\t\t" << **op;
+		//++count;
+	}
+	c.stack.pop();
+}
+
+
 void _print_words( Continuation& c )
 {
 	(void)c;
@@ -55,4 +70,20 @@ void _print_words( Continuation& c )
 	std::cout << "\n" << count << " total words." << std::endl;
 }
 
+Operation* const op_type_words = Operation::add("words", {}, {{IType},{}}, _print_type_words, true);
+Operation* const op_type_words_short = Operation::add("/w", {}, {{IType},{}}, _print_type_words, true);
 Operation* const op_words = Operation::add("words", {}, {{},{}}, _print_words, true);
+Operation* const op_words_short = Operation::add("/w", {}, {{},{}}, _print_words, true);
+
+void _print_types( Continuation& c )
+{
+	(void)c;
+	std::cout << "ActorForth Types:\n";
+	for( size_t id = 0; id < Type::size(); ++id )
+	{
+		std::cout << "\t" << Type::from_id(id) << "\n";
+	}
+}
+
+Operation* const op_types = Operation::add("types", {}, {{},{}}, _print_types, true);
+Operation* const op_types_short = Operation::add("/t", {}, {{},{}}, _print_types, true);

@@ -150,6 +150,7 @@ private:
 
 	friend std::ostream& operator<<(std::ostream& out, const Operation& op);
 	friend void _print_words( Continuation& );
+	friend void _print_type_words( Continuation& );
 };
 
 extern Operation* const op_nop;

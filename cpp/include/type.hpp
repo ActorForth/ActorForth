@@ -71,6 +71,7 @@ private:
 void initialize(void); 
 
 extern const Type Any;
+extern const Type IType;
 extern const Type Int;
 extern const Type Bool;
 extern const Type Atom;

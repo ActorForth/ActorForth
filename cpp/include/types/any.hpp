@@ -11,3 +11,5 @@ extern Operation* const op_stack;
 extern Operation* const op_depth;
 
 extern Operation* const op_words;
+
+extern Operation* const op_types;

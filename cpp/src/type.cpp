@@ -62,6 +62,7 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 void initialize(void) 
 { };
 	const Type Any = Type::find_or_make("Any");
+	const Type IType = Type::find_or_make("Type");
 	const Type Int = Type::find_or_make("Int");
 	const Type Bool = Type::find_or_make("Bool");
 	const Type Atom = Type::find_or_make("Atom");
