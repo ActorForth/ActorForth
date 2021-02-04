@@ -55,7 +55,7 @@ Type& Type::from_id( const ID& id )
 
 std::ostream& operator<<(std::ostream& out, const Type& type)
 {
-	out << "<" << type.name << ">|ID:" << type.id << "|";
+	out << "<" << type.name << "|ID:" << type.id << "|>";
 	return out;
 }
 

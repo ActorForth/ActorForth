@@ -49,7 +49,7 @@ public:
 
 protected:
 	Type( const std::string& n, const Handler& h = default_handler ) : name(n), id(Types.size()), handler(h) 
-	{ std::cout << "Type::ctor( n=" << n << ")" << std::endl; }
+	{ ; } //std::cout << "Type::ctor( n=" << n << ")" << std::endl; }
 
 private:
 

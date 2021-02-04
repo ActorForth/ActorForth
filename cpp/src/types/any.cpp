@@ -8,7 +8,8 @@
 
 void _print(Continuation& c)
 {
-	std::cout << c.stack.tos();
+	const StackObject& o = c.stack.tos();
+	std::cout << o.type << ", " << o.value;
 	c.stack.pop();
 }
 
@@ -24,8 +25,9 @@ void _stack(Continuation& c)
 	if(not c.stack.depth()) std::cout << "<empty>" << std::endl;
 	for(auto item=c.stack.rbegin();item!=c.stack.rend();++item)
 	{
+		const StackObject& o = *item;
 		if(not count) std::cout << "TOS: \t"; else std::cout << "\t";
-		std::cout << std::setw(2) << std::dec << count++ << "\t" << *item << std::endl;
+		std::cout << std::setw(2) << std::dec << count++ << " :\t" << o.value << "\t: " << o.type.name << std::endl;
 	}
 }
 
@@ -43,7 +45,8 @@ void _print_type_words( Continuation& c )
 	std::cout << "\n\t" << t.name << ":";
 	for( auto op=ops.rbegin(); op!=ops.rend(); ++op)
 	{
-		std::cout << "\n\t\t" << **op;
+		const Signature& s = (**op).sig;
+		std::cout << "\n\t\t" << (**op).name << " :" << s.in_seq << " -> " << s.out_seq;
 		//++count;
 	}
 	c.stack.pop();
@@ -65,7 +68,9 @@ void _print_words( Continuation& c )
 		std::cout << "\n\t" << t.name << ":";
 		for( auto op=ops.rbegin(); op!=ops.rend(); ++op)
 		{
-			std::cout << "\n\t\t" << **op;
+			const Signature& s = (**op).sig;
+			std::cout << "\n\t\t" << (**op).name << " : ";
+			s.display(std::cout);
 			++count;
 		}
 	}

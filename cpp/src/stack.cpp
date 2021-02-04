@@ -83,7 +83,8 @@ bool StackSig::operator==(const StackSig& s) const
 
 bool StackSig::operator==(const StackObject& o) const
 {
-	std::cout << "Comparing " << *this << " with " << o << "." << std::endl;
+	//std::cout << "Comparing " << *this << " with " << o << "." << std::endl;
+	
 	// Generic Types always match.
 	if(type.id == 0) return true;
 
@@ -146,4 +147,31 @@ Signature::Signature(const std::vector<Type>& in, const std::vector<Type>& out)
 	{
 		out_seq.push( StackSig::make_stacksig(*i) );
 	}
+}
+
+std::ostream& Signature::display(std::ostream& o) const
+{
+	bool first = true;
+	if(in_seq.depth()==0) o << "[]";
+	for(auto i=in_seq.begin();i!=in_seq.end();++i)
+	{
+		if(!first) o << ", ";
+		first = false;
+		o << (*i).type.name;
+		if((*i).maybe_value.has_value()) o << "{ " << (*i).maybe_value << " }";
+	}
+
+	o << " -> ";
+
+	first = true;
+	if(out_seq.depth()==0) o << "[]";
+	for(auto i=out_seq.begin();i!=out_seq.end();++i)
+	{
+		if(!first) o << ", ";
+		first = false;
+		o << (*i).type.name;
+		if((*i).maybe_value.has_value()) o << "{ " << (*i).maybe_value << " }";
+	}
+
+	return o;
 }

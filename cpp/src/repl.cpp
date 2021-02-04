@@ -39,7 +39,7 @@ void _interpret( Continuation& c )
 	// TODO -	consider putting the tokens stream in the Continuation and allowing
 	//			devs to update the token stream and/or write their own interpreter word
 	//			to act as a little DSL.
-	std::cout << "Interpreting : " << c.token << std::endl;
+	//std::cout << "Interpreting : " << c.token << std::endl;
 
 	const std::string& word = c.token.value;
 
@@ -55,7 +55,7 @@ void _interpret( Continuation& c )
 		if(word.size()==std::to_string(i).size())
 		{
 			c.stack.push( StackObject( Int, i ) );
-			std::cout << "\tFound a Int : " << c.stack.tos() << "." << std::endl;
+			//std::cout << "\tFound a Int : " << c.stack.tos() << "." << std::endl;
 			return;
 		}
 	}	
@@ -66,7 +66,7 @@ void _interpret( Continuation& c )
 	if(word == "true" or word == "false") 
 	{
 		c.stack.push( StackObject( { Bool, (word == "true") ? true : false} ) );
-		std::cout << "\tFound a Bool : " << c.stack.tos() << "." << std::endl;
+		//std::cout << "\tFound a Bool : " << c.stack.tos() << "." << std::endl;
 		return;
 	}
 
@@ -74,7 +74,7 @@ void _interpret( Continuation& c )
 	Operation* op = Operation::find(word, c.stack);
 	if(op)
 	{
-		std::cout << "\tFound an Operation : " << *op << ". EXECUTING!" << std::endl;
+		//std::cout << "\tFound an Operation : " << *op << ". EXECUTING!" << std::endl;
 		c.op = op;
 		c.execute( c );
 		return;
@@ -82,7 +82,8 @@ void _interpret( Continuation& c )
 
 	// Otherwise create an Atom.
 	c.stack.push( StackObject( Atom, word ) );
-	std::cout << "\tFound an Atom : " << c.stack.tos() << "." << std::endl;
+	std::cout << "?\n";
+	//std::cout << "\tFound an Atom : " << c.stack.tos() << "." << std::endl;
 }
 
 
@@ -103,13 +104,15 @@ int main(int argc, char *argv[])
 	Continuation cont = { dstack, rstack, op_nop, Parser::Token() };
 
 	Parser input = open_file(argc,argv);
-
+	
+	/*
 	std::cout << "Any    = " << Types::Any << std::endl;
 	std::cout << "Int    = " << Types::Int << std::endl;
 	std::cout << "Bool   = " << Types::Bool << std::endl;
 	std::cout << "Atom   = " << Types::Atom << std::endl;
 	std::cout << "String = " << Types::String << std::endl;
-
+	*/
+	
 	while(input.good())
 	{
 		// For stdin we write an acknowledgement prompt as a Forthwright should expect.

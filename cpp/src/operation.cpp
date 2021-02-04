@@ -20,12 +20,12 @@ std::map<Type::ID,std::vector<const Operation*>> Operation::TypeCtors;
 Operation* Operation::add(const std::string& name, const Parser::Token& token, const Signature& sig, const Type::Handler& h, const bool force_global )
 {
 	// Which Type vocabulary does it belong?
-	Type::ID type = 0; // Default to Global 'Any' vocabulary.
+	Type::ID type_id = 0; // Default to Global 'Any' vocabulary.
 	try
 	{
 		// If we're not forcing global 'Any' scope then see if there's a stack context
 		// which will indicate another Type's vocabulary to store this Operation into.
-		if(not force_global) type = sig.in_seq.tos().type.id;
+		if(not force_global) type_id = sig.in_seq.tos().type.id;
 	}
 	catch( Stack<StackSig>::Underflow& x ) 
 	{
@@ -45,11 +45,11 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 	Operation* new_op = new Operation(name, token, sig, h);
 
 	// Insert Operation into type vocabulary.
-	TypeOps[type].push_back(new_op);
+	TypeOps[type_id].push_back(new_op);
 
-	std::cout << "Just added operator " << *new_op << std::endl;
+	//std::cout << "Just added operator " << *new_op << std::endl;
 
-	std::cout << Type::from_id(type) << " has " << Operation::TypeOps[type].size() << " words." << std::endl;
+	//std::cout << Type::from_id(type_id) << " has " << Operation::TypeOps[type_id].size() << " words." << std::endl;
 
 	// BDM TODO : Detect whether or not this is also a Constructor.
 	return new_op;

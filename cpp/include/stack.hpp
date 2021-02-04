@@ -59,6 +59,19 @@ public:
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
+
+	auto begin(void) const 
+	{ 
+		auto result = std::get_if<NonEmpty>(&_stack);
+		return (result) ? result->_data.begin() : AlwaysEmpty.begin();
+	}
+
+	auto end(void) const 
+	{ 
+		auto result = std::get_if<NonEmpty>(&_stack);
+		return (result) ? result->_data.end() : AlwaysEmpty.end();
+	}
+
 	//std::vector<T>::const_reverse_iterator 
 	auto rbegin(void) const 
 	{ 
@@ -202,6 +215,9 @@ struct Signature
 
 	bool matches(const Stack<StackObject>& sobjects) const;
 	bool matches(const Stack<StackSig>& sig) const;
+
+	std::ostream& display(std::ostream& o) const;
+
 };
 
 std::ostream& operator<<(std::ostream& out, const Signature& sig);
