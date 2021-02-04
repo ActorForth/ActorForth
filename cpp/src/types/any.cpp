@@ -33,7 +33,9 @@ Operation* const op_stack = Operation::add("/s", {}, {{},{}}, _stack, true);
 
 Operation* const op_depth = Operation::add("/d", {}, {{},{}}, [](Continuation& c) { c.stack.push( { Int, static_cast<int>(c.stack.depth()) } ); }, true );
 
-
+// BDM TODO - 	move this under Type.cpp once we get the ctor declared for 
+//				putting a Type on the stack in the first place. Then can 
+//				refactor _print_words in terms of this one.
 void _print_type_words( Continuation& c )
 {
 	const Type& t = c.stack.tos().type;
@@ -87,3 +89,12 @@ void _print_types( Continuation& c )
 
 Operation* const op_types = Operation::add("types", {}, {{},{}}, _print_types, true);
 Operation* const op_types_short = Operation::add("/t", {}, {{},{}}, _print_types, true);
+
+
+Operation* const op_dup = Operation::add("dup", {}, {{Any},{Any, Any}}, [](Continuation& c) {c.stack.push(c.stack.tos());}, true );
+Operation* const op_drop = Operation::add("drop", {}, {{Any},{}}, [](Continuation& c) {c.stack.pop();}, true );
+Operation* const op_swap = Operation::add("swap", {}, {{Any, Any},{Any, Any}}, [](Continuation& c) {const StackObject o = c.stack.tos(); c.stack.pop(); const StackObject j = c.stack.tos(); c.stack.pop(); c.stack.push(o); c.stack.push(j);}, true );
+Operation* const op_2dup = Operation::add("2dup", {}, {{Any, Any},{Any, Any, Any, Any}}, [](Continuation& c) {const StackObject o = c.stack.tos(); (*op_swap)(c); const StackObject j = c.stack.tos(); (*op_swap)(c); c.stack.push(j); c.stack.push(o); }, true );
+
+// BDM TODO 	- Need to confirm the Types are identical (convertible via ctors?) before allowing an assignment.
+Operation* const op_assign = Operation::add("=", {}, {{Any, Any},{Any}}, [](Continuation& c) {StackObject o = c.stack.tos(); c.stack.pop(); c.stack.pop(); c.stack.push(o);}, true );

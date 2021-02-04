@@ -48,9 +48,16 @@ void _interpret( Continuation& c )
 	{
 		// return if successful.
 		int i = std::stoi(word);
-		c.stack.push( StackObject( Int, i ) );
-		std::cout << "\tFound a Int : " << c.stack.tos() << "." << std::endl;
-		return;
+
+		// BDM HACK - 	C++ accepts a lot of stuff with text as numerics.
+		//				This needs to be improved to be more "correct"
+		//				so words like 2dup don't get treated as numbers.
+		if(word.size()==std::to_string(i).size())
+		{
+			c.stack.push( StackObject( Int, i ) );
+			std::cout << "\tFound a Int : " << c.stack.tos() << "." << std::endl;
+			return;
+		}
 	}	
 	catch( const std::invalid_argument& ) {;}
 	catch( const std::out_of_range& ) {;}
