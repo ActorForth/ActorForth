@@ -38,4 +38,23 @@ void _op_int_plus( Continuation& c )
 
 Operation* const op_int_plus = Operation::add("+", {}, { {Int, Int}, {Int}}, _op_int_plus);
 
+void _op_int_minus( Continuation& c )
+{
+	const int val = std::get<int>(c.stack.tos().value);
+	c.stack.pop();
+	c.stack.tos().value = std::get<int>(c.stack.tos().value) - val;
+}
+
+Operation* const op_int_minus = Operation::add("-", {}, { {Int, Int}, {Int}}, _op_int_minus);
+
+void _op_int_multiply( Continuation& c )
+{
+	const int val = std::get<int>(c.stack.tos().value);
+	c.stack.pop();
+	c.stack.tos().value = std::get<int>(c.stack.tos().value) * val;
+}
+
+Operation* const op_int_multiply = Operation::add("*", {}, { {Int, Int}, {Int}}, _op_int_multiply);
+
+
 }
