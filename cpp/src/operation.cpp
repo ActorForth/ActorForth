@@ -50,7 +50,7 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 	// Insert Operation into type vocabulary.
 	TypeOps[type_id].push_back(new_op);
 
-	//std::cout << "Just added operator " << *new_op << std::endl;
+	std::cout << "Just added operator " << *new_op << std::endl;
 
 	//std::cout << Type::from_id(type_id) << " has " << Operation::TypeOps[type_id].size() << " words." << std::endl;
 
