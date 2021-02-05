@@ -5,6 +5,8 @@
 namespace ActorForth
 {
 
+extern Operation* const op_interpret;	
+
 extern Operation* const op_print;
 extern Operation* const op_empty_print;
 

@@ -34,60 +34,6 @@ Parser open_file(int argc, char *argv[])
 	return Parser();
 }
 
-void _interpret( Continuation& c )
-{
-	// BDM - 	call interpret inside the interpreter immediately goes into an infinite loop.
-	// TODO -	consider putting the tokens stream in the Continuation and allowing
-	//			devs to update the token stream and/or write their own interpreter word
-	//			to act as a little DSL.
-	//std::cout << "Interpreting : " << c.token << std::endl;
-
-	const std::string& word = c.token.value;
-
-	// First check if it's an integer.
-	try
-	{
-		// return if successful.
-		int i = std::stoi(word);
-
-		// BDM HACK - 	C++ accepts a lot of stuff with text as numerics.
-		//				This needs to be improved to be more "correct"
-		//				so words like 2dup don't get treated as numbers.
-		if(word.size()==std::to_string(i).size())
-		{
-			c.stack.push( StackObject( Int, i ) );
-			//std::cout << "\tFound a Int : " << c.stack.tos() << "." << std::endl;
-			return;
-		}
-	}	
-	catch( const std::invalid_argument& ) {;}
-	catch( const std::out_of_range& ) {;}
-
-	// Next check if it's a boolean.
-	if(word == "true" or word == "false") 
-	{
-		c.stack.push( StackObject( { Bool, (word == "true") ? true : false} ) );
-		//std::cout << "\tFound a Bool : " << c.stack.tos() << "." << std::endl;
-		return;
-	}
-
-	// Finally check if it's an existing value word.	
-	ActorForth::Operation* op = ActorForth::Operation::find(word, c.stack);
-	if(op)
-	{
-		//std::cout << "\tFound an Operation : " << *op << ". EXECUTING!" << std::endl;
-		c.op = op;
-		c.execute( c );
-		return;
-	}
-
-	// Otherwise create an Atom.
-	c.stack.push( StackObject( Atom, word ) );
-	std::cout << "?\n";
-	//std::cout << "\tFound an Atom : " << c.stack.tos() << "." << std::endl;
-}
-
-
 
 int main(int argc, char *argv[])
 {
@@ -95,7 +41,6 @@ int main(int argc, char *argv[])
 	Types::initialize();
 
 	//std::cout << "Startup" << std::endl;
-	ActorForth::Operation* const op_interpret = ActorForth::Operation::add("interpret", {}, Signature(), _interpret, true);
 	//std::cout << "op_interpret got address " << (void*) op_interpret << std::endl;
 
 	if (!op_interpret or !op_nop) { std::cout << "ERROR primitive ops not ready!" << std::endl; exit(-1); }

@@ -7,7 +7,7 @@
 
 #include "operation.hpp"
 
-TEST_CASE("main")
+TEST_CASE("Any Type Operations")
 {
 
 }

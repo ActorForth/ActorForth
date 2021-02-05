@@ -78,6 +78,7 @@ Operation* const op_nop = Operation::add("nop", {}, Signature(), [](Continuation
 Operation* t[] = 
 	{ 
 		// Any repl words.
+		ActorForth::op_interpret,
 		ActorForth::op_print, 
 		ActorForth::op_empty_print, 
 		ActorForth::op_stack,
