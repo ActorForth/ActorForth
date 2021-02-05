@@ -6,6 +6,10 @@
 #include "continuation.hpp"
 #include "types/any.hpp"
 
+namespace ActorForth
+{
+
+	
 void _print(Continuation& c)
 {
 	const StackObject& o = c.stack.tos();
@@ -105,3 +109,5 @@ Operation* const op_2dup = Operation::add("2dup", {}, {{Any, Any},{Any, Any, Any
 
 // BDM TODO 	- Need to confirm the Types are identical (convertible via ctors?) before allowing an assignment.
 Operation* const op_assign = Operation::add("=", {}, {{Any, Any},{Any}}, [](Continuation& c) {StackObject o = c.stack.tos(); c.stack.pop(); c.stack.pop(); c.stack.push(o);}, true );
+
+}

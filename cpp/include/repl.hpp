@@ -10,4 +10,9 @@
 
 int main(int argc, char *argv[]);
 
-extern Operation* const op_interpret;
+namespace ActorForth
+{
+
+extern ActorForth::Operation* const op_interpret;
+
+}

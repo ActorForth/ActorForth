@@ -11,7 +11,13 @@
 #include <iostream>
 
 class Continuation;
+
+namespace ActorForth
+{
+
 class Operation;
+
+}
 
 namespace Types
 {

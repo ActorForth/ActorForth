@@ -19,6 +19,9 @@
 
 class Continuation;
 
+namespace ActorForth
+{
+
 class Operation
 {
 public:
@@ -154,3 +157,5 @@ private:
 };
 
 extern Operation* const op_nop;
+
+}

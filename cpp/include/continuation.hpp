@@ -10,6 +10,8 @@
 #include <operation.hpp>
 #include <stack.hpp>
 
+using namespace ActorForth;
+
 class Continuation
 {
 public:
@@ -18,7 +20,7 @@ public:
 	Stack<StackObject> stack;	// data stack
 	Stack<StackObject> rstack;	// return stack
 
-	Operation* op;
+	ActorForth::Operation* op;
 	Parser::Token token;
 
 	void execute( Continuation& cont ) { (*op)(cont); }

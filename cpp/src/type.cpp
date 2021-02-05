@@ -11,6 +11,8 @@
 #include "type.hpp"
 #include "continuation.hpp"
 
+using namespace ActorForth;
+
 namespace Types
 {
 

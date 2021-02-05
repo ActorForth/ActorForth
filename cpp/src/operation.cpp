@@ -6,6 +6,9 @@
 #include <operation.hpp>
 #include <continuation.hpp>
 
+namespace ActorForth
+{
+
 // Holds the global vocabularies of all Operations for each Type.
 std::map<Type::ID,std::vector<Operation*>> Operation::TypeOps;
 
@@ -55,27 +58,6 @@ Operation* Operation::add(const std::string& name, const Parser::Token& token, c
 	return new_op;
 }
 
-/*
-template<class T> Operation* _search_vocabulary(const std::string& op_name, const Stack<T>& stack, const std::vector<Operation*>& list)
-{
-	Operation* result = 0;
-	std::vector<Operation*> results;
-
-	// Search in reverse order for all Operations with name, 'op_name'.
-	std::for_each(list.rbegin(), list.rend(), [&op_name, &result, &stack](Operation* op) 
-	{
-		if(op->name != op_name) return;
-
-		// Do we have a signature match with the stack?
-		if(not op->sig.matches(stack)) return;
-
-		// Is this the longest match we've found?
-		if(result and op->sig.in_seq.depth() > result->sig.in_seq.depth()) result = op;
-	} );
-
-	return result;	
-}
-*/
 
 std::ostream& operator<<(std::ostream& out, const Operation& op)
 {
@@ -86,16 +68,33 @@ std::ostream& operator<<(std::ostream& out, const Operation& op)
 
 Operation* const op_nop = Operation::add("nop", {}, Signature(), [](Continuation&) {;}, true);
 
+
+
+}
+
 #include "types/any.hpp"
-
-
+#include "types/int.hpp"
 
 Operation* t[] = 
 	{ 
-		op_print, 
-		op_empty_print, 
-		op_stack,
-		op_depth,
-		op_words,
+		// Any repl words.
+		ActorForth::op_print, 
+		ActorForth::op_empty_print, 
+		ActorForth::op_stack,
+		ActorForth::op_depth,
+		ActorForth::op_type_words,
+		ActorForth::op_words,
+		ActorForth::op_types,
+
+		// Any basic stack manipulation words.
+		ActorForth::op_dup,
+		ActorForth::op_drop,
+		ActorForth::op_swap,
+		ActorForth::op_2dup,
+		ActorForth::op_assign,
 		
+		// Int words.
+		ActorForth::op_atom_int,
+		ActorForth::op_string_int,
 	};
+

@@ -9,6 +9,7 @@
 
 #include "type.hpp"
 using namespace Types;
+using namespace ActorForth;
 
 
 int help(char *argv[])
@@ -71,7 +72,7 @@ void _interpret( Continuation& c )
 	}
 
 	// Finally check if it's an existing value word.	
-	Operation* op = Operation::find(word, c.stack);
+	ActorForth::Operation* op = ActorForth::Operation::find(word, c.stack);
 	if(op)
 	{
 		//std::cout << "\tFound an Operation : " << *op << ". EXECUTING!" << std::endl;
@@ -90,10 +91,11 @@ void _interpret( Continuation& c )
 
 int main(int argc, char *argv[])
 {
+	using namespace ActorForth;
 	Types::initialize();
 
 	//std::cout << "Startup" << std::endl;
-	Operation* const op_interpret = Operation::add("interpret", {}, Signature(), _interpret, true);
+	ActorForth::Operation* const op_interpret = ActorForth::Operation::add("interpret", {}, Signature(), _interpret, true);
 	//std::cout << "op_interpret got address " << (void*) op_interpret << std::endl;
 
 	if (!op_interpret or !op_nop) { std::cout << "ERROR primitive ops not ready!" << std::endl; exit(-1); }
