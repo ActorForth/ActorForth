@@ -9,6 +9,7 @@
 #include <vector>
 #include <map>
 #include <iostream>
+#include <stdexcept>
 
 class Continuation;
 
@@ -42,9 +43,9 @@ public:
 	Type( const Type& t ) = default;
 	Type& operator=(const Type& t) 
 	{
-		if(name != t.name) throw std::exception();
-		if(id != t.id) throw std::exception();
-		if(&handler != &t.handler) throw std::exception();
+		if(name != t.name) throw std::logic_error("Can't re-assign Type instance names.");
+		if(id != t.id) throw std::logic_error("Can't re-assign Type instance ids.");
+		if(&handler != &t.handler) throw std::logic_error("Can't re-assign Type instance handlers.");
 		return *this;
 	}
 	

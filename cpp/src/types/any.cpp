@@ -28,8 +28,8 @@ void _interpret( Continuation& c )
 	try
 	{
 		// return if successful.
-		//int i = std::stoi(word);
-		int i = std::stoi(std::get<std::string>(c.stack.tos().value));
+		int i = std::stoi(word);
+		//int i = std::stoi(std::get<std::string>(c.stack.tos().value));
 		//std::cout << "int i = " << i << std::endl;
 
 		// BDM HACK - 	C++ accepts a lot of stuff with text as numerics.
