@@ -33,11 +33,11 @@ Parser::Parser(const std::string filename, const std::string content)
 		location(std::move(filename))
 {
 	//s = std::stringstream();
-	std::cout << "Parser sstream ctor." << std::endl;
+	//std::cout << "Parser sstream ctor." << std::endl;
 	//s << content ;
 	//std::cout << "Streamed in the content." << std::endl;
 	input = &s;
-	std::cout << "Input pointer set." << std::endl;
+	//std::cout << "Input pointer set." << std::endl;
 }
 
 
@@ -68,7 +68,7 @@ Parser::StateMaybeToken Parser::Whitespace::consume(const char c, const FilePosi
 
 Parser::StateMaybeToken Parser::Characters::consume(const char c, const FilePosition& pos)
 {
-	std::cout << "Characters::consume with '" << c << "'" << std::endl;
+	//std::cout << "Characters::consume with '" << c << "'" << std::endl;
 	if(isspace(c)) return { Whitespace(), token };
 	if(c=='"') return { String(pos), token };
 	if(c=='.' or c==';' or c==':') return { Characters(c, pos), token };

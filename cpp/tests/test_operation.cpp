@@ -25,6 +25,17 @@ extern ActorForth::Operation* const op_interpret;
 
 }
 
+void execute_me(const string& code, Continuation& cont)
+{
+	Parser p("op unit test", code);
+	for(auto n: p.tokens())
+		{
+			// Pass control to the interpreter.
+			cont.op = op_interpret;
+			cont.token = n;
+			cont.execute( cont );
+		}	
+}
 
 TEST_CASE("Any Type Operations")
 {
@@ -34,23 +45,85 @@ TEST_CASE("Any Type Operations")
 
 	SUBCASE("op_interpret")
 	{
-		const string code = "17";
-		Parser p("op_interpret", code);
-
-
-		for(auto n: p.tokens())
-		{
-			// Pass control to the interpreter.
-			cont.op = op_interpret;
-			cont.token = n;
-			cont.execute( cont );
-		}	
+		execute_me("17", cont);
 		
 		CHECK(cont.stack.depth()==1);
 		CHECK(cont.stack.tos().type == Int);
 		CHECK(get<int>(cont.stack.tos().value)==17);
-		
 	}
+
+	SUBCASE("dup")
+	{
+		execute_me("test dup", cont);
+
+		CHECK(cont.stack.depth()==2);
+		CHECK(cont.stack.tos().type == Atom);
+		CHECK(get<std::string>(cont.stack.tos().value)=="test");
+
+		SUBCASE("drop")
+		{
+			execute_me("drop", cont);
+
+			CHECK(cont.stack.depth()==1);
+			CHECK(cont.stack.tos().type == Atom);
+			CHECK(get<std::string>(cont.stack.tos().value)=="test");
+
+			SUBCASE("swap")
+			{
+				execute_me("next",cont);
+				CHECK(cont.stack.depth()==2);
+				CHECK(cont.stack.tos().type == Atom);
+				CHECK(get<std::string>(cont.stack.tos().value)=="next");
+
+				execute_me("swap", cont);
+				CHECK(cont.stack.depth()==2);
+				CHECK(cont.stack.tos().type == Atom);
+				CHECK(get<std::string>(cont.stack.tos().value)=="test");
+
+				SUBCASE("2dup")
+				{
+					execute_me("2dup", cont);
+					CHECK(cont.stack.depth()==4);
+					CHECK(cont.stack.tos().type == Atom);
+					CHECK(get<std::string>(cont.stack.tos().value)=="test");
+
+					execute_me("drop", cont);
+					CHECK(cont.stack.depth()==3);
+					CHECK(cont.stack.tos().type == Atom);
+					CHECK(get<std::string>(cont.stack.tos().value)=="next");
+
+					execute_me("drop", cont);
+					CHECK(cont.stack.depth()==2);
+					CHECK(cont.stack.tos().type == Atom);
+					CHECK(get<std::string>(cont.stack.tos().value)=="test");
+
+					execute_me("drop", cont);
+					CHECK(cont.stack.depth()==1);
+					CHECK(cont.stack.tos().type == Atom);
+					CHECK(get<std::string>(cont.stack.tos().value)=="next");
+
+					SUBCASE("=")
+					{
+						execute_me("different =", cont);
+						CHECK(cont.stack.depth()==1);
+						CHECK(cont.stack.tos().type == Atom);
+						CHECK(get<std::string>(cont.stack.tos().value)=="different");
+					}
+				}
+			}
+		}
+	}
+}
+
+TEST_CASE("op_plus")
+{
+	Continuation cont;
+
+	execute_me("17 3 +", cont);
+
+	CHECK(cont.stack.depth()==1);
+	CHECK(cont.stack.tos().type == Int);
+	CHECK(get<int>(cont.stack.tos().value)==20);
 }
 
 int main(int argc, char *argv[])
