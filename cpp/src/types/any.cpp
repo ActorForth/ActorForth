@@ -19,17 +19,26 @@ void _interpret( Continuation& c )
 
 	const std::string& word = c.token.value;
 
+	// Initially ever token starts as an Atom.
+	c.stack.push( StackObject( Atom, word ) );
+
+	//std::cout << "tos = " << c.stack.tos() << std::endl;
+
 	// First check if it's an integer.
 	try
 	{
 		// return if successful.
-		int i = std::stoi(word);
+		//int i = std::stoi(word);
+		int i = std::stoi(std::get<std::string>(c.stack.tos().value));
+		//std::cout << "int i = " << i << std::endl;
 
 		// BDM HACK - 	C++ accepts a lot of stuff with text as numerics.
 		//				This needs to be improved to be more "correct"
 		//				so words like 2dup don't get treated as numbers.
 		if(word.size()==std::to_string(i).size())
-		{
+		{		
+			//std::cout << "updating the stack with the int." << std::endl;	
+			c.stack.pop();
 			c.stack.push( StackObject( Int, i ) );
 			//std::cout << "\tFound a Int : " << c.stack.tos() << "." << std::endl;
 			return;
@@ -41,12 +50,16 @@ void _interpret( Continuation& c )
 	// Next check if it's a boolean.
 	if(word == "true" or word == "false") 
 	{
+		c.stack.pop();
 		c.stack.push( StackObject( { Bool, (word == "true") ? true : false} ) );
 		//std::cout << "\tFound a Bool : " << c.stack.tos() << "." << std::endl;
 		return;
 	}
 
 	// Finally check if it's an existing value word.	
+	// BDM TODO - should probably make find a regular operator
+	//			  that knows to get the Atom at tos() out of the way.
+	auto tmp = c.stack.tos(); c.stack.pop();
 	ActorForth::Operation* op = ActorForth::Operation::find(word, c.stack);
 	if(op)
 	{
@@ -57,7 +70,7 @@ void _interpret( Continuation& c )
 	}
 
 	// Otherwise create an Atom.
-	c.stack.push( StackObject( Atom, word ) );
+	c.stack.push(tmp);
 	std::cout << "?\n";
 	//std::cout << "\tFound an Atom : " << c.stack.tos() << "." << std::endl;
 }
