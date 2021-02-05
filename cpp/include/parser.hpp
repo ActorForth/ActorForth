@@ -77,7 +77,8 @@ private:
 	struct Characters
 	{	
 		Characters(char c, const FilePosition& pos)
-			{ token.value.push_back(c); token.location = pos; }
+			{ token.value.push_back(c); token.location = pos;
+			std::cout << "Characters::ctor with '" << c << "'" << std::endl; }
 
 		StateMaybeToken consume(const char c, const FilePosition& pos);
 

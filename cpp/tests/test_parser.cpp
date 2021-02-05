@@ -54,6 +54,15 @@ TEST_CASE("Parser")
 	}
 	
 
+	SUBCASE("Input stream suddenly ends.")
+	{
+		std::string input = "17";
+		Parser short_parse("short_parse", input);
+		auto t = short_parse.tokens().begin();
+		//auto v = t.next();
+		CHECK((*t).value == "17");
+	}
+
 	std::cout << "Will try to read from cin if anything was passed in." << std::endl;
 
 	Parser stdinput;

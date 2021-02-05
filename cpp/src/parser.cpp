@@ -68,6 +68,7 @@ Parser::StateMaybeToken Parser::Whitespace::consume(const char c, const FilePosi
 
 Parser::StateMaybeToken Parser::Characters::consume(const char c, const FilePosition& pos)
 {
+	std::cout << "Characters::consume with '" << c << "'" << std::endl;
 	if(isspace(c)) return { Whitespace(), token };
 	if(c=='"') return { String(pos), token };
 	if(c=='.' or c==';' or c==':') return { Characters(c, pos), token };
@@ -98,9 +99,10 @@ generator<Parser::Token> Parser::tokens()
 	using namespace std;
 	//cout << "Tokens read char '" << c << "'." << endl;
 
+	std::optional< Token > maybe_token;
 	while(input->get(c))
 	{
-		std::optional< Token > maybe_token;
+		//std::optional< Token > maybe_token;
 		std::tie(state, maybe_token) = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
 
 		if (maybe_token.has_value()) co_yield( maybe_token.value() );
@@ -111,6 +113,10 @@ generator<Parser::Token> Parser::tokens()
 		if(is_stdin() and c == '\n' and not std::holds_alternative<String>(state)) break;
 		//cout << "Tokens read char '" << c << "'." << endl;
 	}
+	// Anything left over? Throw in a line feed to find out.
+	// BDM NOTE - open strings still won't be completed. What to do?
+	std::tie(state, maybe_token) = std::visit([&](auto&& sarg) { return sarg.consume('\n', location); }, state);
+	if (maybe_token.has_value()) co_yield( maybe_token.value() );
 }
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
