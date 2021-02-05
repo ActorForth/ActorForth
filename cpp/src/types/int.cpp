@@ -4,6 +4,7 @@
 
 #include "continuation.hpp"
 #include "types/int.hpp"
+#include "types/any.hpp"
 
 namespace ActorForth
 {
@@ -56,5 +57,16 @@ void _op_int_multiply( Continuation& c )
 
 Operation* const op_int_multiply = Operation::add("*", {}, { {Int, Int}, {Int}}, _op_int_multiply);
 
+void _op_int_divide( Continuation& c )
+{
+	const int denominator = std::get<int>(c.stack.tos().value);
+	c.stack.pop();
+	const int enumerator = std::get<int>(c.stack.tos().value);
+	c.stack.tos().value = enumerator % denominator;
+	(*op_dup)(c);
+	c.stack.tos().value = enumerator / denominator;
+}
+
+Operation* const op_int_divide = Operation::add("/", {}, { {Int, Int}, {Int, Int}}, _op_int_divide);
 
 }

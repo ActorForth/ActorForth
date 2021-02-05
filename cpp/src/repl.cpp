@@ -129,6 +129,14 @@ int main(int argc, char *argv[])
 		}		
 	}
 
+	int result = 0;
+
+	// If there's an int at tos then we'll make that our return value.
+	if(cont.stack.depth() and cont.stack.tos().type == Int)
+	{
+		result = std::get<int>(cont.stack.tos().value);
+	}
+
 	std::cout << "\nStack remaining : ";
 	size_t count = 0;
 	if(not cont.stack.depth()) std::cout << "<empty>" << std::endl;
@@ -141,5 +149,5 @@ int main(int argc, char *argv[])
 	}
 	std::cout << "\nend of line..." << std::endl;
 
-	return 0;
+	return result;
 }

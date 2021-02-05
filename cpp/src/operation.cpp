@@ -96,5 +96,9 @@ Operation* t[] =
 		// Int words.
 		ActorForth::op_atom_int,
 		ActorForth::op_string_int,
+		ActorForth::op_int_plus,
+		ActorForth::op_int_minus,
+		ActorForth::op_int_multiply,
+		ActorForth::op_int_divide,
 	};
 
