@@ -3,6 +3,7 @@
 //				This is the GLOBAL dictionary.
 //
 
+#include <algorithm>
 #include "continuation.hpp"
 #include "types/any.hpp"
 
@@ -171,8 +172,24 @@ Operation* const op_types_short = Operation::add("/t", {}, {{},{}}, _print_types
 Operation* const op_dup = Operation::add("dup", {}, {{Any},{Any, Any}}, [](Continuation& c) {c.stack.push(c.stack.tos());}, true );
 Operation* const op_drop = Operation::add("drop", {}, {{Any},{}}, [](Continuation& c) {c.stack.pop();}, true );
 
-// BDM TODO : use C++ swap as an efficient alternative.
-Operation* const op_swap = Operation::add("swap", {}, {{Any, Any},{Any, Any}}, [](Continuation& c) {const StackObject o = c.stack.tos(); c.stack.pop(); const StackObject j = c.stack.tos(); c.stack.pop(); c.stack.push(o); c.stack.push(j);}, true );
+void _op_swap( Continuation& c )
+{
+	// Try a faster swap version if types are the same.
+	const size_t size = c.stack.depth();
+	StackObject& a = c.stack[size-1];
+	StackObject& b = c.stack[size-2];
+	if(a.type.id == b.type.id) return std::swap(a,b);
+
+	// Different Type's can't be swaped.
+	StackObject A(a);
+	StackObject B(b);
+	c.stack.pop(); c.stack.pop();
+	c.stack.push(A);
+	c.stack.push(B);
+}
+
+Operation* const op_swap = Operation::add("swap", {}, {{Any, Any},{Any, Any}}, _op_swap, true );
+
 Operation* const op_2dup = Operation::add("2dup", {}, {{Any, Any},{Any, Any, Any, Any}}, [](Continuation& c) {const StackObject o = c.stack.tos(); (*op_swap)(c); const StackObject j = c.stack.tos(); (*op_swap)(c); c.stack.push(j); c.stack.push(o); }, true );
 
 // BDM TODO 	- Need to confirm the Types are identical (convertible via ctors?) before allowing an assignment.

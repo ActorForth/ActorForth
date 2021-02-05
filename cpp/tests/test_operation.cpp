@@ -52,6 +52,29 @@ TEST_CASE("Any Type Operations")
 		CHECK(get<int>(cont.stack.tos().value)==17);
 	}
 
+	SUBCASE("swap same & different types")
+	{
+		execute_me("15 true", cont);
+		CHECK(cont.stack.depth()==2);
+		CHECK(cont.stack.tos().type == Bool);
+		CHECK(get<bool>(cont.stack.tos().value)==true);
+
+		execute_me("swap", cont);
+		CHECK(cont.stack.depth()==2);
+		CHECK(cont.stack.tos().type == Int);
+		CHECK(get<int>(cont.stack.tos().value)==15);
+
+		execute_me("drop false swap", cont);
+		CHECK(cont.stack.depth()==2);
+		CHECK(cont.stack.tos().type == Bool);
+		CHECK(get<bool>(cont.stack.tos().value)==true);
+
+		execute_me("drop", cont);
+		CHECK(cont.stack.depth()==1);
+		CHECK(cont.stack.tos().type == Bool);
+		CHECK(get<bool>(cont.stack.tos().value)==false);
+	}
+
 	SUBCASE("dup")
 	{
 		execute_me("test dup", cont);

@@ -45,7 +45,8 @@ public:
 	{
 		if(name != t.name) throw std::logic_error("Can't re-assign Type instance names.");
 		if(id != t.id) throw std::logic_error("Can't re-assign Type instance ids.");
-		if(&handler != &t.handler) throw std::logic_error("Can't re-assign Type instance handlers.");
+		if(handler.target<void(Continuation&)>() != t.handler.target<void(Continuation&)>()) throw std::logic_error("Can't re-assign Type instance handlers.");
+
 		return *this;
 	}
 	

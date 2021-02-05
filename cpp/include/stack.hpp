@@ -34,6 +34,8 @@ public:
 	T& tos(void) { return std::visit([&](auto& sarg) -> T& { return sarg.tos(); }, _stack); }
 	const T& tos(void) const { return std::visit([&](const auto & sarg) -> const T& { return sarg.tos(); }, _stack); }	
 
+
+
 	void pop(void) 
 	{ 
 		_stack = std::visit([](auto& sarg) { return sarg.pop(); }, _stack); 
@@ -59,6 +61,12 @@ public:
 
 	size_t depth(void) const { return (std::get_if<NonEmpty>(&_stack)) ? std::get<NonEmpty>(_stack)._data.size() : 0; }
 
+	T& operator[](const size_t pos)
+	{
+		auto result = std::get_if<NonEmpty>(&_stack);
+		if (result) return result->_data[pos];
+		throw Underflow();		
+	}
 
 	auto begin(void) const 
 	{ 
