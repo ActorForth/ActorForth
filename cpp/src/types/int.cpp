@@ -26,7 +26,9 @@ void _string_int_ctor( Continuation& c )
 	throw std::invalid_argument("");
 }
 
-Operation* const op_atom_int = Operation::add("int", {}, { {Atom}, {} }, _string_int_ctor, true);
-Operation* const op_string_int = Operation::add("int", {}, { {String}, {} }, _string_int_ctor, true);
+Operation* const op_atom_int = Operation::add("int", {}, { {Atom}, {Int} }, _string_int_ctor, true);
+Operation* const op_string_int = Operation::add("int", {}, { {String}, {Int} }, _string_int_ctor, true);
+
+
 
 }
