@@ -29,6 +29,13 @@ void _string_int_ctor( Continuation& c )
 Operation* const op_atom_int = Operation::add("int", {}, { {Atom}, {Int} }, _string_int_ctor, true);
 Operation* const op_string_int = Operation::add("int", {}, { {String}, {Int} }, _string_int_ctor, true);
 
+void _op_int_plus( Continuation& c )
+{
+	const int val = std::get<int>(c.stack.tos().value);
+	c.stack.pop();
+	c.stack.tos().value = std::get<int>(c.stack.tos().value) + val;
+}
 
+Operation* const op_int_plus = Operation::add("+", {}, { {Int, Int}, {Int}}, _op_int_plus);
 
 }
