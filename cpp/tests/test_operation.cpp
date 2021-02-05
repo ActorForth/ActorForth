@@ -39,7 +39,7 @@ void execute_me(const string& code, Continuation& cont)
 
 TEST_CASE("Any Type Operations")
 {
-	(void)t;
+	//(void)t;
 
 	Continuation cont;
 
@@ -115,15 +115,47 @@ TEST_CASE("Any Type Operations")
 	}
 }
 
-TEST_CASE("op_plus")
+TEST_CASE("Int Type Operations")
 {
 	Continuation cont;
 
-	execute_me("17 3 +", cont);
+	SUBCASE("+")
+	{
+		execute_me("17 3 +", cont);
 
-	CHECK(cont.stack.depth()==1);
-	CHECK(cont.stack.tos().type == Int);
-	CHECK(get<int>(cont.stack.tos().value)==20);
+		CHECK(cont.stack.depth()==1);
+		CHECK(cont.stack.tos().type == Int);
+		CHECK(get<int>(cont.stack.tos().value)==20);
+
+		SUBCASE("-")
+		{
+			execute_me("5 -", cont);
+			CHECK(cont.stack.depth()==1);
+			CHECK(cont.stack.tos().type == Int);
+			CHECK(get<int>(cont.stack.tos().value)==15);
+
+			SUBCASE("*")
+			{
+				execute_me("dup *", cont);
+				CHECK(cont.stack.depth()==1);
+				CHECK(cont.stack.tos().type == Int);
+				CHECK(get<int>(cont.stack.tos().value)==225);
+
+				SUBCASE("/")
+				{
+					execute_me("5 /", cont);
+					CHECK(cont.stack.depth()==2);
+					CHECK(cont.stack.tos().type == Int);
+					CHECK(get<int>(cont.stack.tos().value)==45);
+
+					execute_me("drop", cont);
+					CHECK(cont.stack.depth()==1);
+					CHECK(cont.stack.tos().type == Int);
+					CHECK(get<int>(cont.stack.tos().value)==0);
+				}
+			}
+		}
+	}
 }
 
 int main(int argc, char *argv[])
@@ -134,7 +166,7 @@ int main(int argc, char *argv[])
 	cout << "test_operation" << endl;
 
 	if (!op_interpret or !op_nop) { std::cout << "ERROR primitive ops not ready!" << std::endl; exit(-1); }
-	if(argc > 1 and std::string(argv[1]) == "--help") return -1;
+	//if(argc > 1 and std::string(argv[1]) == "--help") return -1;
 
 	doctest::Context context;
 
@@ -142,65 +174,8 @@ int main(int argc, char *argv[])
 
     context.applyCommandLine(argc, argv);
 
-    //cout << "op_interpret = " << (void*) ActorForth::op_interpret << endl;
-    //cout << "op_print = " << (void*) ActorForth::op_print << endl;
-	//cout << "op_empty_print = " << (void*) ActorForth::op_empty_print << endl;
-
-
     int res = context.run(); // run
 
     if(context.shouldExit()) // important - query flags (and --exit) rely on the user doing this
         return res;          // propagate the result of the tests
 }
-
-
-/*
-int main(int argc, char *argv[])
-{
-	using namespace ActorForth;
-	Types::initialize();
-
-	cout << "test_operation" << endl;
-	//doctest::Context context;
-
-	//context.setOption("order-by", "name");            // sort the test cases by their name
-
-    //context.applyCommandLine(argc, argv);
-
-    //cout << "op_interpret = " << (void*) ActorForth::op_interpret << endl;
-    //cout << "op_print = " << (void*) ActorForth::op_print << endl;
-	//cout << "op_empty_print = " << (void*) ActorForth::op_empty_print << endl;
-
-
-    //int res = context.run(); // run
-
-    //if(context.shouldExit()) // important - query flags (and --exit) rely on the user doing this
-        //return res;          // propagate the result of the tests
-
-	if (!op_interpret or !op_nop) { std::cout << "ERROR primitive ops not ready!" << std::endl; exit(-1); }
-	if(argc > 1 and std::string(argv[1]) == "--help") return -1;
-
-
-	Stack<StackObject> dstack;
-	Stack<StackObject> rstack;
-	Continuation cont = { dstack, rstack, op_nop, Parser::Token() };
-
-	const string code = "17";
-	Parser p("op_interpret", code);
-
-
-	for(auto n: p.tokens())
-	{
-		// Pass control to the interpreter.
-		cont.op = op_interpret;
-		cont.token = n;
-		cont.execute( cont );
-	}	
-		
-		//CHECK(cont.stack.depth()==1);
-		//CHECK(cont.stack.tos().type == Int);
-		//CHECK(get<int>(cont.stack.tos().value)==17);
-		
-	return 0;
-}
-*/
