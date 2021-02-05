@@ -98,6 +98,8 @@ Operation* const op_types_short = Operation::add("/t", {}, {{},{}}, _print_types
 
 Operation* const op_dup = Operation::add("dup", {}, {{Any},{Any, Any}}, [](Continuation& c) {c.stack.push(c.stack.tos());}, true );
 Operation* const op_drop = Operation::add("drop", {}, {{Any},{}}, [](Continuation& c) {c.stack.pop();}, true );
+
+// BDM TODO : use C++ swap as an efficient alternative.
 Operation* const op_swap = Operation::add("swap", {}, {{Any, Any},{Any, Any}}, [](Continuation& c) {const StackObject o = c.stack.tos(); c.stack.pop(); const StackObject j = c.stack.tos(); c.stack.pop(); c.stack.push(o); c.stack.push(j);}, true );
 Operation* const op_2dup = Operation::add("2dup", {}, {{Any, Any},{Any, Any, Any, Any}}, [](Continuation& c) {const StackObject o = c.stack.tos(); (*op_swap)(c); const StackObject j = c.stack.tos(); (*op_swap)(c); c.stack.push(j); c.stack.push(o); }, true );
 
