@@ -12,7 +12,7 @@ void _word_spec_start( Continuation& c )
 	const std::string name = std::get<std::string>(c.stack.tos().value);
 	WordSpecification new_word_spec = { name, c.token, Signature() };
 	c.stack.pop();
-	c.stack.push( StackObject( WordSpecInputSig, new_word_spec ) );
+	// BDM - get UDT first. c.stack.push( StackObject( WordSpecInputSig, new_word_spec ) );
 }
 
 void _word_spec_input_interpret( Continuation& c )
