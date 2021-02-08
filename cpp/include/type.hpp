@@ -32,9 +32,10 @@ public:
 	using ID = size_t;
 
 	//static Type& find( const std::string& n );
-	static Type& find_or_make( const std::string& n, const Handler& h = default_handler );
+	static Type& find_or_make( const std::string& n, const Handler& handler = default_handler );
 
 	static Type& from_id( const ID& id );
+	static Type& from_name( const std::string& name );
 
 	bool operator==(const Type& t) const { return id == t.id; }
 
@@ -84,5 +85,11 @@ extern const Type Int;
 extern const Type Bool;
 extern const Type Atom;
 extern const Type String;  // BDM : Should we just use Atoms?
+
+extern const Type WordSpecInputSig;
+extern const Type WordSpecOutputSig;
+extern const Type WordInputPattern;
+extern const Type WordOutputPattern;
+extern const Type WordCodeCompile;
 
 };

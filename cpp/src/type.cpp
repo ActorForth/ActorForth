@@ -11,6 +11,8 @@
 #include "type.hpp"
 #include "continuation.hpp"
 
+#include "types/compiler.hpp"
+
 using namespace ActorForth;
 
 namespace Types
@@ -26,7 +28,7 @@ std::vector<Type> Type::Types = { {"Any"} };
 std::map<const std::string, const Type::ID> Type::TypeIDs = { {"Any",0} };
 
 
-Type& Type::find_or_make( const std::string& n, const Handler& h )
+Type& Type::find_or_make( const std::string& n, const Handler& handler )
 {
 	// TODO : automatically treat all types that begin with _ as generic Any types.
 	auto search = TypeIDs.find(n);
@@ -35,7 +37,7 @@ Type& Type::find_or_make( const std::string& n, const Handler& h )
 	// BDM TODO : potential race condition here. mutex required? too slow! 
 	// 			  probably just need to preallocate the vector for max allowed types.
 	TypeIDs.insert( {n, Types.size()} );
-	auto t = Type(n, h);
+	auto t = Type(n, handler);
 	Types.push_back(t);
 	return Types[t.id];
 }
@@ -55,6 +57,20 @@ Type& Type::from_id( const ID& id )
 	throw std::out_of_range(err.str());
 }	
 
+Type& Type::from_name( const std::string& name )
+{
+	try
+	{
+		return Types[TypeIDs.at(name)];
+	}	
+	catch( const std::out_of_range& x )
+	{
+		std::stringstream err;
+		err << "<exception: out_of_range> No such Type named '" << name << "!";
+		throw std::out_of_range(err.str());
+	}
+}
+
 std::ostream& operator<<(std::ostream& out, const Type& type)
 {
 	out << "<" << type.name << "|ID:" << type.id << "|>";
@@ -69,6 +85,14 @@ void initialize(void)
 	const Type Bool = Type::find_or_make("Bool");
 	const Type Atom = Type::find_or_make("Atom");
 	const Type String = Type::find_or_make("String");
+
+
+
+	const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);
+	const Type WordSpecOutputSig = Type::find_or_make("WordSpecOutputSig");
+	const Type WordInputPattern = Type::find_or_make("WordInputPattern");
+	const Type WordOutputPattern = Type::find_or_make("WordOutputPattern");
+	const Type WordCodeCompile = Type::find_or_make("WordCodeCompile");
 //};
 
 }
