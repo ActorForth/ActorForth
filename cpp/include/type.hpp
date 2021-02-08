@@ -61,7 +61,7 @@ public:
  
 	void lock_attributes(void) { attributes_locked = true; }
 
-	void add_attribute( const Attribute& sig );
+	void add_attribute( const std::string& name, const StackSig& sig );
 
 	const Attribute& attrib( const std::string& name ) const;
 
@@ -128,30 +128,10 @@ struct Attribute
 {
 	const std::string name;
 	const StackSig sig;
+	const size_t pos;
 };
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
-
-/*
-struct Signature
-{
-	Signature() = default;
-	Signature(const Signature&) = default;
-	Signature(const std::vector<Type>& in, const std::vector<Type>& out = {});
-	Stack<StackSig> in_seq;
-	Stack<StackSig> out_seq;
-
-	bool matches(const Stack<StackObject>& sobjects) const;
-	bool matches(const Stack<StackSig>& sig) const;
-
-	std::ostream& display(std::ostream& o) const;
-
-};
-
-std::ostream& operator<<(std::ostream& out, const Signature& sig);
-*/
-
-
 
 //
 //	Initialize built-in Types here. Order matters!

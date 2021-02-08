@@ -167,14 +167,6 @@ private:
 	friend std::ostream& operator<<(std::ostream& out, const Signature& sig);
 };
 
-//template<class T> inline std::ostream& operator<<(std::ostream& out, const Stack<T>& stack)
-
-/*
-using AnyValue = std::variant< bool, int, unsigned, std::string >;
-
-std::ostream& operator<<(std::ostream& out, const AnyValue& val);
-std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);
-*/
 
 struct StackObject
 {
@@ -191,31 +183,6 @@ struct StackObject
 };
 
 std::ostream& operator<<(std::ostream& out, const StackObject& obj);
-
-/*
-struct StackSig
-{
-	// Note - Generic types will always ignore a specified value.
-	StackSig( const Type& t, const std::optional<AnyValue>& x ) : type(t), maybe_value(x) {;}
-	StackSig( const StackSig& s ) = default;
-
-	// BDM StackSig( std::pair< Type,std::optional<AnyValue> >&& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
-
-	static StackSig make_stacksig(const Type& type);
-	template<class T> static StackSig make_stacksig(const Type& type, const T& val ) 
-	{
-		return StackSig(type, std::make_optional< AnyValue >( val ));
-	}
-
-	bool operator==(const StackSig& o) const;
-	bool operator==(const StackObject& o) const;
-
-	Type type;
-	std::optional<AnyValue> maybe_value;
-};
-
-std::ostream& operator<<(std::ostream& out, const StackSig& sig);
-*/
 
 struct Signature
 {

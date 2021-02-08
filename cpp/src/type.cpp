@@ -142,22 +142,23 @@ Type& Type::from_name( const std::string& name )
 }
 
 
-void Type::add_attribute( const Attribute& sig )
+void Type::add_attribute( const std::string& name, const StackSig& sig )
 {
 	if(attributes_locked)
 	{
 		std::stringstream s;
-		s << "Type attributes are locked for Type: '" << name << "'.";
+		s << "Type attributes are locked for Type: '" << Type::name << "'.";
 		throw( std::logic_error(s.str()) );
 	}
-	if(find_attribute(sig.name))
+	if(find_attribute(name))
 	{
 			std::stringstream s;
-			s << "'" << sig.name << "' is already an attribute of Type: '" << Type::name << "'.";
+			s << "'" << name << "' is already an attribute of Type: '" << Type::name << "'.";
 			throw std::logic_error(s.str());
 	}
 
-	attributes.push_back(sig);
+	Attribute attrib = { name, sig, attributes.size() };
+	attributes.push_back(attrib);
 }
 
 const Attribute& Type::attrib( const std::string& name ) const

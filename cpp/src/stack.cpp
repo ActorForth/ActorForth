@@ -15,35 +15,6 @@
 template<> const std::vector<StackObject> Stack<StackObject>::AlwaysEmpty = std::vector<StackObject>();
 template<> const std::vector<StackSig> Stack<StackSig>::AlwaysEmpty  = std::vector<StackSig>();
 
-/*
-std::ostream& operator<<(std::ostream& out, const AnyValue& val)
-{
-	if(auto v = std::get_if<bool>(&val)) out << std::boolalpha << *v;
-	else if(auto v = std::get_if<int>(&val)) out << *v;
-	else if(auto v = std::get_if<unsigned>(&val)) out << *v;
-	else if(auto v = std::get_if<std::string>(&val)) out << *v;
-	else out << "UNKNOWN VALUE TYPE!";
-	return out;
-}
-
-
-std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val)
-{
-	if(val.has_value()) out << val.value();
-	else
-		out << "<no value>";
-	return out;
-}
-
-
-StackSig StackSig::make_stacksig(const Type& type)  
-{
-	// NOTE - turns out make_optional will construct the optional with a default
-	//		  ctor of the first listed type! Not what we expected/wanted!
-	//return StackSig( std::make_pair(type, std::make_optional<AnyValue>()) );
-	return StackSig( type, std::optional<AnyValue>() );
-}
-*/
 
 std::ostream& operator<<(std::ostream& out, const StackObject& obj)
 {
@@ -51,54 +22,11 @@ std::ostream& operator<<(std::ostream& out, const StackObject& obj)
 	return out;
 }
 
-/*
-std::ostream& operator<<(std::ostream& out, const StackSig& sig) 
-{ 
-	out << "<Spec>{" << sig.type << ", " << sig.maybe_value << "}";
-	return out; 
-}
-*/
-
-
 std::ostream& operator<<(std::ostream& out, const Signature& sig)
 {
 	out << "<Signature>{in=" << sig.in_seq << ", out=" << sig.out_seq << "}";
 	return out;
 }
-
-/*
-bool StackSig::operator==(const StackSig& s) const
-{
-	// Generic Types always match.
-	if(type.id == 0) return true;
-
-	// Different Types fail.
-	if(type.id != s.type.id) return false;
-
-	// If both our signatures specifies a value check it as well.
-	if(maybe_value.has_value() and s.maybe_value.has_value() and maybe_value.value() != s.maybe_value.value()) return false;
-
-	return true;
-}
-
-
-
-bool StackSig::operator==(const StackObject& o) const
-{
-	//std::cout << "Comparing " << *this << " with " << o << "." << std::endl;
-	
-	// Generic Types always match.
-	if(type.id == 0) return true;
-
-	// Different Types fail.
-	if(type.id != o.type.id) return false;
-
-	// If our signature specifies a value check it as well.
-	if(maybe_value.has_value() and maybe_value.value() != o.value) return false;
-
-	return true;
-}
-*/
 
 // Confirms whether or not the inbound stack complies with this Signature.
 // Only the last n stack entries are checked where n = in_seq.depth().
