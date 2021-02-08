@@ -15,7 +15,7 @@
 template<> const std::vector<StackObject> Stack<StackObject>::AlwaysEmpty = std::vector<StackObject>();
 template<> const std::vector<StackSig> Stack<StackSig>::AlwaysEmpty  = std::vector<StackSig>();
 
-
+/*
 std::ostream& operator<<(std::ostream& out, const AnyValue& val)
 {
 	if(auto v = std::get_if<bool>(&val)) out << std::boolalpha << *v;
@@ -43,7 +43,7 @@ StackSig StackSig::make_stacksig(const Type& type)
 	//return StackSig( std::make_pair(type, std::make_optional<AnyValue>()) );
 	return StackSig( type, std::optional<AnyValue>() );
 }
-
+*/
 
 std::ostream& operator<<(std::ostream& out, const StackObject& obj)
 {
@@ -51,12 +51,13 @@ std::ostream& operator<<(std::ostream& out, const StackObject& obj)
 	return out;
 }
 
-
+/*
 std::ostream& operator<<(std::ostream& out, const StackSig& sig) 
 { 
 	out << "<Spec>{" << sig.type << ", " << sig.maybe_value << "}";
 	return out; 
 }
+*/
 
 
 std::ostream& operator<<(std::ostream& out, const Signature& sig)
@@ -65,7 +66,7 @@ std::ostream& operator<<(std::ostream& out, const Signature& sig)
 	return out;
 }
 
-
+/*
 bool StackSig::operator==(const StackSig& s) const
 {
 	// Generic Types always match.
@@ -79,6 +80,7 @@ bool StackSig::operator==(const StackSig& s) const
 
 	return true;
 }
+
 
 
 bool StackSig::operator==(const StackObject& o) const
@@ -96,7 +98,7 @@ bool StackSig::operator==(const StackObject& o) const
 
 	return true;
 }
-
+*/
 
 // Confirms whether or not the inbound stack complies with this Signature.
 // Only the last n stack entries are checked where n = in_seq.depth().

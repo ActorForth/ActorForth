@@ -22,6 +22,8 @@ std::map<Type::ID,std::vector<const Operation*>> Operation::TypeCtors;
 //			Returns 0 if a conflicting Operation already exists.
 Operation* Operation::add(const std::string& name, const Parser::Token& token, const Signature& sig, const Type::Handler& h, const bool force_global )
 {
+	//std::cout << "Operation::add( name = '" << name << "', token = " << token << ", sig = " << sig << "." << std::endl;
+
 	// Which Type vocabulary does it belong?
 	Type::ID type_id = 0; // Default to Global 'Any' vocabulary.
 	try

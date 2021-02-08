@@ -10,8 +10,10 @@
 #include <map>
 #include <iostream>
 #include <stdexcept>
+#include <variant>
 
 class Continuation;
+struct StackObject;
 
 namespace ActorForth
 {
@@ -22,6 +24,7 @@ class Operation;
 
 namespace Types
 {
+
 
 class Type
 {
@@ -72,6 +75,58 @@ private:
 
 	friend std::ostream& operator<<(std::ostream& out, const Type& type);
 };
+
+
+
+using AnyValue = std::variant< bool, int, unsigned, std::string >;
+
+std::ostream& operator<<(std::ostream& out, const AnyValue& val);
+std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);	
+
+
+
+struct StackSig
+{
+	// Note - Generic types will always ignore a specified value.
+	StackSig( const Type& t, const std::optional<AnyValue>& x ) : type(t), maybe_value(x) {;}
+	StackSig( const StackSig& s ) = default;
+
+	// BDM StackSig( std::pair< Type,std::optional<AnyValue> >&& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
+
+	static StackSig make_stacksig(const Type& type);
+	template<class T> static StackSig make_stacksig(const Type& type, const T& val ) 
+	{
+		return StackSig(type, std::make_optional< AnyValue >( val ));
+	}
+
+	bool operator==(const StackSig& o) const;
+	//bool operator==(const StackObject& o) const;
+	friend bool operator==(const StackSig& s, const StackObject& o);
+
+	Type type;
+	std::optional<AnyValue> maybe_value;
+};
+
+std::ostream& operator<<(std::ostream& out, const StackSig& sig);
+
+/*
+struct Signature
+{
+	Signature() = default;
+	Signature(const Signature&) = default;
+	Signature(const std::vector<Type>& in, const std::vector<Type>& out = {});
+	Stack<StackSig> in_seq;
+	Stack<StackSig> out_seq;
+
+	bool matches(const Stack<StackObject>& sobjects) const;
+	bool matches(const Stack<StackSig>& sig) const;
+
+	std::ostream& display(std::ostream& o) const;
+
+};
+
+std::ostream& operator<<(std::ostream& out, const Signature& sig);
+*/
 
 
 

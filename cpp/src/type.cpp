@@ -11,12 +11,82 @@
 #include "type.hpp"
 #include "continuation.hpp"
 
-#include "types/compiler.hpp"
+//#include "types/compiler.hpp"
 
 using namespace ActorForth;
 
 namespace Types
 {
+
+
+std::ostream& operator<<(std::ostream& out, const AnyValue& val)
+{
+	if(auto v = std::get_if<bool>(&val)) out << std::boolalpha << *v;
+	else if(auto v = std::get_if<int>(&val)) out << *v;
+	else if(auto v = std::get_if<unsigned>(&val)) out << *v;
+	else if(auto v = std::get_if<std::string>(&val)) out << *v;
+	else out << "UNKNOWN VALUE TYPE!";
+	return out;
+}
+
+
+std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val)
+{
+	if(val.has_value()) out << val.value();
+	else
+		out << "<no value>";
+	return out;
+}
+
+
+StackSig StackSig::make_stacksig(const Type& type)  
+{
+	// NOTE - turns out make_optional will construct the optional with a default
+	//		  ctor of the first listed type! Not what we expected/wanted!
+	//return StackSig( std::make_pair(type, std::make_optional<AnyValue>()) );
+	return StackSig( type, std::optional<AnyValue>() );
+}
+
+
+std::ostream& operator<<(std::ostream& out, const StackSig& sig) 
+{ 
+	out << "<Spec>{" << sig.type << ", " << sig.maybe_value << "}";
+	return out; 
+}
+
+
+bool StackSig::operator==(const StackSig& s) const
+{
+	// Generic Types always match.
+	if(type.id == 0) return true;
+
+	// Different Types fail.
+	if(type.id != s.type.id) return false;
+
+	// If both our signatures specifies a value check it as well.
+	if(maybe_value.has_value() and s.maybe_value.has_value() and maybe_value.value() != s.maybe_value.value()) return false;
+
+	return true;
+}
+
+//bool StackSig::operator==(const StackObject& o) const
+bool operator==(const StackSig& s, const StackObject& o)
+{
+	//std::cout << "Comparing " << *this << " with " << o << "." << std::endl;
+	
+	// Generic Types always match.
+	if(s.type.id == 0) return true;
+
+	// Different Types fail.
+	if(s.type.id != o.type.id) return false;
+
+	// If our signature specifies a value check it as well.
+	if(s.maybe_value.has_value() and s.maybe_value.value() != o.value) return false;
+
+	return true;
+}
+
+
 
 Type::Handler Type::default_handler = [](Continuation& c) { (*(c.op))(c); };
 
@@ -88,11 +158,11 @@ void initialize(void)
 
 
 
-	const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);
-	const Type WordSpecOutputSig = Type::find_or_make("WordSpecOutputSig");
-	const Type WordInputPattern = Type::find_or_make("WordInputPattern");
-	const Type WordOutputPattern = Type::find_or_make("WordOutputPattern");
-	const Type WordCodeCompile = Type::find_or_make("WordCodeCompile");
+	//const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);
+	//const Type WordSpecOutputSig = Type::find_or_make("WordSpecOutputSig");
+	//const Type WordInputPattern = Type::find_or_make("WordInputPattern");
+	//const Type WordOutputPattern = Type::find_or_make("WordOutputPattern");
+	//const Type WordCodeCompile = Type::find_or_make("WordCodeCompile");
 //};
 
 }

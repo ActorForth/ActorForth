@@ -169,10 +169,12 @@ private:
 
 //template<class T> inline std::ostream& operator<<(std::ostream& out, const Stack<T>& stack)
 
+/*
 using AnyValue = std::variant< bool, int, unsigned, std::string >;
 
 std::ostream& operator<<(std::ostream& out, const AnyValue& val);
 std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);
+*/
 
 struct StackObject
 {
@@ -190,6 +192,7 @@ struct StackObject
 
 std::ostream& operator<<(std::ostream& out, const StackObject& obj);
 
+/*
 struct StackSig
 {
 	// Note - Generic types will always ignore a specified value.
@@ -212,6 +215,7 @@ struct StackSig
 };
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
+*/
 
 struct Signature
 {
