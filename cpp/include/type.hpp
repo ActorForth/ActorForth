@@ -25,6 +25,9 @@ class Operation;
 namespace Types
 {
 
+struct StackSig;
+struct Attribute;
+
 
 class Type
 {
@@ -35,7 +38,7 @@ public:
 	using ID = size_t;
 
 	//static Type& find( const std::string& n );
-	static Type& find_or_make( const std::string& n, const Handler& handler = default_handler );
+	static Type& find_or_make( const std::string& n, const Handler& handler = default_handler, const bool lock = true );
 
 	static Type& from_id( const ID& id );
 	static Type& from_name( const std::string& name );
@@ -55,17 +58,31 @@ public:
 	}
 	
 	static size_t size() { return Types.size(); }
+ 
+	void lock_attributes(void) { attributes_locked = true; }
+
+	void add_attribute( const Attribute& sig );
+
+	const Attribute& attrib( const std::string& name ) const;
 
 	const std::string name;
 	const ID id;
 
 protected:
-	Type( const std::string& n, const Handler& h = default_handler ) : name(n), id(Types.size()), handler(h) 
+	Type( const std::string& n, const Handler& h = default_handler, const bool lock = true) : name(n), id(Types.size()), handler(h), attributes_locked(lock) 
 	{ ; } //std::cout << "Type::ctor( n=" << n << ")" << std::endl; }
 
 private:
 
 	const Handler handler;
+
+	// User defined attributes for this type.
+	std::vector<Attribute> attributes;
+
+	const Attribute* find_attribute(const std::string& name) const;
+
+	// When locked, no attributes may be added/removed.
+	bool attributes_locked;
 
 	// A Type name can only be instantiated once and its position in the Types vector is its ID.
 	static std::vector<Type> Types;
@@ -105,6 +122,12 @@ struct StackSig
 
 	Type type;
 	std::optional<AnyValue> maybe_value;
+};
+
+struct Attribute
+{
+	const std::string name;
+	const StackSig sig;
 };
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);

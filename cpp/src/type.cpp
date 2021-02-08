@@ -98,7 +98,7 @@ std::vector<Type> Type::Types = { {"Any"} };
 std::map<const std::string, const Type::ID> Type::TypeIDs = { {"Any",0} };
 
 
-Type& Type::find_or_make( const std::string& n, const Handler& handler )
+Type& Type::find_or_make( const std::string& n, const Handler& handler, const bool lock )
 {
 	// TODO : automatically treat all types that begin with _ as generic Any types.
 	auto search = TypeIDs.find(n);
@@ -107,7 +107,7 @@ Type& Type::find_or_make( const std::string& n, const Handler& handler )
 	// BDM TODO : potential race condition here. mutex required? too slow! 
 	// 			  probably just need to preallocate the vector for max allowed types.
 	TypeIDs.insert( {n, Types.size()} );
-	auto t = Type(n, handler);
+	auto t = Type(n, handler, lock);
 	Types.push_back(t);
 	return Types[t.id];
 }
@@ -140,6 +140,44 @@ Type& Type::from_name( const std::string& name )
 		throw std::out_of_range(err.str());
 	}
 }
+
+
+void Type::add_attribute( const Attribute& sig )
+{
+	if(attributes_locked)
+	{
+		std::stringstream s;
+		s << "Type attributes are locked for Type: '" << name << "'.";
+		throw( std::logic_error(s.str()) );
+	}
+	if(find_attribute(sig.name))
+	{
+			std::stringstream s;
+			s << "'" << sig.name << "' is already an attribute of Type: '" << Type::name << "'.";
+			throw std::logic_error(s.str());
+	}
+
+	attributes.push_back(sig);
+}
+
+const Attribute& Type::attrib( const std::string& name ) const
+{
+	const Attribute* result = find_attribute(name);
+	if(result) return *result;
+	std::stringstream s;
+	s << "'" << name << "' is not a value attribute for Type: '" << Type::name << "'.";
+	throw std::out_of_range(s.str());
+}
+
+const Attribute* Type::find_attribute(const std::string& name) const
+{
+	for(auto a = attributes.begin(); a != attributes.end(); ++a)
+	{
+		if ( (*a).name == name ) return &(*a);
+	}
+	return (Attribute*)0;
+}
+
 
 std::ostream& operator<<(std::ostream& out, const Type& type)
 {
