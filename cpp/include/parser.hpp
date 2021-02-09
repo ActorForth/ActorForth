@@ -19,6 +19,9 @@
 
 #include "generator.hpp"
 
+
+#include "type.hpp"
+
 using felspar::makham::generator;
 
 class Parser
