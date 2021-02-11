@@ -14,13 +14,19 @@ rm bin/int.o
 rm bin/compiler.o
 rm bin/libtype.a
 clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/parser.cpp -stdlib=libc++ -o bin/parser.o
+[ $? -eq 0 ] || exit $?
 clang++-10 -v  -Wno-unused-parameter -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
+[ $? -eq 0 ] || exit $?
 clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham -I doctest src/operation.cpp -stdlib=libc++ -o bin/operation.o
+[ $? -eq 0 ] || exit $?
 clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham -I doctest src/stack.cpp -stdlib=libc++ -o bin/stack.o
+[ $? -eq 0 ] || exit $?
 clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/types/int.cpp -stdlib=libc++ -o bin/int.o
+[ $? -eq 0 ] || exit $?
 clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/types/any.cpp -stdlib=libc++ -o bin/any.o
+[ $? -eq 0 ] || exit $?
 #clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/types/compiler.cpp -stdlib=libc++ -o bin/compiler.o
-
+#[ $? -eq 0 ] || exit $?
 
 llvm-ar-10 -rc bin/libtype.a bin/parser.o bin/stack.o bin/type.o bin/operation.o bin/any.o bin/int.o #bin/compiler.o
 [ $? -eq 0 ] || exit $?

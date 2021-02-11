@@ -93,13 +93,26 @@ private:
 	friend std::ostream& operator<<(std::ostream& out, const Type& type);
 };
 
+struct ProductInstance;
 
+using AnyValue = std::variant< bool, int, unsigned, std::string, ProductInstance>; 
 
-using AnyValue = std::variant< bool, int, unsigned, std::string >;
+struct ProductInstance
+{
+	//ProductInstance();
+	//~ProductInstance();
+	AnyValue& operator[](const std::string& attrib_name);
+	const AnyValue& operator[](const std::string& attrib_name) const;
+	Type type;
+	std::vector<AnyValue> attributes;
+
+	bool operator!=(const ProductInstance& p) const;
+	//bool operator==(const ProductInstance& p) const;
+};
+
 
 std::ostream& operator<<(std::ostream& out, const AnyValue& val);
-std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);	
-
+std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);
 
 
 struct StackSig
@@ -131,6 +144,8 @@ struct Attribute
 	const size_t pos;
 };
 
+
+
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 
 //
@@ -152,4 +167,4 @@ extern const Type WordInputPattern;
 extern const Type WordOutputPattern;
 extern const Type WordCodeCompile;
 
-};
+} // eons Types

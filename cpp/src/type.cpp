@@ -179,12 +179,33 @@ const Attribute* Type::find_attribute(const std::string& name) const
 	return (Attribute*)0;
 }
 
-
 std::ostream& operator<<(std::ostream& out, const Type& type)
 {
 	out << "<" << type.name << "|ID:" << type.id << "|>";
 	return out;
 }
+
+bool ProductInstance::operator!=(const ProductInstance& p) const
+{
+	if(type.id != p.type.id) return true;
+	for(size_t i=0;i<attributes.size();++i)
+	{
+		if (attributes[i] != p.attributes[i]) return true;
+	}
+	return false;
+}
+
+
+AnyValue& ProductInstance::operator[](const std::string& attrib_name)
+{
+	return attributes[type.attrib(attrib_name).pos];
+}
+
+const AnyValue& ProductInstance::operator[](const std::string& attrib_name) const
+{
+	return attributes[type.attrib(attrib_name).pos];
+}
+
 
 void initialize(void) 
 { };
