@@ -142,7 +142,7 @@ Type& Type::from_name( const std::string& name )
 }
 
 
-void Type::add_attribute( const std::string& name, const StackSig& sig )
+void Type::add_attribute( const std::string& name, const StackSig& sig ) const
 {
 	if(attributes_locked)
 	{
@@ -158,7 +158,10 @@ void Type::add_attribute( const std::string& name, const StackSig& sig )
 	}
 
 	Attribute attrib = { name, sig, attributes.size() };
-	attributes.push_back(attrib);
+	// BDM HACK HACK - this is likely undefined behavior!!
+	std::vector<Attribute>* v = const_cast<std::vector<Attribute>*>(&attributes);
+	//attributes.push_back(attrib);
+	v->push_back(attrib);
 }
 
 const Attribute& Type::attrib( const std::string& name ) const
@@ -207,8 +210,7 @@ const AnyValue& ProductInstance::operator[](const std::string& attrib_name) cons
 }
 
 
-void initialize(void) 
-{ };
+
 	const Type Any = Type::find_or_make("Any");
 	const Type IType = Type::find_or_make("Type");
 	const Type Int = Type::find_or_make("Int");
@@ -216,6 +218,15 @@ void initialize(void)
 	const Type Atom = Type::find_or_make("Atom");
 	const Type String = Type::find_or_make("String");
 
+	const Type FSPosition = Type::find_or_make("FilePosition", Type::default_handler, false);
+	
+
+void initialize(void) 
+{ 
+	FSPosition.add_attribute("filename", {String,{}}); 
+	FSPosition.add_attribute("linenumber", {Int,{}}); 
+	FSPosition.add_attribute("column", {Int,{}}); 
+}
 
 
 	//const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);

@@ -61,7 +61,7 @@ public:
  
 	void lock_attributes(void) { attributes_locked = true; }
 
-	void add_attribute( const std::string& name, const StackSig& sig );
+	void add_attribute( const std::string& name, const StackSig& sig ) const;
 
 	const Attribute& attrib( const std::string& name ) const;
 
@@ -160,6 +160,8 @@ extern const Type Int;
 extern const Type Bool;
 extern const Type Atom;
 extern const Type String;  // BDM : Should we just use Atoms?
+
+extern const Type FSPosition;
 
 extern const Type WordSpecInputSig;
 extern const Type WordSpecOutputSig;
