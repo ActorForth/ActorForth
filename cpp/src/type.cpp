@@ -136,7 +136,7 @@ Type& Type::from_name( const std::string& name )
 	catch( const std::out_of_range& x )
 	{
 		std::stringstream err;
-		err << "<exception: out_of_range> No such Type named '" << name << "!";
+		err << "<exception: out_of_range> No such Type named '" << name << "'!";
 		throw std::out_of_range(err.str());
 	}
 }
