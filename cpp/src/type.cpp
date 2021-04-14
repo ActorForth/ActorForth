@@ -164,12 +164,28 @@ void Type::add_attribute( const std::string& name, const StackSig& sig ) const
 	v->push_back(attrib);
 }
 
+void Type::_list_valid_attributes(std::stringstream& out) const
+{
+	out << "\t";
+	if(attributes.size()==0)
+	{
+		out << "There are no attributes for this type yet.";
+		return;
+	}
+	for(auto a = attributes.begin(); a != attributes.end(); ++a)
+	{
+		if(a!=attributes.begin()) out << ", ";
+		out << a->name;
+	}
+}
+
 const Attribute& Type::attrib( const std::string& name ) const
 {
 	const Attribute* result = find_attribute(name);
 	if(result) return *result;
 	std::stringstream s;
-	s << "'" << name << "' is not a value attribute for Type: '" << Type::name << "'.";
+	s << "Type::attrib['" << name << "'] is not a value attribute name for Type: '" << Type::name << "'.\n";
+	_list_valid_attributes(s);
 	throw std::out_of_range(s.str());
 }
 

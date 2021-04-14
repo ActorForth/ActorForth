@@ -34,6 +34,7 @@ public:
 
 	~Parser() {;}
 
+	/*
 	struct FilePosition
 	{
 		FilePosition() : filename("=Unknown="), linenumber(1), column(1) {;}
@@ -44,14 +45,18 @@ public:
 		unsigned linenumber;
 		unsigned column;
 	};
+	*/
+
+	void update_pos(const char c);
 
 	struct Token
 	{
-		Token() = default;
-		Token(const char c, const FilePosition& pos) 
-			{ value.push_back(c); location = pos; }
+		Token() : location(Types::FSPosition) {;}
+		Token(const Types::ProductInstance& pos) : location(pos) {;}
+		Token(const char c, const Types::ProductInstance& pos) : location(pos)
+			{ value.push_back(c); }
 		std::string value;
-		FilePosition location;
+		Types::ProductInstance location;
 	};
 
 	// consult good() to see if potential tokens are available.
@@ -74,30 +79,29 @@ private:
 
 	struct Whitespace 
 	{		
-		StateMaybeToken consume(const char c, const FilePosition& pos);
+		StateMaybeToken consume(const char c, const Types::ProductInstance& pos);
 	};
 
 	struct Characters
 	{	
-		Characters(char c, const FilePosition& pos)
-			{ token.value.push_back(c); token.location = pos; }
+		Characters(char c, const Types::ProductInstance& pos) : token(c,pos) {;}
 
-		StateMaybeToken consume(const char c, const FilePosition& pos);
+		StateMaybeToken consume(const char c, const Types::ProductInstance& pos);
 
 		Token token;
 	};
 
 	struct String
 	{
-		String(const FilePosition& pos) { token.location = pos; }
-		StateMaybeToken consume( const char c, const FilePosition& pos);
+		String(const Types::ProductInstance& pos) : token(pos) {;}
+		StateMaybeToken consume( const char c, const Types::ProductInstance& pos);
 
 		Token token;
 	};
 
 	struct Comment
 	{
-		StateMaybeToken consume(const char c, const FilePosition& pos);
+		StateMaybeToken consume(const char c, const Types::ProductInstance& pos);
 	};
 
 	// s or f may or may not be active according to the ctor called.
@@ -106,7 +110,7 @@ private:
 	std::ifstream f;
 	std::istream* input;
 
-	FilePosition location;
+	Types::ProductInstance location;
 };
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token);

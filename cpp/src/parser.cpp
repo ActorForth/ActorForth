@@ -4,13 +4,26 @@
 
 #include "parser.hpp"
 
-Parser::Parser(void) : input(&std::cin) {;}
+Parser::Parser(void) : input(&std::cin), location(Types::FSPosition) 
+{
+	std::string attrib = "filename";
+	Types::AnyValue& x = location[attrib];
+	std::string& f = std::get<std::string>(x);
+	f = std::string("=Unknown=");
+	//std::get<std::string&>(location["filename"])= std::string("=Unknown=");
+	std::get<int>(location["linenumber"])=1;
+	std::get<int>(location["column"])=1;
+}
 
 Parser::Parser(const std::string filename ) 
 	: 	f( std::ifstream(filename, std::ios::binary) ),
 		input(0),
-		location(std::move(filename))
+		location(Types::FSPosition) 
+		//location(std::move(filename))
 { 
+	std::get<std::string>(location["filename"])=filename;
+	std::get<int>(location["linenumber"])=1;
+	std::get<int>(location["column"])=1;
 	try 
 	{
   		f.exceptions(f.failbit);
@@ -29,9 +42,13 @@ Parser::Parser(const std::string filename )
 
 Parser::Parser(const std::string filename, const std::string content)
 	: 	s(content),
+		location(Types::FSPosition) 
 		//input(0),
-		location(std::move(filename))
+		// location(std::move(filename))
 {
+	std::get<std::string>(location["filename"])=filename;
+	std::get<int>(location["linenumber"])=1;
+	std::get<int>(location["column"])=1;
 	//s = std::stringstream();
 	//std::cout << "Parser sstream ctor." << std::endl;
 	//s << content ;
@@ -41,23 +58,25 @@ Parser::Parser(const std::string filename, const std::string content)
 }
 
 
-void Parser::FilePosition::update(const char c)
+void Parser::update_pos(const char c)
 {
+	int linenumber = std::get<int>(location["linenumber"]);
+	int column = std::get<int>(location["column"]);
 	switch(c)
 	{
 		case '\n' :
-			linenumber +=1;
-			column = 1;
+			std::get<int>(location["linenumber"])=linenumber + 1;
+			std::get<int>(location["column"]) = 1;
 			break;
 		case '\t' :
-			column += 4;
+			std::get<int>(location["column"]) = column + 4;
 			break;
 		default:
-			column += 1;
+			std::get<int>(location["column"]) = column + 1;
 	}
 }
 
-Parser::StateMaybeToken Parser::Whitespace::consume(const char c, const FilePosition& pos)
+Parser::StateMaybeToken Parser::Whitespace::consume(const char c, const Types::ProductInstance& pos)
 {
 	if(isspace(c)) return { *this, {} };
 	if(c=='.' or c==';' or c==':') return { Whitespace(), Token(c,pos) };
@@ -66,7 +85,7 @@ Parser::StateMaybeToken Parser::Whitespace::consume(const char c, const FilePosi
 	return { Characters(c, pos), {} };
 }
 
-Parser::StateMaybeToken Parser::Characters::consume(const char c, const FilePosition& pos)
+Parser::StateMaybeToken Parser::Characters::consume(const char c, const Types::ProductInstance& pos)
 {
 	//std::cout << "Characters::consume with '" << c << "'" << std::endl;
 	if(isspace(c)) return { Whitespace(), token };
@@ -77,14 +96,14 @@ Parser::StateMaybeToken Parser::Characters::consume(const char c, const FilePosi
 	return { *this, {} };
 }
 
-Parser::StateMaybeToken Parser::String::consume( const char c, const FilePosition& pos)
+Parser::StateMaybeToken Parser::String::consume( const char c, const Types::ProductInstance& pos)
 {			
 	if(c=='"') return { Whitespace(), token };
 	token.value.push_back(c);
 	return { *this, {} };
 }
 
-Parser::StateMaybeToken Parser::Comment::consume(const char c, const FilePosition& pos)
+Parser::StateMaybeToken Parser::Comment::consume(const char c, const Types::ProductInstance& pos)
 {
 	if(c=='\n') return { Whitespace(), {} };
 	return { *this, {} };
@@ -106,7 +125,7 @@ generator<Parser::Token> Parser::tokens()
 		std::tie(state, maybe_token) = std::visit([&](auto&& sarg) { return sarg.consume(c, location); }, state);
 
 		if (maybe_token.has_value()) co_yield( maybe_token.value() );
-		location.update(c);
+		update_pos(c);
 
 		// If we're reading from std::cin we'll only pull in one line at a time
 		// unless we're already inside a string.
@@ -121,7 +140,7 @@ generator<Parser::Token> Parser::tokens()
 
 std::ostream& operator<<(std::ostream& out, const Parser::Token& token)
 {
-	out << "'" << token.value << "'" << " [ file : " << token.location.filename 
-	    << ", line: " << token.location.linenumber << ", col: " << token.location.column << " ]";
+	out << "'" << token.value << "'" << " [ file : " << std::get<std::string>(token.location["filename"]) 
+	    << ", line: " << std::get<int>(token.location["linenumber"]) << ", col: " << std::get<int>(token.location["column"]) << " ]";
 	return out;
 }

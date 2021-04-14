@@ -91,6 +91,8 @@ private:
 	static std::map<const std::string, const Type::ID> TypeIDs;
 
 	friend std::ostream& operator<<(std::ostream& out, const Type& type);
+
+	void _list_valid_attributes(std::stringstream& out) const;
 };
 
 struct ProductInstance;
@@ -101,6 +103,11 @@ struct ProductInstance
 {
 	//ProductInstance();
 	//~ProductInstance();
+	ProductInstance(const Type& type) : type(type) 
+	{
+		// TODO : Initialze default attribute variables based on Type.
+		;
+	}
 	AnyValue& operator[](const std::string& attrib_name);
 	const AnyValue& operator[](const std::string& attrib_name) const;
 	Type type;
