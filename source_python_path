@@ -1,4 +1,0 @@
-#PYTHONPATH=./src:src:.:$PYTHONPATH
-export PYTHONPATH=$PWD:$PWD/src:$PWD/src/af_types:$PWD/src/tests
-export MYPYPATH=$PYTHONPATH
-

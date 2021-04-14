@@ -9,12 +9,7 @@ said license and do assign an unlimited, universal, non-exclusive
 license to the copyright holder and anyone else who agrees to abide by
 the license.
 
-Run `./setup` under a python 3.8+ virtual environment for best results.
-
-Then run `./interpret samples/fundamentals01.a4` to see it run a simple
-script.
-
-Run `./interpret` by itself to get the REPL.
+ActorForth was originally written in Python 3.x but hit some technical limits in Python's ability to do low level processing and the alternative implementation stressed the "functional" iterative aspects of the Python interpreter so we have now switched to modern C++ and are back on track.
 
 See [ActorForthDefinition](docs/ActorForthDefinition.md) for a quick
 overview of how the language works.

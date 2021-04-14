@@ -1,5 +1,7 @@
 # ActorForth Definition
 
+### NOTE - TODO this document needs to be updated to remove the references to the python execution environment.
+
 ## Overview
 
 ActorForth is an environment, compiler, interpreter, and program combined into one.
