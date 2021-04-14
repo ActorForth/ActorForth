@@ -184,7 +184,20 @@ const Attribute* Type::find_attribute(const std::string& name) const
 
 std::ostream& operator<<(std::ostream& out, const Type& type)
 {
-	out << "<" << type.name << "|ID:" << type.id << "|>";
+	out << "<" << type.name << "|ID:" << type.id << "|";
+	if(type.attributes.size())
+	{
+		out << "{";
+
+		for(auto a = type.attributes.begin(); a != type.attributes.end(); ++a)
+		{
+			if(a!=type.attributes.begin()) out << ", ";
+			out << "[" << a->pos << "] " << a->name << ":" << a->sig;
+		}
+
+		out << "};";
+	}
+	out << ">";
 	return out;
 }
 
@@ -218,6 +231,7 @@ const AnyValue& ProductInstance::operator[](const std::string& attrib_name) cons
 	const Type Atom = Type::find_or_make("Atom");
 	const Type String = Type::find_or_make("String");
 
+	// The false parameter keeps the type unlocked so we may add attributes to it later.
 	const Type FSPosition = Type::find_or_make("FilePosition", Type::default_handler, false);
 	
 
@@ -226,6 +240,7 @@ void initialize(void)
 	FSPosition.add_attribute("filename", {String,{}}); 
 	FSPosition.add_attribute("linenumber", {Int,{}}); 
 	FSPosition.add_attribute("column", {Int,{}}); 
+	//FSPosition.lock_attributes();
 }
 
 
