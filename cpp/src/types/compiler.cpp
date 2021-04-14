@@ -7,6 +7,7 @@
 namespace ActorForth
 {
 
+// Starts compilation of a new word.
 void _word_spec_start( Continuation& c )
 {
 	const std::string name = std::get<std::string>(c.stack.tos().value);
@@ -15,6 +16,7 @@ void _word_spec_start( Continuation& c )
 	// BDM - get UDT first. c.stack.push( StackObject( WordSpecInputSig, new_word_spec ) );
 }
 
+// Executes a compiled word.
 void _word_spec_input_interpret( Continuation& c )
 {
 	StackObject atom( c.stack.tos() );
