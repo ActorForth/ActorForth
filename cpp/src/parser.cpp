@@ -21,9 +21,18 @@ Parser::Parser(const std::string filename )
 		location(Types::FSPosition) 
 		//location(std::move(filename))
 { 
-	std::get<std::string>(location["filename"])=filename;
-	std::get<int>(location["linenumber"])=1;
-	std::get<int>(location["column"])=1;
+	std::cout << "Parser(filename = " << filename << ")." << std::endl;
+
+	std::cout << "Setting location filename." << std::endl;
+	Types::AnyValue fn = filename;
+	
+	std::cout << "fn = " << fn << std::endl;
+	location["filename"] = fn;
+
+	std::cout << "Setting linenumber position." << std::endl;
+	location["linenumber"]=1;
+	std::cout << "Setting column position." << std::endl;
+	location["column"]=1;
 	try 
 	{
   		f.exceptions(f.failbit);
@@ -37,6 +46,8 @@ Parser::Parser(const std::string filename )
     }
     f.exceptions(f.badbit);
     input = &f;
+
+    std::cout << "Parser ctor return." << std::endl;
 }
 
 

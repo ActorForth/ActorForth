@@ -8,11 +8,19 @@
 
 TEST_CASE("Parser")
 {
+	std::cout << "Parser test case started." << std::endl;
+	
+	Types::initialize();
+
 	//std::string const name = "../../../develop/cpp/data/SampleTextFile_1000kb.txt"; 
 	//std::string const name = "../../../develop/cpp/data/orig_SampleTextFile_1000b.txt";
 	std::string const name = "tests/data/parseme.a4";
 
+	std::cout << "Instantiating Parser." << std:: endl;
+
 	Parser codetext(name); 
+
+	std::cout << "Checking Parser." << std::endl;
 
 	SUBCASE("File parser is ready.")
 	{

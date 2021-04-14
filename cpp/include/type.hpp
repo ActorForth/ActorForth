@@ -62,6 +62,7 @@ public:
 	void lock_attributes(void) { attributes_locked = true; }
 
 	void add_attribute( const std::string& name, const StackSig& sig ) const;
+	const std::vector<Attribute>& attribs(void) const {return attributes;}
 
 	const Attribute& attrib( const std::string& name ) const;
 
@@ -103,11 +104,8 @@ struct ProductInstance
 {
 	//ProductInstance();
 	//~ProductInstance();
-	ProductInstance(const Type& type) : type(type) 
-	{
-		// TODO : Initialze default attribute variables based on Type.
-		;
-	}
+	ProductInstance(const Type& type);
+
 	AnyValue& operator[](const std::string& attrib_name);
 	const AnyValue& operator[](const std::string& attrib_name) const;
 	Type type;
@@ -151,7 +149,7 @@ struct Attribute
 	const size_t pos;
 };
 
-
+std::ostream& operator<<(std::ostream& out, const Attribute& attrib);
 
 std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 

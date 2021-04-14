@@ -38,6 +38,19 @@ std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val)
 	return out;
 }
 
+ProductInstance::ProductInstance(const Type& type) : type(type) 
+{
+	std::cout << "Initializing the " << type.attribs().size() << " attributes for a " << type.name << "." << std::endl;
+	// Initialze default attribute variables based on Type.
+	for(size_t i=0;i<type.attribs().size();++i)
+	{
+		const Attribute& a = type.attribs()[i];
+		std::cout << "\tInitializing attribute #" << i << " " << a.name << "." << std::endl;
+		attributes.push_back(AnyValue());
+	}
+	std::cout << "Initialization complete." << std::endl;
+}
+
 
 StackSig StackSig::make_stacksig(const Type& type)  
 {
@@ -45,6 +58,13 @@ StackSig StackSig::make_stacksig(const Type& type)
 	//		  ctor of the first listed type! Not what we expected/wanted!
 	//return StackSig( std::make_pair(type, std::make_optional<AnyValue>()) );
 	return StackSig( type, std::optional<AnyValue>() );
+}
+
+
+std::ostream& operator<<(std::ostream& out, const Attribute& attrib)
+{
+	out << "<Attribute>{ " << attrib.name << ", " << attrib.sig << ", pos:" << attrib.pos << "}";
+	return out;
 }
 
 
@@ -252,11 +272,14 @@ const AnyValue& ProductInstance::operator[](const std::string& attrib_name) cons
 	
 
 void initialize(void) 
-{ 
+{ 	std::cout << "Type::initialize starts." << std::endl;
+
 	FSPosition.add_attribute("filename", {String,{}}); 
 	FSPosition.add_attribute("linenumber", {Int,{}}); 
 	FSPosition.add_attribute("column", {Int,{}}); 
 	//FSPosition.lock_attributes();
+
+	std::cout << "Type::initialize ends." << std::endl;
 }
 
 
