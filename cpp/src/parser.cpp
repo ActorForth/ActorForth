@@ -57,9 +57,9 @@ Parser::Parser(const std::string filename, const std::string content)
 		//input(0),
 		// location(std::move(filename))
 {
-	std::get<std::string>(location["filename"])=filename;
-	std::get<int>(location["linenumber"])=1;
-	std::get<int>(location["column"])=1;
+	location["filename"]=filename;
+	location["linenumber"]=1;
+	location["column"]=1;
 	//s = std::stringstream();
 	//std::cout << "Parser sstream ctor." << std::endl;
 	//s << content ;
@@ -76,14 +76,14 @@ void Parser::update_pos(const char c)
 	switch(c)
 	{
 		case '\n' :
-			std::get<int>(location["linenumber"])=linenumber + 1;
-			std::get<int>(location["column"]) = 1;
+			location["linenumber"]=linenumber + 1;
+			location["column"] = 1;
 			break;
 		case '\t' :
-			std::get<int>(location["column"]) = column + 4;
+			location["column"] = column + 4;
 			break;
 		default:
-			std::get<int>(location["column"]) = column + 1;
+			location["column"] = column + 1;
 	}
 }
 
