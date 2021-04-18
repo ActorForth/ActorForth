@@ -22,7 +22,7 @@
 
 #include "type.hpp"
 
-using felspar::makham::generator;
+using felspar::coro::generator;
 
 class Parser
 {

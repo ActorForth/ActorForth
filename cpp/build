@@ -13,19 +13,19 @@ rm bin/any.o
 rm bin/int.o
 rm bin/compiler.o
 rm bin/libtype.a
-clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/parser.cpp -stdlib=libc++ -o bin/parser.o
+clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I coro/include -I coro/include/felspar/coro  -I doctest src/parser.cpp -stdlib=libc++ -o bin/parser.o
 [ $? -eq 0 ] || exit $?
-clang++-10 -v  -Wno-unused-parameter -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
+clang++-10 -v  -Wno-unused-parameter -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I coro/include -I coro/include/felspar/coro -I doctest src/type.cpp -stdlib=libc++ -o bin/type.o
 [ $? -eq 0 ] || exit $?
-clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham -I doctest src/operation.cpp -stdlib=libc++ -o bin/operation.o
+clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I coro/include -I coro/include/felspar/coro -I doctest src/operation.cpp -stdlib=libc++ -o bin/operation.o
 [ $? -eq 0 ] || exit $?
-clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham -I doctest src/stack.cpp -stdlib=libc++ -o bin/stack.o
+clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I coro/include -I coro/include/felspar/coro -I doctest src/stack.cpp -stdlib=libc++ -o bin/stack.o
 [ $? -eq 0 ] || exit $?
-clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/types/int.cpp -stdlib=libc++ -o bin/int.o
+clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I coro/include -I coro/include/felspar/coro  -I doctest src/types/int.cpp -stdlib=libc++ -o bin/int.o
 [ $? -eq 0 ] || exit $?
-clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/types/any.cpp -stdlib=libc++ -o bin/any.o
+clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I coro/include -I coro/include/felspar/coro  -I doctest src/types/any.cpp -stdlib=libc++ -o bin/any.o
 [ $? -eq 0 ] || exit $?
-#clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham  -I doctest src/types/compiler.cpp -stdlib=libc++ -o bin/compiler.o
+#clang++-10 -v -c $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I coro/include -I coro/include/felspar/coro  -I doctest src/types/compiler.cpp -stdlib=libc++ -o bin/compiler.o
 #[ $? -eq 0 ] || exit $?
 
 llvm-ar-10 -rc bin/libtype.a bin/parser.o bin/stack.o bin/type.o bin/operation.o bin/any.o bin/int.o #bin/compiler.o
@@ -34,7 +34,7 @@ llvm-ar-10 -rc bin/libtype.a bin/parser.o bin/stack.o bin/type.o bin/operation.o
 
 # test_parser
 rm bin/test_parser
-clang++-10 -v $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham  -I doctest tests/test_parser.cpp -stdlib=libc++ bin/libtype.a -o bin/test_parser
+clang++-10 -v $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -fdiagnostics-show-option -Wall -Wextra -Wpedantic -I include -I coro/include -I coro/include/felspar/coro  -I doctest tests/test_parser.cpp -stdlib=libc++ bin/libtype.a -o bin/test_parser
 perf stat bin/test_parser < tests/data/parseme.a4
 [ $? -eq 0 ] || exit $?
 
@@ -42,40 +42,40 @@ perf stat bin/test_parser < tests/data/parseme.a4
 rm bin/test_stack
 rm bin/test_stack.profraw
 rm bin/test_stack.llvm-profdata
-clang++-10 -v -fprofile-instr-generate -fcoverage-mapping -fdiagnostics-show-option -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_stack.cpp -stdlib=libc++ bin/libtype.a -o bin/test_stack
+clang++-10 -v -fprofile-instr-generate -fcoverage-mapping -fdiagnostics-show-option -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -I include -I coro/include -I coro/include/felspar/coro -I doctest tests/test_stack.cpp -stdlib=libc++ bin/libtype.a -o bin/test_stack
 LLVM_PROFILE_FILE="bin/test_stack.profraw" bin/test_stack -s -d
 [ $? -eq 0 ] || exit $?
 
 #llvm-profdata-10 merge -sparse bin/test_stack.profraw -o bin/test_stack.llvm-profdata
-#llvm-cov-10 show -ignore-filename-regex=test_stack.cpp -ignore-filename-regex=makham* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation.?pp bin/test_stack -instr-profile=bin/test_stack.llvm-profdata
-#llvm-cov-10 report -ignore-filename-regex=test_stack.cpp -ignore-filename-regex=makham* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation.?pp bin/test_stack -instr-profile=bin/test_stack.llvm-profdata
+#llvm-cov-10 show -ignore-filename-regex=test_stack.cpp -ignore-filename-regex=coro* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation.?pp bin/test_stack -instr-profile=bin/test_stack.llvm-profdata
+#llvm-cov-10 report -ignore-filename-regex=test_stack.cpp -ignore-filename-regex=coro* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation.?pp bin/test_stack -instr-profile=bin/test_stack.llvm-profdata
 
 # test_type
 rm bin/test_type
 rm bin/test_type.profraw
 rm bin/test_type.llvm-profdata
-clang++-10 -v -fprofile-instr-generate -fcoverage-mapping -fdiagnostics-show-option -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_type.cpp -stdlib=libc++ bin/libtype.a -o bin/test_type
+clang++-10 -v -fprofile-instr-generate -fcoverage-mapping -fdiagnostics-show-option -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -I include -I coro/include -I coro/include/felspar/coro -I doctest tests/test_type.cpp -stdlib=libc++ bin/libtype.a -o bin/test_type
 LLVM_PROFILE_FILE="bin/test_type.profraw" bin/test_type -s -d
 [ $? -eq 0 ] || exit $?
 
 #llvm-profdata-10 merge -sparse bin/test_type.profraw -o bin/test_type.llvm-profdata
-#llvm-cov-10 show -ignore-filename-regex=test_type.cpp -ignore-filename-regex=makham* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation.?pp bin/test_type -instr-profile=bin/test_type.llvm-profdata
-#llvm-cov-10 report -ignore-filename-regex=test_type.cpp -ignore-filename-regex=makham* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation.?pp bin/test_type -instr-profile=bin/test_type.llvm-profdata
+#llvm-cov-10 show -ignore-filename-regex=test_type.cpp -ignore-filename-regex=coro* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation.?pp bin/test_type -instr-profile=bin/test_type.llvm-profdata
+#llvm-cov-10 report -ignore-filename-regex=test_type.cpp -ignore-filename-regex=coro* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* -ignore-filename-regex=operation.?pp bin/test_type -instr-profile=bin/test_type.llvm-profdata
 
 # test_operation 
 rm bin/test_operation
 rm bin/test_operation.profraw
 rm bin/test_operation.llvm-profdata
-clang++-10 -v $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham -I doctest tests/test_operation.cpp -stdlib=libc++ bin/libtype.a -o bin/test_operation
+clang++-10 -v $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I coro/include -I coro/include/felspar/coro -I doctest tests/test_operation.cpp -stdlib=libc++ bin/libtype.a -o bin/test_operation
 LLVM_PROFILE_FILE="bin/test_operation.profraw" bin/test_operation -s -d
 [ $? -eq 0 ] || exit $?
 
 #llvm-profdata-10 merge -sparse bin/test_operation.profraw -o bin/test_operation.llvm-profdata
-#llvm-cov-10 show -ignore-filename-regex=stack.?pp -ignore-filename-regex=test_operation.cpp -ignore-filename-regex=makham* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* bin/test_operation -instr-profile=bin/test_operation.llvm-profdata
-#llvm-cov-10 report -ignore-filename-regex=stack.?pp -ignore-filename-regex=test_operation.cpp -ignore-filename-regex=makham* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* bin/test_operation -instr-profile=bin/test_operation.llvm-profdata
+#llvm-cov-10 show -ignore-filename-regex=stack.?pp -ignore-filename-regex=test_operation.cpp -ignore-filename-regex=coro* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* bin/test_operation -instr-profile=bin/test_operation.llvm-profdata
+#llvm-cov-10 report -ignore-filename-regex=stack.?pp -ignore-filename-regex=test_operation.cpp -ignore-filename-regex=coro* -ignore-filename-regex=doctest* -ignore-filename-regex=type* -ignore-filename-regex=parser* bin/test_operation -instr-profile=bin/test_operation.llvm-profdata
 
 # actorforth (aka repl)
 rm bin/actorforth
-clang++-10 -v $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I makham/include -I makham/include/felspar/makham -I doctest src/repl.cpp -stdlib=libc++ bin/libtype.a -o bin/actorforth
+clang++-10 -v $BUILD_PARAM -fcoroutines-ts -std=c++20 -Werror -Wall -Wextra -Wpedantic -Wno-unused-parameter -I include -I coro/include -I coro/include/felspar/coro -I doctest src/repl.cpp -stdlib=libc++ bin/libtype.a -o bin/actorforth
 perf stat bin/actorforth --help
 [ $? -eq 0 ] || exit $?

@@ -7,5 +7,5 @@ compiler = meson.get_compiler('cpp')
 
 source = []
 subdir('src')
-incdir = include_directories('include', 'makham/include', 'makham/include/felspar/makham') # , '/usr/lib/llvm-10/bin/../include/c++/v1')
+incdir = include_directories('include', 'coro/include', 'coro/include/felspar/coro') # , '/usr/lib/llvm-10/bin/../include/c++/v1')
 library('libparser', source, include_directories : incdir)
