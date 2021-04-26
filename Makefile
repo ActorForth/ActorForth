@@ -88,7 +88,7 @@ ifndef OS
 	$(CXX) -o $@ $(FLAGS) $(SHARED_FLAGS) $(SHARED_OBJECTS) $(LIBS) $(LD_FLAGS)
 endif
 
-bin/$(ARCH)/$(BIN_OUT): static
+bin/$(ARCH)/$(BIN_OUT): static $(MAIN_OBJ)
 	$(CXX) -o $@ $(FLAGS) $(OBJECTS) $(TEST_DOCSRC) $(MAIN_OBJ)
 	cp $@ $@.debug
 	$(STRIP) -S --strip-unneeded $@
