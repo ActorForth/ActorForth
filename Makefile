@@ -103,11 +103,15 @@ obj/tests/$(ARCH)/%.o: %.cpp
 	$(CXX) -c -o $@ $< $(FLAGS) $(TEST_INCLUDE)
 	
 bin/tests/$(ARCH)/%: $(TEST_OBJECTS)
-	$(CXX) -o $@ $(FLAGS) $< $(OBJECTS)
+	$(CXX) -o $@ $(FLAGS) obj/tests/$(ARCH)/cpp/tests/$(basename $(notdir $@)).o $(OBJECTS)
 	
 run_tests: static $(TEST_DOCOBJ) $(TEST_BINS)
+ifndef OS
 	$(info === Test: test_parser ===)
 	perf stat bin/tests/$(ARCH)/test_parser < cpp/tests/data/parseme.a4	
+else
+	$(info > No perf support on Windows. < )
+endif
 	$(info === Test: test_stack ===)
 	LLVM_PROFILE_FILE="bin/tests/$(ARCH)/test_stack.profraw" \
 	./bin/tests/$(ARCH)/test_stack -s -d
@@ -115,8 +119,12 @@ run_tests: static $(TEST_DOCOBJ) $(TEST_BINS)
 	LLVM_PROFILE_FILE="./bin/tests/$(ARCH)/test_type.profraw" ./bin/tests/$(ARCH)/test_type -s -d
 	$(info === Test: test_operation ===)
 	LLVM_PROFILE_FILE="./bin/tests/$(ARCH)/test_operation.profraw" ./bin/tests/$(ARCH)/test_operation -s -d
+ifndef OS
 	$(info === Test: actorforth help ===)
 	perf stat bin/$(ARCH)/$(BIN_OUT) --help
+else
+	$(info > No perf support on Windows. < )
+endif
 	
 
 # --- CLEAN ---
@@ -131,6 +139,9 @@ clean-shared:
 	
 clean-tests:
 	$(RM) $(TEST_DOCOBJ) $(MAIN_OBJ) $(TEST_OBJECTS)
+	$(RM) bin/tests/$(ARCH)/test_stack.profraw
+	$(RM) bin/tests/$(ARCH)/test_type.profraw
+	$(RM) bin/tests/$(ARCH)/test_operation.profraw
 	
 
 .PHONY: tests static shared makedir all
