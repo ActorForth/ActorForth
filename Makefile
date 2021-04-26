@@ -97,7 +97,7 @@ bin/$(ARCH)/$(BIN_OUT): static
 # ---- TESTS ---
 
 
-tests: static $(TEST_DOCOBJ) $(TEST_BINS) binary
+tests: static $(TEST_DOCOBJ) $(TEST_BINS) binary run_tests
 
 obj/tests/$(ARCH)/%.o: %.cpp
 	$(CXX) -c -o $@ $< $(FLAGS) $(TEST_INCLUDE)
@@ -105,7 +105,7 @@ obj/tests/$(ARCH)/%.o: %.cpp
 bin/tests/$(ARCH)/%: $(TEST_OBJECTS)
 	$(CXX) -o $@ $(FLAGS) $< $(OBJECTS)
 	
-run_tests:
+run_tests: static $(TEST_DOCOBJ) $(TEST_BINS)
 	$(info === Test: test_parser ===)
 	perf stat bin/tests/$(ARCH)/test_parser < cpp/tests/data/parseme.a4	
 	$(info === Test: test_stack ===)
