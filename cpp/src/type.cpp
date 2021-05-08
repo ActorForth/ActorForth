@@ -11,7 +11,7 @@
 #include "type.hpp"
 #include "continuation.hpp"
 
-//#include "types/compiler.hpp"
+#include "types/compiler.hpp"
 
 using namespace ActorForth;
 
@@ -283,7 +283,7 @@ void initialize(void)
 }
 
 
-	//const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);
+	const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);
 	//const Type WordSpecOutputSig = Type::find_or_make("WordSpecOutputSig");
 	//const Type WordInputPattern = Type::find_or_make("WordInputPattern");
 	//const Type WordOutputPattern = Type::find_or_make("WordOutputPattern");
