@@ -38,19 +38,6 @@ std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val)
 	return out;
 }
 
-ProductInstance::ProductInstance(const Type& type) : type(type) 
-{
-	std::cout << "Initializing the " << type.attribs().size() << " attributes for a " << type.name << "." << std::endl;
-	// Initialze default attribute variables based on Type.
-	for(size_t i=0;i<type.attribs().size();++i)
-	{
-		const Attribute& a = type.attribs()[i];
-		std::cout << "\tInitializing attribute #" << i << " " << a.name << "." << std::endl;
-		attributes.push_back(AnyValue());
-	}
-	std::cout << "Initialization complete." << std::endl;
-}
-
 
 StackSig StackSig::make_stacksig(const Type& type)  
 {
@@ -120,6 +107,7 @@ std::map<const std::string, const Type::ID> Type::TypeIDs = { {"Any",0} };
 
 Type& Type::find_or_make( const std::string& n, const Handler& handler, const bool lock )
 {
+	std::cout << "Type::find_or_make( n=" << n << ", handler=" << (const void*) &handler << ", lock=" << lock << " ) starts." << std::endl;
 	// TODO : automatically treat all types that begin with _ as generic Any types.
 	auto search = TypeIDs.find(n);
 	if (search != TypeIDs.end()) return Types[search->second];
@@ -236,6 +224,22 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 	out << ">";
 	return out;
 }
+
+
+ProductInstance::ProductInstance(const Type& type) : type(type) 
+{
+	std::cout << "ProductInstance ctor initializing the " << type.attribs().size() << " attributes for type '" << type.name << "'(" << type.id << ")." << std::endl;
+	// Initialze default attribute variables based on Type.
+	for(size_t i=0;i<type.attribs().size();++i)
+	{
+		std::cout << "\tInitializing attribute #" << i << " ";
+		const Attribute& a = type.attribs()[i];
+		std::cout << a.name << "." << std::endl;
+		attributes.push_back(AnyValue());
+	}
+	std::cout << "Initialization complete." << std::endl;
+}
+
 
 bool ProductInstance::operator!=(const ProductInstance& p) const
 {

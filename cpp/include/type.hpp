@@ -46,7 +46,8 @@ public:
 	bool operator==(const Type& t) const { return id == t.id; }
 
 	//Type( const Type&& ) = default;
-	
+
+	Type( void ) = delete;	
 	Type( const Type& t ) = default;
 	Type& operator=(const Type& t) 
 	{
@@ -102,7 +103,7 @@ using AnyValue = std::variant< bool, int, unsigned, std::string, ProductInstance
 
 struct ProductInstance
 {
-	//ProductInstance();
+	ProductInstance() = delete;
 	//~ProductInstance();
 	ProductInstance(const Type& type);
 

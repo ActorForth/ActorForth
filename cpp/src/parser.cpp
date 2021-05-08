@@ -6,6 +6,7 @@
 
 Parser::Parser(void) : input(&std::cin), location(Types::FSPosition) 
 {
+	std::cout << "Parser default ctor." << std::endl;
 	std::string attrib = "filename";
 	Types::AnyValue& x = location[attrib];
 	std::string& f = std::get<std::string>(x);
@@ -19,6 +20,7 @@ Parser::Parser(const std::string filename )
 	: 	f( std::ifstream(filename, std::ios::binary) ),
 		input(0),
 		location(Types::FSPosition) 
+
 		//location(std::move(filename))
 { 
 	std::cout << "Parser(filename = " << filename << ")." << std::endl;
@@ -54,9 +56,12 @@ Parser::Parser(const std::string filename )
 Parser::Parser(const std::string filename, const std::string content)
 	: 	s(content),
 		location(Types::FSPosition) 
+
 		//input(0),
 		// location(std::move(filename))
 {
+	std::cout << "Parser filename ctor." << std::endl;
+
 	location["filename"]=filename;
 	location["linenumber"]=1;
 	location["column"]=1;
