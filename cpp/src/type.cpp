@@ -55,7 +55,7 @@ std::ostream& operator<<(std::ostream& out, const Attribute& attrib)
 
 class Continuation;
 
-Type::Handler Type::default_handler = [](Continuation& c) { (*(c.op))(c); };
+Type::Handler Type::default_handler; // BDM refactor hack! (Move to Continuation?) = [](Continuation& c) { (*(c.op))(c); };
 
 //
 //	Any type is a special generic type that matches all other types.
@@ -231,23 +231,32 @@ const AnyValue& ProductInstance::operator[](const std::string& attrib_name) cons
 	const Type Atom = Type::find_or_make("Atom");
 	const Type String = Type::find_or_make("String");
 
+	/* BDM
+
 	// The false parameter keeps the type unlocked so we may add attributes to it later.
 	const Type FSPosition = Type::find_or_make("FilePosition", Type::default_handler, false);
+
+	*/
 	
 
 void initialize(void) 
 { 	std::cout << "Type::initialize starts." << std::endl;
+
+
+	/* BDM
 
 	FSPosition.add_attribute("filename", {String,{}}); 
 	FSPosition.add_attribute("linenumber", {Int,{}}); 
 	FSPosition.add_attribute("column", {Int,{}}); 
 	//FSPosition.lock_attributes();
 
+	*/
+
 	std::cout << "Type::initialize ends." << std::endl;
 }
 
 
-	const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);
+	// BDM - refactoring! const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);
 	//const Type WordSpecOutputSig = Type::find_or_make("WordSpecOutputSig");
 	//const Type WordInputPattern = Type::find_or_make("WordInputPattern");
 	//const Type WordOutputPattern = Type::find_or_make("WordOutputPattern");

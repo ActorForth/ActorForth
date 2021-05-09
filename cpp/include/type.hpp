@@ -138,6 +138,7 @@ extern const Type Bool;
 extern const Type Atom;
 extern const Type String;  // BDM : Should we just use Atoms?
 
+/* BDM
 extern const Type FSPosition;
 
 extern const Type WordSpecInputSig;
@@ -145,5 +146,6 @@ extern const Type WordSpecOutputSig;
 extern const Type WordInputPattern;
 extern const Type WordOutputPattern;
 extern const Type WordCodeCompile;
+*/
 
 } // eons Types
