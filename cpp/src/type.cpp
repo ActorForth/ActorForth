@@ -24,6 +24,28 @@ using namespace ActorForth;
 namespace Types 
 {
 
+
+Type::Type( const Type& t ) : name(t.name), id(t.id), 
+							handler(t.handler), attributes(t.attributes),
+							attributes_locked(t.attributes_locked)
+{;}
+
+
+// Protected ctor.
+Type::Type( const std::string& n, const Handler& h, const bool lock ) : name(n), id(Types.size()), handler(h), attributes_locked(lock) 
+	{ ; } //std::cout << "Type::ctor( n=" << n << ")" << std::endl; }
+
+Type::~Type( void ) {;}
+
+Type& Type::operator=(const Type& t) 
+{
+	if(name != t.name) throw std::logic_error("Can't re-assign Type instance names.");
+	if(id != t.id) throw std::logic_error("Can't re-assign Type instance ids.");
+	if(handler.target<void(Continuation&)>() != t.handler.target<void(Continuation&)>()) throw std::logic_error("Can't re-assign Type instance handlers.");
+
+	return *this;
+}
+
 std::ostream& operator<<(std::ostream& out, const AnyValue& val)
 {
 	if(auto v = std::get_if<bool>(&val)) out << std::boolalpha << *v;
@@ -42,15 +64,6 @@ std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val)
 		out << "<no value>";
 	return out;
 }
-
-
-std::ostream& operator<<(std::ostream& out, const Attribute& attrib)
-{
-	out << "<Attribute>{ " << attrib.name << ", " << attrib.sig << ", pos:" << attrib.pos << "}";
-	return out;
-}
-
-
 
 
 class Continuation;
@@ -80,6 +93,7 @@ Type& Type::find_or_make( const std::string& n, const Handler& handler, const bo
 	return Types[t.id];
 }
 
+
 Type& Type::from_id( const ID& id ) 
 { 		
 	if(id < Types.size()) return Types[id]; 
@@ -94,6 +108,7 @@ Type& Type::from_id( const ID& id )
 	}
 	throw std::out_of_range(err.str());
 }	
+
 
 Type& Type::from_name( const std::string& name )
 {
@@ -110,7 +125,7 @@ Type& Type::from_name( const std::string& name )
 }
 
 
-void Type::add_attribute( const std::string& name, const StackSig& sig ) const
+void Type::add_attribute( const std::string& name ) // BDM refactor! , const StackSig& sig ) const
 {
 	if(attributes_locked)
 	{
@@ -125,12 +140,18 @@ void Type::add_attribute( const std::string& name, const StackSig& sig ) const
 			throw std::logic_error(s.str());
 	}
 
-	Attribute attrib = { name, sig, attributes.size() };
+	// BDM refactor - Attribute attrib = { name, sig, attributes.size() };
+	Attribute attrib = { name, attributes.size() };
 	// BDM HACK HACK - this is likely undefined behavior!!
+
+	
+	attributes.push_back(attrib);
+	/* BDM refactor!
 	std::vector<Attribute>* v = const_cast<std::vector<Attribute>*>(&attributes);
-	//attributes.push_back(attrib);
 	v->push_back(attrib);
+	*/
 }
+
 
 void Type::_list_valid_attributes(std::stringstream& out) const
 {
@@ -147,6 +168,7 @@ void Type::_list_valid_attributes(std::stringstream& out) const
 	}
 }
 
+
 const Attribute& Type::attrib( const std::string& name ) const
 {
 	const Attribute* result = find_attribute(name);
@@ -157,6 +179,7 @@ const Attribute& Type::attrib( const std::string& name ) const
 	throw std::out_of_range(s.str());
 }
 
+
 const Attribute* Type::find_attribute(const std::string& name) const
 {
 	for(auto a = attributes.begin(); a != attributes.end(); ++a)
@@ -165,6 +188,7 @@ const Attribute* Type::find_attribute(const std::string& name) const
 	}
 	return (Attribute*)0;
 }
+
 
 std::ostream& operator<<(std::ostream& out, const Type& type)
 {
@@ -176,7 +200,7 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 		for(auto a = type.attributes.begin(); a != type.attributes.end(); ++a)
 		{
 			if(a!=type.attributes.begin()) out << ", ";
-			out << "[" << a->pos << "] " << a->name << ":" << a->sig;
+			out << "[" << a->pos << "] " << a->name ; // BDM refactor! << ":" << a->sig;
 		}
 
 		out << "};";
@@ -217,11 +241,11 @@ AnyValue& ProductInstance::operator[](const std::string& attrib_name)
 	return attributes[type.attrib(attrib_name).pos];
 }
 
+
 const AnyValue& ProductInstance::operator[](const std::string& attrib_name) const
 {
 	return attributes[type.attrib(attrib_name).pos];
 }
-
 
 
 	const Type Any = Type::find_or_make("Any");

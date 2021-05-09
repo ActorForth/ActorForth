@@ -19,7 +19,7 @@ namespace ActorForth
 {
 
 class Operation;
-struct StackSig;
+// struct StackSig;
 
 }
 
@@ -52,21 +52,17 @@ public:
 	//Type( const Type&& ) = default;
 
 	Type( void ) = delete;	
-	Type( const Type& t ) = default;
-	Type& operator=(const Type& t) 
-	{
-		if(name != t.name) throw std::logic_error("Can't re-assign Type instance names.");
-		if(id != t.id) throw std::logic_error("Can't re-assign Type instance ids.");
-		if(handler.target<void(Continuation&)>() != t.handler.target<void(Continuation&)>()) throw std::logic_error("Can't re-assign Type instance handlers.");
+	Type( const Type& t );
+	~Type( void );
+	
+	Type& operator=(const Type& t);
 
-		return *this;
-	}
 	
 	static size_t size() { return Types.size(); }
  
 	void lock_attributes(void) { attributes_locked = true; }
 
-	void add_attribute( const std::string& name, const ActorForth::StackSig& sig ) const;
+	void add_attribute( const std::string& name ); // BDM refactor! , const ActorForth::StackSig& sig ) const;
 	const std::vector<Attribute>& attribs(void) const {return attributes;}
 
 	const Attribute& attrib( const std::string& name ) const;
@@ -75,8 +71,7 @@ public:
 	const ID id;
 
 protected:
-	Type( const std::string& n, const Handler& h = default_handler, const bool lock = true) : name(n), id(Types.size()), handler(h), attributes_locked(lock) 
-	{ ; } //std::cout << "Type::ctor( n=" << n << ")" << std::endl; }
+	Type( const std::string& n, const Handler& h = default_handler, const bool lock = true);
 
 private:
 
