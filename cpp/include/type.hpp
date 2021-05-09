@@ -19,13 +19,17 @@ namespace ActorForth
 {
 
 class Operation;
+struct StackSig;
 
 }
+
+
+
 
 namespace Types
 {
 
-struct StackSig;
+
 struct Attribute;
 
 
@@ -62,7 +66,7 @@ public:
  
 	void lock_attributes(void) { attributes_locked = true; }
 
-	void add_attribute( const std::string& name, const StackSig& sig ) const;
+	void add_attribute( const std::string& name, const ActorForth::StackSig& sig ) const;
 	const std::vector<Attribute>& attribs(void) const {return attributes;}
 
 	const Attribute& attrib( const std::string& name ) const;
@@ -120,39 +124,6 @@ struct ProductInstance
 std::ostream& operator<<(std::ostream& out, const AnyValue& val);
 std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val);
 
-
-struct StackSig
-{
-	// Note - Generic types will always ignore a specified value.
-	StackSig( const Type& t, const std::optional<AnyValue>& x ) : type(t), maybe_value(x) {;}
-	StackSig( const StackSig& s ) = default;
-
-	// BDM StackSig( std::pair< Type,std::optional<AnyValue> >&& x ) : std::pair< Type,std::optional<AnyValue> >(x) {;}
-
-	static StackSig make_stacksig(const Type& type);
-	template<class T> static StackSig make_stacksig(const Type& type, const T& val ) 
-	{
-		return StackSig(type, std::make_optional< AnyValue >( val ));
-	}
-
-	bool operator==(const StackSig& o) const;
-	//bool operator==(const StackObject& o) const;
-	friend bool operator==(const StackSig& s, const StackObject& o);
-
-	Type type;
-	std::optional<AnyValue> maybe_value;
-};
-
-struct Attribute
-{
-	const std::string name;
-	const StackSig sig;
-	const size_t pos;
-};
-
-std::ostream& operator<<(std::ostream& out, const Attribute& attrib);
-
-std::ostream& operator<<(std::ostream& out, const StackSig& sig);
 
 //
 //	Initialize built-in Types here. Order matters!
