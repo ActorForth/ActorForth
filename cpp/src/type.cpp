@@ -9,15 +9,42 @@
 #include <stdexcept>
 
 #include "type.hpp"
-#include "continuation.hpp"
+// BDM - remove this dependency #include "continuation.hpp"
 
-//#include "types/compiler.hpp"
+// BDM - remove this dependency #include "types/compiler.hpp"
+
+#include "type_attribute.hpp"
+#include "stack_sig.hpp"
 
 using namespace ActorForth;
+//using namespace Types;
 
-namespace Types
+//using ActorForth::Types::AnyValue;
+
+namespace Types 
 {
 
+
+Type::Type( const Type& t ) : name(t.name), id(t.id), 
+							handler(t.handler), attributes(t.attributes),
+							attributes_locked(t.attributes_locked)
+{;}
+
+
+// Protected ctor.
+Type::Type( const std::string& n, const Handler& h, const bool lock ) : name(n), id(Types.size()), handler(h), attributes_locked(lock) 
+	{ ; } //std::cout << "Type::ctor( n=" << n << ")" << std::endl; }
+
+Type::~Type( void ) {;}
+
+Type& Type::operator=(const Type& t) 
+{
+	if(name != t.name) throw std::logic_error("Can't re-assign Type instance names.");
+	if(id != t.id) throw std::logic_error("Can't re-assign Type instance ids.");
+	if(handler.target<void(Continuation&)>() != t.handler.target<void(Continuation&)>()) throw std::logic_error("Can't re-assign Type instance handlers.");
+
+	return *this;
+}
 
 std::ostream& operator<<(std::ostream& out, const AnyValue& val)
 {
@@ -38,77 +65,10 @@ std::ostream& operator<<(std::ostream& out, const std::optional<AnyValue>& val)
 	return out;
 }
 
-ProductInstance::ProductInstance(const Type& type) : type(type) 
-{
-	std::cout << "Initializing the " << type.attribs().size() << " attributes for a " << type.name << "." << std::endl;
-	// Initialze default attribute variables based on Type.
-	for(size_t i=0;i<type.attribs().size();++i)
-	{
-		const Attribute& a = type.attribs()[i];
-		std::cout << "\tInitializing attribute #" << i << " " << a.name << "." << std::endl;
-		attributes.push_back(AnyValue());
-	}
-	std::cout << "Initialization complete." << std::endl;
-}
 
+class Continuation;
 
-StackSig StackSig::make_stacksig(const Type& type)  
-{
-	// NOTE - turns out make_optional will construct the optional with a default
-	//		  ctor of the first listed type! Not what we expected/wanted!
-	//return StackSig( std::make_pair(type, std::make_optional<AnyValue>()) );
-	return StackSig( type, std::optional<AnyValue>() );
-}
-
-
-std::ostream& operator<<(std::ostream& out, const Attribute& attrib)
-{
-	out << "<Attribute>{ " << attrib.name << ", " << attrib.sig << ", pos:" << attrib.pos << "}";
-	return out;
-}
-
-
-std::ostream& operator<<(std::ostream& out, const StackSig& sig) 
-{ 
-	out << "<Spec>{" << sig.type << ", " << sig.maybe_value << "}";
-	return out; 
-}
-
-
-bool StackSig::operator==(const StackSig& s) const
-{
-	// Generic Types always match.
-	if(type.id == 0) return true;
-
-	// Different Types fail.
-	if(type.id != s.type.id) return false;
-
-	// If both our signatures specifies a value check it as well.
-	if(maybe_value.has_value() and s.maybe_value.has_value() and maybe_value.value() != s.maybe_value.value()) return false;
-
-	return true;
-}
-
-//bool StackSig::operator==(const StackObject& o) const
-bool operator==(const StackSig& s, const StackObject& o)
-{
-	//std::cout << "Comparing " << *this << " with " << o << "." << std::endl;
-	
-	// Generic Types always match.
-	if(s.type.id == 0) return true;
-
-	// Different Types fail.
-	if(s.type.id != o.type.id) return false;
-
-	// If our signature specifies a value check it as well.
-	if(s.maybe_value.has_value() and s.maybe_value.value() != o.value) return false;
-
-	return true;
-}
-
-
-
-Type::Handler Type::default_handler = [](Continuation& c) { (*(c.op))(c); };
+Type::Handler Type::default_handler; // BDM refactor hack! (Move to Continuation?) = [](Continuation& c) { (*(c.op))(c); };
 
 //
 //	Any type is a special generic type that matches all other types.
@@ -120,6 +80,7 @@ std::map<const std::string, const Type::ID> Type::TypeIDs = { {"Any",0} };
 
 Type& Type::find_or_make( const std::string& n, const Handler& handler, const bool lock )
 {
+	std::cout << "Type::find_or_make( n=" << n << ", handler=" << (const void*) &handler << ", lock=" << lock << " ) starts." << std::endl;
 	// TODO : automatically treat all types that begin with _ as generic Any types.
 	auto search = TypeIDs.find(n);
 	if (search != TypeIDs.end()) return Types[search->second];
@@ -131,6 +92,7 @@ Type& Type::find_or_make( const std::string& n, const Handler& handler, const bo
 	Types.push_back(t);
 	return Types[t.id];
 }
+
 
 Type& Type::from_id( const ID& id ) 
 { 		
@@ -147,6 +109,7 @@ Type& Type::from_id( const ID& id )
 	throw std::out_of_range(err.str());
 }	
 
+
 Type& Type::from_name( const std::string& name )
 {
 	try
@@ -162,7 +125,7 @@ Type& Type::from_name( const std::string& name )
 }
 
 
-void Type::add_attribute( const std::string& name, const StackSig& sig ) const
+void Type::add_attribute( const std::string& name ) // BDM refactor! , const StackSig& sig ) const
 {
 	if(attributes_locked)
 	{
@@ -177,12 +140,18 @@ void Type::add_attribute( const std::string& name, const StackSig& sig ) const
 			throw std::logic_error(s.str());
 	}
 
-	Attribute attrib = { name, sig, attributes.size() };
+	// BDM refactor - Attribute attrib = { name, sig, attributes.size() };
+	Attribute attrib = { name, attributes.size() };
 	// BDM HACK HACK - this is likely undefined behavior!!
+
+	
+	attributes.push_back(attrib);
+	/* BDM refactor!
 	std::vector<Attribute>* v = const_cast<std::vector<Attribute>*>(&attributes);
-	//attributes.push_back(attrib);
 	v->push_back(attrib);
+	*/
 }
+
 
 void Type::_list_valid_attributes(std::stringstream& out) const
 {
@@ -199,6 +168,7 @@ void Type::_list_valid_attributes(std::stringstream& out) const
 	}
 }
 
+
 const Attribute& Type::attrib( const std::string& name ) const
 {
 	const Attribute* result = find_attribute(name);
@@ -209,6 +179,7 @@ const Attribute& Type::attrib( const std::string& name ) const
 	throw std::out_of_range(s.str());
 }
 
+
 const Attribute* Type::find_attribute(const std::string& name) const
 {
 	for(auto a = attributes.begin(); a != attributes.end(); ++a)
@@ -217,6 +188,7 @@ const Attribute* Type::find_attribute(const std::string& name) const
 	}
 	return (Attribute*)0;
 }
+
 
 std::ostream& operator<<(std::ostream& out, const Type& type)
 {
@@ -228,7 +200,7 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 		for(auto a = type.attributes.begin(); a != type.attributes.end(); ++a)
 		{
 			if(a!=type.attributes.begin()) out << ", ";
-			out << "[" << a->pos << "] " << a->name << ":" << a->sig;
+			out << "[" << a->pos << "] " << a->name ; // BDM refactor! << ":" << a->sig;
 		}
 
 		out << "};";
@@ -236,6 +208,22 @@ std::ostream& operator<<(std::ostream& out, const Type& type)
 	out << ">";
 	return out;
 }
+
+
+ProductInstance::ProductInstance(const Type& type) : type(type) 
+{
+	std::cout << "ProductInstance ctor initializing the " << type.attribs().size() << " attributes for type '" << type.name << "'(" << type.id << ")." << std::endl;
+	// Initialze default attribute variables based on Type.
+	for(size_t i=0;i<type.attribs().size();++i)
+	{
+		std::cout << "\tInitializing attribute #" << i << " ";
+		const Attribute& a = type.attribs()[i];
+		std::cout << a.name << "." << std::endl;
+		attributes.push_back(AnyValue());
+	}
+	std::cout << "Initialization complete." << std::endl;
+}
+
 
 bool ProductInstance::operator!=(const ProductInstance& p) const
 {
@@ -253,11 +241,11 @@ AnyValue& ProductInstance::operator[](const std::string& attrib_name)
 	return attributes[type.attrib(attrib_name).pos];
 }
 
+
 const AnyValue& ProductInstance::operator[](const std::string& attrib_name) const
 {
 	return attributes[type.attrib(attrib_name).pos];
 }
-
 
 
 	const Type Any = Type::find_or_make("Any");
@@ -267,27 +255,36 @@ const AnyValue& ProductInstance::operator[](const std::string& attrib_name) cons
 	const Type Atom = Type::find_or_make("Atom");
 	const Type String = Type::find_or_make("String");
 
+	/* BDM
+
 	// The false parameter keeps the type unlocked so we may add attributes to it later.
 	const Type FSPosition = Type::find_or_make("FilePosition", Type::default_handler, false);
+
+	*/
 	
 
 void initialize(void) 
 { 	std::cout << "Type::initialize starts." << std::endl;
+
+
+	/* BDM
 
 	FSPosition.add_attribute("filename", {String,{}}); 
 	FSPosition.add_attribute("linenumber", {Int,{}}); 
 	FSPosition.add_attribute("column", {Int,{}}); 
 	//FSPosition.lock_attributes();
 
+	*/
+
 	std::cout << "Type::initialize ends." << std::endl;
 }
 
 
-	//const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);
+	// BDM - refactoring! const Type WordSpecInputSig = Type::find_or_make("WordSpecInputSig", _word_spec_input_interpret);
 	//const Type WordSpecOutputSig = Type::find_or_make("WordSpecOutputSig");
 	//const Type WordInputPattern = Type::find_or_make("WordInputPattern");
 	//const Type WordOutputPattern = Type::find_or_make("WordOutputPattern");
 	//const Type WordCodeCompile = Type::find_or_make("WordCodeCompile");
 //};
 
-}
+} // eons Types
