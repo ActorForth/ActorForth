@@ -4,66 +4,286 @@
 		"selected_items":
 		[
 			[
-				"Stack",
-				"StackSig"
+				"defa",
+				"default_handler"
 			],
 			[
 				"fin",
 				"find_or_make"
 			],
 			[
-				"de",
-				"default_handler"
+				"att",
+				"attrib_name"
 			],
 			[
-				"ou",
-				"out_of_range"
+				"attri",
+				"attributes"
 			],
 			[
-				"test",
-				"test_parser"
+				"attribu",
+				"attributes_locked"
 			],
 			[
-				"tst",
-				"test_parser"
+				"S",
+				"StackSig"
+			],
+			[
+				"St",
+				"StackSig"
+			],
+			[
+				"at",
+				"attributes_locked"
+			],
+			[
+				"enu",
+				"enumerator"
+			],
+			[
+				"_op_int_mi",
+				"_op_int_multiply"
+			],
+			[
+				"Ty",
+				"TypeOps"
+			],
+			[
+				"find",
+				"find_or_make"
+			],
+			[
+				"size",
+				"size_t"
+			],
+			[
+				"_print",
+				"_print_types"
+			],
+			[
+				"si",
+				"size_t"
+			],
+			[
+				"Stack",
+				"StackSig"
+			],
+			[
+				"out",
+				"out_seq"
+			],
+			[
+				"b",
+				"begin"
+			],
+			[
+				"mak",
+				"make_stacksig"
+			],
+			[
+				"v",
+				"vector\tstd::vector"
 			],
 			[
 				"Sta",
-				"StateType"
+				"StackSig"
+			],
+			[
+				"make_st",
+				"make_stackobj"
+			],
+			[
+				"get",
+				"get_if"
+			],
+			[
+				"ma",
+				"maybe_token"
+			],
+			[
+				"file",
+				"filesystem"
+			],
+			[
+				"string",
+				"stringstream"
+			],
+			[
+				"if",
+				"ifstream"
+			],
+			[
+				"ou",
+				"out_seq"
+			],
+			[
+				"ins",
+				"_inst_stackobj"
+			],
+			[
+				"mi",
+				"mis_match_stack"
+			],
+			[
+				"match",
+				"match_stack"
+			],
+			[
+				"al",
+				"alt_longer_match_sig"
+			],
+			[
+				"alt_",
+				"alt_longer_match_sig"
+			],
+			[
+				"mat",
+				"match_stack"
+			],
+			[
+				"ST",
+				"StackObject"
+			],
+			[
+				"m",
+				"matches"
+			],
+			[
+				"A",
+				"A"
+			],
+			[
+				"alt",
+				"alt_longer_match_sig"
+			],
+			[
+				"Sig",
+				"Signature"
+			],
+			[
+				"pu",
+				"push_back"
+			],
+			[
+				"llvm-",
+				"llvm-cov-10"
+			],
+			[
+				"in",
+				"in_seq"
+			],
+			[
+				"Stac",
+				"StackSig"
+			],
+			[
+				"ios",
+				"iostream\tstandard header"
+			],
+			[
+				"glo",
+				"global_op"
+			],
+			[
+				"gl",
+				"global_op"
+			],
+			[
+				"cp",
+				"capacity"
+			],
+			[
+				"lib",
+				"libparser"
 			],
 			[
 				"col",
 				"column"
 			],
 			[
-				"line",
-				"linenumber"
-			],
-			[
-				"co",
-				"column"
-			],
-			[
-				"if",
-				"ifstream"
+				"st",
+				"state_maybe_token"
 			]
 		]
 	},
 	"buffers":
 	[
 		{
-			"file": "cpp/include/type.hpp",
+			"file": "cpp/build",
 			"settings":
 			{
-				"buffer_size": 1124,
+				"buffer_size": 6256,
+				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
 		},
 		{
-			"file": "cpp/include/continuation.hpp",
+			"file": "cpp/tests/test_parser.cpp",
 			"settings":
 			{
-				"buffer_size": 232,
+				"buffer_size": 1829,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "cpp/include/type.hpp",
+			"settings":
+			{
+				"buffer_size": 3270,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "samples/aspire/access_token.a4",
+			"settings":
+			{
+				"buffer_size": 4578,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "cpp/src/type.cpp",
+			"settings":
+			{
+				"buffer_size": 7853,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "cpp/include/types/any.hpp",
+			"settings":
+			{
+				"buffer_size": 526,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "cpp/src/repl.cpp",
+			"settings":
+			{
+				"buffer_size": 2601,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "cpp/include/parser.hpp",
+			"settings":
+			{
+				"buffer_size": 2540,
+				"encoding": "UTF-8",
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "cpp/include/types/int.hpp",
+			"settings":
+			{
+				"buffer_size": 365,
+				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
 		},
@@ -71,23 +291,16 @@
 			"file": "cpp/src/operation.cpp",
 			"settings":
 			{
-				"buffer_size": 4061,
+				"buffer_size": 3103,
+				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
 		},
 		{
-			"file": "cpp/include/operation.hpp",
+			"file": "cpp/src/types/compiler.cpp",
 			"settings":
 			{
-				"buffer_size": 2257,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "cpp/build",
-			"settings":
-			{
-				"buffer_size": 1563,
+				"buffer_size": 1064,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
@@ -96,112 +309,17 @@
 			"file": "cpp/include/stack.hpp",
 			"settings":
 			{
-				"buffer_size": 1619,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "cpp/src/type.cpp",
-			"settings":
-			{
-				"buffer_size": 1467,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/operation.py",
-			"settings":
-			{
-				"buffer_size": 10985,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/af_types/__init__.py",
-			"settings":
-			{
-				"buffer_size": 17772,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/interpret.py",
-			"settings":
-			{
-				"buffer_size": 2715,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/continuation.py",
-			"settings":
-			{
-				"buffer_size": 4308,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/af_types/af_any.py",
-			"settings":
-			{
-				"buffer_size": 4500,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/af_types/af_int.py",
-			"settings":
-			{
-				"buffer_size": 2475,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "cpp/tests/test_type.cpp",
-			"settings":
-			{
-				"buffer_size": 1141,
+				"buffer_size": 5113,
 				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
 		},
 		{
-			"file": "src/compiler.py",
+			"file": "cpp/src/stack.cpp",
 			"settings":
 			{
-				"buffer_size": 26880,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/af_types/af_branch.py",
-			"settings":
-			{
-				"buffer_size": 4849,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/aftype.py",
-			"settings":
-			{
-				"buffer_size": 3397,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "src/af_types/af_usertype.py",
-			"settings":
-			{
-				"buffer_size": 8253,
-				"line_ending": "Unix"
-			}
-		},
-		{
-			"file": "cpp/tests/test_stack.cpp",
-			"settings":
-			{
-				"buffer_size": 465,
+				"buffer_size": 2463,
+				"encoding": "UTF-8",
 				"line_ending": "Unix"
 			}
 		}
@@ -238,33 +356,49 @@
 	},
 	"expanded_folders":
 	[
-		"/home/scherrey/projects/languages/ActorForth",
-		"/home/scherrey/projects/languages/ActorForth/cpp",
-		"/home/scherrey/projects/languages/ActorForth/cpp/include",
-		"/home/scherrey/projects/languages/ActorForth/cpp/include/types",
-		"/home/scherrey/projects/languages/ActorForth/cpp/src",
-		"/home/scherrey/projects/languages/ActorForth/cpp/tests",
-		"/home/scherrey/projects/languages/ActorForth/cpp/tests/data",
-		"/home/scherrey/projects/languages/ActorForth/samples",
-		"/home/scherrey/projects/languages/ActorForth/src",
-		"/home/scherrey/projects/languages/ActorForth/src/af_types",
-		"/home/scherrey/projects/languages/ActorForth/src/tests"
+		"/home/scherrey/projects/ActorForth",
+		"/home/scherrey/projects/ActorForth/cpp",
+		"/home/scherrey/projects/ActorForth/cpp/include",
+		"/home/scherrey/projects/ActorForth/cpp/include/types",
+		"/home/scherrey/projects/ActorForth/cpp/src",
+		"/home/scherrey/projects/ActorForth/cpp/src/types",
+		"/home/scherrey/projects/ActorForth/cpp/tests",
+		"/home/scherrey/projects/ActorForth/cpp/tests/data",
+		"/home/scherrey/projects/ActorForth/samples",
+		"/home/scherrey/projects/ActorForth/samples/aspire"
 	],
 	"file_history":
 	[
-		"/home/scherrey/projects/languages/ActorForth/cpp/include/types/any.hpp",
-		"/home/scherrey/projects/languages/ActorForth/cpp/include/parser.hpp",
-		"/home/scherrey/projects/languages/ActorForth/src/tests/test_usertype.py",
-		"/home/scherrey/projects/languages/ActorForth/cpp/include/stack.hpp",
-		"/home/scherrey/projects/languages/ActorForth/cpp/tests/data/parseme.a4",
-		"/home/scherrey/projects/languages/ActorForth/cpp/src/parser.cpp",
-		"/home/scherrey/projects/languages/ActorForth/cpp/build",
-		"/home/scherrey/projects/languages/ActorForth/src/repl.py",
-		"/home/scherrey/projects/languages/ActorForth/src/parser.py",
-		"/home/scherrey/projects/languages/ActorForth/src/stack.py",
-		"/home/scherrey/projects/languages/ActorForth/cpp/include/continuation.hpp",
-		"/home/scherrey/projects/languages/ActorForth/cpp/src/parse.cpp",
-		"/home/scherrey/projects/languages/ActorForth/LICENSE.txt"
+		"/home/scherrey/projects/ActorForth/cpp/include/types/product.hpp",
+		"/home/scherrey/projects/ActorForth/cpp/include/types/compiler.hpp",
+		"/home/scherrey/projects/ActorForth/cpp/tests/test_stack.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/src/types/int.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/src/types/any.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/include/repl.hpp",
+		"/home/scherrey/projects/ActorForth/cpp/src/parser.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/tests/test_operation.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/src/type.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/include/continuation.hpp",
+		"/home/scherrey/projects/ActorForth/cpp/include/operation.hpp",
+		"/home/scherrey/projects/ActorForth/cpp/tests/test_type.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/include/type.hpp",
+		"/home/scherrey/projects/ActorForth/cpp/src/repl.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/include/parser.hpp",
+		"/home/scherrey/projects/ActorForth/cpp/tests/data/parseme.a4",
+		"/home/scherrey/projects/ActorForth/cpp/include/types/any.hpp",
+		"/home/scherrey/projects/ActorForth/cpp/src/stack.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/build",
+		"/home/scherrey/projects/ActorForth/cpp/include/stack.hpp",
+		"/home/scherrey/projects/ActorForth/cpp/tests/test_typing.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/tests/test_cin.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/tests/test_parser.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/src/operation.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/src/continuation.cpp",
+		"/home/scherrey/projects/ActorForth/cpp/src/meson.build",
+		"/home/scherrey/projects/ActorForth/cpp/meson.build",
+		"/home/scherrey/projects/ActorForth/cpp/builddir/meson-logs/meson-log.txt",
+		"/home/scherrey/projects/ActorForth/cpp/src/parse.cpp",
+		"/home/scherrey/projects/ActorForth/LICENSE.txt"
 	],
 	"find":
 	{
@@ -275,7 +409,7 @@
 		"height": 101.0,
 		"where_history":
 		[
-			"*.py"
+			"*.?pp"
 		]
 	},
 	"find_state":
@@ -283,7 +417,12 @@
 		"case_sensitive": false,
 		"find_history":
 		[
-			"udts"
+			"_type",
+			"friend",
+			"AlwaysEmpty",
+			"HERE'S OUR",
+			"Signature",
+			"/include"
 		],
 		"highlight": true,
 		"in_selection": false,
@@ -291,34 +430,196 @@
 		"regex": false,
 		"replace_history":
 		[
+			"_operation"
 		],
 		"reverse": false,
+		"scrollbar_highlights": true,
 		"show_context": true,
 		"use_buffer2": true,
+		"use_gitignore": true,
 		"whole_word": false,
 		"wrap": true
 	},
 	"groups":
 	[
 		{
-			"selected": 4,
 			"sheets":
 			[
 				{
 					"buffer": 0,
-					"file": "cpp/include/type.hpp",
+					"file": "cpp/build",
+					"selected": true,
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 1124,
+						"buffer_size": 6256,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								651,
-								651
+								0,
+								0
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C#/Build.sublime-syntax"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "cpp/tests/test_parser.cpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 1829,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								681,
+								681
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 1,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 2,
+					"file": "cpp/include/type.hpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 3270,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								0,
+								0
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 408.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 2,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 3,
+					"file": "samples/aspire/access_token.a4",
+					"semi_transient": true,
+					"settings":
+					{
+						"buffer_size": 4578,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								116,
+								116
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/ShellScript/Bash.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 3,
+					"stack_multiselect": false,
+					"type": "text"
+				}
+			]
+		},
+		{
+			"sheets":
+			[
+				{
+					"buffer": 4,
+					"file": "cpp/src/type.cpp",
+					"selected": true,
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 7853,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								0,
+								0
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 2648.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 0,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 5,
+					"file": "cpp/include/types/any.hpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 526,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								352,
+								352
 							]
 						],
 						"settings":
@@ -326,27 +627,90 @@
 							"syntax": "Packages/C++/C++.sublime-syntax"
 						},
 						"translation.x": 0.0,
-						"translation.y": 306.0,
+						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 5,
+					"stack_index": 1,
+					"stack_multiselect": false,
 					"type": "text"
 				},
 				{
-					"buffer": 1,
-					"file": "cpp/include/continuation.hpp",
+					"buffer": 6,
+					"file": "cpp/src/repl.cpp",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 232,
+						"buffer_size": 2601,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								210,
-								210
+								890,
+								890
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 765.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 2,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 7,
+					"file": "cpp/include/parser.hpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 2540,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								771,
+								771
+							]
+						],
+						"settings":
+						{
+							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
+							"translate_tabs_to_spaces": false
+						},
+						"translation.x": 0.0,
+						"translation.y": 474.0,
+						"zoom_level": 1.0
+					},
+					"stack_index": 3,
+					"stack_multiselect": false,
+					"type": "text"
+				},
+				{
+					"buffer": 8,
+					"file": "cpp/include/types/int.hpp",
+					"semi_transient": false,
+					"settings":
+					{
+						"buffer_size": 365,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								365,
+								365
 							]
 						],
 						"settings":
@@ -358,508 +722,131 @@
 						"zoom_level": 1.0
 					},
 					"stack_index": 4,
+					"stack_multiselect": false,
 					"type": "text"
 				},
 				{
-					"buffer": 2,
+					"buffer": 9,
 					"file": "cpp/src/operation.cpp",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 4061,
+						"buffer_size": 3103,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								65,
-								65
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/C++/C++.sublime-syntax"
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 2,
-					"type": "text"
-				},
-				{
-					"buffer": 3,
-					"file": "cpp/include/operation.hpp",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 2257,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								756,
-								756
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/C++/C++.sublime-syntax"
-						},
-						"translation.x": 0.0,
-						"translation.y": 306.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 3,
-					"type": "text"
-				},
-				{
-					"buffer": 4,
-					"file": "cpp/build",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 1563,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								445,
-								445
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/C#/Build.sublime-syntax"
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 1,
-					"type": "text"
-				}
-			]
-		},
-		{
-			"selected": 8,
-			"sheets":
-			[
-				{
-					"buffer": 5,
-					"file": "cpp/include/stack.hpp",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 1619,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								383,
-								383
+								1992,
+								1992
 							]
 						],
 						"settings":
 						{
 							"syntax": "Packages/C++/C++.sublime-syntax",
+							"tab_size": 4,
 							"translate_tabs_to_spaces": false
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 1190.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 11,
-					"type": "text"
-				},
-				{
-					"buffer": 6,
-					"file": "cpp/src/type.cpp",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 1467,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								414,
-								414
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/C++/C++.sublime-syntax"
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 10,
-					"type": "text"
-				},
-				{
-					"buffer": 7,
-					"file": "src/operation.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 10985,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								5315,
-								5315
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 816.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 8,
-					"type": "text"
-				},
-				{
-					"buffer": 8,
-					"file": "src/af_types/__init__.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 17772,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								17651,
-								17651
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 3570.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 6,
-					"type": "text"
-				},
-				{
-					"buffer": 9,
-					"file": "src/interpret.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 2715,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								726,
-								726
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 255.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 13,
+					"stack_index": 5,
+					"stack_multiselect": false,
 					"type": "text"
 				},
 				{
 					"buffer": 10,
-					"file": "src/continuation.py",
+					"file": "cpp/src/types/compiler.cpp",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 4308,
+						"buffer_size": 1064,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								133,
-								133
+								359,
+								359
 							]
 						],
 						"settings":
 						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
+							"syntax": "Packages/C++/C++.sublime-syntax",
 							"tab_size": 4,
-							"translate_tabs_to_spaces": true
+							"translate_tabs_to_spaces": false
 						},
 						"translation.x": 0.0,
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 7,
+					"stack_index": 6,
+					"stack_multiselect": false,
 					"type": "text"
 				},
 				{
 					"buffer": 11,
-					"file": "src/af_types/af_any.py",
+					"file": "cpp/include/stack.hpp",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 4500,
+						"buffer_size": 5113,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								131,
-								131
+								4439,
+								4439
 							]
 						],
 						"settings":
 						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
+							"syntax": "Packages/C++/C++.sublime-syntax",
 							"tab_size": 4,
-							"translate_tabs_to_spaces": true
+							"translate_tabs_to_spaces": false
 						},
 						"translation.x": 0.0,
-						"translation.y": 0.0,
+						"translation.y": 61.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 14,
+					"stack_index": 7,
+					"stack_multiselect": false,
 					"type": "text"
 				},
 				{
 					"buffer": 12,
-					"file": "src/af_types/af_int.py",
+					"file": "cpp/src/stack.cpp",
 					"semi_transient": false,
 					"settings":
 					{
-						"buffer_size": 2475,
+						"buffer_size": 2463,
 						"regions":
 						{
 						},
 						"selection":
 						[
 							[
-								0,
-								0
+								394,
+								394
 							]
 						],
 						"settings":
 						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
+							"syntax": "Packages/C++/C++.sublime-syntax",
 							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 0.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 12,
-					"type": "text"
-				},
-				{
-					"buffer": 13,
-					"file": "cpp/tests/test_type.cpp",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 1141,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								1140,
-								1140
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/C++/C++.sublime-syntax"
-						},
-						"translation.x": 0.0,
-						"translation.y": 153.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 0,
-					"type": "text"
-				},
-				{
-					"buffer": 14,
-					"file": "src/compiler.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 26880,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								26797,
-								26797
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 9841.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 18,
-					"type": "text"
-				},
-				{
-					"buffer": 15,
-					"file": "src/af_types/af_branch.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 4849,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								1918,
-								1918
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
 							"translate_tabs_to_spaces": false
 						},
 						"translation.x": 0.0,
-						"translation.y": 1683.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 9,
-					"type": "text"
-				},
-				{
-					"buffer": 16,
-					"file": "src/aftype.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 3397,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								994,
-								994
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 510.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 16,
-					"type": "text"
-				},
-				{
-					"buffer": 17,
-					"file": "src/af_types/af_usertype.py",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 8253,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								313,
-								313
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/Python/Python.sublime-syntax",
-							"tab_size": 4,
-							"translate_tabs_to_spaces": true
-						},
-						"translation.x": 0.0,
-						"translation.y": 51.0,
-						"zoom_level": 1.0
-					},
-					"stack_index": 15,
-					"type": "text"
-				},
-				{
-					"buffer": 18,
-					"file": "cpp/tests/test_stack.cpp",
-					"semi_transient": false,
-					"settings":
-					{
-						"buffer_size": 465,
-						"regions":
-						{
-						},
-						"selection":
-						[
-							[
-								0,
-								0
-							]
-						],
-						"settings":
-						{
-							"syntax": "Packages/C++/C++.sublime-syntax"
-						},
-						"translation.x": 0.0,
 						"translation.y": 0.0,
 						"zoom_level": 1.0
 					},
-					"stack_index": 17,
+					"stack_index": 8,
+					"stack_multiselect": false,
 					"type": "text"
 				}
 			]
@@ -893,7 +880,7 @@
 		"cols":
 		[
 			0.0,
-			0.5,
+			0.506081447086,
 			1.0
 		],
 		"rows":
