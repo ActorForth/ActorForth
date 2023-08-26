@@ -30,8 +30,13 @@ SHARED_OBJECTS := $(addprefix obj/shared/$(ARCH)/,$(notdir) $(SOURCES:.cpp=.o))
 MAIN_OBJ := $(addprefix obj/static/$(ARCH)/,$(notdir) $(MAIN_SRC:.cpp=.o))
 
 # Set compile flags for static & shared builds.
-FLAGS 		:= $(INCLUDES) -g3 -std=c++20  -fcoroutines-ts -stdlib=libc++ -O0 \
-					-fprofile-instr-generate -fcoverage-mapping -fdiagnostics-show-option
+# FLAGS 		:= $(INCLUDES) -g3 -std=c++20  -fcoroutines-ts -stdlib=libc++ -O0 \
+#					-fprofile-instr-generate -fcoverage-mapping -fdiagnostics-show-option
+					
+FLAGS 		:= $(INCLUDES) -g3 -std=c++20 -stdlib=libc++ -O0 -fdiagnostics-color=always  \
+					-fprofile-instr-generate -fcoverage-mapping -fdiagnostics-show-option					
+										
+					
 SHARED_FLAGS := 
 LD_FLAGS 	:= -shared -Wl,-soname,$(OUTPUT).so.$(VERSION)
 LIBS 		:= 
@@ -39,8 +44,6 @@ LIBS 		:=
 # Add platform-specific flags.
 ifdef OS
 	# Windows platform.
-	#LD_FLAGS += -lclang_rt.profile-x86_64
-	#FLAGS += --coverage
 else
 	# Linux, etc.
 	SHARED_FLAGS += -fPIC
@@ -55,7 +58,7 @@ TEST_OBJECTS := $(addprefix obj/tests/$(ARCH)/,$(notdir) $(TEST_SOURCES:.cpp=.o)
 TEST_BINS	:= $(addprefix bin/tests/$(ARCH)/,$(basename $(notdir $(TEST_OBJECTS))))
 
 
-all: makedir static shared binary tests
+all: makedir static shared binary tests run_tests
 
 
 makedir:
@@ -78,7 +81,7 @@ obj/static/$(ARCH)/%.o: %.cpp
 	$(CXX) -c -o $@ $< $(FLAGS)
 	
 obj/shared/$(ARCH)/%.o: %.cpp
-	$(CXX) -c -o $@ $<  $(SHARED_FLAGS) $(FLAGS) $(LIBS)
+	$(CXX) -c -o $@ $< $(FLAGS) $(SHARED_FLAGS) $(LIBS)
 	
 bin/$(ARCH)/$(OUTPUT).a: $(OBJECTS)
 	-rm -f $@
@@ -87,7 +90,7 @@ bin/$(ARCH)/$(OUTPUT).a: $(OBJECTS)
 bin/$(ARCH)/$(OUTPUT).so.$(VERSION): $(SHARED_OBJECTS)
 # FIXME: Detect Windows platform & disable linking.
 ifndef OS
-	$(CXX) -o $@ $(FLAGS) $(SHARED_OBJECTS) $(LIBS) $(LD_FLAGS)
+	$(CXX) -o $@ $(FLAGS) $(SHARED_FLAGS) $(SHARED_OBJECTS) $(LIBS) $(LD_FLAGS)
 endif
 
 bin/$(ARCH)/$(BIN_OUT): static $(MAIN_OBJ)
@@ -98,46 +101,27 @@ bin/$(ARCH)/$(BIN_OUT): static $(MAIN_OBJ)
 
 # ---- TESTS ---
 
-build_tests: static $(TEST_DOCOBJ) $(TEST_BINS)
 
-tests: run_tests
+tests: static $(TEST_DOCOBJ) $(TEST_BINS) binary run_tests
 
 obj/tests/$(ARCH)/%.o: %.cpp
 	$(CXX) -c -o $@ $< $(FLAGS) $(TEST_INCLUDE)
 	
 bin/tests/$(ARCH)/%: $(TEST_OBJECTS)
-	$(CXX) -o $@ $(FLAGS) obj/tests/$(ARCH)/cpp/tests/$(basename $(notdir $@)).o $(OBJECTS)
+	$(CXX) -o $@ $(FLAGS) $< $(OBJECTS)
 	
-run_tests: test_parser test_stack test_type test_operation test_help
-
-test_parser: build_tests
-ifndef OS
+run_tests: static $(TEST_DOCOBJ) $(TEST_BINS)
 	$(info === Test: test_parser ===)
 	perf stat bin/tests/$(ARCH)/test_parser < cpp/tests/data/parseme.a4	
-else
-	$(info > No perf support on Windows. < )
-endif
-
-test_stack: build_tests
 	$(info === Test: test_stack ===)
 	LLVM_PROFILE_FILE="bin/tests/$(ARCH)/test_stack.profraw" \
 	./bin/tests/$(ARCH)/test_stack -s -d
-	
-test_type: build_tests
 	$(info === Test: test_type ===)
 	LLVM_PROFILE_FILE="./bin/tests/$(ARCH)/test_type.profraw" ./bin/tests/$(ARCH)/test_type -s -d
-	
-test_operation: build_tests
 	$(info === Test: test_operation ===)
 	LLVM_PROFILE_FILE="./bin/tests/$(ARCH)/test_operation.profraw" ./bin/tests/$(ARCH)/test_operation -s -d
-
-test_help: build_tests binary
-ifndef OS
 	$(info === Test: actorforth help ===)
 	perf stat bin/$(ARCH)/$(BIN_OUT) --help
-else
-	$(info > No perf support on Windows. < )
-endif
 	
 
 # --- CLEAN ---
@@ -152,9 +136,6 @@ clean-shared:
 	
 clean-tests:
 	$(RM) $(TEST_DOCOBJ) $(MAIN_OBJ) $(TEST_OBJECTS)
-	$(RM) bin/tests/$(ARCH)/test_stack.profraw
-	$(RM) bin/tests/$(ARCH)/test_type.profraw
-	$(RM) bin/tests/$(ARCH)/test_operation.profraw
 	
 
 .PHONY: tests static shared makedir all

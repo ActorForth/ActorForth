@@ -19,3 +19,22 @@ overview of how the language works.
 Experiments implementing an Actor-style programming language on top of
 a stack-based processor will be forthcoming as the system is
 developed.
+
+To build you need clang++ installed. On a Debian derivative you should be able to install with this:
+
+`
+sudo apt install cmake ninja-build clang-15 lld-15 libc++-15-dev libc++abi-15-dev llvm-15-dev clang-15-doc llvm-15-doc
+`
+
+Now get linux to use your version of clang++. Can adjust that '150' number to whatever is the highest of your current installs.
+
+`
+sudo update-alternatives --install /usr/bin/clang++ clang++ /usr/bin/clang++-15 150
+`
+
+To see the other installs or pick one manually do this:
+
+`
+sudo update-alternatives --config clang++
+`
+
