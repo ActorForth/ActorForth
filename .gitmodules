@@ -1,9 +1,0 @@
-[submodule "cpp/doctest"]
-	path = cpp/doctest
-	url = git@github.com:onqtam/doctest.git
-[submodule "cpp/aixlog"]
-	path = cpp/aixlog
-	url = git@github.com:badaix/aixlog.git
-[submodule "cpp/coro"]
-	path = cpp/coro
-	url = git@github.com:Felspar/coro.git

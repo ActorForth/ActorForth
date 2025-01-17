@@ -1,0 +1,3 @@
+rebar3 eunit --cover
+rebar3 cover
+#brave file:///home/scherrey/projects/actorforth/_build/test/cover/index.html

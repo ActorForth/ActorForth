@@ -1,4 +1,0 @@
-export CC=clang
-export CXX=clang++
-
-meson setup builddir
