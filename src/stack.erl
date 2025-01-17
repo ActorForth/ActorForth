@@ -1,6 +1,6 @@
 -module(stack).
 
--export_type([stack/0]).
+-export_type([stack/0, stack_item/0]).
 
 
 -type type() :: atom().
