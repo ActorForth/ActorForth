@@ -2,7 +2,9 @@
 
 -export_type([stack/0]).
 
--type stack_item() :: {atom(), term() | function()}.
+
+-type type() :: atom().
+-type stack_item() :: {type(), term() | function()}.
 -type stack() :: [stack_item()].
 
 -export([new/0, push/2, pop/1, swap/1]).
