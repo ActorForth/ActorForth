@@ -13,7 +13,7 @@
     data_stack :: list(),
     return_stack :: list(),
     next_op :: reference() | 'end',
-    current_token :: actorforth:token()
+    current_token :: repl:token()
 }).
 
 -type op_ref() :: reference() | 'end'.
@@ -21,5 +21,5 @@
     data_stack :: stack:stack(),
     return_stack :: stack:stack(),
     next_op :: op_ref(),
-    current_token :: actorforth:token()
+    current_token :: repl:token()
 }.

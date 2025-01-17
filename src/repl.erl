@@ -1,4 +1,4 @@
--module(actorforth).
+-module(repl).
 
 -export([interpret/1, make_token/1, make_token/2, make_token/3, make_token/4]).
 
