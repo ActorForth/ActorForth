@@ -1,5 +1,7 @@
 -module(op).
 
+-export([op_int/1]).
+
 -type cont() :: thread:continuation().
 
 -type thread() :: thread:thread(). % Replace with the actual module and type
@@ -11,7 +13,7 @@
 
 % -export([some_function/1]). % Export whatever functions you need
 
--spec op_int(cont()) -> cont().
+-spec op_int(op()) -> cont().
 op_int(C) ->
     C.
 

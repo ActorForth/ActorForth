@@ -6,7 +6,7 @@
 -type type() :: atom().
 -type stack_item() :: {type(), term() | function()}.
 
--type thread() :: function().
+-type thread() :: [function()].
 
 
 -record(continuation, {
