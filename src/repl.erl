@@ -33,7 +33,7 @@ interpret_token(#token{value = Value}, Cont) ->
     %% Create a new stack item 
     StackItem = {atom, Value},
     
-    %% Directly update the continuation record
+    %% Directly update the continuation record - should we use stack:push! TODO
     Cont#continuation{data_stack = [StackItem | Cont#continuation.data_stack]}.     
 
 
