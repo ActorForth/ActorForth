@@ -1,5 +1,7 @@
 -module(thread).
 
+-export([empty_continuation/0]).
+
 -export_type([type/0, thread/0, continuation/0]).
 
 
@@ -23,3 +25,16 @@
     next_op :: op_ref(),
     current_token :: repl:token()
 }.
+
+empty_continuation() ->
+    #continuation{
+        data_stack = [],
+        return_stack = [],
+        next_op = 'end',
+        current_token = #token{
+            value = "",
+            column = 0,
+            line = 0,
+            file = "(unknown)"
+        }
+    }.
