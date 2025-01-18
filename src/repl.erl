@@ -2,25 +2,27 @@
 
 -include("token.hrl"). 
 
--export([interpret/1, make_token/1, make_token/2, make_token/3, make_token/4]).
+-export([interpret_tokens/1, interpret_tokens/2, make_token/1, make_token/2, make_token/3, make_token/4]).
 
 
 
--spec interpret([#token{}]) -> ok.
-interpret(Tokens) ->
-    lists:foreach(fun interpret_token/1, Tokens),
+-spec interpret_tokens([#token{}]) -> thread:continuation().
+interpret_tokens(Tokens) ->
+    Result = interpret_tokens(Tokens, thread:make_continuation()),
     io:format("ok.~n"),
-    ok.
+    Result.
 
--spec interpret_token(#token{}) -> ok.
-interpret_token(#token{value = Token, line = Line, column = Column, file = File}) ->
-    case string:to_integer(Token) of
-        {Int, []} -> % Conversion successful, no remaining characters
-            io:format("int(~p) at ~s, line ~p, column ~p ", [Int, File, Line, Column]);
-        _ -> % Conversion failed or partial
-            io:format("'~s' at ~s, line ~p, column ~p ", [Token, File, Line, Column])
-    end,
-    ok.
+-spec interpret_tokens([#token{}], thread:continuation()) -> thread:continuation().
+interpret_tokens([], Cont) ->
+    Cont;
+interpret_tokens([Token | Tokens], Cont) ->
+    NewCont = interpret_token(Token, Cont),
+    interpret_tokens(Tokens, NewCont).
+
+
+interpret_token(_Token, Cont) ->
+    Cont.    
+
 
 -spec make_token(string()) -> #token{}.
 make_token(Value) ->
