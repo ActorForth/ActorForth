@@ -1,5 +1,7 @@
 -module(thread).
 
+-include("token.hrl"). 
+
 -export([empty_continuation/0]).
 
 -export_type([type/0, thread/0, continuation/0]).

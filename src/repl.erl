@@ -1,13 +1,10 @@
 -module(repl).
 
+-include("token.hrl"). 
+
 -export([interpret/1, make_token/1, make_token/2, make_token/3, make_token/4]).
 
--record(token, {
-    value :: string(),
-    column :: non_neg_integer(),
-    line :: non_neg_integer(),
-    file :: string()
-}).
+
 
 -spec interpret([#token{}]) -> ok.
 interpret(Tokens) ->
