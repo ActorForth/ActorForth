@@ -33,13 +33,8 @@ interpret_token(#token{value = Value}, Cont) ->
     %% Create a new stack item 
     StackItem = {atom, Value},
     
-    %% Use make_continuation/4 to create a new continuation with updated data stack
-    thread:make_continuation(
-        [StackItem | Cont#continuation.data_stack],
-        Cont#continuation.return_stack,
-        Cont#continuation.next_op,
-        Cont#continuation.current_token
-    ).     
+    %% Directly update the continuation record
+    Cont#continuation{data_stack = [StackItem | Cont#continuation.data_stack]}.     
 
 
 -spec make_token(string()) -> #token{}.
