@@ -31,8 +31,9 @@ interpret_tokens([Token | Tokens], Cont) ->
 -spec interpret_token(#token{}, thread:continuation()) -> thread:continuation().
 interpret_token(#token{value = Value}, Cont) ->
     %% Create a new stack item 
+    % TODO - not using Cont:current_token. Remove it?
     StackItem = {atom, Value},
-    
+    io:format("~s ",[Value]),
     %% Directly update the continuation record - should we use stack:push! TODO
     Cont#continuation{data_stack = [StackItem | Cont#continuation.data_stack]}.     
 
