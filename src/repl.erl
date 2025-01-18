@@ -1,10 +1,18 @@
 -module(repl).
 
 -include("token.hrl"). 
+-include("continuation.hrl").
 
 -export([interpret_tokens/1, interpret_tokens/2, make_token/1, make_token/2, make_token/3, make_token/4]).
 
+-export_type([token/0]).
 
+-type token() :: #token{
+    value :: string(),
+    column :: non_neg_integer(),
+    line :: non_neg_integer(),
+    file :: string()
+}.
 
 -spec interpret_tokens([#token{}]) -> thread:continuation().
 interpret_tokens(Tokens) ->
@@ -20,8 +28,18 @@ interpret_tokens([Token | Tokens], Cont) ->
     interpret_tokens(Tokens, NewCont).
 
 
-interpret_token(_Token, Cont) ->
-    Cont.    
+-spec interpret_token(#token{}, thread:continuation()) -> thread:continuation().
+interpret_token(#token{value = Value}, Cont) ->
+    %% Create a new stack item 
+    StackItem = {atom, Value},
+    
+    %% Use make_continuation/4 to create a new continuation with updated data stack
+    thread:make_continuation(
+        [StackItem | Cont#continuation.data_stack],
+        Cont#continuation.return_stack,
+        Cont#continuation.next_op,
+        Cont#continuation.current_token
+    ).     
 
 
 -spec make_token(string()) -> #token{}.

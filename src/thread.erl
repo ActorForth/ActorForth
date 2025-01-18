@@ -1,6 +1,7 @@
 -module(thread).
 
 -include("token.hrl").
+-include("continuation.hrl").
 
 -export([make_continuation/0, make_continuation/1, make_continuation/2, make_continuation/3, make_continuation/4]).
 
@@ -9,20 +10,7 @@
 -type type() :: atom().
 -type thread() :: [function()].
 
--record(continuation, {
-    data_stack :: list(),
-    return_stack :: list(),
-    next_op :: reference() | 'end',
-    current_token :: #token{}
-}).
 
--type op_ref() :: reference() | 'end'.
--type continuation() :: #continuation{
-    data_stack :: list(),
-    return_stack :: list(),
-    next_op :: op_ref(),
-    current_token :: #token{}
-}.
 
 -spec make_continuation() -> #continuation{}.
 make_continuation() ->
