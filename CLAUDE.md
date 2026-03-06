@@ -45,7 +45,7 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - **`src/af_interpreter.erl`** — The outer interpreter. `interpret_token/2` implements the 4-step dispatch above. Pure (no I/O).
 - **`src/af_type_int.erl`** — Int type: constructor `int` (Atom->Int), arithmetic `+`,`-`,`*`,`/`
 - **`src/af_type_bool.erl`** — Bool type: constructor `bool`, comparisons `==`,`!=`,`<`,`>`,`<=`,`>=`, `not`
-- **`src/af_type_any.erl`** — Global ops: `dup`, `drop`, `swap`, `2dup`, `print`, `stack`, `words`, `types`, `load` (file loading)
+- **`src/af_type_any.erl`** — Global ops: `dup`, `drop`, `swap`, `rot`, `over`, `2dup`, `print`, `stack`, `words`, `types`, `see`, `load`, `debug`, `assert`, `assert-eq`, `load` (file loading)
 - **`src/af_type_compiler.erl`** — Word definition compiler. `: name Types -> Types ; body .` Compiled word bodies use late binding (dispatch through interpreter at runtime). Sub-clause pattern matching on Int, Bool, String values with right-aligned partial matching.
 - **`src/af_type_product.erl`** — Product type definition. `type Point x Int y Int .` Auto-generates constructor (`point`), non-destructive getters (`x`, `y`), and setters (`x!`, `y!`). Product instances are `{TypeName, #{field => {Type, Val}}}`. Getters leave the instance on the stack.
 - **`src/af_type_ffi.erl`** — Erlang FFI: `erlang-apply` (with args list) and `erlang-apply0` (zero args). Calls any Erlang function with automatic term conversion.
@@ -57,8 +57,8 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - **`src/af_actor_worker.erl`** — gen_server wrapper for supervised actors. Handles cast/call messages through ActorForth word dispatch.
 - **`src/af_compile.erl`** — Word compilation: closure-based (`compile_word/4`) and BEAM module generation (`compile_module/2`). Optimizes known primitives inline.
 - **`src/af_type_check.erl`** — Compile-time type inference. `check_word/4` and `infer_stack/2`. Resolves `Any` to concrete types via substitution.
-- **`src/af_type_beam.erl`** — BEAM assembler types. `BeamModule` and `BeamFunction` for building and compiling BEAM modules from ActorForth. Also provides `compile-to-beam` ( Atom Atom -- Atom ) to compile a defined ActorForth word directly to a native BEAM module.
-- **`src/af_word_compiler.erl`** — Automatic word-to-BEAM compiler. Takes word definitions (name, sig_in, sig_out, body ops) and compiles them to native BEAM functions via abstract forms. Simulates the stack with expression nodes instead of runtime values. Handles stack ops, arithmetic, comparisons, boolean, and integer literals. Unknown ops fall back to runtime dispatch.
+- **`src/af_type_beam.erl`** — BEAM assembler types + high-level compilation words. `compile-to-beam` ( Atom Atom -- Atom ) compiles one word to BEAM with transparent native wrapper. `compile-all` ( Atom -- Atom ) compiles all user words. `save-module` ( String Atom -- ) writes .beam file. `build-escript` ( String Atom Atom -- ) builds standalone executable.
+- **`src/af_word_compiler.erl`** — Automatic word-to-BEAM compiler. Simulates the stack with abstract form expressions. Handles stack ops, arithmetic, comparisons, boolean, integer literals. Unknown ops fall back to runtime dispatch. `make_wrapper/4` generates ActorForth ops that unwrap tagged values, call native BEAM, and re-wrap results.
 - **`src/af_server.erl`** — gen_server bridge: wraps ActorForth interpreter as OTP citizen. `start_link`, `call`, `cast`, `eval`, `stop`. Term conversion at boundaries.
 - **`src/af_term.erl`** — Bidirectional Erlang <-> ActorForth term conversion. `to_stack_item/1`, `from_stack_item/1`.
 - **`src/af_error.erl`** — Structured error records with location, word trace, stack snapshot. `raise/3`, `format/1`.

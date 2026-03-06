@@ -69,6 +69,12 @@ init() ->
         impl = fun op_types/1
     }),
 
+    %% see : Atom ->  (display source/definition of a word)
+    af_type:add_op('Any', #operation{
+        name = "see", sig_in = ['Atom'], sig_out = [],
+        impl = fun op_see/1
+    }),
+
     %% assert : Bool ->  (passes silently if true, errors with location if false)
     af_type:add_op('Any', #operation{
         name = "assert", sig_in = ['Bool'], sig_out = [],
@@ -165,6 +171,56 @@ op_types(Cont) ->
     Types = [T#af_type.name || T <- af_type:all_types()],
     io:format("Types: ~p~n", [lists:sort(Types)]),
     Cont.
+
+%%% See
+
+op_see(Cont) ->
+    [{'Atom', WordName} | Rest] = Cont#continuation.data_stack,
+    AllTypes = af_type:all_types(),
+    Matches = lists:flatmap(fun(#af_type{name = TypeName, ops = Ops}) ->
+        case maps:get(WordName, Ops, []) of
+            [] -> [];
+            OpList -> [{TypeName, Op} || Op <- OpList]
+        end
+    end, AllTypes),
+    case Matches of
+        [] ->
+            io:format("Word '~s' not found.~n", [WordName]);
+        _ ->
+            lists:foreach(fun({TypeName, Op}) ->
+                print_word_definition(TypeName, Op)
+            end, Matches)
+    end,
+    Cont#continuation{data_stack = Rest}.
+
+print_word_definition(TypeName, #operation{name = Name, sig_in = SigIn, sig_out = SigOut, source = Source}) ->
+    %% Format signature
+    SigInStr = format_sig(SigIn),
+    SigOutStr = format_sig(SigOut),
+    io:format("  : ~s ~s -> ~s ;", [Name, SigInStr, SigOutStr]),
+    case Source of
+        {compiled, Body} ->
+            BodyStr = string:join([Op#operation.name || Op <- Body], " "),
+            io:format(" ~s .~n", [BodyStr]);
+        {native, Mod} ->
+            io:format("  [native: ~p]~n", [Mod]);
+        auto ->
+            io:format("  [auto-generated]~n");
+        _ ->
+            io:format("  [built-in]~n")
+    end,
+    io:format("    in type: ~p~n", [TypeName]).
+
+format_sig([]) -> "";
+format_sig(Sig) ->
+    %% Sig is TOS-first; display in Forth order (deepest first)
+    Reversed = lists:reverse(Sig),
+    string:join([format_sig_item(S) || S <- Reversed], " ").
+
+format_sig_item({Type, Value}) ->
+    lists:flatten(io_lib:format("~p(~p)", [Type, Value]));
+format_sig_item(Type) when is_atom(Type) ->
+    atom_to_list(Type).
 
 %%% Assert
 

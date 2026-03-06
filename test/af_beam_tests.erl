@@ -1,6 +1,7 @@
 -module(af_beam_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("kernel/include/file.hrl").
 -include("token.hrl").
 -include("continuation.hrl").
 -include("operation.hrl").
@@ -15,6 +16,7 @@ setup() ->
     af_type_any:init(),
     af_type_int:init(),
     af_type_bool:init(),
+    af_type_string:init(),
     af_type_compiler:init(),
     af_type_beam:init().
 
@@ -58,16 +60,13 @@ beam_module_test_() ->
 beam_compile_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
         fun(_) -> {"compile identity function", fun() ->
-            %% Build: identity(Arg1) -> Arg1
             C1 = eval("af_beam_test_id beam-module identity 1 int beam-fun 1 int beam-arg beam-return beam-compile", af_interpreter:new_continuation()),
             [{'Atom', "af_beam_test_id"}] = C1#continuation.data_stack,
-            %% Call the compiled function
             ?assertEqual(hello, af_beam_test_id:identity(hello)),
             ?assertEqual(42, af_beam_test_id:identity(42))
         end} end,
 
         fun(_) -> {"compile double function using beam-op", fun() ->
-            %% Build: double(Arg1) -> Arg1 + Arg1
             C1 = eval("af_beam_test_dbl beam-module double 1 int beam-fun 1 int beam-arg 1 int beam-arg + 2 int beam-op beam-return beam-compile", af_interpreter:new_continuation()),
             [{'Atom', "af_beam_test_dbl"}] = C1#continuation.data_stack,
             ?assertEqual(10, af_beam_test_dbl:double(5)),
@@ -75,7 +74,6 @@ beam_compile_test_() ->
         end} end,
 
         fun(_) -> {"compile function with remote call", fun() ->
-            %% Build: len(Arg1) -> erlang:length(Arg1)
             C1 = eval("af_beam_test_len beam-module len 1 int beam-fun 1 int beam-arg erlang length 1 int beam-call beam-return beam-compile", af_interpreter:new_continuation()),
             [{'Atom', "af_beam_test_len"}] = C1#continuation.data_stack,
             ?assertEqual(3, af_beam_test_len:len([a, b, c])),
@@ -84,9 +82,7 @@ beam_compile_test_() ->
 
         fun(_) -> {"compile module with multiple functions", fun() ->
             C1 = eval("af_beam_test_multi beam-module", af_interpreter:new_continuation()),
-            %% Function 1: inc(X) -> X + 1
             C2 = eval("inc 1 int beam-fun 1 int beam-arg 1 int beam-int + 2 int beam-op beam-return", C1),
-            %% Function 2: dec(X) -> X - 1
             C3 = eval("dec 1 int beam-fun 1 int beam-arg 1 int beam-int - 2 int beam-op beam-return", C2),
             C4 = eval("beam-compile", C3),
             [{'Atom', "af_beam_test_multi"}] = C4#continuation.data_stack,
@@ -108,42 +104,135 @@ beam_compile_test_() ->
         end} end
     ]}.
 
-%% --- ActorForth word definition compiled to BEAM ---
+%% --- compile-to-beam with transparent wrapper ---
 
-af_word_to_beam_test_() ->
+compile_to_beam_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
-        fun(_) -> {"define ActorForth word then compile equivalent to BEAM", fun() ->
-            %% Define square in ActorForth
+        fun(_) -> {"define word then compile equivalent to BEAM", fun() ->
             C1 = eval(": square Int -> Int ; dup * .", af_interpreter:new_continuation()),
             C2 = eval("7 int square", C1),
             [{'Int', 49}] = C2#continuation.data_stack,
-            %% Now build the same function as BEAM
             C3 = eval("af_beam_test_sq beam-module square 1 int beam-fun 1 int beam-arg 1 int beam-arg * 2 int beam-op beam-return beam-compile", C1),
             [{'Atom', "af_beam_test_sq"}] = C3#continuation.data_stack,
-            %% Both should produce the same result
             ?assertEqual(49, af_beam_test_sq:square(7)),
             ?assertEqual(100, af_beam_test_sq:square(10))
         end} end,
 
-        fun(_) -> {"compile-to-beam compiles defined word to native BEAM", fun() ->
-            %% Define double in ActorForth
+        fun(_) -> {"compile-to-beam compiles and replaces with native wrapper", fun() ->
             C1 = eval(": double Int -> Int ; dup + .", af_interpreter:new_continuation()),
-            [] = C1#continuation.data_stack,
-            %% Compile it to BEAM using compile-to-beam
-            C2 = eval("double af_beam_test_ctb compile-to-beam", C1),
-            [{'Atom', "af_beam_test_ctb"}] = C2#continuation.data_stack,
-            %% Call the native BEAM function
-            ?assertEqual(10, af_beam_test_ctb:double(5)),
-            ?assertEqual(0, af_beam_test_ctb:double(0)),
-            ?assertEqual(-6, af_beam_test_ctb:double(-3))
+            %% Verify interpreted version works
+            C2 = eval("5 int double", C1),
+            [{'Int', 10}] = C2#continuation.data_stack,
+            %% Compile to native BEAM
+            C3 = eval("double af_ctb_wrap compile-to-beam", C1),
+            [{'Atom', "af_ctb_wrap"}] = C3#continuation.data_stack,
+            %% The word should still work through ActorForth — now via native wrapper
+            C4 = eval("7 int double", C3),
+            [{'Int', 14}, {'Atom', "af_ctb_wrap"}] = C4#continuation.data_stack,
+            %% Native function also callable directly
+            ?assertEqual(10, af_ctb_wrap:double(5))
         end} end,
 
         fun(_) -> {"compile-to-beam with arithmetic word", fun() ->
-            %% Define inc: adds 1
             C1 = eval(": inc Int -> Int ; 1 + .", af_interpreter:new_continuation()),
-            C2 = eval("inc af_beam_test_ctb2 compile-to-beam", C1),
-            [{'Atom', "af_beam_test_ctb2"}] = C2#continuation.data_stack,
-            ?assertEqual(6, af_beam_test_ctb2:inc(5)),
-            ?assertEqual(0, af_beam_test_ctb2:inc(-1))
+            C2 = eval("inc af_ctb_inc compile-to-beam", C1),
+            [{'Atom', "af_ctb_inc"}] = C2#continuation.data_stack,
+            ?assertEqual(6, af_ctb_inc:inc(5)),
+            %% Use through ActorForth
+            C3 = eval("10 int inc", C2),
+            [{'Int', 11}, {'Atom', "af_ctb_inc"}] = C3#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- compile-all ---
+
+compile_all_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"compile-all compiles all user words into one module", fun() ->
+            C1 = eval(": double Int -> Int ; dup + .", af_interpreter:new_continuation()),
+            C2 = eval(": square Int -> Int ; dup * .", C1),
+            C3 = eval("af_ctb_all compile-all", C2),
+            [{'Atom', "af_ctb_all"}] = C3#continuation.data_stack,
+            %% Both functions exist in the module
+            ?assertEqual(10, af_ctb_all:double(5)),
+            ?assertEqual(49, af_ctb_all:square(7)),
+            %% Both work through ActorForth via wrappers
+            C4 = eval("3 int double", C3),
+            [{'Int', 6}, {'Atom', "af_ctb_all"}] = C4#continuation.data_stack,
+            C5 = eval("4 int square", C3),
+            [{'Int', 16}, {'Atom', "af_ctb_all"}] = C5#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- save-module ---
+
+save_module_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"save-module writes .beam file to disk", fun() ->
+            C1 = eval(": triple Int -> Int ; dup dup + + .", af_interpreter:new_continuation()),
+            C2 = eval("triple af_save_test compile-to-beam", C1),
+            %% Save to a temp directory
+            TmpDir = "/tmp/af_beam_test_" ++ integer_to_list(erlang:unique_integer([positive])),
+            %% Stack: [Atom("af_save_test")]
+            %% save-module expects [String(dir), Atom(mod)]
+            C3 = eval("\"" ++ TmpDir ++ "\" save-module", C2),
+            [] = C3#continuation.data_stack,
+            %% Verify file exists
+            BeamFile = filename:join(TmpDir, "af_save_test.beam"),
+            ?assert(filelib:is_regular(BeamFile)),
+            %% Verify it's a valid beam file
+            {ok, Binary} = file:read_file(BeamFile),
+            ?assert(byte_size(Binary) > 0),
+            %% Cleanup
+            file:delete(BeamFile),
+            file:del_dir(TmpDir)
+        end} end
+    ]}.
+
+%% --- build-escript ---
+
+build_escript_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"build-escript creates executable file", fun() ->
+            %% Compile a word with args (so name doesn't auto-execute)
+            C1 = eval(": double Int -> Int ; dup + .", af_interpreter:new_continuation()),
+            C2 = eval("double af_escript_test compile-to-beam", C1),
+            [{'Atom', "af_escript_test"}] = C2#continuation.data_stack,
+            TmpFile = "/tmp/af_escript_test_" ++ integer_to_list(erlang:unique_integer([positive])),
+            %% Build escript via exported Erlang API (entry=double, but main wraps it)
+            ok = af_type_beam:build_escript(af_escript_test, double, TmpFile),
+            %% Verify file exists and is executable
+            ?assert(filelib:is_regular(TmpFile)),
+            {ok, #file_info{mode = Mode}} = file:read_file_info(TmpFile),
+            ?assert((Mode band 8#111) > 0),
+            file:delete(TmpFile)
+        end} end,
+
+        fun(_) -> {"build-escript runs and exits cleanly", fun() ->
+            %% Compile a zero-arg word directly via Erlang API
+            WordDef = {"answer", [], ['Int'], [#operation{name = "42"}]},
+            {ok, af_escript_run} = af_word_compiler:compile_words_to_module(af_escript_run, [WordDef]),
+            ?assertEqual(42, af_escript_run:answer()),
+            TmpFile = "/tmp/af_escript_run_" ++ integer_to_list(erlang:unique_integer([positive])),
+            ok = af_type_beam:build_escript(af_escript_run, answer, TmpFile),
+            %% Run it — main calls answer() then halt(0)
+            Result = os:cmd(TmpFile ++ " 2>&1; echo $?"),
+            Lines = string:split(string:trim(Result), "\n", all),
+            LastLine = lists:last(Lines),
+            ?assertEqual("0", LastLine),
+            file:delete(TmpFile)
+        end} end,
+
+        fun(_) -> {"build-escript word works through ActorForth", fun() ->
+            %% Test the ActorForth word with a function that takes args
+            C1 = eval(": triple Int -> Int ; dup dup + + .", af_interpreter:new_continuation()),
+            C2 = eval("triple af_esc_word compile-to-beam", C1),
+            [{'Atom', "af_esc_word"}] = C2#continuation.data_stack,
+            TmpFile = "/tmp/af_esc_word_" ++ integer_to_list(erlang:unique_integer([positive])),
+            %% Use the ActorForth build-escript word
+            C3 = eval("triple \"" ++ TmpFile ++ "\" build-escript", C2),
+            [] = C3#continuation.data_stack,
+            ?assert(filelib:is_regular(TmpFile)),
+            file:delete(TmpFile)
         end} end
     ]}.

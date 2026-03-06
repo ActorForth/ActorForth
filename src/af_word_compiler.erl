@@ -1,9 +1,14 @@
 -module(af_word_compiler).
 
+-include("token.hrl").
 -include("operation.hrl").
+-include("continuation.hrl").
 -include("af_type.hrl").
 
--export([compile_words_to_module/2]).
+-export([compile_words_to_module/2, compile_words_to_binary/2]).
+-export([make_wrapper/4, get_module_binary/1]).
+
+-define(BINARY_TABLE, af_module_binaries).
 
 %% Compile a list of ActorForth word definitions into a BEAM module.
 %% Each word becomes an exported function operating on raw Erlang values
@@ -24,6 +29,26 @@
 %%   Generates: double(X) -> X + X.
 %%
 compile_words_to_module(ModuleName, WordDefs) when is_atom(ModuleName) ->
+    case compile_words_to_binary(ModuleName, WordDefs) of
+        {ok, ModuleName, Binary} ->
+            code:load_binary(ModuleName, atom_to_list(ModuleName) ++ ".beam", Binary),
+            store_binary(ModuleName, Binary),
+            {ok, ModuleName};
+        {error, _} = Err ->
+            Err
+    end.
+
+%% Retrieve a stored module binary. Returns {ok, Binary} | not_found.
+get_module_binary(ModuleName) ->
+    ensure_binary_table(),
+    case ets:lookup(?BINARY_TABLE, ModuleName) of
+        [{ModuleName, Binary}] -> {ok, Binary};
+        [] -> not_found
+    end.
+
+%% Compile word definitions to a BEAM binary without loading.
+%% Returns {ok, ModuleName, Binary} | {error, Reason}.
+compile_words_to_binary(ModuleName, WordDefs) when is_atom(ModuleName) ->
     L = 1,
     FunForms = lists:filtermap(fun({Name, SigIn, SigOut, Body}) ->
         case compile_word_to_form(Name, SigIn, SigOut, Body, L) of
@@ -42,15 +67,33 @@ compile_words_to_module(ModuleName, WordDefs) when is_atom(ModuleName) ->
             ],
             case compile:forms(AllForms, [binary, return_errors]) of
                 {ok, ModuleName, Binary} ->
-                    code:load_binary(ModuleName, atom_to_list(ModuleName) ++ ".beam", Binary),
-                    {ok, ModuleName};
+                    {ok, ModuleName, Binary};
                 {ok, ModuleName, Binary, _Warnings} ->
-                    code:load_binary(ModuleName, atom_to_list(ModuleName) ++ ".beam", Binary),
-                    {ok, ModuleName};
+                    {ok, ModuleName, Binary};
                 {error, Errors, _Warnings} ->
                     {error, {compile_error, Errors}}
             end
     end.
+
+%% Build an ActorForth wrapper operation that calls a native BEAM function.
+%% The wrapper unwraps {Type, Value} stack items, calls the native function,
+%% and re-wraps the result with the correct output types.
+make_wrapper(ModAtom, FunAtom, SigIn, SigOut) ->
+    Arity = length(SigIn),
+    Impl = fun(Cont) ->
+        {Items, Rest} = lists:split(Arity, Cont#continuation.data_stack),
+        RawArgs = [Val || {_Type, Val} <- Items],
+        Result = erlang:apply(ModAtom, FunAtom, RawArgs),
+        NewStack = wrap_results(Result, SigOut) ++ Rest,
+        Cont#continuation{data_stack = NewStack}
+    end,
+    #operation{
+        name = atom_to_list(FunAtom),
+        sig_in = SigIn,
+        sig_out = SigOut,
+        impl = Impl,
+        source = {native, ModAtom}
+    }.
 
 %% Compile a single word definition to an Erlang abstract form function.
 %% Returns {ok, FunctionForm, {FunAtom, Arity}} | {error, Reason}.
@@ -170,3 +213,23 @@ arg_name(1) -> 'X';
 arg_name(2) -> 'Y';
 arg_name(3) -> 'Z';
 arg_name(N) -> list_to_atom("Arg" ++ integer_to_list(N)).
+
+%%% Internal
+
+ensure_binary_table() ->
+    case ets:info(?BINARY_TABLE) of
+        undefined -> ets:new(?BINARY_TABLE, [named_table, set, public]);
+        _ -> ok
+    end.
+
+store_binary(ModuleName, Binary) ->
+    ensure_binary_table(),
+    ets:insert(?BINARY_TABLE, {ModuleName, Binary}).
+
+%% Wrap a native function result back into tagged stack items.
+%% Single value -> [{Type, Value}]
+%% Tuple -> zip with SigOut types
+wrap_results(Value, [SingleType]) ->
+    [{SingleType, Value}];
+wrap_results(Tuple, Types) when is_tuple(Tuple) ->
+    lists:zipwith(fun(Type, Val) -> {Type, Val} end, Types, tuple_to_list(Tuple)).

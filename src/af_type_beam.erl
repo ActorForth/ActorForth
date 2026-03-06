@@ -6,6 +6,7 @@
 -include("af_type.hrl").
 
 -export([init/0]).
+-export([build_escript/3]).
 
 %% The BEAM assembler: ActorForth types for building and compiling BEAM modules.
 %%
@@ -23,6 +24,12 @@
 %%   beam-return       — ( BeamFunction -- BeamModule )  finish function, return to module
 %%   beam-compile      — ( BeamModule -- Atom )  compile module, returns module name
 %%
+%% High-level compilation:
+%%   compile-to-beam   — ( Atom Atom -- Atom )  compile one word to BEAM, replace with native wrapper
+%%   compile-all       — ( Atom -- Atom )  compile all user words to BEAM module
+%%   save-module       — ( Atom String -- )  write compiled module to .beam file
+%%   build-escript     — ( Atom Atom String -- )  build standalone escript executable
+%%
 %% The assembler builds Erlang abstract forms and compiles via compile:forms/2.
 
 init() ->
@@ -37,20 +44,6 @@ init() ->
         impl = fun op_beam_module/1
     }),
 
-    %% All beam-* words registered in BeamModule/BeamFunction dicts
-    %% so they dispatch when those types are TOS.
-
-    %% beam-fun: ( BeamModule Arity:Int Name:Atom -- BeamFunction )
-    %% Usage: my_mod beam-module 1 int double beam-fun
-    %% Note: BeamModule must be TOS before pushing arity and name...
-    %% Actually, let's use a "method" style where BeamModule stays TOS.
-    %% Usage: my_mod beam-module   → [BeamModule]
-    %%        beam-fun reads next two tokens as name and arity.
-    %% Simpler: register in Any so args below BeamModule work.
-
-    %% beam-fun: BeamModule is deepest, name and arity on top
-    %% Stack at call: [Int(arity), Atom(name), BeamModule, ...]
-    %% TOS = Int, so we must register in Any.
     af_type:add_op('Any', #operation{
         name = "beam-fun",
         sig_in = ['Int', 'Atom', 'BeamModule'],
@@ -58,7 +51,6 @@ init() ->
         impl = fun op_beam_fun/1
     }),
 
-    %% beam-arg: [Int(n), BeamFunction, ...]
     af_type:add_op('Any', #operation{
         name = "beam-arg",
         sig_in = ['Int', 'BeamFunction'],
@@ -66,7 +58,6 @@ init() ->
         impl = fun op_beam_arg/1
     }),
 
-    %% beam-int: [Int(val), BeamFunction, ...]
     af_type:add_op('Any', #operation{
         name = "beam-int",
         sig_in = ['Int', 'BeamFunction'],
@@ -74,7 +65,6 @@ init() ->
         impl = fun op_beam_int/1
     }),
 
-    %% beam-atom: [Atom(val), BeamFunction, ...]
     af_type:add_op('Any', #operation{
         name = "beam-atom",
         sig_in = ['Atom', 'BeamFunction'],
@@ -82,7 +72,6 @@ init() ->
         impl = fun op_beam_atom/1
     }),
 
-    %% beam-call: [Int(arity), Atom(fun), Atom(mod), BeamFunction, ...]
     af_type:add_op('Any', #operation{
         name = "beam-call",
         sig_in = ['Int', 'Atom', 'Atom', 'BeamFunction'],
@@ -90,7 +79,6 @@ init() ->
         impl = fun op_beam_call/1
     }),
 
-    %% beam-op: [Int(arity), Atom(op), BeamFunction, ...]
     af_type:add_op('Any', #operation{
         name = "beam-op",
         sig_in = ['Int', 'Atom', 'BeamFunction'],
@@ -98,7 +86,6 @@ init() ->
         impl = fun op_beam_op/1
     }),
 
-    %% beam-return: [BeamFunction, ...]
     af_type:add_op('BeamFunction', #operation{
         name = "beam-return",
         sig_in = ['BeamFunction'],
@@ -106,7 +93,6 @@ init() ->
         impl = fun op_beam_return/1
     }),
 
-    %% beam-compile: [BeamModule, ...]
     af_type:add_op('BeamModule', #operation{
         name = "beam-compile",
         sig_in = ['BeamModule'],
@@ -114,8 +100,8 @@ init() ->
         impl = fun op_beam_compile/1
     }),
 
-    %% compile-to-beam: [Atom(module_name), Atom(word_name), ...]
-    %% Looks up a defined ActorForth word and compiles it to a BEAM module.
+    %% compile-to-beam: ( Atom(mod_name) Atom(word_name) -- Atom(mod_name) )
+    %% Compiles a defined word to native BEAM and replaces it with a native wrapper.
     af_type:add_op('Any', #operation{
         name = "compile-to-beam",
         sig_in = ['Atom', 'Atom'],
@@ -123,11 +109,37 @@ init() ->
         impl = fun op_compile_to_beam/1
     }),
 
+    %% compile-all: ( Atom(mod_name) -- Atom(mod_name) )
+    %% Compiles ALL user-defined words into one BEAM module with native wrappers.
+    af_type:add_op('Any', #operation{
+        name = "compile-all",
+        sig_in = ['Atom'],
+        sig_out = ['Atom'],
+        impl = fun op_compile_all/1
+    }),
+
+    %% save-module: ( String(dir) Atom(mod_name) -- )
+    %% Writes a compiled module's .beam file to disk.
+    af_type:add_op('Any', #operation{
+        name = "save-module",
+        sig_in = ['String', 'Atom'],
+        sig_out = [],
+        impl = fun op_save_module/1
+    }),
+
+    %% build-escript: ( String(output_path) Atom(entry_fun) Atom(mod_name) -- )
+    %% Builds a standalone escript executable.
+    af_type:add_op('Any', #operation{
+        name = "build-escript",
+        sig_in = ['String', 'Atom', 'Atom'],
+        sig_out = [],
+        impl = fun op_build_escript/1
+    }),
+
     ok.
 
-%%% --- Implementation ---
+%%% --- Low-level BEAM assembler ---
 
-%% beam-module: create a new module structure
 op_beam_module(Cont) ->
     [{'Atom', Name} | Rest] = Cont#continuation.data_stack,
     ModName = list_to_atom(Name),
@@ -138,24 +150,19 @@ op_beam_module(Cont) ->
     },
     Cont#continuation{data_stack = [{'BeamModule', ModVal} | Rest]}.
 
-%% beam-fun: start defining a function
-%% Stack: [Int(arity), Atom(name), BeamModule, ...]
 op_beam_fun(Cont) ->
     [{'Int', Arity}, {'Atom', FunName}, {'BeamModule', Mod} | Rest] = Cont#continuation.data_stack,
     FunAtom = list_to_atom(FunName),
-    %% Generate argument variables
     ArgVars = [{var, 1, list_to_atom("Arg" ++ integer_to_list(I))} || I <- lists:seq(1, Arity)],
     FunVal = #{
         name => FunAtom,
         arity => Arity,
         args => ArgVars,
-        body_exprs => [],          %% accumulated expressions
-        module => Mod              %% parent module
+        body_exprs => [],
+        module => Mod
     },
     Cont#continuation{data_stack = [{'BeamFunction', FunVal} | Rest]}.
 
-%% beam-arg: push a reference to argument N (1-based)
-%% Stack: [Int(n), BeamFunction, ...]
 op_beam_arg(Cont) ->
     [{'Int', N}, {'BeamFunction', Fun} | Rest] = Cont#continuation.data_stack,
     #{args := ArgVars, body_exprs := Exprs} = Fun,
@@ -163,8 +170,6 @@ op_beam_arg(Cont) ->
     NewFun = Fun#{body_exprs => Exprs ++ [ArgVar]},
     Cont#continuation{data_stack = [{'BeamFunction', NewFun} | Rest]}.
 
-%% beam-int: push an integer literal expression
-%% Stack: [Int(val), BeamFunction, ...]
 op_beam_int(Cont) ->
     [{'Int', Val}, {'BeamFunction', Fun} | Rest] = Cont#continuation.data_stack,
     #{body_exprs := Exprs} = Fun,
@@ -172,8 +177,6 @@ op_beam_int(Cont) ->
     NewFun = Fun#{body_exprs => Exprs ++ [Expr]},
     Cont#continuation{data_stack = [{'BeamFunction', NewFun} | Rest]}.
 
-%% beam-atom: push an atom literal expression
-%% Stack: [Atom(val), BeamFunction, ...]
 op_beam_atom(Cont) ->
     [{'Atom', Val}, {'BeamFunction', Fun} | Rest] = Cont#continuation.data_stack,
     #{body_exprs := Exprs} = Fun,
@@ -181,12 +184,9 @@ op_beam_atom(Cont) ->
     NewFun = Fun#{body_exprs => Exprs ++ [Expr]},
     Cont#continuation{data_stack = [{'BeamFunction', NewFun} | Rest]}.
 
-%% beam-call: emit a remote call Mod:Fun(last N exprs)
-%% Stack: [Int(arity), Atom(fun), Atom(mod), BeamFunction, ...]
 op_beam_call(Cont) ->
     [{'Int', Arity}, {'Atom', FName}, {'Atom', MName}, {'BeamFunction', Fun} | Rest] = Cont#continuation.data_stack,
     #{body_exprs := Exprs} = Fun,
-    %% Pop the last Arity expressions as arguments
     {Before, Args} = lists:split(length(Exprs) - Arity, Exprs),
     CallExpr = {call, 1,
         {remote, 1, {atom, 1, list_to_atom(MName)}, {atom, 1, list_to_atom(FName)}},
@@ -194,8 +194,6 @@ op_beam_call(Cont) ->
     NewFun = Fun#{body_exprs => Before ++ [CallExpr]},
     Cont#continuation{data_stack = [{'BeamFunction', NewFun} | Rest]}.
 
-%% beam-op: apply a BIF operator to the last N expressions
-%% Stack: [Int(arity), Atom(op), BeamFunction, ...]
 op_beam_op(Cont) ->
     [{'Int', Arity}, {'Atom', OpName}, {'BeamFunction', Fun} | Rest] = Cont#continuation.data_stack,
     #{body_exprs := Exprs} = Fun,
@@ -204,12 +202,10 @@ op_beam_op(Cont) ->
     NewFun = Fun#{body_exprs => Before ++ [OpExpr]},
     Cont#continuation{data_stack = [{'BeamFunction', NewFun} | Rest]}.
 
-%% beam-return: finish a function, add it to the module
 op_beam_return(Cont) ->
     [{'BeamFunction', Fun} | Rest] = Cont#continuation.data_stack,
     #{name := FunName, arity := Arity, args := ArgVars,
       body_exprs := Exprs, module := Mod} = Fun,
-    %% Build the function form — last expression is the return value
     LastExpr = lists:last(Exprs),
     Clause = {clause, 1, ArgVars, [], [LastExpr]},
     FunForm = {function, 1, FunName, Arity, [Clause]},
@@ -220,7 +216,6 @@ op_beam_return(Cont) ->
     },
     Cont#continuation{data_stack = [{'BeamModule', NewMod} | Rest]}.
 
-%% beam-compile: compile the module and load it
 op_beam_compile(Cont) ->
     [{'BeamModule', Mod} | Rest] = Cont#continuation.data_stack,
     #{name := ModName, functions := Funs, exports := Exports} = Mod,
@@ -240,9 +235,10 @@ op_beam_compile(Cont) ->
             error({beam_compile_error, Errors})
     end.
 
-%% compile-to-beam: look up a defined word and compile it to a BEAM module.
-%% Stack: [Atom(module_name), Atom(word_name), ...]
-%% Searches all types for ops named WordName with source = {compiled, Body}.
+%%% --- High-level compilation ---
+
+%% compile-to-beam: compile a single word to native BEAM and replace
+%% its ActorForth op with a native wrapper.
 op_compile_to_beam(Cont) ->
     [{'Atom', ModNameStr}, {'Atom', WordName} | Rest] = Cont#continuation.data_stack,
     ModAtom = list_to_atom(ModNameStr),
@@ -252,14 +248,64 @@ op_compile_to_beam(Cont) ->
         _ ->
             case af_word_compiler:compile_words_to_module(ModAtom, WordDefs) of
                 {ok, ModAtom} ->
+                    register_wrappers(ModAtom, WordDefs),
                     Cont#continuation{data_stack = [{'Atom', ModNameStr} | Rest]};
                 {error, Reason} ->
                     error({compile_to_beam, Reason})
             end
     end.
 
-%% Find all compiled word definitions with the given name across all types.
-%% Returns [{Name, SigIn, SigOut, Body}] suitable for af_word_compiler.
+%% compile-all: compile ALL user-defined words into one BEAM module.
+op_compile_all(Cont) ->
+    [{'Atom', ModNameStr} | Rest] = Cont#continuation.data_stack,
+    ModAtom = list_to_atom(ModNameStr),
+    AllDefs = find_all_compiled_words(),
+    case AllDefs of
+        [] -> error({compile_all, no_compiled_words_found});
+        _ ->
+            case af_word_compiler:compile_words_to_module(ModAtom, AllDefs) of
+                {ok, ModAtom} ->
+                    register_wrappers(ModAtom, AllDefs),
+                    Cont#continuation{data_stack = [{'Atom', ModNameStr} | Rest]};
+                {error, Reason} ->
+                    error({compile_all, Reason})
+            end
+    end.
+
+%% save-module: write a loaded module's .beam to disk.
+%% Stack: [String(dir_path), Atom(mod_name), ...]
+op_save_module(Cont) ->
+    [{'String', DirPath}, {'Atom', ModNameStr} | Rest] = Cont#continuation.data_stack,
+    ModAtom = list_to_atom(ModNameStr),
+    case af_word_compiler:get_module_binary(ModAtom) of
+        {ok, Binary} ->
+            Dir = binary_to_list(DirPath),
+            ok = filelib:ensure_dir(Dir ++ "/"),
+            FilePath = filename:join(Dir, atom_to_list(ModAtom) ++ ".beam"),
+            ok = file:write_file(FilePath, Binary),
+            Cont#continuation{data_stack = Rest};
+        not_found ->
+            error({save_module, module_not_compiled, ModAtom})
+    end.
+
+%% build-escript: create a standalone executable.
+%% Stack: [String(output_path), Atom(entry_fun), Atom(mod_name), ...]
+%% The entry function must take 0 arguments.
+op_build_escript(Cont) ->
+    [{'String', OutputPath}, {'Atom', EntryFunStr}, {'Atom', ModNameStr} | Rest] = Cont#continuation.data_stack,
+    ModAtom = list_to_atom(ModNameStr),
+    EntryFun = list_to_atom(EntryFunStr),
+    OutputFile = binary_to_list(OutputPath),
+    case build_escript(ModAtom, EntryFun, OutputFile) of
+        ok ->
+            Cont#continuation{data_stack = Rest};
+        {error, Reason} ->
+            error({build_escript, Reason})
+    end.
+
+%%% --- Internal helpers ---
+
+%% Find all compiled word definitions with a given name across all types.
 find_compiled_words(WordName) ->
     AllTypes = af_type:all_types(),
     lists:flatmap(fun(#af_type{ops = Ops}) ->
@@ -269,3 +315,110 @@ find_compiled_words(WordName) ->
         (_) -> false
         end, AllOps)
     end, AllTypes).
+
+%% Find ALL compiled word definitions across all types.
+find_all_compiled_words() ->
+    AllTypes = af_type:all_types(),
+    lists:flatmap(fun(#af_type{ops = Ops}) ->
+        AllOps = lists:flatmap(fun({_Name, OpList}) -> OpList end, maps:to_list(Ops)),
+        lists:filtermap(fun(#operation{name = N, sig_in = SI, sig_out = SO, source = {compiled, Body}}) ->
+            {true, {N, SI, SO, Body}};
+        (_) -> false
+        end, AllOps)
+    end, AllTypes).
+
+%% Register native wrapper ops, replacing the interpreted versions.
+register_wrappers(ModAtom, WordDefs) ->
+    lists:foreach(fun({Name, SigIn, SigOut, _Body}) ->
+        FunAtom = list_to_atom(Name),
+        Wrapper = af_word_compiler:make_wrapper(ModAtom, FunAtom, SigIn, SigOut),
+        %% Find and replace in the appropriate type dict
+        TargetType = case SigIn of
+            [T | _] -> T;
+            [] -> 'Any'
+        end,
+        %% Replace all ops with this name in the target type
+        case af_type:get_type(TargetType) of
+            {ok, #af_type{ops = Ops}} ->
+                case maps:get(Name, Ops, []) of
+                    [] ->
+                        %% Not found in target type, try Any
+                        replace_word_ops('Any', Name, Wrapper);
+                    _Existing ->
+                        replace_word_ops(TargetType, Name, Wrapper)
+                end;
+            not_found ->
+                replace_word_ops('Any', Name, Wrapper)
+        end
+    end, WordDefs).
+
+%% Replace interpreted word ops with the native wrapper.
+%% Only replaces ops that have source = {compiled, _}.
+replace_word_ops(TypeName, OpName, Wrapper) ->
+    case af_type:get_type(TypeName) of
+        {ok, #af_type{ops = Ops}} ->
+            case maps:get(OpName, Ops, []) of
+                [] -> ok;
+                OpList ->
+                    NewList = lists:map(fun(#operation{source = {compiled, _}}) ->
+                        Wrapper;
+                    (Op) ->
+                        Op
+                    end, OpList),
+                    af_type:replace_ops(TypeName, OpName, NewList)
+            end;
+        not_found -> ok
+    end.
+
+%% Build an escript executable from a compiled module.
+%% Generates a main wrapper module, bundles both into an escript.
+build_escript(ModAtom, EntryFun, OutputFile) ->
+    %% Get the application module binary
+    case af_word_compiler:get_module_binary(ModAtom) of
+        {ok, AppBinary} ->
+            %% Generate a main module that calls ModAtom:EntryFun()
+            MainMod = list_to_atom(atom_to_list(ModAtom) ++ "_main"),
+            MainBinary = build_main_module(MainMod, ModAtom, EntryFun),
+            %% Build escript sections
+            Sections = [
+                {shebang, "/usr/bin/env escript"},
+                {emu_args, "-escript main " ++ atom_to_list(MainMod)},
+                {archive, [
+                    {atom_to_list(MainMod) ++ ".beam", MainBinary},
+                    {atom_to_list(ModAtom) ++ ".beam", AppBinary}
+                ], []}
+            ],
+            case escript:create(OutputFile, Sections) of
+                ok ->
+                    %% Make executable
+                    file:change_mode(OutputFile, 8#755),
+                    ok;
+                {error, Reason} ->
+                    {error, {escript_create, Reason}}
+            end;
+        not_found ->
+            {error, {module_not_compiled, ModAtom}}
+    end.
+
+%% Build a main wrapper module: main(_Args) -> Mod:Fun(), halt(0).
+build_main_module(MainMod, AppMod, EntryFun) ->
+    L = 1,
+    Forms = [
+        {attribute, L, module, MainMod},
+        {attribute, L, export, [{main, 1}]},
+        {function, L, main, 1, [
+            {clause, L,
+                [{var, L, '_Args'}],
+                [],
+                [
+                    {call, L,
+                        {remote, L, {atom, L, AppMod}, {atom, L, EntryFun}},
+                        []},
+                    {call, L,
+                        {remote, L, {atom, L, erlang}, {atom, L, halt}},
+                        [{integer, L, 0}]}
+                ]}
+        ]}
+    ],
+    {ok, MainMod, Binary} = compile:forms(Forms, [binary]),
+    Binary.
