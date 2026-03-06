@@ -503,6 +503,6 @@ Small words are auditable. A one-line word can be verified by inspection. A sequ
 | OTP supervision for actors | Done | supervised-server word; simple_one_for_one supervisor; gen_server actor workers |
 | Tail call optimization | Done | Detects self-call in tail position; pops trace before tail call for BEAM TCO |
 | Compile-time type checking | Done | af_type_check: infers stack effects, resolves Any to concrete types, warns on sig mismatch |
+| BEAM assembler types | Done | af_type_beam: BeamModule/BeamFunction types, builds abstract forms, compiles via compile:forms |
 | Context register for actors | Deferred | See Part V |
 | Maximal-consume parser | Deferred | Needed for Real type |
-| Self-hosting BEAM assembler | Future | Phase 3 |

@@ -17,7 +17,8 @@ init_types() ->
     af_type_map:init(),
     af_type_list:init(),
     af_type_actor:init(),
-    af_type_ffi:init().
+    af_type_ffi:init(),
+    af_type_beam:init().
 
 start() ->
     init_types(),

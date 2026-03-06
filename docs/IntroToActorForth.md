@@ -1304,17 +1304,68 @@ The type checker resolves `Any` in operation signatures to concrete types from t
 - Pattern matching sub-clauses are checked independently per clause
 
 
-## Chapter 19: The Road Ahead
+## Chapter 19: The BEAM Assembler
 
-What you've seen is the Erlang-hosted implementation — interpreter, compiler, actor model, and OTP supervision. It works, it's tested, and it demonstrates the core ideas. But the vision goes further.
+ActorForth can compile functions directly to BEAM bytecode using the `BeamModule` and `BeamFunction` types. This is the first step toward self-hosting.
 
-### Self-Hosting
+### Building a BEAM Module
 
-The ultimate goal: write the BEAM assembler in ActorForth itself. The assembler would be a set of types — `BeamModule`, `BeamFunction`, `BeamInstruction` — whose dictionaries give tokens meaning in the context of emitting bytecode. The same interpreter that runs your program would also compile it.
+```
+# Create a module
+my_math beam-module
 
-A `BeamModule` on the stack means tokens are module-level directives. A `BeamFunction` means tokens are function instructions. A `BeamInstruction` means tokens are opcodes and operands. The outer interpreter doesn't change — it still does the same five-step dispatch. The types on the stack determine whether you're writing a program or writing a compiler.
+# Define: double(X) -> X + X
+double 1 int beam-fun
+    1 int beam-arg        # push Arg1
+    1 int beam-arg        # push Arg1 again
+    + 2 int beam-op       # apply + to the two args
+beam-return
 
-This is the promise of the TOS-driven dictionary mechanism: **any tool that processes text can be built as a set of types.** A compiler is just types for emitting code. A test framework is just types for asserting conditions. A network protocol handler is just types for parsing packets. The same interpreter drives them all.
+# Define: square(X) -> X * X
+square 1 int beam-fun
+    1 int beam-arg
+    1 int beam-arg
+    * 2 int beam-op
+beam-return
+
+# Compile and load the module
+beam-compile
+# Stack: [Atom("my_math")]
+```
+
+After `beam-compile`, the module is loaded and callable from Erlang:
+
+```erlang
+my_math:double(5).   %% => 10
+my_math:square(7).   %% => 49
+```
+
+### Available Words
+
+| Word | Stack Effect | Description |
+|------|-------------|-------------|
+| `beam-module` | `( Atom -- BeamModule )` | Start new module |
+| `beam-fun` | `( BeamModule Atom Int -- BeamFunction )` | Start function (name, arity) |
+| `beam-arg` | `( BeamFunction Int -- BeamFunction )` | Reference argument N (1-based) |
+| `beam-int` | `( BeamFunction Int -- BeamFunction )` | Integer literal |
+| `beam-atom` | `( BeamFunction Atom -- BeamFunction )` | Atom literal |
+| `beam-op` | `( BeamFunction Atom Int -- BeamFunction )` | Apply operator (+, -, *, etc.) |
+| `beam-call` | `( BeamFunction Atom Atom Int -- BeamFunction )` | Remote call Mod:Fun/Arity |
+| `beam-return` | `( BeamFunction -- BeamModule )` | Finish function |
+| `beam-compile` | `( BeamModule -- Atom )` | Compile and load module |
+
+### How It Works
+
+The assembler builds Erlang abstract forms — the same format `compile:forms/2` expects. Each `beam-*` word adds to the form tree. `beam-compile` hands the forms to the Erlang compiler, which generates optimized BEAM bytecode and loads it into the VM.
+
+This demonstrates the core principle: **the types on the stack determine what tokens mean.** When a `BeamFunction` is on the stack, `beam-arg` adds an argument reference. When a `BeamModule` is on the stack, `beam-compile` triggers compilation. The outer interpreter doesn't change — it's the same five-step dispatch driving everything.
+
+
+## Chapter 20: The Road Ahead
+
+The BEAM assembler is a proof of concept. The next step is compiling ActorForth word definitions directly to BEAM modules — taking the word body, inferring types, and emitting the equivalent abstract forms automatically. Combined with the compile-time type checker, this would give ActorForth words the full performance of native BEAM functions.
+
+The ultimate goal remains: a fully self-hosting ActorForth where the compiler, the type system, and the BEAM assembler are all written in ActorForth itself. The TOS-driven dictionary mechanism makes this possible — a compiler is just types for emitting code, using the same interpreter that runs user programs.
 
 ---
 
