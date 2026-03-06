@@ -57,7 +57,8 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - **`src/af_actor_worker.erl`** — gen_server wrapper for supervised actors. Handles cast/call messages through ActorForth word dispatch.
 - **`src/af_compile.erl`** — Word compilation: closure-based (`compile_word/4`) and BEAM module generation (`compile_module/2`). Optimizes known primitives inline.
 - **`src/af_type_check.erl`** — Compile-time type inference. `check_word/4` and `infer_stack/2`. Resolves `Any` to concrete types via substitution.
-- **`src/af_type_beam.erl`** — BEAM assembler types. `BeamModule` and `BeamFunction` for building and compiling BEAM modules from ActorForth.
+- **`src/af_type_beam.erl`** — BEAM assembler types. `BeamModule` and `BeamFunction` for building and compiling BEAM modules from ActorForth. Also provides `compile-to-beam` ( Atom Atom -- Atom ) to compile a defined ActorForth word directly to a native BEAM module.
+- **`src/af_word_compiler.erl`** — Automatic word-to-BEAM compiler. Takes word definitions (name, sig_in, sig_out, body ops) and compiles them to native BEAM functions via abstract forms. Simulates the stack with expression nodes instead of runtime values. Handles stack ops, arithmetic, comparisons, boolean, and integer literals. Unknown ops fall back to runtime dispatch.
 - **`src/af_server.erl`** — gen_server bridge: wraps ActorForth interpreter as OTP citizen. `start_link`, `call`, `cast`, `eval`, `stop`. Term conversion at boundaries.
 - **`src/af_term.erl`** — Bidirectional Erlang <-> ActorForth term conversion. `to_stack_item/1`, `from_stack_item/1`.
 - **`src/af_error.erl`** — Structured error records with location, word trace, stack snapshot. `raise/3`, `format/1`.
@@ -75,5 +76,6 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - Type-specific ops (like `+`) are registered in that type's dictionary
 - Pattern matching via overloaded word signatures preferred over if/else
 - Compiled word bodies use late binding: each token dispatches through interpreter at runtime
+- Compiled words store their body ops in `#operation.source = {compiled, Body}` for later BEAM compilation via `compile-to-beam`
 - Tail self-calls in word bodies are detected and restructured for BEAM TCO (trace popped before tail call)
 - ActorForth script files use `.a4` extension (see `samples/`)

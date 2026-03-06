@@ -123,5 +123,27 @@ af_word_to_beam_test_() ->
             %% Both should produce the same result
             ?assertEqual(49, af_beam_test_sq:square(7)),
             ?assertEqual(100, af_beam_test_sq:square(10))
+        end} end,
+
+        fun(_) -> {"compile-to-beam compiles defined word to native BEAM", fun() ->
+            %% Define double in ActorForth
+            C1 = eval(": double Int -> Int ; dup + .", af_interpreter:new_continuation()),
+            [] = C1#continuation.data_stack,
+            %% Compile it to BEAM using compile-to-beam
+            C2 = eval("double af_beam_test_ctb compile-to-beam", C1),
+            [{'Atom', "af_beam_test_ctb"}] = C2#continuation.data_stack,
+            %% Call the native BEAM function
+            ?assertEqual(10, af_beam_test_ctb:double(5)),
+            ?assertEqual(0, af_beam_test_ctb:double(0)),
+            ?assertEqual(-6, af_beam_test_ctb:double(-3))
+        end} end,
+
+        fun(_) -> {"compile-to-beam with arithmetic word", fun() ->
+            %% Define inc: adds 1
+            C1 = eval(": inc Int -> Int ; 1 + .", af_interpreter:new_continuation()),
+            C2 = eval("inc af_beam_test_ctb2 compile-to-beam", C1),
+            [{'Atom', "af_beam_test_ctb2"}] = C2#continuation.data_stack,
+            ?assertEqual(6, af_beam_test_ctb2:inc(5)),
+            ?assertEqual(0, af_beam_test_ctb2:inc(-1))
         end} end
     ]}.

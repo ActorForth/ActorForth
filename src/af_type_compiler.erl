@@ -325,7 +325,8 @@ register_single_word(State, Rest, Cont) ->
         name = Name,
         sig_in = SigIn,
         sig_out = SigOut,
-        impl = Impl
+        impl = Impl,
+        source = {compiled, Body}
     },
 
     ensure_type(TargetType),
@@ -352,7 +353,8 @@ register_multi_word(State, Clauses, Rest, Cont) ->
             name = Name,
             sig_in = CSigIn,
             sig_out = CSigOut,
-            impl = Impl
+            impl = Impl,
+            source = {compiled, CBody}
         },
         af_type:add_op(TargetType, Op)
     end, Clauses),

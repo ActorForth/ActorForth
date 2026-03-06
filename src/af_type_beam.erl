@@ -114,6 +114,15 @@ init() ->
         impl = fun op_beam_compile/1
     }),
 
+    %% compile-to-beam: [Atom(module_name), Atom(word_name), ...]
+    %% Looks up a defined ActorForth word and compiles it to a BEAM module.
+    af_type:add_op('Any', #operation{
+        name = "compile-to-beam",
+        sig_in = ['Atom', 'Atom'],
+        sig_out = ['Atom'],
+        impl = fun op_compile_to_beam/1
+    }),
+
     ok.
 
 %%% --- Implementation ---
@@ -230,3 +239,33 @@ op_beam_compile(Cont) ->
         {error, Errors, _Warnings} ->
             error({beam_compile_error, Errors})
     end.
+
+%% compile-to-beam: look up a defined word and compile it to a BEAM module.
+%% Stack: [Atom(module_name), Atom(word_name), ...]
+%% Searches all types for ops named WordName with source = {compiled, Body}.
+op_compile_to_beam(Cont) ->
+    [{'Atom', ModNameStr}, {'Atom', WordName} | Rest] = Cont#continuation.data_stack,
+    ModAtom = list_to_atom(ModNameStr),
+    WordDefs = find_compiled_words(WordName),
+    case WordDefs of
+        [] -> error({compile_to_beam, no_word_found, WordName});
+        _ ->
+            case af_word_compiler:compile_words_to_module(ModAtom, WordDefs) of
+                {ok, ModAtom} ->
+                    Cont#continuation{data_stack = [{'Atom', ModNameStr} | Rest]};
+                {error, Reason} ->
+                    error({compile_to_beam, Reason})
+            end
+    end.
+
+%% Find all compiled word definitions with the given name across all types.
+%% Returns [{Name, SigIn, SigOut, Body}] suitable for af_word_compiler.
+find_compiled_words(WordName) ->
+    AllTypes = af_type:all_types(),
+    lists:flatmap(fun(#af_type{ops = Ops}) ->
+        AllOps = lists:flatmap(fun({_Name, OpList}) -> OpList end, maps:to_list(Ops)),
+        lists:filtermap(fun(#operation{name = N, sig_in = SI, sig_out = SO, source = {compiled, Body}}) when N =:= WordName ->
+            {true, {N, SI, SO, Body}};
+        (_) -> false
+        end, AllOps)
+    end, AllTypes).
