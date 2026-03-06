@@ -1190,25 +1190,85 @@ type Stats
 Two counters in one actor. Each operation touches only the field it cares about. The `report` call returns both values synchronously.
 
 
-## Chapter 15: The Road Ahead
+## Chapter 15: Compiling Words
 
-What you've seen is the prototype interpreter — ActorForth running inside Erlang. It works, it's tested, and it demonstrates the core ideas. But the vision goes further.
+ActorForth includes two compilation strategies that go beyond the interpreter's late-binding dispatch.
 
-### Compiling to BEAM
+### Closure-Based Compilation
 
-The interpreter is useful for exploration, but ActorForth should compile to BEAM bytecode. The first target is **Core Erlang** — a stable intermediate representation that the Erlang compiler can optimize. An ActorForth word like:
-
-```
-: double Int -> Int ; dup + .
-```
-
-would compile to something equivalent to:
+`af_compile:compile_word/4` takes a word's name, input/output signatures, and body operations, and pre-resolves all body tokens at compile time. Known primitives (`dup`, `drop`, `swap`, `+`, `-`, `*`) get replaced with optimized inline funs that skip the interpreter entirely:
 
 ```erlang
-double(X) -> X + X.
+%% Instead of ETS lookup + dispatch for every "dup":
+fun(S) -> [hd(S) | S] end
 ```
 
-This gets all of BEAM's optimizations for free — dead code elimination, constant folding, register allocation. ActorForth words become real BEAM functions. Pattern matching sub-clauses map directly to Erlang function clauses.
+The result is an `#operation{}` with `source = compiled` that can replace the interpreted version.
+
+### BEAM Module Generation
+
+`af_compile:compile_module/2` goes further — it generates a real BEAM module via `compile:forms/2`. Each word becomes an exported function:
+
+```erlang
+%% From ActorForth: : double Int -> Int ; dup + .
+%% Generated:
+double(Stack0) ->
+    af_compile:apply_impl("dup", af_compile:apply_impl("+", Stack0)).
+```
+
+The module is loaded dynamically with `code:load_binary/3`. Words in the module are callable as regular Erlang functions.
+
+### Tail Call Optimization
+
+When a word's body ends with a self-call, the compiler detects this and restructures the closure so the self-call is in Erlang tail position. This means tail-recursive ActorForth words use constant stack space:
+
+```
+: countdown Int -> ;
+    : 0 -> ; drop
+    : Int -> ; 1 - countdown .
+
+1000 countdown    # Uses O(1) stack, not O(n)
+```
+
+The mechanism: the word trace frame is popped *before* the tail call, putting it in true Erlang tail position. The BEAM's native TCO handles the rest.
+
+
+## Chapter 16: Supervised Actors
+
+While `server` spawns a raw Erlang process, `supervised-server` creates an actor under OTP supervision — giving you automatic restart on failure.
+
+### Basic Usage
+
+```
+type Counter value Int .
+: increment Counter -> Counter ; value 1 + value! .
+: count Counter -> Counter Int ; value .
+
+0 counter supervised-server
+```
+
+This spawns the actor under a `simple_one_for_one` supervisor. The actor is implemented as a `gen_server` that handles `cast` (async) and `call` (sync) messages through the same word dispatch mechanism.
+
+### How It Works
+
+- `supervised-server` creates a `gen_server` worker via `af_actor_worker`
+- The supervisor (`af_actor_sup`) uses `transient` restart strategy — actors restart on abnormal termination but not on normal `stop`
+- `<< ... >>` send blocks work identically for both `server` and `supervised-server` actors
+- The `supervised` flag in the Actor map routes messages through `gen_server:call/cast` instead of raw `!`
+
+### Differences from `server`
+
+| Feature | `server` | `supervised-server` |
+|---------|----------|---------------------|
+| Process type | `spawn_link` | `gen_server` under supervisor |
+| Crash behavior | Crashes caller | Restarts automatically |
+| Message passing | Raw `!` and `receive` | `gen_server:cast/call` |
+| Stop behavior | Process exits | `{stop, normal, State}` |
+
+
+## Chapter 17: The Road Ahead
+
+What you've seen is the Erlang-hosted implementation — interpreter, compiler, actor model, and OTP supervision. It works, it's tested, and it demonstrates the core ideas. But the vision goes further.
 
 ### Self-Hosting
 
@@ -1345,6 +1405,7 @@ Auto-generates: constructor (`typename`), non-destructive getters (`field1`, `fi
 | Word | Effect | Description |
 |------|--------|-------------|
 | `server` | `( instance -- Actor )` | Spawn stateful actor from any typed instance |
+| `supervised-server` | `( instance -- Actor )` | Spawn supervised actor (OTP gen_server) |
 | `self` | `( -- Actor )` | Push current process reference |
 | `<<` | Enter send mode | Start actor message block |
 | `>>` | Exit send mode | End actor message block, push results |

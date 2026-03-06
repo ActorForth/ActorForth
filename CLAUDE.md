@@ -52,7 +52,10 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - **`src/af_type_string.erl`** — String type wrapping Erlang binaries. Quoted strings auto-convert. `concat`, `length`, `to-atom`, `to-int`, `to-string`.
 - **`src/af_type_map.erl`** — Map type wrapping Erlang maps. `map-new`, `map-put`, `map-get`, `map-delete`, `map-has?`, `map-keys`, `map-values`, `map-size`.
 - **`src/af_type_list.erl`** — List type wrapping Erlang cons cells. `nil`, `cons`, `length`, `head`, `tail`.
-- **`src/af_type_actor.erl`** — Actor model: `server` (type instance -> Actor), `<<`/`>>` send protocol, cast/call auto-classification, state privacy via vocab filtering.
+- **`src/af_type_actor.erl`** — Actor model: `server` and `supervised-server` (type instance -> Actor), `<<`/`>>` send protocol, cast/call auto-classification, state privacy via vocab filtering.
+- **`src/af_actor_sup.erl`** — OTP supervisor for actor processes. `simple_one_for_one` strategy with `transient` restart.
+- **`src/af_actor_worker.erl`** — gen_server wrapper for supervised actors. Handles cast/call messages through ActorForth word dispatch.
+- **`src/af_compile.erl`** — Word compilation: closure-based (`compile_word/4`) and BEAM module generation (`compile_module/2`). Optimizes known primitives inline.
 - **`src/af_server.erl`** — gen_server bridge: wraps ActorForth interpreter as OTP citizen. `start_link`, `call`, `cast`, `eval`, `stop`. Term conversion at boundaries.
 - **`src/af_term.erl`** — Bidirectional Erlang <-> ActorForth term conversion. `to_stack_item/1`, `from_stack_item/1`.
 - **`src/af_error.erl`** — Structured error records with location, word trace, stack snapshot. `raise/3`, `format/1`.
@@ -70,4 +73,5 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - Type-specific ops (like `+`) are registered in that type's dictionary
 - Pattern matching via overloaded word signatures preferred over if/else
 - Compiled word bodies use late binding: each token dispatches through interpreter at runtime
+- Tail self-calls in word bodies are detected and restructured for BEAM TCO (trace popped before tail call)
 - ActorForth script files use `.a4` extension (see `samples/`)

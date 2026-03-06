@@ -365,19 +365,45 @@ ensure_type(TypeName) ->
     end.
 
 %% Build an execution function from a compiled word body.
+%% For tail-recursive words (last body token is a self-call), we pop the
+%% trace frame BEFORE the tail call so the self-call is in Erlang tail
+%% position, allowing the BEAM's native TCO to prevent stack growth.
 make_word_impl(Body, WordName) ->
-    fun(Cont) ->
-        Cont1 = case WordName of
-            undefined -> Cont;
-            _ ->
-                Frame = {WordName, Cont#continuation.current_token},
-                Cont#continuation{word_trace = [Frame | Cont#continuation.word_trace]}
-        end,
-        ResultCont = execute_body(Body, Cont1),
-        case WordName of
-            undefined -> ResultCont;
-            _ -> ResultCont#continuation{word_trace = tl(ResultCont#continuation.word_trace)}
-        end
+    case detect_tail_call(Body, WordName) of
+        {true, InitBody, TailOp} ->
+            fun(Cont) ->
+                Cont1 = push_trace(WordName, Cont),
+                Cont2 = execute_body(InitBody, Cont1),
+                Cont3 = pop_trace(WordName, Cont2),
+                (TailOp#operation.impl)(Cont3)
+            end;
+        false ->
+            fun(Cont) ->
+                Cont1 = push_trace(WordName, Cont),
+                ResultCont = execute_body(Body, Cont1),
+                pop_trace(WordName, ResultCont)
+            end
+    end.
+
+push_trace(undefined, Cont) -> Cont;
+push_trace(WordName, Cont) ->
+    Frame = {WordName, Cont#continuation.current_token},
+    Cont#continuation{word_trace = [Frame | Cont#continuation.word_trace]}.
+
+pop_trace(undefined, Cont) -> Cont;
+pop_trace(_WordName, Cont) ->
+    Cont#continuation{word_trace = tl(Cont#continuation.word_trace)}.
+
+%% Check if the last operation in Body is a self-call to WordName.
+detect_tail_call([], _WordName) -> false;
+detect_tail_call(_Body, undefined) -> false;
+detect_tail_call(Body, WordName) ->
+    Last = lists:last(Body),
+    case Last#operation.name of
+        WordName ->
+            {true, lists:droplast(Body), Last};
+        _ ->
+            false
     end.
 
 execute_body([], Cont) -> Cont;

@@ -499,7 +499,9 @@ Small words are auditable. A one-line word can be verified by inspection. A sequ
 | File loading (load word) | Done | `"file.a4" load` from ActorForth; `run_file/1` from Erlang; relative path resolution |
 | Erlang FFI | Done | `erlang-apply` and `erlang-apply0` call any Erlang function with term conversion |
 | Non-destructive getters | Done | Getters leave product instance on stack; eliminates dup-before-access pattern |
+| Core Erlang compilation | Done | Closure-based word compilation (af_compile); BEAM module generation via compile:forms |
+| OTP supervision for actors | Done | supervised-server word; simple_one_for_one supervisor; gen_server actor workers |
+| Tail call optimization | Done | Detects self-call in tail position; pops trace before tail call for BEAM TCO |
 | Context register for actors | Deferred | See Part V |
 | Maximal-consume parser | Deferred | Needed for Real type |
-| Core Erlang compilation | Future | Phase 2 |
 | Self-hosting BEAM assembler | Future | Phase 3 |

@@ -53,6 +53,14 @@ init() ->
         impl = fun op_send_end/1
     }),
 
+    %% supervised-server: like server but under OTP supervision
+    af_type:add_op('Any', #operation{
+        name = "supervised-server",
+        sig_in = ['Any'],
+        sig_out = ['Actor'],
+        impl = fun op_supervised_server/1
+    }),
+
     %% self: push current process pid as Actor (no vocab — raw Actor)
     af_type:add_op('Any', #operation{
         name = "self",
@@ -119,6 +127,24 @@ remove_first(_Elem, []) -> [];
 remove_first(Elem, [Elem | Rest]) -> Rest;
 remove_first(Elem, [H | Rest]) -> [H | remove_first(Elem, Rest)].
 
+%%% --- supervised-server: spawn under OTP supervisor ---
+
+op_supervised_server(Cont) ->
+    [{TypeName, _Value} = Instance | Rest] = Cont#continuation.data_stack,
+    Vocab0 = build_vocab(TypeName),
+    Vocab = Vocab0#{"stop" => [#{args => [], returns => []}]},
+    %% Ensure supervisor is running
+    ensure_supervisor(),
+    {ok, Pid} = af_actor_sup:start_actor(TypeName, Instance),
+    ActorVal = #{pid => Pid, type_name => TypeName, vocab => Vocab, supervised => true},
+    Cont#continuation{data_stack = [{'Actor', ActorVal} | Rest]}.
+
+ensure_supervisor() ->
+    case whereis(af_actor_sup) of
+        undefined -> af_actor_sup:start_link();
+        _ -> ok
+    end.
+
 %%% --- << : begin actor send ---
 
 op_send_begin(Cont) ->
@@ -158,30 +184,40 @@ handle_actor_send(TokenValue, Cont) ->
     end.
 
 dispatch_actor_word(WordName, Entries, ActorInfo, LocalStack, State, Rest, Cont) ->
-    %% Find the first entry whose args match the local stack
     #{pid := Pid} = ActorInfo,
+    IsSupervised = maps:get(supervised, ActorInfo, false),
     Entry = find_matching_entry(Entries, LocalStack),
     #{args := ArgsIn, returns := Returns} = Entry,
-    %% Pop args from local stack
     NumArgs = length(ArgsIn),
     {Args, RemainingStack} = lists:split(NumArgs, LocalStack),
     case Returns of
         [] ->
             %% Cast: async, no reply
-            Pid ! {cast, WordName, Args},
+            case IsSupervised of
+                true  -> gen_server:cast(Pid, {cast, WordName, Args});
+                false -> Pid ! {cast, WordName, Args}
+            end,
             NewState = State#{local_stack => RemainingStack},
             Cont#continuation{data_stack = [{'ActorSend', NewState} | Rest]};
         _ ->
             %% Call: sync, wait for reply
-            Ref = make_ref(),
-            Pid ! {call, WordName, Args, self(), Ref},
-            receive
-                {reply, Ref, ReplyValues} ->
+            case IsSupervised of
+                true ->
+                    {ok, ReplyValues} = gen_server:call(Pid, {call, WordName, Args}, 5000),
                     NewLocalStack = ReplyValues ++ RemainingStack,
                     NewState = State#{local_stack => NewLocalStack},
-                    Cont#continuation{data_stack = [{'ActorSend', NewState} | Rest]}
-            after 5000 ->
-                error({actor_call_timeout, WordName})
+                    Cont#continuation{data_stack = [{'ActorSend', NewState} | Rest]};
+                false ->
+                    Ref = make_ref(),
+                    Pid ! {call, WordName, Args, self(), Ref},
+                    receive
+                        {reply, Ref, ReplyValues} ->
+                            NewLocalStack = ReplyValues ++ RemainingStack,
+                            NewState = State#{local_stack => NewLocalStack},
+                            Cont#continuation{data_stack = [{'ActorSend', NewState} | Rest]}
+                    after 5000 ->
+                        error({actor_call_timeout, WordName})
+                    end
             end
     end.
 
