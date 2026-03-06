@@ -6,7 +6,7 @@
 -include("af_type.hrl").
 
 -export([compile_words_to_module/2, compile_words_to_binary/2]).
--export([make_wrapper/4, get_module_binary/1]).
+-export([make_wrapper/4, get_module_binary/1, store_module_binary/2]).
 -export([find_native_word/1]).
 
 -define(BINARY_TABLE, af_module_binaries).
@@ -314,6 +314,10 @@ ensure_binary_table() ->
 store_binary(ModuleName, Binary) ->
     ensure_binary_table(),
     ets:insert(?BINARY_TABLE, {ModuleName, Binary}).
+
+%% Public version for other modules that compile BEAM modules.
+store_module_binary(ModuleName, Binary) ->
+    store_binary(ModuleName, Binary).
 
 %% Wrap a native function result back into tagged stack items.
 %% Single value -> [{Type, Value}]
