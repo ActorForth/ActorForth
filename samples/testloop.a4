@@ -1,39 +1,29 @@
-deepest_say : -> ;
+: deepest_say -> ;
 	Saying.
 
-deeper_say : -> ;
+: deeper_say -> ;
 	deepest_say.
 
-deep_say : -> ;
+: deep_say -> ;
 	deeper_say.
 
-say : -> ;
+: say -> ;
     deep_say
     print.
 
-start : -> ;
-    Starting
-    print
-    5 int
-    countdown
-    Counting print
-    lcount print.
+# Original versions using loop primitives (not implemented):
+# : start -> ; Starting print 5 int countdown Counting print lcount print.
+# : say_loop -> ; Looping print loop.
+# : done -> ; Done print.
+# : testloop -> ; say start say_loop done.
 
-say_loop : -> ;
-    Looping
-    print
-    loop.
+: count_loop Int -> ;
+    : 0 -> ; drop Done print.
+    Looping print dup print 1 int - count_loop.
 
-done : -> ;
-    Done
-    print.
-
-testloop : -> ;
+: testloop -> ;
     say
-    start
-    say_loop
-    done.
+    Starting print
+    5 int count_loop.
 
 testloop
-
-resume
