@@ -85,29 +85,34 @@ op_server(Cont) ->
     Cont#continuation{data_stack = [{'Actor', ActorVal} | Rest]}.
 
 %% Build the remotely-callable vocabulary for a type.
-%% Only includes user-defined words (source =/= auto).
-%% Computes args_in (sig_in minus state type) and returns (sig_out minus state type).
+%% Only includes user-defined words (source =/= auto) whose sig_in includes the state type.
+%% Searches ALL type dicts since multi-type words register in the TOS type's dict.
 build_vocab(TypeName) ->
-    case af_type:get_type(TypeName) of
-        {ok, #af_type{ops = Ops}} ->
-            maps:fold(fun(WordName, OpList, Acc) ->
-                Entries = lists:filtermap(fun(#operation{source = Source} = Op) ->
-                    case Source of
-                        auto -> false;
-                        _ ->
-                            ArgsIn = remove_first(TypeName, Op#operation.sig_in),
-                            Returns = remove_first(TypeName, Op#operation.sig_out),
-                            {true, #{args => ArgsIn, returns => Returns}}
-                    end
-                end, OpList),
-                case Entries of
-                    [] -> Acc;
-                    _ -> maps:put(WordName, Entries, Acc)
+    AllTypes = af_type:all_types(),
+    lists:foldl(fun(#af_type{ops = Ops}, OuterAcc) ->
+        maps:fold(fun(WordName, OpList, InnerAcc) ->
+            Entries = lists:filtermap(fun(#operation{source = Source} = Op) ->
+                case Source of
+                    auto -> false;
+                    _ ->
+                        case lists:member(TypeName, Op#operation.sig_in) of
+                            true ->
+                                ArgsIn = remove_first(TypeName, Op#operation.sig_in),
+                                Returns = remove_first(TypeName, Op#operation.sig_out),
+                                {true, #{args => ArgsIn, returns => Returns}};
+                            false ->
+                                false
+                        end
                 end
-            end, #{}, Ops);
-        not_found ->
-            #{}
-    end.
+            end, OpList),
+            case Entries of
+                [] -> InnerAcc;
+                _ ->
+                    Existing = maps:get(WordName, InnerAcc, []),
+                    maps:put(WordName, Existing ++ Entries, InnerAcc)
+            end
+        end, OuterAcc, Ops)
+    end, #{}, AllTypes).
 
 %% Remove the first occurrence of an element from a list.
 remove_first(_Elem, []) -> [];
@@ -214,8 +219,8 @@ actor_loop(TypeName, StateInstance) ->
 %% Execute a word on the actor's stack (state instance + pushed args).
 %% Returns the updated state instance.
 execute_actor_word(WordName, Args, _TypeName, StateInstance) ->
-    %% Build stack: state on TOS (for TOS-driven dispatch), args below
-    Stack = [StateInstance | Args],
+    %% Build stack: args on top, state below (Forth convention: rightmost sig = TOS)
+    Stack = Args ++ [StateInstance],
     Cont = #continuation{data_stack = Stack},
     Token = #token{value = WordName},
     ResultCont = af_interpreter:interpret_token(Token, Cont),
@@ -227,8 +232,8 @@ execute_actor_word(WordName, Args, _TypeName, StateInstance) ->
 %% Execute a word that returns values (call semantics).
 %% Returns {ReplyValues, NewStateInstance}.
 execute_actor_call(WordName, Args, TypeName, StateInstance) ->
-    %% Build stack: state on TOS (for TOS-driven dispatch), args below
-    Stack = [StateInstance | Args],
+    %% Build stack: args on top, state below (Forth convention: rightmost sig = TOS)
+    Stack = Args ++ [StateInstance],
     Cont = #continuation{data_stack = Stack},
     Token = #token{value = WordName},
     ResultCont = af_interpreter:interpret_token(Token, Cont),

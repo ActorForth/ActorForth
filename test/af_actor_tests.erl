@@ -108,7 +108,7 @@ messaging_test_() ->
         end} end,
         fun(_) -> {"cast with args via << value word .", fun() ->
             C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
-            C2 = eval(": add Counter Int -> Counter ; dup value rot + value! .", C1),
+            C2 = eval(": add Counter Int -> Counter ; swap dup value rot + value! .", C1),
             C3 = eval(": count Counter -> Counter Int ; dup value .", C2),
             C4 = eval("0 int counter server", C3),
             %% << 5 int add . — "5 int" executes locally, "add" dispatches to actor
@@ -120,7 +120,7 @@ messaging_test_() ->
         end} end,
         fun(_) -> {"chained commands in single << block", fun() ->
             C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
-            C2 = eval(": add Counter Int -> Counter ; dup value rot + value! .", C1),
+            C2 = eval(": add Counter Int -> Counter ; swap dup value rot + value! .", C1),
             C3 = eval(": count Counter -> Counter Int ; dup value .", C2),
             C4 = eval("0 int counter server", C3),
             %% Chain: add 5, then add 10, all in one << block
@@ -192,7 +192,7 @@ kv_store_test_() ->
             %% a counter that tracks a single value for now.
             %% This tests the actor pattern with multiple operations.
             C1 = eval("type Gauge level Int .", af_interpreter:new_continuation()),
-            C2 = eval(": set Gauge Int -> Gauge ; swap level! .", C1),
+            C2 = eval(": set Gauge Int -> Gauge ; level! .", C1),
             C3 = eval(": get Gauge -> Gauge Int ; dup level .", C2),
             C4 = eval(": reset Gauge -> Gauge ; 0 int level! .", C3),
             C5 = eval("0 int gauge server", C4),

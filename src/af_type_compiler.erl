@@ -172,14 +172,17 @@ op_semicolon(Cont) ->
 %% . — Finish compilation: save the word to the appropriate type dictionary
 op_dot(Cont) ->
     [{'CodeCompile', State} | Rest] = Cont#continuation.data_stack,
-    #{name := Name, sig_in := SigIn, sig_out := SigOut, body := Body} = State,
+    #{name := Name, sig_in := SigIn0, sig_out := SigOut0, body := Body} = State,
+
+    %% Signatures are accumulated left-to-right (Forth convention: leftmost = deepest).
+    %% Reverse so element 0 = TOS for match_sig and dispatch.
+    SigIn = lists:reverse(SigIn0),
+    SigOut = lists:reverse(SigOut0),
 
     %% Build the execution function for this compiled word
     Impl = make_word_impl(Body),
 
-    %% Determine which type to register in:
-    %% If sig_in is non-empty, register in the first input type's dict.
-    %% Otherwise register in Any.
+    %% Register in the TOS type's dict (first element after reversal).
     TargetType = case SigIn of
         [FirstType | _] -> FirstType;
         [] -> 'Any'
