@@ -1,6 +1,6 @@
 -record(token, {
-    value :: string(),
-    column :: non_neg_integer(),
-    line :: non_neg_integer(),
-    file :: string()
+    value  = "" :: string(),
+    column = 0  :: non_neg_integer(),
+    line   = 0  :: non_neg_integer(),
+    file   = "" :: string()
 }).

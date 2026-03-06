@@ -1,15 +1,5 @@
-
 -record(continuation, {
-    data_stack :: list(),
-    return_stack :: list(),
-    next_op :: reference() | 'end',
-    current_token :: repl:token()
+    data_stack    = [] :: [af_type:stack_item()],
+    return_stack  = [] :: list(),
+    current_token = undefined :: #token{} | undefined
 }).
-
--type op_ref() :: reference() | 'end'.
--type continuation() :: #continuation{
-    data_stack :: list(),
-    return_stack :: list(),
-    next_op :: op_ref(),
-    current_token :: repl:token()
-}.

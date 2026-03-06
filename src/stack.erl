@@ -7,7 +7,7 @@
 -type stack_item() :: {type(), term() | function()}.
 -type stack() :: [stack_item()].
 
--export([new/0, push/2, pop/1, swap/1]).
+-export([new/0, push/2, pop/1, swap/1, dup/1, drop/1, peek/1]).
 
 %% @doc Creates a new, empty stack.
 -spec new() -> stack().
@@ -32,5 +32,24 @@ swap([A, B | Rest]) ->
     [B, A | Rest];
 swap(_) ->
     error(insufficient_elements).
-    
-    
+
+%% @doc Duplicates the top item on the stack.
+-spec dup(stack()) -> stack() | no_return().
+dup([Top | _] = Stack) ->
+    [Top | Stack];
+dup([]) ->
+    error(empty_stack).
+
+%% @doc Removes the top item from the stack.
+-spec drop(stack()) -> stack() | no_return().
+drop([_ | Rest]) ->
+    Rest;
+drop([]) ->
+    error(empty_stack).
+
+%% @doc Returns the top item without removing it.
+-spec peek(stack()) -> stack_item() | no_return().
+peek([Top | _]) ->
+    Top;
+peek([]) ->
+    error(empty_stack).

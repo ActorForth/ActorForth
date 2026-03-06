@@ -1,0 +1,572 @@
+# ActorForth Erlang Implementation Plan
+
+## Vision
+
+ActorForth is a homoiconic, strongly-typed, concatenative, stack-based language with actor concurrency as a primitive. It targets the Erlang BEAM VM. The implementation progresses in phases:
+
+1. **Prototype** — ActorForth interpreter written in Erlang
+2. **Self-hosting** — ActorForth compiler that emits BEAM bytecode, written in ActorForth itself
+3. **Bootstrap** — The language contains its own BEAM assembler and can compile itself
+
+This plan covers Phase 1: a working prototype interpreter in Erlang that implements the core language semantics proven in the Python implementation, extended with actor primitives that leverage BEAM's native process model.
+
+## What We Learned From Prior Implementations
+
+### Python (most complete)
+- Type-driven dispatch works: operations looked up by name + TOS type, with "Any" as generic fallback
+- Stack signatures (input types -> output types) are the core contract mechanism
+- Compilation is interpretation: the compiler is just another set of type handlers that change what tokens mean (type names vs word references vs pattern constraints)
+- Word definition state machine: `: name InputTypes -> OutputTypes ; body .`
+- Product types (user-defined types) with named attributes, auto-generated constructors/getters/setters
+- Pattern matching via overloaded words with different stack signatures
+- No actor/concurrency features were implemented
+
+### C++ (partial)
+- Confirmed the type registry + stack signature dispatch model works in a compiled context
+- Product type attributes with positional storage + name lookup
+- Got stuck on build tooling and didn't complete the compiler/word-definition system
+
+### Key Design Decisions Carried Forward
+- Everything is a typed stack item: `{Type, Value}`
+- Operations dispatch on name + input stack signature (TOS type context)
+- "Any" type is the generic matcher
+- Unrecognized tokens become Atoms (no syntax errors, only type errors)
+- Types own their operation dictionaries
+- Compilation uses the same execution engine with different type handlers
+
+## Architecture Overview
+
+```
+                    Input Stream (text/file)
+                           |
+                      [ Parser ]
+                           |
+                    Token stream
+                           |
+                   [ Interpreter ]
+                      |        |
+              Word Lookup    make_atom
+              (by name +     (fallback)
+               stack sig)
+                      |
+                 [ Operation ]
+                      |
+              Continuation transform
+              (stack + next_op + token)
+                      |
+                 [ Continuation ]
+                 data_stack, return_stack,
+                 next_op, current_token
+```
+
+For actors:
+```
+    ActorForth Process        ActorForth Process
+    +-----------------+       +-----------------+
+    | Continuation    |       | Continuation    |
+    | (own stacks)    |       | (own stacks)    |
+    | Mailbox (BEAM)  |  <->  | Mailbox (BEAM)  |
+    +-----------------+       +-----------------+
+         Erlang Process            Erlang Process
+```
+
+Each ActorForth actor IS an Erlang process with its own continuation (stacks + execution state). Message passing maps directly to Erlang message passing.
+
+---
+
+## The Inner and Outer Interpreters
+
+Traditional Forth has two interpreters: the **outer interpreter** reads tokens and decides what to do with them, and the **inner interpreter** executes compiled word bodies. ActorForth unifies these through its type-driven dictionary mechanism, making the "compiler" almost trivially simple — just a few words.
+
+### The Outer Interpreter
+
+The outer interpreter is the token processing loop. For each token it:
+
+1. Looks at the TOS type to determine the **current dictionary context**
+2. Searches that type's dictionary for the token
+3. Falls back to the global ("Any") dictionary
+4. If still not found, pushes the token as an `{Atom, "token-text"}` — there are no syntax errors
+
+This is the entire mechanism. The TOS type **is** the interpreter's state. There is no separate "STATE variable" like in traditional Forth that switches between interpreting and compiling. Instead, when `:` pushes a `WordDefinition` type onto the stack, the dictionary context changes. Now every subsequent token is looked up in `WordDefinition`'s dictionary first, which contains words like `->` that know how to accumulate type signatures. When `->` transitions to output signatures, it changes the TOS type to `OutputTypeSignature`. When `;` starts code compilation, it changes TOS to `CodeCompile`. Each of these types has a small dictionary of words that know what tokens mean **in that context**.
+
+This is why building a compiler in ActorForth takes only a few words: each compilation phase is just a type with a handful of operations. The outer interpreter doesn't change — it always does the same thing. The types on the stack change what the tokens *mean*.
+
+```
+Normal interpretation:     TOS is Int, Bool, Atom, etc.
+                           Tokens looked up as executable operations
+
+: myword                   TOS becomes WordDefinition
+                           Next token captured as word name
+
+  Int Int                  TOS becomes InputTypeSignature
+                           Tokens looked up as type names, accumulated into input sig
+
+  ->                       Found in InputTypeSignature's dictionary
+                           TOS becomes OutputTypeSignature
+
+  Int                      Token accumulated into output sig
+
+  ;                        Found in OutputTypeSignature's dictionary
+                           TOS becomes CodeCompile
+
+  dup +                    Tokens resolved to operation references and appended
+                           to compiled word body (not executed, just recorded)
+
+  .                        Found in CodeCompile's dictionary
+                           Saves compiled word, pops compiler state off stack
+                           Back to normal interpretation
+```
+
+The entire compiler is: the `:` word, the `->` word, the `;` word, and the `.` word, plus the type dictionaries for `WordDefinition`, `InputTypeSignature`, `OutputTypeSignature`, and `CodeCompile`. That's it. Any new syntax can be created the same way — define a type whose dictionary gives tokens new meaning.
+
+### The Inner Interpreter
+
+The inner interpreter executes compiled word bodies. A compiled word is a list of operation references. Execution steps through this list, applying each operation to the continuation.
+
+In Erlang, this is naturally a fold over the operation list:
+
+```erlang
+execute_word([], Cont) -> Cont;
+execute_word([Op | Rest], Cont) ->
+    NewCont = apply_op(Op, Cont),
+    execute_word(Rest, NewCont).
+```
+
+When a compiled word calls another compiled word, the return address (remaining operations) is pushed onto the return stack. When that word finishes, execution resumes from the return stack. This is identical to traditional Forth threaded code.
+
+The inner interpreter is also where **pattern matching dispatch** happens. When a word has multiple definitions with different stack signatures, the inner interpreter selects the most specific match:
+
+```
+: factorial  0 Int -> Int ; drop 1 .
+: factorial  Int -> Int ; dup 1 - factorial * .
+```
+
+Both are registered under the name `factorial` in the `Int` type dictionary. When `factorial` is invoked, the dispatcher tries each definition's input signature against the actual stack. The definition with `0 Int` (value + type constraint) is more specific than `Int` alone, so it's tried first. This replaces `if` statements with declarative pattern matching — the same word name, different behaviors based on what's on the stack.
+
+Prefer this pattern matching style over explicit branching wherever possible:
+
+```
+# PREFER: pattern matching via overloaded signatures
+: collatz  1 Int -> Int ; .                          # base case
+: collatz-even  Int -> Int ; 2 / collatz .           # even case
+: collatz-odd   Int -> Int ; 3 * 1 + collatz .       # odd case
+
+# AVOID: explicit if/else branching
+: collatz  Int -> Int ; dup 1 == if ... else ... then .
+```
+
+Pattern matching is more declarative, composes better, and maps naturally to BEAM's native pattern matching when we compile to Core Erlang.
+
+### Why This Matters for Self-Hosting
+
+Because the compiler is just types with dictionaries, and types can be defined in ActorForth itself (via Product Types and word definitions), the language can define its own compiler. The BEAM assembler is just another set of types whose dictionaries give tokens meaning in the context of emitting bytecode. A `BeamModule` type on the stack means tokens are interpreted as module-level directives. A `BeamFunction` type means tokens are function-level instructions. The same outer interpreter drives it all.
+
+---
+
+## Phase 1: Core Language (Erlang Prototype)
+
+### Milestone 1: Type System & Operation Dispatch
+
+**Goal:** Replace the current "push everything as atom" interpreter with proper type-driven dispatch.
+
+#### 1.1 Type Registry (`src/af_type.erl`)
+
+The type registry is a central ETS table (or module-level state via a gen_server) that maps type names to their operation dictionaries.
+
+```erlang
+%% Type representation
+-record(af_type, {
+    name        :: atom(),           %% e.g. 'Atom', 'Int', 'Bool', 'Any'
+    ops         :: #{op_name() => [operation()]},  %% name -> list of ops (overloaded)
+    handler     :: fun((continuation()) -> continuation()),  %% execution handler
+    attributes  :: [attribute()]     %% for product types
+}).
+
+%% Stack item — the universal currency
+-type stack_item() :: {TypeName :: atom(), Value :: term()}.
+
+%% Operation with stack signature
+-record(operation, {
+    name        :: string(),
+    sig_in      :: [type_constraint()],   %% required input stack types
+    sig_out     :: [type_constraint()],   %% declared output types
+    impl        :: fun((continuation()) -> continuation()) | [operation()],  %% native or compiled
+    source      :: #token{}               %% where defined
+}).
+
+%% Type constraint in a signature
+-type type_constraint() :: atom()          %% type name (e.g. 'Int')
+                         | {atom(), term()} %% type + specific value
+                         | 'Any'.           %% matches anything
+```
+
+Key behaviors:
+- `af_type:register(Name, Opts)` — register a new type
+- `af_type:find_op(TypeName, OpName, Stack)` — find operation matching name + current stack signature
+- `af_type:add_op(TypeName, Operation)` — add operation to a type's dictionary
+- Global "Any" type operations are checked as fallback for all types
+- Type lookup order: TOS type dictionary -> "Any" dictionary
+
+#### 1.2 Stack Signature Matching (`src/af_type.erl`)
+
+The matching algorithm from Python:
+1. Get the TOS type
+2. Look up operations with matching name in that type's dictionary
+3. For each candidate, check if the stack satisfies the input signature
+4. "Any" in a signature matches any type
+5. If a specific value is in the constraint, it must match too
+6. If no match in TOS type, fall back to "Any" type dictionary
+7. If still no match, apply `make_atom` (push as Atom)
+
+#### 1.3 Built-in Types (`src/af_types/`)
+
+Each type module registers itself and its operations:
+
+- **`af_type_atom.erl`** — The Atom type. No operations of its own. Created by `make_atom` when a token doesn't match any operation.
+- **`af_type_int.erl`** — Constructor `int` takes `Atom` -> `Int`. Operations: `+`, `-`, `*`, `/`
+- **`af_type_bool.erl`** — Constructor `bool` takes `Atom` -> `Bool`. Operations: `not`, `==`, `!=`, `<`, `>`, `<=`, `>=`
+- **`af_type_any.erl`** — Global operations: `dup`, `drop`, `swap`, `2dup`, `print`, `stack`, `words`, `types`, `debug`
+
+### Milestone 2: Parser
+
+**Goal:** Proper tokenizer with source location tracking.
+
+#### 2.1 Parser (`src/af_parser.erl`)
+
+Tokenization rules (from Python impl):
+- Whitespace delimiters: space, tab, newline
+- Special punctuation tokens (self-delimiting): `.` `:` `;`
+- Comments: `#` to end of line (discarded or kept as metadata)
+- Quoted strings: `"..."` preserved as single token
+- Everything else: accumulated as a word token
+- Each token tagged with `{Value, Line, Column, Filename}`
+
+The parser should be a pure function: `parse(InputString, Filename) -> [#token{}]`
+
+For REPL use, also support incremental/line-at-a-time parsing.
+
+### Milestone 3: Interpreter Core
+
+**Goal:** The interpret loop with proper type-driven dispatch.
+
+#### 3.1 Interpreter (`src/af_interpreter.erl`)
+
+Replaces current `repl.erl`. The core loop:
+
+```
+interpret_token(Token, Continuation) ->
+    1. Look up Token.value as operation name against current stack
+    2. If found: execute operation, return new Continuation
+    3. If not found: push {atom, Token.value} onto data_stack
+    4. Return updated Continuation
+```
+
+The continuation record needs to be extended:
+
+```erlang
+-record(continuation, {
+    data_stack    :: [stack_item()],
+    return_stack  :: [term()],
+    next_op       :: op_ref() | 'end',
+    current_token :: #token{},
+    debug         :: boolean(),
+    call_depth    :: non_neg_integer()
+}).
+```
+
+#### 3.2 REPL (`src/af_repl.erl`)
+
+Interactive read-eval-print loop:
+- Reads a line from stdin
+- Parses into tokens
+- Interprets each token against current continuation
+- Prints prompt with status
+- Handles `^C` gracefully
+
+### Milestone 4: Word Definition (Compiler)
+
+**Goal:** User-defined words with type signatures, compiled within the interpreter.
+
+The compiler is not a separate system — it's just four words (`:`, `->`, `;`, `.`) and four types whose dictionaries give tokens context-dependent meaning. See "The Inner and Outer Interpreters" section above for the full explanation of why this works.
+
+```
+: word-name  InputType1 InputType2 -> OutputType1 ; body-word1 body-word2 .
+```
+
+#### 4.1 Compiler Types (`src/af_types/af_type_compiler.erl`)
+
+Each compiler phase is a type. The outer interpreter doesn't change — it always does TOS-dictionary lookup. These types just redirect what tokens mean:
+
+| Type on TOS | Pushed by | Tokens mean | Transitions to |
+|---|---|---|---|
+| `WordDefinition` | `:` | Next token = word name | `InputTypeSignature` |
+| `InputTypeSignature` | (after name capture) | Type names for input sig | `OutputTypeSignature` (via `->`) |
+| `OutputTypeSignature` | `->` | Type names for output sig | `CodeCompile` (via `;`) |
+| `CodeCompile` | `;` | Word references to compile | (pops all via `.`) |
+
+Each of these types has a tiny dictionary — typically just the transition word and a default handler for accumulating. The `CodeCompile` handler is the most interesting: it resolves each token to an operation reference (by looking it up against the declared input types) and appends it to the word body being built. Unresolved tokens compile as `make_atom`.
+
+The `.` word in `CodeCompile`'s dictionary finishes compilation: it pops all the compiler state off the stack, packages the accumulated operation list + signatures into an Operation record, and registers it in the appropriate type's dictionary (determined by the first input type in the signature, or "Any" if none).
+
+#### 4.2 Pattern Matching via Overloaded Signatures
+
+Multiple definitions of the same word with different signatures:
+
+```
+: factorial 0 Int -> Int ; drop 1 .
+: factorial Int -> Int ; dup 1 - factorial * .
+```
+
+Both are registered under `factorial` in `Int`'s dictionary. At dispatch time, the most specific matching signature wins — value constraints (`0 Int`) beat type-only constraints (`Int`). This is the preferred control flow mechanism over if/else branching.
+
+### Milestone 5: Product Types (User-Defined Types)
+
+**Goal:** Named composite types with attributes.
+
+```
+type Point x Int y Int .
+10 5 point              # constructor (lowercase = type name)
+x                       # getter — pushes x value
+Point -> x 100 =        # setter via reference
+```
+
+#### 5.1 Product Type Definition (`src/af_types/af_type_usertype.erl`)
+
+When `type` is invoked:
+1. Next token = type name (must start uppercase)
+2. Subsequent tokens = attribute pairs: `name Type name Type ...`
+3. `.` finishes definition
+
+Auto-generated operations:
+- **Constructor** (lowercase type name): takes N typed values from stack, creates instance
+- **Getters**: one per attribute, pushes attribute value
+- **Reference + Setter**: `->` creates reference, attribute name with reference = setter
+
+Internal representation:
+```erlang
+-record(product_instance, {
+    type_name :: atom(),
+    values    :: #{atom() => stack_item()}   %% attribute_name => typed value
+}).
+```
+
+### Milestone 6: Control Flow
+
+**Goal:** Branching and looping via pattern matching and recursion.
+
+The primary control flow mechanism is **pattern matching via overloaded word signatures**, not if/else branching. This is both more natural for a strongly-typed stack language and maps directly to BEAM's native pattern matching when we eventually compile.
+
+#### 6.1 Pattern Matching Dispatch (Primary)
+
+Multiple definitions of the same word with different stack signatures:
+
+```
+: abs  Int -> Int ; dup 0 < not .            # non-negative: identity
+: abs  Int -> Int ; dup 0 < swap 0 swap - .  # negative: negate
+```
+
+More specific signatures (value constraints) are tried before general ones. This is the preferred way to express conditional logic.
+
+#### 6.2 Tail-Recursive Words (Primary)
+
+Recursion with pattern matching base cases — natural on BEAM:
+
+```
+: factorial  0 Int -> Int ; drop 1 .
+: factorial  Int -> Int ; dup 1 - factorial * .
+```
+
+The inner interpreter should detect tail position calls and optimize (or rely on BEAM's tail call optimization once we compile).
+
+#### 6.3 Return-Stack Loops (Secondary)
+
+For cases where imperative looping is genuinely clearer:
+- **`countdown`/`loop`** — Return-stack loop counter (from Python impl)
+
+#### 6.4 Traditional Branching (Low Priority)
+
+- **`if`/`else`/`then`** — Only if pattern matching proves insufficient for some use case. These are compile-time words in `CodeCompile`'s dictionary that emit branch operations into the compiled word body. Avoid reaching for these when pattern matching works.
+
+---
+
+## Phase 2: Actor Primitives
+
+### Milestone 7: Actor Model
+
+**Goal:** Each ActorForth actor is an Erlang process with its own continuation.
+
+This is where ActorForth diverges from traditional Forth and leverages BEAM's killer feature.
+
+#### 7.1 Actor Primitives
+
+| Word | Signature | Description |
+|---|---|---|
+| `spawn` | `( word -- Actor )` | Spawn new process executing word, returns actor reference |
+| `send` | `( value Actor -- )` | Send typed value to actor's mailbox |
+| `receive` | `( -- value )` | Block until message arrives, push onto stack |
+| `self` | `( -- Actor )` | Push current actor's reference |
+| `!` | `( value Actor -- )` | Alias for send |
+| `?` | `( Actor -- value )` | Request/reply pattern |
+
+#### 7.2 Actor Implementation (`src/af_actor.erl`)
+
+Each actor is:
+```erlang
+actor_loop(Continuation, WordOps) ->
+    receive
+        {msg, Value} ->
+            %% Push Value onto data_stack, execute actor's word
+            NewCont = push_and_execute(Value, Continuation, WordOps),
+            actor_loop(NewCont, WordOps);
+        {request, From, Value} ->
+            NewCont = push_and_execute(Value, Continuation, WordOps),
+            {Reply, FinalCont} = pop_reply(NewCont),
+            From ! {reply, Reply},
+            actor_loop(FinalCont, WordOps);
+        stop -> ok
+    end.
+```
+
+Key design decisions:
+- Actor state = its continuation (stacks persist between messages)
+- Messages are typed stack items
+- An actor's "behavior" is a compiled word that processes each message
+- Supervision trees can be built as ActorForth words wrapping OTP supervisor
+
+#### 7.3 Actor Types
+
+New types for the actor system:
+- **`Actor`** — wraps an Erlang pid, typed by what messages it accepts
+- **`Message`** — typed envelope for inter-actor communication
+- **`Mailbox`** — selective receive with pattern matching on message types
+
+---
+
+## Phase 3: BEAM Bytecode Compilation (Future)
+
+### Milestone 8: Core Erlang Emission
+
+**Goal:** Compile ActorForth words to Core Erlang rather than interpreting them.
+
+Strategy: Target **Core Erlang** (not raw BEAM bytecode) as the initial compilation target. Core Erlang is a stable intermediate representation that the Erlang compiler can optimize and assemble.
+
+Why Core Erlang first:
+- Stable API across OTP versions (unlike raw BEAM opcodes which change)
+- Gets all of BEAM's optimizations for free
+- Erlang provides `compile:forms/1` to compile Core Erlang to .beam files
+- Much simpler than raw bytecode — no register allocation needed initially
+
+```erlang
+%% ActorForth word  : double Int -> Int ; dup + .
+%% Compiles to Core Erlang equivalent of:
+%% double(X) -> X + X.
+```
+
+Key reference: [A peak into the Erlang compiler and BEAM bytecode](https://gomoripeti.github.io/beam_by_example/)
+
+#### 8.1 Compilation Strategy
+
+For each ActorForth word:
+1. Analyze the stack signature → function arity (number of inputs)
+2. Map stack positions to Core Erlang variables
+3. Translate body operations to Core Erlang function calls
+4. Emit Core Erlang module
+5. Use `compile:forms/2` to produce .beam
+
+### Milestone 9: BEAM Assembler in ActorForth
+
+**Goal:** Write the BEAM assembler in ActorForth itself.
+
+Once ActorForth can compile to Core Erlang and has file I/O:
+1. Implement BEAM binary format writer as ActorForth words
+2. Implement instruction encoding (genop.tab opcodes)
+3. Write register allocator in ActorForth
+4. Replace Core Erlang backend with direct BEAM emission
+5. Self-host: compile the compiler with itself
+
+Key references:
+- [The BEAM Book](https://github.com/happi/theBeamBook) by Erik Stenman — Chapter on BEAM file format and instruction set
+- [BEAM instruction set](https://www.cs-lab.org/historical_beam_instruction_set.html)
+- [genop.tab](https://github.com/erlang/otp/blob/master/lib/compiler/src/genop.tab) — canonical opcode definitions
+- [codec-beam](https://hackage.haskell.org/package/codec-beam) — Haskell BEAM assembler (reference implementation)
+
+---
+
+## Implementation Order & Dependencies
+
+```
+M1: Type System ──────┐
+                      ├── M3: Interpreter ── M4: Compiler ── M5: Product Types
+M2: Parser ───────────┘                          |
+                                                  ├── M6: Control Flow
+                                                  │
+                                                  └── M7: Actors
+                                                          |
+                                                     M8: Core Erlang
+                                                          |
+                                                     M9: Self-hosting
+```
+
+**Suggested sprint plan:**
+
+| Sprint | Milestone | Deliverable |
+|---|---|---|
+| 1 | M1 + M2 | Type registry, stack sig matching, parser with source locations |
+| 2 | M3 | Working interpreter with `int`, `bool`, `atom`, stack ops, arithmetic |
+| 3 | M4 | Word definition `: name types -> types ; body .` |
+| 4 | M5 | Product types with auto-generated constructors/accessors |
+| 5 | M6 | Control flow: if/else/then, recursion, loops |
+| 6 | M7 | Actor spawn/send/receive mapped to Erlang processes |
+| 7 | M8 | Core Erlang emission for compiled words |
+| 8 | M9 | BEAM assembler written in ActorForth |
+
+## Testing Strategy
+
+- **EUnit** for unit tests of individual modules (type registry, parser, stack ops)
+- **Common Test** for integration tests (multi-word programs, actor interactions)
+- **ActorForth script tests** — run `.a4` sample files and check output (regression suite)
+- **Property-based testing** (PropEr) for parser and type matching invariants
+- Port the Python test suite as ActorForth scripts where applicable
+
+## File Structure
+
+```
+src/
+  af_type.erl           # Type registry and stack signature matching
+  af_parser.erl         # Tokenizer
+  af_interpreter.erl    # Core interpret loop
+  af_repl.erl           # Interactive REPL
+  af_compiler.erl       # Word definition state machine
+  af_actor.erl          # Actor primitives
+  af_types/
+    af_type_atom.erl    # Atom type
+    af_type_int.erl     # Int type + arithmetic
+    af_type_bool.erl    # Bool type + comparisons
+    af_type_any.erl     # Global operations (dup, swap, drop, print, etc.)
+    af_type_compiler.erl # Compiler state types (WordDefinition, etc.)
+    af_type_usertype.erl # Product type support
+    af_type_actor.erl   # Actor type
+include/
+  token.hrl             # Token record (exists)
+  continuation.hrl      # Continuation record (exists, will be extended)
+  operation.hrl         # Operation record
+  af_type.hrl           # Type records
+test/
+  af_type_tests.erl
+  af_parser_tests.erl
+  af_interpreter_tests.erl
+  af_compiler_tests.erl
+  af_actor_tests.erl
+samples/
+  *.a4                  # ActorForth scripts (exist)
+```
+
+## Reference Materials
+
+- [Starting Forth](https://www.forth.com/starting-forth/) by Leo Brodie — Forth fundamentals
+- [Thinking Forth](http://thinking-forth.sourceforge.net/) by Leo Brodie — Forth philosophy and design
+- [The BEAM Book](https://github.com/happi/theBeamBook) by Erik Stenman — BEAM VM internals
+- [BEAM instruction set](https://www.cs-lab.org/historical_beam_instruction_set.html)
+- [A peak into the Erlang compiler and BEAM bytecode](https://gomoripeti.github.io/beam_by_example/)
+- [codec-beam](https://hackage.haskell.org/package/codec-beam) — Reference BEAM assembler in Haskell
+- [ActorForth Language Definition](docs/ActorForthDefinition.md) — Language spec (needs updating from Python refs)
