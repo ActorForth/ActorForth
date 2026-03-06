@@ -56,6 +56,7 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - **`src/af_actor_sup.erl`** — OTP supervisor for actor processes. `simple_one_for_one` strategy with `transient` restart.
 - **`src/af_actor_worker.erl`** — gen_server wrapper for supervised actors. Handles cast/call messages through ActorForth word dispatch.
 - **`src/af_compile.erl`** — Word compilation: closure-based (`compile_word/4`) and BEAM module generation (`compile_module/2`). Optimizes known primitives inline.
+- **`src/af_type_check.erl`** — Compile-time type inference. `check_word/4` and `infer_stack/2`. Resolves `Any` to concrete types via substitution.
 - **`src/af_server.erl`** — gen_server bridge: wraps ActorForth interpreter as OTP citizen. `start_link`, `call`, `cast`, `eval`, `stop`. Term conversion at boundaries.
 - **`src/af_term.erl`** — Bidirectional Erlang <-> ActorForth term conversion. `to_stack_item/1`, `from_stack_item/1`.
 - **`src/af_error.erl`** — Structured error records with location, word trace, stack snapshot. `raise/3`, `format/1`.

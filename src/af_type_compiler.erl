@@ -313,6 +313,9 @@ register_single_word(State, Rest, Cont) ->
     SigIn = lists:reverse(SigIn0),
     SigOut = lists:reverse(SigOut0),
 
+    %% Compile-time type check
+    type_check_body(Name, SigIn, SigOut, Body),
+
     Impl = make_word_impl(Body, Name),
 
     %% Register in the TOS type's dict (first element after reversal).
@@ -342,6 +345,8 @@ register_multi_word(State, Clauses, Rest, Cont) ->
     lists:foreach(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody}) ->
         CSigIn = lists:reverse(CSigIn0),
         CSigOut = lists:reverse(CSigOut0),
+        %% Type check each clause body
+        type_check_body(Name, CSigIn, CSigOut, CBody),
         Impl = make_word_impl(CBody, Name),
         Op = #operation{
             name = Name,
@@ -353,6 +358,20 @@ register_multi_word(State, Clauses, Rest, Cont) ->
     end, Clauses),
 
     Cont#continuation{data_stack = Rest}.
+
+%% Run compile-time type check on a word body.
+%% Emits a warning on type mismatch; does not prevent compilation.
+type_check_body(Name, SigIn, SigOut, Body) ->
+    case af_type_check:check_word(Name, SigIn, SigOut, Body) of
+        ok -> ok;
+        {error, {type_mismatch, _, #{expected := Expected, actual := Actual}}} ->
+            io:format("Warning: type mismatch in word '~s'~n"
+                      "  declared output: ~p~n"
+                      "  inferred output: ~p~n", [Name, Expected, Actual]);
+        {error, _Reason} ->
+            %% Other errors (stack underflow, etc.) — skip for now
+            ok
+    end.
 
 get_target_type([{Type, _Value} | _]) -> Type;
 get_target_type([Type | _]) when is_atom(Type) -> Type;

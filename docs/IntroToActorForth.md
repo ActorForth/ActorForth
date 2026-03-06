@@ -1266,7 +1266,45 @@ This spawns the actor under a `simple_one_for_one` supervisor. The actor is impl
 | Stop behavior | Process exits | `{stop, normal, State}` |
 
 
-## Chapter 17: The Road Ahead
+## Chapter 18: Compile-Time Type Checking
+
+ActorForth checks word definitions at compile time by inferring the stack effect of each body token and comparing the result against the declared output signature.
+
+### How It Works
+
+When you define a word:
+
+```
+: double Int -> Int ; dup + .
+```
+
+The compiler:
+1. Starts with the declared input stack: `[Int]`
+2. Looks up `dup` — sig is `Any -> Any Any` — but since the input is `Int`, resolves `Any` to `Int`: stack becomes `[Int, Int]`
+3. Looks up `+` — sig is `Int Int -> Int` — consumes two Ints, produces one: stack becomes `[Int]`
+4. Compares `[Int]` against declared output `[Int]` — match!
+
+If there's a mismatch, the compiler emits a warning:
+
+```
+: bad Int -> Int ; dup .
+Warning: type mismatch in word 'bad'
+  declared output: ['Int']
+  inferred output: ['Int','Int']
+```
+
+### Type Variable Resolution
+
+The type checker resolves `Any` in operation signatures to concrete types from the actual stack. This means `dup` applied to `Bool` correctly infers `[Bool, Bool]`, not `[Any, Any]`. The `Any` type acts as a type variable that gets unified during inference.
+
+### Limitations
+
+- The checker warns but does not prevent compilation (words still run with dynamic dispatch)
+- Recursive calls and unknown words are treated as pushing `Atom` — full inference for user-defined words requires iterative analysis
+- Pattern matching sub-clauses are checked independently per clause
+
+
+## Chapter 19: The Road Ahead
 
 What you've seen is the Erlang-hosted implementation — interpreter, compiler, actor model, and OTP supervision. It works, it's tested, and it demonstrates the core ideas. But the vision goes further.
 
