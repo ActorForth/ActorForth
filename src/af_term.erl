@@ -8,6 +8,7 @@
 to_stack_item(true) -> {'Bool', true};
 to_stack_item(false) -> {'Bool', false};
 to_stack_item(N) when is_integer(N) -> {'Int', N};
+to_stack_item(F) when is_float(F) -> {'Float', F};
 to_stack_item(B) when is_binary(B) -> {'String', B};
 to_stack_item(A) when is_atom(A) -> {'Atom', atom_to_list(A)};
 to_stack_item(L) when is_list(L) ->
@@ -17,18 +18,22 @@ to_stack_item(M) when is_map(M) ->
         [{to_stack_item(K), to_stack_item(V)} || {K, V} <- maps:to_list(M)]
     )};
 to_stack_item(T) when is_tuple(T) ->
-    {'List', [to_stack_item(E) || E <- tuple_to_list(T)]};
+    {'Tuple', T};
 to_stack_item(P) when is_pid(P) ->
     {'Actor', #{pid => P, type_name => undefined, vocab => #{}}};
+to_stack_item(R) when is_reference(R) ->
+    {'Atom', lists:flatten(io_lib:format("~p", [R]))};
 to_stack_item(Other) ->
     error({unsupported_term, Other}).
 
 %% Convert ActorForth stack item -> Erlang term
 -spec from_stack_item({atom(), term()}) -> term().
 from_stack_item({'Int', N}) -> N;
+from_stack_item({'Float', F}) -> F;
 from_stack_item({'Bool', B}) -> B;
 from_stack_item({'String', B}) -> B;
 from_stack_item({'Atom', S}) -> list_to_atom(S);
+from_stack_item({'Tuple', T}) -> T;
 from_stack_item({'List', Items}) ->
     [from_stack_item(I) || I <- Items];
 from_stack_item({'Map', M}) ->

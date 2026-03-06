@@ -7,6 +7,7 @@
 
 -export([compile_words_to_module/2, compile_words_to_binary/2]).
 -export([make_wrapper/4, get_module_binary/1]).
+-export([find_native_word/1]).
 
 -define(BINARY_TABLE, af_module_binaries).
 
@@ -50,8 +51,10 @@ get_module_binary(ModuleName) ->
 %% Returns {ok, ModuleName, Binary} | {error, Reason}.
 compile_words_to_binary(ModuleName, WordDefs) when is_atom(ModuleName) ->
     L = 1,
+    %% Build compile context: maps word names to {Arity, NumOutputs} for inter-word calls
+    Ctx = #{module => ModuleName, words => build_word_index(WordDefs)},
     FunForms = lists:filtermap(fun({Name, SigIn, SigOut, Body}) ->
-        case compile_word_to_form(Name, SigIn, SigOut, Body, L) of
+        case compile_word_to_form(Name, SigIn, SigOut, Body, L, Ctx) of
             {ok, Form, Export} -> {true, {Form, Export}};
             {error, _Reason} -> false
         end
@@ -97,7 +100,7 @@ make_wrapper(ModAtom, FunAtom, SigIn, SigOut) ->
 
 %% Compile a single word definition to an Erlang abstract form function.
 %% Returns {ok, FunctionForm, {FunAtom, Arity}} | {error, Reason}.
-compile_word_to_form(Name, SigIn, SigOut, Body, L) ->
+compile_word_to_form(Name, SigIn, SigOut, Body, L, Ctx) ->
     FunAtom = list_to_atom(Name),
     Arity = length(SigIn),
     %% Create argument variables
@@ -106,7 +109,7 @@ compile_word_to_form(Name, SigIn, SigOut, Body, L) ->
     %% SigIn = [TOS, Next, ...], ArgVars = [Arg1, Arg2, ...]
     %% Arg1 corresponds to TOS (SigIn element 0)
     InitExprStack = ArgVars,
-    case simulate_body(Body, InitExprStack, L) of
+    case simulate_body(Body, InitExprStack, L, Ctx) of
         {ok, ResultStack} ->
             %% Build return expression from result stack
             ReturnExpr = build_return(ResultStack, SigOut, L),
@@ -120,85 +123,165 @@ compile_word_to_form(Name, SigIn, SigOut, Body, L) ->
 %% Simulate the word body on an expression stack.
 %% Each stack entry is an Erlang abstract form expression.
 %% Returns {ok, ResultExprStack} | {error, Reason}.
-simulate_body([], Stack, _L) -> {ok, Stack};
-simulate_body([#operation{name = OpName} | Rest], Stack, L) ->
-    case translate_op(OpName, Stack, L) of
-        {ok, NewStack} -> simulate_body(Rest, NewStack, L);
+simulate_body([], Stack, _L, _Ctx) -> {ok, Stack};
+simulate_body([#operation{name = OpName} | Rest], Stack, L, Ctx) ->
+    case translate_op(OpName, Stack, L, Ctx) of
+        {ok, NewStack} -> simulate_body(Rest, NewStack, L, Ctx);
         {error, _} = Err -> Err
     end.
 
 %% Translate a single operation on the expression stack.
 %% Known primitives are translated to direct abstract forms.
-translate_op("dup", [A | Rest], _L) ->
+translate_op("dup", [A | Rest], _L, _Ctx) ->
     {ok, [A, A | Rest]};
-translate_op("drop", [_ | Rest], _L) ->
+translate_op("drop", [_ | Rest], _L, _Ctx) ->
     {ok, Rest};
-translate_op("swap", [A, B | Rest], _L) ->
+translate_op("swap", [A, B | Rest], _L, _Ctx) ->
     {ok, [B, A | Rest]};
-translate_op("rot", [A, B, C | Rest], _L) ->
+translate_op("rot", [A, B, C | Rest], _L, _Ctx) ->
     {ok, [C, A, B | Rest]};
-translate_op("over", [A, B | Rest], _L) ->
+translate_op("over", [A, B | Rest], _L, _Ctx) ->
     {ok, [B, A, B | Rest]};
-translate_op("2dup", [A, B | Rest], _L) ->
+translate_op("2dup", [A, B | Rest], _L, _Ctx) ->
     {ok, [A, B, A, B | Rest]};
 
 %% Arithmetic: consume two expressions, produce one
-translate_op("+", [A, B | Rest], L) ->
+translate_op("+", [A, B | Rest], L, _Ctx) ->
     {ok, [{op, L, '+', B, A} | Rest]};
-translate_op("-", [A, B | Rest], L) ->
+translate_op("-", [A, B | Rest], L, _Ctx) ->
     {ok, [{op, L, '-', B, A} | Rest]};
-translate_op("*", [A, B | Rest], L) ->
+translate_op("*", [A, B | Rest], L, _Ctx) ->
     {ok, [{op, L, '*', B, A} | Rest]};
-translate_op("/", [A, B | Rest], L) ->
+translate_op("/", [A, B | Rest], L, _Ctx) ->
     {ok, [{call, L, {remote, L, {atom, L, erlang}, {atom, L, 'div'}}, [B, A]} | Rest]};
 
 %% Comparison: produce boolean
-translate_op("==", [A, B | Rest], L) ->
+translate_op("==", [A, B | Rest], L, _Ctx) ->
     {ok, [{op, L, '=:=', B, A} | Rest]};
-translate_op("!=", [A, B | Rest], L) ->
+translate_op("!=", [A, B | Rest], L, _Ctx) ->
     {ok, [{op, L, '=/=', B, A} | Rest]};
-translate_op("<", [A, B | Rest], L) ->
+translate_op("<", [A, B | Rest], L, _Ctx) ->
     {ok, [{op, L, '<', B, A} | Rest]};
-translate_op(">", [A, B | Rest], L) ->
+translate_op(">", [A, B | Rest], L, _Ctx) ->
     {ok, [{op, L, '>', B, A} | Rest]};
-translate_op("<=", [A, B | Rest], L) ->
+translate_op("<=", [A, B | Rest], L, _Ctx) ->
     {ok, [{op, L, '=<', B, A} | Rest]};
-translate_op(">=", [A, B | Rest], L) ->
+translate_op(">=", [A, B | Rest], L, _Ctx) ->
     {ok, [{op, L, '>=', B, A} | Rest]};
 
 %% Boolean
-translate_op("not", [A | Rest], L) ->
+translate_op("not", [A | Rest], L, _Ctx) ->
     {ok, [{op, L, 'not', A} | Rest]};
 
-%% Integer literals (tokens that are numbers)
-translate_op(Name, Stack, L) ->
+%% Integer literals and inter-word/cross-module calls
+translate_op(Name, Stack, L, Ctx) ->
     case catch list_to_integer(Name) of
         N when is_integer(N) ->
             {ok, [{integer, L, N} | Stack]};
         _ ->
-            %% Try to find the op in the type system for its sig
-            case find_compilable_op(Name, Stack, L) of
+            case resolve_word_call(Name, Stack, L, Ctx) of
                 {ok, NewStack} -> {ok, NewStack};
                 not_found ->
-                    %% Unknown — generate a call to af_compile:apply_impl
-                    %% which handles dispatch at runtime
-                    {ok, [make_runtime_call(Name, Stack, L) | Stack]}
+                    {error, {unknown_op, Name}}
             end
     end.
 
-%% Try to find a registered operation and generate a call to it.
-%% For now, handle calls to other compiled functions in the same module.
-find_compilable_op(_Name, _Stack, _L) ->
-    %% Future: resolve inter-word calls within the same module
-    not_found.
+%% Resolve a word call: same-module, cross-module native, or error.
+resolve_word_call(Name, Stack, L, #{module := Mod, words := Words}) ->
+    case maps:get(Name, Words, undefined) of
+        {Arity, NumOut} ->
+            %% Same-module call: generate local function call
+            generate_local_call(Name, Arity, NumOut, Stack, L, Mod);
+        undefined ->
+            %% Try cross-module: look for already-compiled native words
+            case find_native_word(Name) of
+                {ok, NativeMod, Arity, NumOut} ->
+                    generate_remote_call(Name, NativeMod, Arity, NumOut, Stack, L);
+                not_found ->
+                    not_found
+            end
+    end;
+resolve_word_call(Name, Stack, L, _NoCtx) ->
+    case find_native_word(Name) of
+        {ok, NativeMod, Arity, NumOut} ->
+            generate_remote_call(Name, NativeMod, Arity, NumOut, Stack, L);
+        not_found ->
+            not_found
+    end.
 
-%% Generate a runtime fallback call for unknown operations.
-make_runtime_call(Name, _Stack, L) ->
-    %% Call af_compile:apply_impl(Name, Stack) as a fallback
-    %% This is a catch-all that preserves correctness
-    {call, L,
-        {remote, L, {atom, L, af_compile}, {atom, L, apply_impl}},
-        [{string, L, Name}, {nil, L}]}.
+%% Generate a local function call (same module).
+generate_local_call(Name, Arity, NumOut, Stack, L, _Mod) ->
+    case length(Stack) >= Arity of
+        true ->
+            {Args, Rest} = lists:split(Arity, Stack),
+            %% Args are TOS-first; function expects them in order
+            CallExpr = {call, L, {atom, L, list_to_atom(Name)}, Args},
+            case NumOut of
+                1 -> {ok, [CallExpr | Rest]};
+                0 -> {ok, Rest};  %% void call — result discarded
+                _ ->
+                    %% Multiple returns: destructure tuple
+                    expand_tuple_result(CallExpr, NumOut, Rest, L)
+            end;
+        false ->
+            not_found
+    end.
+
+%% Generate a remote function call (different module).
+generate_remote_call(Name, NativeMod, Arity, NumOut, Stack, L) ->
+    case length(Stack) >= Arity of
+        true ->
+            {Args, Rest} = lists:split(Arity, Stack),
+            CallExpr = {call, L,
+                {remote, L, {atom, L, NativeMod}, {atom, L, list_to_atom(Name)}},
+                Args},
+            case NumOut of
+                1 -> {ok, [CallExpr | Rest]};
+                0 -> {ok, Rest};
+                _ -> expand_tuple_result(CallExpr, NumOut, Rest, L)
+            end;
+        false ->
+            not_found
+    end.
+
+%% Expand a tuple result into multiple stack entries using element/2.
+expand_tuple_result(CallExpr, NumOut, Rest, L) ->
+    %% Bind result to a variable, then extract elements
+    TmpVar = {var, L, '__Result'},
+    Elements = [{call, L,
+        {remote, L, {atom, L, erlang}, {atom, L, element}},
+        [{integer, L, I}, TmpVar]} || I <- lists:seq(1, NumOut)],
+    %% Use a block expression: begin __Result = Call, ... end
+    BlockExpr = {block, L, [
+        {match, L, TmpVar, CallExpr}
+        | Elements
+    ]},
+    %% Only push the last element as the result (single expression stack entry)
+    %% For multi-return, we'd need to restructure — for now push as tuple
+    {ok, [{call, L, {atom, L, list_to_atom("__tuple_result")}, [BlockExpr]} | Rest]}.
+
+%% Look up a word that has been compiled to a native BEAM module.
+%% Returns {ok, Module, Arity, NumOutputs} | not_found.
+find_native_word(Name) ->
+    AllTypes = af_type:all_types(),
+    find_native_in_types(Name, AllTypes).
+
+find_native_in_types(_Name, []) -> not_found;
+find_native_in_types(Name, [#af_type{ops = Ops} | Rest]) ->
+    case maps:get(Name, Ops, []) of
+        [] -> find_native_in_types(Name, Rest);
+        OpList ->
+            case find_native_op(OpList) of
+                {ok, Mod, Arity, NumOut} -> {ok, Mod, Arity, NumOut};
+                not_found -> find_native_in_types(Name, Rest)
+            end
+    end.
+
+find_native_op([]) -> not_found;
+find_native_op([#operation{source = {native, Mod}, sig_in = SigIn, sig_out = SigOut} | _]) ->
+    {ok, Mod, length(SigIn), length(SigOut)};
+find_native_op([_ | Rest]) ->
+    find_native_op(Rest).
 
 %% Build the return expression from the result expression stack.
 %% If single output, return the expression directly.
@@ -213,6 +296,12 @@ arg_name(1) -> 'X';
 arg_name(2) -> 'Y';
 arg_name(3) -> 'Z';
 arg_name(N) -> list_to_atom("Arg" ++ integer_to_list(N)).
+
+%% Build an index of word names -> {Arity, NumOutputs} for inter-word call resolution.
+build_word_index(WordDefs) ->
+    lists:foldl(fun({Name, SigIn, SigOut, _Body}, Acc) ->
+        maps:put(Name, {length(SigIn), length(SigOut)}, Acc)
+    end, #{}, WordDefs).
 
 %%% Internal
 

@@ -42,8 +42,8 @@ to_stack_item_test_() ->
         {"empty map", fun() ->
             ?assertEqual({'Map', #{}}, af_term:to_stack_item(#{}))
         end},
-        {"tuple becomes list", fun() ->
-            ?assertEqual({'List', [{'Int', 1}, {'Int', 2}]},
+        {"tuple becomes Tuple", fun() ->
+            ?assertEqual({'Tuple', {1, 2}},
                          af_term:to_stack_item({1, 2}))
         end},
         {"pid becomes Actor", fun() ->

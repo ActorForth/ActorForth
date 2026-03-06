@@ -45,12 +45,25 @@ tokenize([$" | Rest], File, Line, Col, Current, Tokens) ->
     Token = #token{value = StringVal, line = Line, column = Col, file = File, quoted = true},
     tokenize(Rest1, File, Line1, Col1, [], [Token | Tokens1]);
 
-%% Self-delimiting punctuation: . : ;
+%% Self-delimiting punctuation: : ;
 tokenize([C | Rest], File, Line, Col, Current, Tokens)
-  when C =:= $.; C =:= $:; C =:= $; ->
+  when C =:= $:; C =:= $; ->
     Tokens1 = emit(Current, File, Line, Col, Tokens),
     PuncToken = #token{value = [C], line = Line, column = Col, file = File},
     tokenize(Rest, File, Line, Col + 1, [], [PuncToken | Tokens1]);
+
+%% Dot: check if it's part of a float literal (digits.digits)
+tokenize([$. | Rest], File, Line, Col, Current, Tokens) ->
+    case is_float_dot(Current, Rest) of
+        true ->
+            %% Part of a float literal — keep accumulating
+            tokenize(Rest, File, Line, Col + 1, Current ++ [{$., Line, Col}], Tokens);
+        false ->
+            %% Self-delimiting punctuation
+            Tokens1 = emit(Current, File, Line, Col, Tokens),
+            PuncToken = #token{value = ".", line = Line, column = Col, file = File},
+            tokenize(Rest, File, Line, Col + 1, [], [PuncToken | Tokens1])
+    end;
 
 %% Regular character
 tokenize([C | Rest], File, Line, Col, [], Tokens) ->
@@ -66,6 +79,22 @@ emit(CharList, File, _Line, _Col, Tokens) ->
     Value = [C || {C, _, _} <- CharList],
     Token = #token{value = Value, line = StartLine, column = StartCol, file = File},
     [Token | Tokens].
+
+%% Check if a dot is part of a float literal: digits before dot AND digit after.
+is_float_dot([], _) -> false;
+is_float_dot(Current, [C | _]) when C >= $0, C =< $9 ->
+    %% Check that all chars before the dot are digits (optionally with leading -)
+    Chars = [Ch || {Ch, _, _} <- Current],
+    all_digits(Chars);
+is_float_dot(_, _) -> false.
+
+all_digits([]) -> false;
+all_digits([$- | Rest]) -> all_digits_strict(Rest);
+all_digits(Chars) -> all_digits_strict(Chars).
+
+all_digits_strict([]) -> false;
+all_digits_strict(Chars) ->
+    lists:all(fun(C) -> C >= $0 andalso C =< $9 end, Chars).
 
 skip_comment([]) -> [];
 skip_comment([$\n | Rest]) -> Rest;

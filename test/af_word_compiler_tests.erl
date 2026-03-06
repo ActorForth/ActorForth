@@ -131,3 +131,34 @@ rot_test() ->
     Def = word_def("myrot", ['Int', 'Int', 'Int'], ['Int', 'Int', 'Int'], ["rot"]),
     {ok, af_wc_test_rot} = af_word_compiler:compile_words_to_module(af_wc_test_rot, [Def]),
     ?assertEqual({3, 1, 2}, af_wc_test_rot:myrot(1, 2, 3)).
+
+%% --- Inter-word call tests ---
+
+inter_word_call_test() ->
+    %% double calls inc: double(X) = inc(inc(X)) where inc(X) = X + 1
+    %% Compile both into same module — double should call inc directly
+    Def1 = word_def("inc", ['Int'], ['Int'], ["1", "+"]),
+    Def2 = word_def("double_inc", ['Int'], ['Int'], ["inc", "inc"]),
+    {ok, af_wc_test_inter} = af_word_compiler:compile_words_to_module(af_wc_test_inter, [Def1, Def2]),
+    ?assertEqual(6, af_wc_test_inter:inc(5)),
+    ?assertEqual(7, af_wc_test_inter:double_inc(5)),
+    ?assertEqual(2, af_wc_test_inter:double_inc(0)).
+
+inter_word_chain_test() ->
+    %% triple(X) = X + X + X = double(X) + X
+    %% body: dup double +  (dup X, call double on TOS, add)
+    Def1 = word_def("double", ['Int'], ['Int'], ["dup", "+"]),
+    Def2 = word_def("triple", ['Int'], ['Int'], ["dup", "double", "+"]),
+    {ok, af_wc_test_chain} = af_word_compiler:compile_words_to_module(af_wc_test_chain, [Def1, Def2]),
+    ?assertEqual(10, af_wc_test_chain:double(5)),
+    ?assertEqual(15, af_wc_test_chain:triple(5)),
+    ?assertEqual(0, af_wc_test_chain:triple(0)).
+
+inter_word_complex_test() ->
+    %% square(X) = X * X, then sum_sq(X, Y) = square(X) + square(Y)
+    Def1 = word_def("square", ['Int'], ['Int'], ["dup", "*"]),
+    Def2 = word_def("sum_sq", ['Int', 'Int'], ['Int'], ["swap", "square", "swap", "square", "+"]),
+    {ok, af_wc_test_complex} = af_word_compiler:compile_words_to_module(af_wc_test_complex, [Def1, Def2]),
+    ?assertEqual(9, af_wc_test_complex:square(3)),
+    ?assertEqual(25, af_wc_test_complex:sum_sq(3, 4)),
+    ?assertEqual(2, af_wc_test_complex:sum_sq(1, 1)).
