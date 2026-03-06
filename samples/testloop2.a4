@@ -4,12 +4,12 @@
 # : testloop2 -> ; start 5 int countdown lcount print loop end.
 
 : count_loop Int -> ;
-    : 0 -> ; drop.
-    dup print 1 int - count_loop.
+    : 0 -> ; drop
+    : Int -> ; dup print 1 - count_loop.
 
 : testloop2 -> ;
     Starting print
-    5 int count_loop
+    5 count_loop
     Ending print.
 
 testloop2

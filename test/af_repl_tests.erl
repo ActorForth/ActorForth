@@ -11,6 +11,7 @@ setup() ->
     af_type_bool:init(),
     af_type_compiler:init(),
     af_type_product:init(),
+    af_type_list:init(),
     af_type_actor:init().
 
 repl_test_() ->

@@ -123,7 +123,7 @@ register_product_type(TypeName, Fields) ->
     %% Constructor: lowercase type name, registered in Any
     ConstructorName = string:lowercase(atom_to_list(TypeName)),
     FieldTypes = [FType || {_, FType} <- Fields],
-    ConstructorSigIn = FieldTypes,
+    ConstructorSigIn = lists:reverse(FieldTypes),
     Constructor = #operation{
         name = ConstructorName,
         sig_in = ConstructorSigIn,

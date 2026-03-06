@@ -18,12 +18,12 @@
 # : testloop -> ; say start say_loop done.
 
 : count_loop Int -> ;
-    : 0 -> ; drop Done print.
-    Looping print dup print 1 int - count_loop.
+    : 0 -> ; drop Done print
+    : Int -> ; Looping print dup print 1 - count_loop.
 
 : testloop -> ;
     say
     Starting print
-    5 int count_loop.
+    5 count_loop.
 
 testloop

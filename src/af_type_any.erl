@@ -67,7 +67,36 @@ init() ->
         name = "types", sig_in = [], sig_out = [],
         impl = fun op_types/1
     }),
+
+    %% assert : Bool ->  (passes silently if true, errors with location if false)
+    af_type:add_op('Any', #operation{
+        name = "assert", sig_in = ['Bool'], sig_out = [],
+        impl = fun op_assert/1
+    }),
+
+    %% assert-eq : Any Any ->  (passes if equal type+value, errors with expected/actual)
+    af_type:add_op('Any', #operation{
+        name = "assert-eq", sig_in = ['Any', 'Any'], sig_out = [],
+        impl = fun op_assert_eq/1
+    }),
+
+    %% debug : -> Debug  (pushes Debug marker, handler intercepts on/off)
+    af_type:register_type(#af_type{name = 'Debug'}),
+    af_type:add_op('Any', #operation{
+        name = "debug", sig_in = [], sig_out = ['Debug'],
+        impl = fun op_debug/1
+    }),
+    af_type:register_type(#af_type{
+        name = 'Debug',
+        ops = get_ops('Debug'),
+        handler = fun handle_debug/2
+    }),
+
     ok.
+
+get_ops(TypeName) ->
+    {ok, #af_type{ops = Ops}} = af_type:get_type(TypeName),
+    Ops.
 
 %%% Operations
 
@@ -129,3 +158,53 @@ op_types(Cont) ->
     Types = [T#af_type.name || T <- af_type:all_types()],
     io:format("Types: ~p~n", [lists:sort(Types)]),
     Cont.
+
+%%% Assert
+
+op_assert(Cont) ->
+    [{'Bool', Val} | Rest] = Cont#continuation.data_stack,
+    case Val of
+        true ->
+            Cont#continuation{data_stack = Rest};
+        false ->
+            Token = Cont#continuation.current_token,
+            case Token of
+                #token{file = File, line = Line, column = Col} ->
+                    error({assertion_failed, File, Line, Col});
+                _ ->
+                    error(assertion_failed)
+            end
+    end.
+
+op_assert_eq(Cont) ->
+    [Expected, Actual | Rest] = Cont#continuation.data_stack,
+    case Expected =:= Actual of
+        true ->
+            Cont#continuation{data_stack = Rest};
+        false ->
+            Token = Cont#continuation.current_token,
+            case Token of
+                #token{file = File, line = Line, column = Col} ->
+                    error({assert_eq_failed, File, Line, Col,
+                           {expected, Expected}, {actual, Actual}});
+                _ ->
+                    error({assert_eq_failed,
+                           {expected, Expected}, {actual, Actual}})
+            end
+    end.
+
+%%% Debug
+
+op_debug(Cont) ->
+    Cont#continuation{
+        data_stack = [{'Debug', #{}} | Cont#continuation.data_stack]
+    }.
+
+handle_debug("on", Cont) ->
+    [{'Debug', _} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = Rest, debug = true};
+handle_debug("off", Cont) ->
+    [{'Debug', _} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = Rest, debug = false};
+handle_debug(Other, _Cont) ->
+    error({debug_expected_on_off, Other}).

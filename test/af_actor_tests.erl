@@ -17,6 +17,7 @@ setup() ->
     af_type_bool:init(),
     af_type_compiler:init(),
     af_type_product:init(),
+    af_type_list:init(),
     af_type_actor:init().
 
 %% --- server spawns actor from type instance ---
@@ -64,33 +65,33 @@ server_test_() ->
         end} end
     ]}.
 
-%% --- << ... . basic messaging ---
+%% --- << ... >> basic messaging ---
 
 messaging_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
-        fun(_) -> {"cast via << word . sends async message", fun() ->
+        fun(_) -> {"cast via << word >> sends async message", fun() ->
             C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
             C2 = eval(": increment Counter -> Counter ; dup value 1 int + value! .", C1),
             C3 = eval(": count Counter -> Counter Int ; dup value .", C2),
             C4 = eval("0 int counter server", C3),
             %% Send increment (cast)
-            C5 = eval("<< increment .", C4),
+            C5 = eval("<< increment >>", C4),
             %% Actor should still be on stack
             [{'Actor', _}] = C5#continuation.data_stack,
             %% Send count (call) to verify the increment worked
-            C6 = eval("<< count .", C5),
+            C6 = eval("<< count >>", C5),
             [{'Int', 1}, {'Actor', _}] = C6#continuation.data_stack,
             %% Clean up
-            eval("<< stop .", C6),
+            eval("<< stop >>", C6),
             ok
         end} end,
-        fun(_) -> {"call via << word . returns values", fun() ->
+        fun(_) -> {"call via << word >> returns values", fun() ->
             C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
             C2 = eval(": count Counter -> Counter Int ; dup value .", C1),
             C3 = eval("0 int counter server", C2),
-            C4 = eval("<< count .", C3),
+            C4 = eval("<< count >>", C3),
             [{'Int', 0}, {'Actor', _}] = C4#continuation.data_stack,
-            eval("<< stop .", C4),
+            eval("<< stop >>", C4),
             ok
         end} end,
         fun(_) -> {"multiple casts in sequence", fun() ->
@@ -98,24 +99,24 @@ messaging_test_() ->
             C2 = eval(": increment Counter -> Counter ; dup value 1 int + value! .", C1),
             C3 = eval(": count Counter -> Counter Int ; dup value .", C2),
             C4 = eval("0 int counter server", C3),
-            C5 = eval("<< increment .", C4),
-            C6 = eval("<< increment .", C5),
-            C7 = eval("<< increment .", C6),
-            C8 = eval("<< count .", C7),
+            C5 = eval("<< increment >>", C4),
+            C6 = eval("<< increment >>", C5),
+            C7 = eval("<< increment >>", C6),
+            C8 = eval("<< count >>", C7),
             [{'Int', 3}, {'Actor', _}] = C8#continuation.data_stack,
-            eval("<< stop .", C8),
+            eval("<< stop >>", C8),
             ok
         end} end,
-        fun(_) -> {"cast with args via << value word .", fun() ->
+        fun(_) -> {"cast with args via << value word >>", fun() ->
             C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
             C2 = eval(": add Counter Int -> Counter ; swap dup value rot + value! .", C1),
             C3 = eval(": count Counter -> Counter Int ; dup value .", C2),
             C4 = eval("0 int counter server", C3),
-            %% << 5 int add . — "5 int" executes locally, "add" dispatches to actor
-            C5 = eval("<< 5 int add .", C4),
-            C6 = eval("<< count .", C5),
+            %% << 5 int add >> — "5 int" executes locally, "add" dispatches to actor
+            C5 = eval("<< 5 int add >>", C4),
+            C6 = eval("<< count >>", C5),
             [{'Int', 5}, {'Actor', _}] = C6#continuation.data_stack,
-            eval("<< stop .", C6),
+            eval("<< stop >>", C6),
             ok
         end} end,
         fun(_) -> {"chained commands in single << block", fun() ->
@@ -124,10 +125,10 @@ messaging_test_() ->
             C3 = eval(": count Counter -> Counter Int ; dup value .", C2),
             C4 = eval("0 int counter server", C3),
             %% Chain: add 5, then add 10, all in one << block
-            C5 = eval("<< 5 int add 10 int add .", C4),
-            C6 = eval("<< count .", C5),
+            C5 = eval("<< 5 int add 10 int add >>", C4),
+            C6 = eval("<< count >>", C5),
             [{'Int', 15}, {'Actor', _}] = C6#continuation.data_stack,
-            eval("<< stop .", C6),
+            eval("<< stop >>", C6),
             ok
         end} end
     ]}.
@@ -141,7 +142,7 @@ stop_test_() ->
             C2 = eval("0 int counter server", C1),
             [{'Actor', #{pid := Pid}}] = C2#continuation.data_stack,
             ?assert(is_process_alive(Pid)),
-            eval("<< stop .", C2),
+            eval("<< stop >>", C2),
             timer:sleep(50),
             ?assertNot(is_process_alive(Pid))
         end} end
@@ -175,10 +176,10 @@ privacy_test_() ->
             %% "dup" inside << should execute locally (on empty local stack → crash)
             %% but "5 int" should work locally, pushing Int(5) to local stack
             %% then "drop" should work locally, removing it
-            C4 = eval("<< 5 int drop count .", C3),
+            C4 = eval("<< 5 int drop count >>", C3),
             %% count returns 0 (actor value unchanged)
             [{'Int', 0}, {'Actor', _}] = C4#continuation.data_stack,
-            eval("<< stop .", C4),
+            eval("<< stop >>", C4),
             ok
         end} end
     ]}.
@@ -197,14 +198,14 @@ kv_store_test_() ->
             C4 = eval(": reset Gauge -> Gauge ; 0 int level! .", C3),
             C5 = eval("0 int gauge server", C4),
             %% Set to 42
-            C6 = eval("<< 42 int set .", C5),
-            C7 = eval("<< get .", C6),
+            C6 = eval("<< 42 int set >>", C5),
+            C7 = eval("<< get >>", C6),
             [{'Int', 42}, {'Actor', _}] = C7#continuation.data_stack,
             %% Reset
-            C8 = eval("drop << reset .", C7),
-            C9 = eval("<< get .", C8),
+            C8 = eval("drop << reset >>", C7),
+            C9 = eval("<< get >>", C8),
             [{'Int', 0}, {'Actor', _}] = C9#continuation.data_stack,
-            eval("<< stop .", C9),
+            eval("<< stop >>", C9),
             ok
         end} end
     ]}.
@@ -219,14 +220,14 @@ event_counter_test_() ->
             C3 = eval(": err Stats -> Stats ; dup errors 1 int + errors! .", C2),
             C4 = eval(": report Stats -> Stats Int Int ; dup dup errors rot hits .", C3),
             C5 = eval("0 int 0 int stats server", C4),
-            C6 = eval("<< hit .", C5),
-            C7 = eval("<< hit .", C6),
-            C8 = eval("<< hit .", C7),
-            C9 = eval("<< err .", C8),
-            C10 = eval("<< report .", C9),
+            C6 = eval("<< hit >>", C5),
+            C7 = eval("<< hit >>", C6),
+            C8 = eval("<< hit >>", C7),
+            C9 = eval("<< err >>", C8),
+            C10 = eval("<< report >>", C9),
             %% report returns hits (TOS) and errors
             [{'Int', 3}, {'Int', 1}, {'Actor', _}] = C10#continuation.data_stack,
-            eval("<< stop .", C10),
+            eval("<< stop >>", C10),
             ok
         end} end
     ]}.

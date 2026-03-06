@@ -1,1 +1,16 @@
-junk 40 int 2 int + print True bool False bool
+# Both forms are legal: literal handler auto-converts, explicit constructor still works.
+
+# Explicit constructors
+40 int 2 int + 42 assert-eq
+
+# Literal handlers (implicit)
+40 2 + 42 assert-eq
+
+# Bool literals
+True bool True assert-eq
+False False assert-eq
+
+# Comparison
+5 3 > assert
+3 5 > not assert
+10 10 == assert

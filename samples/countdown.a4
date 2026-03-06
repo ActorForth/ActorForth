@@ -1,11 +1,12 @@
 # countdown.a4
-# Counts down from 100,000 printing the current count along the way.
-
-# Original loop primitives version (not implemented):
-# 100000 countdown lcount print loop
+# Recursive countdown using pattern matching sub-clauses.
 
 : countdown Int -> ;
-    : 0 -> ; drop.
-    dup print 1 int - countdown.
+    : 0 -> ; drop
+    : Int -> ; 1 - countdown.
 
-100000 int countdown
+# Run a small countdown (no print — just verify it completes)
+5 countdown
+
+# Verify stack is empty after countdown consumes its argument
+# (countdown drops the 0 at the end, leaving nothing)

@@ -12,6 +12,8 @@
 %%   {'InputTypeSignature', Map}
 %%   {'OutputTypeSignature', Map}
 %%   {'CodeCompile', Map}
+%%   {'SubClauseInput', Map}
+%%   {'SubClauseOutput', Map}
 
 init() ->
     %% : (colon) — starts a word definition. Registered in Any so it's always available.
@@ -27,6 +29,8 @@ init() ->
     af_type:register_type(#af_type{name = 'InputTypeSignature'}),
     af_type:register_type(#af_type{name = 'OutputTypeSignature'}),
     af_type:register_type(#af_type{name = 'CodeCompile'}),
+    af_type:register_type(#af_type{name = 'SubClauseInput'}),
+    af_type:register_type(#af_type{name = 'SubClauseOutput'}),
 
     %% -> in InputTypeSignature transitions to OutputTypeSignature
     af_type:add_op('InputTypeSignature', #operation{
@@ -52,6 +56,22 @@ init() ->
         impl = fun op_dot/1
     }),
 
+    %% -> in SubClauseInput transitions to SubClauseOutput
+    af_type:add_op('SubClauseInput', #operation{
+        name = "->",
+        sig_in = ['SubClauseInput'],
+        sig_out = ['SubClauseOutput'],
+        impl = fun op_sub_arrow/1
+    }),
+
+    %% ; in SubClauseOutput transitions back to CodeCompile
+    af_type:add_op('SubClauseOutput', #operation{
+        name = ";",
+        sig_in = ['SubClauseOutput'],
+        sig_out = ['CodeCompile'],
+        impl = fun op_sub_semicolon/1
+    }),
+
     %% Now set handlers on compiler types (must be after ops are registered)
     init_handlers(),
 
@@ -61,14 +81,13 @@ init() ->
 
 %% : — Push WordDefinition state onto stack, changing the dictionary context.
 op_colon(Cont) ->
-    State = #{name => undefined, sig_in => [], sig_out => [], body => []},
+    State = #{name => undefined, sig_in => [], sig_out => [], body => [],
+              clauses => [], current_sub => undefined},
     Cont#continuation{
         data_stack = [{'WordDefinition', State} | Cont#continuation.data_stack]
     }.
 
 %%% Type handlers — called by interpreter when no op matches in the type's dict.
-%%% This is how compiler types intercept tokens: the handler captures them
-%%% instead of the interpreter's default make_atom fallback.
 init_handlers() ->
     af_type:register_type(#af_type{
         name = 'WordDefinition',
@@ -89,6 +108,16 @@ init_handlers() ->
         name = 'CodeCompile',
         ops = get_ops('CodeCompile'),
         handler = fun handle_code_compile/2
+    }),
+    af_type:register_type(#af_type{
+        name = 'SubClauseInput',
+        ops = get_ops('SubClauseInput'),
+        handler = fun handle_sub_clause_input/2
+    }),
+    af_type:register_type(#af_type{
+        name = 'SubClauseOutput',
+        ops = get_ops('SubClauseOutput'),
+        handler = fun handle_sub_clause_output/2
     }).
 
 get_ops(TypeName) ->
@@ -96,9 +125,7 @@ get_ops(TypeName) ->
     Ops.
 
 %% Handler: WordDefinition
-%% If name is undefined, capture this token as the word name and transition
-%% to InputTypeSignature.
-%% If name is set, shouldn't happen (should have transitioned).
+%% Capture token as the word name and transition to InputTypeSignature.
 handle_word_definition(TokenValue, Cont) ->
     [{'WordDefinition', State} | Rest] = Cont#continuation.data_stack,
     NewState = State#{name => TokenValue},
@@ -129,22 +156,98 @@ handle_output_sig(TokenValue, Cont) ->
     }.
 
 %% Handler: CodeCompile
-%% Resolve token to operation reference and append to body
+%% ":" starts a sub-clause; other tokens are compiled as body ops.
+handle_code_compile(":", Cont) ->
+    [{'CodeCompile', State} | Rest] = Cont#continuation.data_stack,
+    #{body := Body, clauses := Clauses, current_sub := CurrentSub} = State,
+    %% Complete any active sub-clause
+    NewClauses = case CurrentSub of
+        undefined -> Clauses;
+        #{sub_sig_in := SSI, sub_sig_out := SSO} ->
+            Clauses ++ [#{sig_in => SSI, sig_out => SSO, body => Body}]
+    end,
+    %% Transition to SubClauseInput
+    SubState = State#{
+        clauses => NewClauses,
+        current_sub => undefined,
+        body => [],
+        sub_sig_in => [],
+        sub_position => 0
+    },
+    Cont#continuation{
+        data_stack = [{'SubClauseInput', SubState} | Rest]
+    };
 handle_code_compile(TokenValue, Cont) ->
     [{'CodeCompile', State} | Rest] = Cont#continuation.data_stack,
-    #{sig_in := SigIn, body := Body} = State,
-    %% Try to resolve the token as an operation
-    %% Build a fake stack based on known input types for resolution
-    Op = resolve_compile_token(TokenValue, SigIn),
+    #{body := Body} = State,
+    %% Compile token as a late-binding thunk
+    Op = resolve_compile_token(TokenValue),
     NewState = State#{body => Body ++ [Op]},
     Cont#continuation{
         data_stack = [{'CodeCompile', NewState} | Rest]
     }.
 
+%% Handler: SubClauseInput
+%% Resolve tokens as either value constraints or type names against master sig.
+handle_sub_clause_input(TokenValue, Cont) ->
+    [{'SubClauseInput', State} | Rest] = Cont#continuation.data_stack,
+    #{sig_in := MasterSigIn, sub_sig_in := SubSigIn, sub_position := Pos} = State,
+    Resolved = resolve_sub_token(TokenValue, MasterSigIn, Pos),
+    NewState = State#{
+        sub_sig_in => SubSigIn ++ [Resolved],
+        sub_position => Pos + 1
+    },
+    Cont#continuation{
+        data_stack = [{'SubClauseInput', NewState} | Rest]
+    }.
+
+%% Handler: SubClauseOutput
+%% Resolve tokens as either value constraints or type names against master sig.
+handle_sub_clause_output(TokenValue, Cont) ->
+    [{'SubClauseOutput', State} | Rest] = Cont#continuation.data_stack,
+    #{sig_out := MasterSigOut, sub_sig_out := SubSigOut, sub_out_position := Pos} = State,
+    Resolved = resolve_sub_token(TokenValue, MasterSigOut, Pos),
+    NewState = State#{
+        sub_sig_out => SubSigOut ++ [Resolved],
+        sub_out_position => Pos + 1
+    },
+    Cont#continuation{
+        data_stack = [{'SubClauseOutput', NewState} | Rest]
+    }.
+
+%% Resolve a sub-clause token against the master signature.
+%% If the token can be parsed as a literal of the master type at this position,
+%% it becomes a value constraint {Type, Value}. Otherwise it's a type name atom.
+resolve_sub_token(TokenValue, MasterSig, Pos) ->
+    case Pos < length(MasterSig) of
+        true ->
+            MasterType = lists:nth(Pos + 1, MasterSig),
+            case try_literal_for_type(TokenValue, MasterType) of
+                {ok, {Type, Value}} -> {Type, Value};
+                not_found -> list_to_atom(TokenValue)
+            end;
+        false ->
+            list_to_atom(TokenValue)
+    end.
+
+%% Try to parse a token as a literal of a specific type using its literal handler.
+try_literal_for_type(TokenValue, TypeName) ->
+    case af_type:find_op_by_name("literal", TypeName) of
+        {ok, #operation{impl = Impl}} ->
+            TempCont = #continuation{data_stack = [{'Atom', TokenValue}]},
+            try
+                ResultCont = Impl(TempCont),
+                [{T, V} | _] = ResultCont#continuation.data_stack,
+                {ok, {T, V}}
+            catch _:_ ->
+                not_found
+            end;
+        not_found ->
+            not_found
+    end.
+
 %% Compile a token as a late-binding thunk.
-%% At runtime, dispatches through the interpreter — handles recursion,
-%% forward references, and unknown words (which become Atoms) correctly.
-resolve_compile_token(TokenValue, _SigIn) ->
+resolve_compile_token(TokenValue) ->
     #operation{
         name = TokenValue,
         sig_in = [],
@@ -169,9 +272,45 @@ op_semicolon(Cont) ->
         data_stack = [{'CodeCompile', State} | Rest]
     }.
 
+%% -> in SubClauseInput: freeze sub_sig_in, transition to SubClauseOutput
+op_sub_arrow(Cont) ->
+    [{'SubClauseInput', State} | Rest] = Cont#continuation.data_stack,
+    NewState = State#{sub_sig_out => [], sub_out_position => 0},
+    Cont#continuation{
+        data_stack = [{'SubClauseOutput', NewState} | Rest]
+    }.
+
+%% ; in SubClauseOutput: transition back to CodeCompile with sub-clause context
+op_sub_semicolon(Cont) ->
+    [{'SubClauseOutput', State} | Rest] = Cont#continuation.data_stack,
+    #{sub_sig_in := SubSigIn, sub_sig_out := SubSigOut} = State,
+    NewState = State#{
+        current_sub => #{sub_sig_in => SubSigIn, sub_sig_out => SubSigOut},
+        body => []
+    },
+    Cont#continuation{
+        data_stack = [{'CodeCompile', NewState} | Rest]
+    }.
+
 %% . — Finish compilation: save the word to the appropriate type dictionary
 op_dot(Cont) ->
     [{'CodeCompile', State} | Rest] = Cont#continuation.data_stack,
+    #{clauses := Clauses, current_sub := CurrentSub, body := Body} = State,
+    case Clauses =:= [] andalso CurrentSub =:= undefined of
+        true ->
+            %% Normal case: single operation, no sub-clauses
+            register_single_word(State, Rest, Cont);
+        false ->
+            %% Multi-clause: complete any active sub-clause and register all
+            AllClauses = case CurrentSub of
+                undefined -> Clauses;
+                #{sub_sig_in := SSI, sub_sig_out := SSO} ->
+                    Clauses ++ [#{sig_in => SSI, sig_out => SSO, body => Body}]
+            end,
+            register_multi_word(State, AllClauses, Rest, Cont)
+    end.
+
+register_single_word(State, Rest, Cont) ->
     #{name := Name, sig_in := SigIn0, sig_out := SigOut0, body := Body} = State,
 
     %% Signatures are accumulated left-to-right (Forth convention: leftmost = deepest).
@@ -179,16 +318,11 @@ op_dot(Cont) ->
     SigIn = lists:reverse(SigIn0),
     SigOut = lists:reverse(SigOut0),
 
-    %% Build the execution function for this compiled word
     Impl = make_word_impl(Body),
 
     %% Register in the TOS type's dict (first element after reversal).
-    TargetType = case SigIn of
-        [FirstType | _] -> FirstType;
-        [] -> 'Any'
-    end,
+    TargetType = get_target_type(SigIn),
 
-    %% Create and register the operation
     NewOp = #operation{
         name = Name,
         sig_in = SigIn,
@@ -196,17 +330,46 @@ op_dot(Cont) ->
         impl = Impl
     },
 
-    %% Ensure target type exists
-    case af_type:get_type(TargetType) of
-        not_found -> af_type:register_type(#af_type{name = TargetType});
-        _ -> ok
-    end,
+    ensure_type(TargetType),
     af_type:add_op(TargetType, NewOp),
 
     Cont#continuation{data_stack = Rest}.
 
+register_multi_word(State, Clauses, Rest, Cont) ->
+    #{name := Name, sig_in := MasterSigIn0} = State,
+    MasterSigIn = lists:reverse(MasterSigIn0),
+    TargetType = get_target_type(MasterSigIn),
+    ensure_type(TargetType),
+
+    %% Register each sub-clause as a separate operation.
+    %% Value-constrained clauses come first (they were added in order),
+    %% general clauses last — match_first_op tries in list order.
+    lists:foreach(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody}) ->
+        CSigIn = lists:reverse(CSigIn0),
+        CSigOut = lists:reverse(CSigOut0),
+        Impl = make_word_impl(CBody),
+        Op = #operation{
+            name = Name,
+            sig_in = CSigIn,
+            sig_out = CSigOut,
+            impl = Impl
+        },
+        af_type:add_op(TargetType, Op)
+    end, Clauses),
+
+    Cont#continuation{data_stack = Rest}.
+
+get_target_type([{Type, _Value} | _]) -> Type;
+get_target_type([Type | _]) when is_atom(Type) -> Type;
+get_target_type([]) -> 'Any'.
+
+ensure_type(TypeName) ->
+    case af_type:get_type(TypeName) of
+        not_found -> af_type:register_type(#af_type{name = TypeName});
+        _ -> ok
+    end.
+
 %% Build an execution function from a compiled word body.
-%% The inner interpreter: fold operations over the continuation.
 make_word_impl(Body) ->
     fun(Cont) ->
         execute_body(Body, Cont)

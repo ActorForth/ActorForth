@@ -11,8 +11,8 @@
 %%   Any type instance can become an actor via 'server'.
 %%   server   — ( TypeInstance -- Actor )  spawn actor from type instance
 %%   <<       — ( Actor -- ActorSend )    enter actor-send mode
-%%   .        — ( ActorSend -- Actor )    finish send block
-%%   stop     — sent via << stop . to terminate actor
+%%   >>       — ( ActorSend -- Actor )    finish send block
+%%   stop     — sent via << stop >> to terminate actor
 %%
 %% Inside << ... . :
 %%   - Non-actor-vocab tokens execute locally on a temp stack
@@ -45,9 +45,9 @@ init() ->
         impl = fun op_send_begin/1
     }),
 
-    %% . in ActorSend: finishes send block
+    %% >> in ActorSend: finishes send block
     af_type:add_op('ActorSend', #operation{
-        name = ".",
+        name = ">>",
         sig_in = ['ActorSend'],
         sig_out = [],
         impl = fun op_send_end/1

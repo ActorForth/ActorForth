@@ -1,0 +1,34 @@
+# counter_actor.a4 - A simple stateful counter actor
+
+type Counter value Int .
+
+: increment Counter -> Counter ;
+    dup value 1 + value!.
+
+: decrement Counter -> Counter ;
+    dup value 1 - value!.
+
+: count Counter -> Counter Int ;
+    dup value.
+
+# Create a counter starting at 0 and make it an actor
+0 counter server
+
+# Increment three times (cast - async, no return value)
+<< increment >>
+<< increment >>
+<< increment >>
+
+# Decrement once
+<< decrement >>
+
+# Get the count (call - sync, waits for reply)
+<< count >> 2 assert-eq
+
+# Increment two more
+<< increment >>
+<< increment >>
+<< count >> 4 assert-eq
+
+# Clean up
+<< stop >> drop

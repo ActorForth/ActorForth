@@ -3,18 +3,38 @@
 -include("token.hrl").
 -include("continuation.hrl").
 
--export([start/0, interpret_line/2]).
+-export([start/0, run_file/1, run_file_repl/1, interpret_line/2]).
 
-start() ->
+init_types() ->
     af_type:init(),
     af_type_any:init(),
     af_type_int:init(),
     af_type_bool:init(),
     af_type_compiler:init(),
     af_type_product:init(),
-    af_type_actor:init(),
+    af_type_list:init(),
+    af_type_actor:init().
+
+start() ->
+    init_types(),
     io:format("ActorForth REPL. ^C to exit.~n"),
     loop(af_interpreter:new_continuation()).
+
+%% Execute a .a4 file and return the final continuation.
+run_file(Filename) ->
+    init_types(),
+    {ok, Content} = file:read_file(Filename),
+    Tokens = af_parser:parse(binary_to_list(Content), Filename),
+    af_interpreter:interpret_tokens(Tokens, af_interpreter:new_continuation()).
+
+%% Execute a .a4 file then enter the REPL with resulting state.
+run_file_repl(Filename) ->
+    init_types(),
+    {ok, Content} = file:read_file(Filename),
+    Tokens = af_parser:parse(binary_to_list(Content), Filename),
+    Cont = af_interpreter:interpret_tokens(Tokens, af_interpreter:new_continuation()),
+    io:format("ActorForth REPL (loaded ~s). ^C to exit.~n", [Filename]),
+    loop(Cont).
 
 loop(Cont) ->
     case io:get_line("ok: ") of

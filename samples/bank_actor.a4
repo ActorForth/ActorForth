@@ -1,0 +1,59 @@
+# bank_actor.a4 - A bank account actor with transaction ledger
+
+type Transaction 
+    kind Atom 
+    amount Int .
+    
+type Account 
+    balance Int 
+    ledger List .
+
+# Helper: build a Transaction from kind and amount already on stack
+: make-tx Atom Int -> Transaction ;
+    transaction.
+
+# Helper: prepend a Transaction onto Account's ledger
+: add-tx Account Transaction -> Account ;
+    swap dup ledger rot cons ledger!.
+
+# Helper: add to Account balance
+: credit Account Int -> Account ;
+    swap dup balance rot + balance!.
+
+# Helper: subtract from Account balance
+: debit Account Int -> Account ;
+    swap dup balance rot - balance!.
+
+: deposit Account Int -> Account ;
+    dup Deposit swap make-tx rot swap add-tx swap credit.
+
+: withdraw Account Int -> Account ;
+    dup Withdrawal swap make-tx rot swap add-tx swap debit.
+
+: get-balance Account -> Account Int ;
+    dup balance.
+
+: get-ledger Account -> Account List ;
+    dup ledger.
+
+: tx-count Account -> Account Int ;
+    dup ledger length.
+
+# Open account with $1000 and empty ledger
+1000 nil account server
+
+# Deposits
+<< 500 deposit >>
+<< 250 deposit >>
+
+# Withdrawal
+<< 100 withdraw >>
+
+# Check balance: 1000 + 500 + 250 - 100 = 1650
+<< get-balance >> 1650 assert-eq
+
+# Check transaction count
+<< tx-count >> 3 assert-eq
+
+# Clean up
+<< stop >> drop

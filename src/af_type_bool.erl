@@ -10,12 +10,28 @@
 init() ->
     af_type:register_type(#af_type{name = 'Bool'}),
 
+    %% Literal handler: try to parse token as boolean
+    af_type:add_op('Bool', #operation{
+        name = "literal",
+        sig_in = ['Atom'],
+        sig_out = ['Bool'],
+        impl = fun op_literal/1
+    }),
+
     %% Constructor: bool (Atom -> Bool) — in Any dict
     af_type:add_op('Any', #operation{
         name = "bool",
         sig_in = ['Atom'],
         sig_out = ['Bool'],
         impl = fun op_bool/1
+    }),
+
+    %% Constructor pass-through: bool (Bool -> Bool) — no-op when already Bool
+    af_type:add_op('Any', #operation{
+        name = "bool",
+        sig_in = ['Bool'],
+        sig_out = ['Bool'],
+        impl = fun op_bool_passthrough/1
     }),
 
     %% not: Bool -> Bool
@@ -42,6 +58,17 @@ init() ->
 
 %%% Operations
 
+op_literal(Cont) ->
+    [{'Atom', Value} | Rest] = Cont#continuation.data_stack,
+    BoolVal = case Value of
+        "True"  -> true;
+        "true"  -> true;
+        "False" -> false;
+        "false" -> false;
+        _ -> error({not_a_bool, Value})
+    end,
+    Cont#continuation{data_stack = [{'Bool', BoolVal} | Rest]}.
+
 op_bool(Cont) ->
     [{'Atom', Value} | Rest] = Cont#continuation.data_stack,
     BoolVal = case Value of
@@ -52,6 +79,8 @@ op_bool(Cont) ->
         _ -> error({type_error, {cannot_convert_to_bool, Value}})
     end,
     Cont#continuation{data_stack = [{'Bool', BoolVal} | Rest]}.
+
+op_bool_passthrough(Cont) -> Cont.
 
 op_not(Cont) ->
     [{'Bool', V} | Rest] = Cont#continuation.data_stack,
