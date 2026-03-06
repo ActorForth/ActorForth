@@ -1,0 +1,29 @@
+# bridge_counter.a4 - Counter for use with af_server bridge
+#
+# Usage from Erlang:
+#   {ok, Pid} = af_server:start_link("samples/bridge_counter.a4"),
+#   af_server:cast(Pid, "increment", []),
+#   {ok, [1]} = af_server:call(Pid, "count", []),
+#   af_server:call(Pid, "add", [10]),
+#   {ok, [11]} = af_server:call(Pid, "count", []),
+#   af_server:stop(Pid).
+
+type Counter
+    value Int .
+
+: increment Counter -> Counter ;
+    dup value 1 + value!.
+
+: decrement Counter -> Counter ;
+    dup value 1 - value!.
+
+: count Counter -> Counter Int ;
+    dup value.
+
+: add Counter Int -> Counter ;
+    swap dup value rot + value!.
+
+: reset Counter -> Counter ;
+    0 value!.
+
+0 counter

@@ -1,0 +1,30 @@
+# string_demo.a4 - String type demonstration
+
+# Quoted strings become String values automatically
+"hello" " " "world" concat concat
+dup length 11 assert-eq
+"hello world" assert-eq
+
+# Explicit constructor from Atom
+hello string "hello" assert-eq
+
+# Conversion: String -> Int
+"42" to-int 42 assert-eq
+
+# Conversion: Int -> String
+42 to-string "42" assert-eq
+
+# Roundtrip: Int -> String -> Int
+123 to-string to-int 123 assert-eq
+
+# Empty string
+"" length 0 assert-eq
+
+# String in product types
+type Greeting
+    message String
+    count Int .
+
+"Hello!" 3 greeting
+dup message "Hello!" assert-eq
+count 3 assert-eq

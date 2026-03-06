@@ -42,7 +42,7 @@ tokenize([$# | Rest], File, Line, Col, Current, Tokens) ->
 tokenize([$" | Rest], File, Line, Col, Current, Tokens) ->
     Tokens1 = emit(Current, File, Line, Col, Tokens),
     {StringVal, Rest1, Line1, Col1} = read_string(Rest, File, Line, Col + 1, []),
-    Token = #token{value = StringVal, line = Line, column = Col, file = File},
+    Token = #token{value = StringVal, line = Line, column = Col, file = File, quoted = true},
     tokenize(Rest1, File, Line1, Col1, [], [Token | Tokens1]);
 
 %% Self-delimiting punctuation: . : ;

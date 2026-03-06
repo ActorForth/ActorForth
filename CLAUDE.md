@@ -36,8 +36,8 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 
 ### Source Files
 
-- **`include/token.hrl`** — `#token{}` record (value, line, column, file)
-- **`include/continuation.hrl`** — `#continuation{}` record (data_stack, return_stack, current_token)
+- **`include/token.hrl`** — `#token{}` record (value, line, column, file, quoted)
+- **`include/continuation.hrl`** — `#continuation{}` record (data_stack, return_stack, current_token, debug, word_trace)
 - **`include/operation.hrl`** — `#operation{}` record (name, sig_in, sig_out, impl, source)
 - **`include/af_type.hrl`** — `#af_type{}` record (name, ops map, handler)
 - **`src/af_type.erl`** — ETS-backed type registry. `find_op/2`, `find_op_in_tos/2`, `find_op_in_any/2`, `find_op_by_name/2`, `match_sig/2`. Central to everything.
@@ -48,8 +48,15 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - **`src/af_type_any.erl`** — Global ops: `dup`, `drop`, `swap`, `2dup`, `print`, `stack`, `words`, `types`
 - **`src/af_type_compiler.erl`** — Word definition compiler. `: name Types -> Types ; body .` Compiled word bodies use late binding (dispatch through interpreter at runtime).
 - **`src/af_type_product.erl`** — Product type definition. `type Point x Int y Int .` Auto-generates constructor (`point`), getters (`x`, `y`), and setters (`x!`, `y!`). Product instances are `{TypeName, #{field => {Type, Val}}}`.
-- **`src/af_type_actor.erl`** — Actor primitives mapped to Erlang processes. `spawn` (Atom->Actor), `self` (->Actor), `send`/`!` (Any Actor->), `receive` (->Any). Each actor has its own continuation; messages are typed stack items.
-- **`src/af_repl.erl`** — Interactive REPL. Wraps interpreter with I/O.
+- **`src/af_type_string.erl`** — String type wrapping Erlang binaries. Quoted strings auto-convert. `concat`, `length`, `to-atom`, `to-int`, `to-string`.
+- **`src/af_type_map.erl`** — Map type wrapping Erlang maps. `map-new`, `map-put`, `map-get`, `map-delete`, `map-has?`, `map-keys`, `map-values`, `map-size`.
+- **`src/af_type_list.erl`** — List type wrapping Erlang cons cells. `nil`, `cons`, `length`, `head`, `tail`.
+- **`src/af_type_actor.erl`** — Actor model: `server` (type instance -> Actor), `<<`/`>>` send protocol, cast/call auto-classification, state privacy via vocab filtering.
+- **`src/af_server.erl`** — gen_server bridge: wraps ActorForth interpreter as OTP citizen. `start_link`, `call`, `cast`, `eval`, `stop`. Term conversion at boundaries.
+- **`src/af_term.erl`** — Bidirectional Erlang <-> ActorForth term conversion. `to_stack_item/1`, `from_stack_item/1`.
+- **`src/af_error.erl`** — Structured error records with location, word trace, stack snapshot. `raise/3`, `format/1`.
+- **`include/af_error.hrl`** — `#af_error{}` record (type, message, token, stack, word_trace)
+- **`src/af_repl.erl`** — Interactive REPL. Wraps interpreter with I/O. Pretty-prints structured errors.
 - **`src/stack.erl`** — Generic typed stack operations.
 
 ### Key Conventions

@@ -318,7 +318,7 @@ register_single_word(State, Rest, Cont) ->
     SigIn = lists:reverse(SigIn0),
     SigOut = lists:reverse(SigOut0),
 
-    Impl = make_word_impl(Body),
+    Impl = make_word_impl(Body, Name),
 
     %% Register in the TOS type's dict (first element after reversal).
     TargetType = get_target_type(SigIn),
@@ -347,7 +347,7 @@ register_multi_word(State, Clauses, Rest, Cont) ->
     lists:foreach(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody}) ->
         CSigIn = lists:reverse(CSigIn0),
         CSigOut = lists:reverse(CSigOut0),
-        Impl = make_word_impl(CBody),
+        Impl = make_word_impl(CBody, Name),
         Op = #operation{
             name = Name,
             sig_in = CSigIn,
@@ -370,9 +370,19 @@ ensure_type(TypeName) ->
     end.
 
 %% Build an execution function from a compiled word body.
-make_word_impl(Body) ->
+make_word_impl(Body, WordName) ->
     fun(Cont) ->
-        execute_body(Body, Cont)
+        Cont1 = case WordName of
+            undefined -> Cont;
+            _ ->
+                Frame = {WordName, Cont#continuation.current_token},
+                Cont#continuation{word_trace = [Frame | Cont#continuation.word_trace]}
+        end,
+        ResultCont = execute_body(Body, Cont1),
+        case WordName of
+            undefined -> ResultCont;
+            _ -> ResultCont#continuation{word_trace = tl(ResultCont#continuation.word_trace)}
+        end
     end.
 
 execute_body([], Cont) -> Cont;

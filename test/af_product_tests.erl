@@ -16,7 +16,8 @@ setup() ->
     af_type_int:init(),
     af_type_bool:init(),
     af_type_compiler:init(),
-    af_type_product:init().
+    af_type_product:init(),
+    af_type_string:init().
 
 product_type_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [

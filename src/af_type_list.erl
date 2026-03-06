@@ -4,6 +4,7 @@
 -include("operation.hrl").
 -include("continuation.hrl").
 -include("af_type.hrl").
+-include("af_error.hrl").
 
 -export([init/0]).
 
@@ -67,9 +68,15 @@ op_length(Cont) ->
     Cont#continuation{data_stack = [{'Int', length(Items)} | Rest]}.
 
 op_head(Cont) ->
-    [{'List', [H | _]} | Rest] = Cont#continuation.data_stack,
-    Cont#continuation{data_stack = [H | Rest]}.
+    [{'List', Items} | Rest] = Cont#continuation.data_stack,
+    case Items of
+        [H | _] -> Cont#continuation{data_stack = [H | Rest]};
+        [] -> af_error:raise(empty_list, "head on empty list", Cont)
+    end.
 
 op_tail(Cont) ->
-    [{'List', [_ | T]} | Rest] = Cont#continuation.data_stack,
-    Cont#continuation{data_stack = [{'List', T} | Rest]}.
+    [{'List', Items} | Rest] = Cont#continuation.data_stack,
+    case Items of
+        [_ | T] -> Cont#continuation{data_stack = [{'List', T} | Rest]};
+        [] -> af_error:raise(empty_list, "tail on empty list", Cont)
+    end.

@@ -4,6 +4,7 @@
 -include("operation.hrl").
 -include("continuation.hrl").
 -include("af_type.hrl").
+-include("af_error.hrl").
 
 -export([init/0]).
 
@@ -167,13 +168,8 @@ op_assert(Cont) ->
         true ->
             Cont#continuation{data_stack = Rest};
         false ->
-            Token = Cont#continuation.current_token,
-            case Token of
-                #token{file = File, line = Line, column = Col} ->
-                    error({assertion_failed, File, Line, Col});
-                _ ->
-                    error(assertion_failed)
-            end
+            Msg = "Assertion failed: expected True on stack",
+            af_error:raise(assertion_failed, Msg, Cont)
     end.
 
 op_assert_eq(Cont) ->
@@ -182,15 +178,11 @@ op_assert_eq(Cont) ->
         true ->
             Cont#continuation{data_stack = Rest};
         false ->
-            Token = Cont#continuation.current_token,
-            case Token of
-                #token{file = File, line = Line, column = Col} ->
-                    error({assert_eq_failed, File, Line, Col,
-                           {expected, Expected}, {actual, Actual}});
-                _ ->
-                    error({assert_eq_failed,
-                           {expected, Expected}, {actual, Actual}})
-            end
+            Msg = lists:flatten(io_lib:format(
+                "Expected ~s but got ~s",
+                [af_error:format_value(Expected), af_error:format_value(Actual)]
+            )),
+            af_error:raise(assert_eq_failed, Msg, Cont)
     end.
 
 %%% Debug

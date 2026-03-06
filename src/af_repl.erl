@@ -2,8 +2,9 @@
 
 -include("token.hrl").
 -include("continuation.hrl").
+-include("af_error.hrl").
 
--export([start/0, run_file/1, run_file_repl/1, interpret_line/2]).
+-export([start/0, run_file/1, run_file_repl/1, interpret_line/2, init_types/0]).
 
 init_types() ->
     af_type:init(),
@@ -12,6 +13,8 @@ init_types() ->
     af_type_bool:init(),
     af_type_compiler:init(),
     af_type_product:init(),
+    af_type_string:init(),
+    af_type_map:init(),
     af_type_list:init(),
     af_type_actor:init().
 
@@ -44,6 +47,9 @@ loop(Cont) ->
             io:format("Error: ~p~n", [Reason]);
         Line ->
             case catch interpret_line(Line, Cont) of
+                {'EXIT', {#af_error{} = Err, _Stacktrace}} ->
+                    io:format("~s~n", [af_error:format(Err)]),
+                    loop(Cont);
                 {'EXIT', Reason} ->
                     io:format("Error: ~p~n", [Reason]),
                     loop(Cont);
