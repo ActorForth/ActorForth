@@ -1522,21 +1522,141 @@ ok: "/my/project/ebin" save-module
 ok: fib "./fib_app" build-escript
 ```
 
+### Inter-Word Compilation
+
+When `compile-all` compiles multiple words into the same module, calls between words become direct BEAM function calls — no interpreter dispatch overhead:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: : quadruple Int -> Int ; double double .
+ok: af_math compile-all
+# quadruple calls double directly as a native BEAM call
+```
+
+### OTP Application Packaging
+
+`build-release` creates a proper OTP application directory structure:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double af_math compile-to-beam
+ok: af_math "1.0.0" "/my/releases" build-release
+# Creates /my/releases/af_math-1.0.0/ebin/ with .app and .beam files
+```
+
+### OTP Behaviour Generation
+
+`gen-server-module` compiles an ActorForth product type and its words into a proper gen_server module:
+
+```
+ok: type Counter value Int .
+ok: : increment Counter -> Counter ; value 1 + value! .
+ok: : count Counter -> Counter Int ; value .
+ok: af_counter Counter gen-server-module
+
+# Now af_counter is a gen_server module:
+# gen_server:start_link(af_counter, InitState, [])
+# gen_server:cast(Pid, increment)
+# gen_server:call(Pid, count) => {ok, 3}
+```
+
+The generated module can be placed in any OTP supervision tree.
+
 ### Limitations
 
-- Only words built from known primitives (`dup`, `drop`, `swap`, `+`, `-`, `*`, `/`, integer literals) compile to pure native BEAM code.
-- Words calling other user-defined words or unknown operations fall back to runtime dispatch — the ActorForth runtime must be present.
+- Words calling other user-defined words within the same module compile to direct native calls. Cross-module calls to already-compiled native words are also resolved.
+- Words using operations that aren't known primitives fall back to runtime dispatch — the ActorForth runtime must be present.
 - Zero-argument words (like `: answer -> Int ; 42 .`) auto-execute when their name appears, so you can't push their name as an Atom for `compile-to-beam`. Use the Erlang API (`af_word_compiler:compile_words_to_module/2`) for those.
 
 
-## Chapter 22: The Road Ahead
+## Chapter 22: Full BEAM Interoperability
 
-The compilation pipeline is functional: define words in the REPL, compile to BEAM, save modules, build standalone executables. But it currently handles a subset of operations natively — complex word bodies still require the ActorForth runtime.
+ActorForth is a first-class BEAM language. Here's the full interoperability picture.
 
-The next steps:
-- **Broader compilation coverage**: Compile words that call other compiled words, producing fully native call chains without runtime dispatch.
+### Calling Erlang/Elixir from ActorForth
+
+The `erlang-call` word provides natural FFI — push arguments, then module, function, and arity:
+
+```
+ok: -5 int erlang abs 1 int erlang-call
+ok: stack
+0) 5 : Int
+
+ok: 3 int 7 int erlang max 2 int erlang-call
+ok: stack
+0) 7 : Int
+```
+
+For Elixir modules (they're atoms like `'Elixir.String'`):
+
+```
+ok: "hello" Elixir.String upcase 1 int erlang-call
+```
+
+### Calling ActorForth from Erlang/Elixir
+
+Compiled words are standard BEAM functions:
+
+```erlang
+%% From Erlang
+af_math:double(5).        %% => 10
+af_math:square(7).        %% => 49
+
+%% From Elixir
+AfMath.double(5)           # => 10
+```
+
+### OTP Integration
+
+Generated gen_server modules work in any supervision tree:
+
+```erlang
+%% Start the ActorForth-compiled gen_server
+{ok, Pid} = gen_server:start_link(af_counter, InitState, []),
+gen_server:cast(Pid, increment),
+{ok, Count} = gen_server:call(Pid, count).
+```
+
+### Build Integration
+
+The rebar3 plugin compiles `.a4` files automatically:
+
+```erlang
+%% rebar.config
+{plugins, [rebar3_actorforth]}.
+```
+
+Or compile programmatically:
+
+```erlang
+af_compile_file:compile("src/math.a4").
+af_compile_file:compile_to_dir("src/math.a4", "ebin/").
+```
+
+### Type Bridging
+
+`af_term` handles bidirectional conversion at all boundaries:
+
+| Erlang | ActorForth |
+|--------|-----------|
+| `42` | `{Int, 42}` |
+| `3.14` | `{Float, 3.14}` |
+| `true` | `{Bool, true}` |
+| `<<"hello">>` | `{String, <<"hello">>}` |
+| `foo` | `{Atom, "foo"}` |
+| `{ok, 42}` | `{Tuple, {ok, 42}}` |
+| `[1, 2]` | `{List, [{Int,1}, {Int,2}]}` |
+| `#{k => v}` | `{Map, ...}` |
+
+
+## Chapter 23: The Road Ahead
+
+ActorForth now has the full compilation pipeline, OTP integration, and BEAM interoperability needed to be a practical BEAM language. The remaining steps:
+
 - **Core Erlang target**: Generate Core Erlang instead of abstract forms for more control over optimization.
 - **Self-hosting**: Write the ActorForth compiler, type system, and BEAM assembler in ActorForth itself. The TOS-driven dictionary mechanism makes this possible — a compiler is just types for emitting code, using the same interpreter that runs user programs.
+- **Mix integration**: A Mix task for Elixir projects using ActorForth modules.
+- **Protocol support**: Let ActorForth types implement Elixir protocols and OTP behaviours beyond gen_server.
 
 ---
 
@@ -1627,13 +1747,41 @@ The next steps:
 | `map-values` | Map | `( Map -- List )` | All values as list |
 | `map-size` | Map | `( Map -- Int )` | Count of entries |
 
+### Float Operations
+
+| Word | Dict | Effect | Description |
+|------|------|--------|-------------|
+| `3.14` | — | `( -- Float )` | Float literal (auto-detected) |
+| `float` | Any | `( Atom -- Float )` | Parse text as float |
+| `to-float` | Int | `( Int -- Float )` | Convert Int to Float |
+| `to-int` | Float | `( Float -- Int )` | Truncate Float to Int |
+| `+` `-` `*` `/` | Float | `( Float Float -- Float )` | Arithmetic |
+
+Mixed Float/Int arithmetic is supported (e.g., `5.5 2 int +` → `7.5`).
+
+### Tuple Operations
+
+| Word | Dict | Effect | Description |
+|------|------|--------|-------------|
+| `make-tuple` | Any | `( a... Int -- Tuple )` | Build tuple from N stack items |
+| `to-tuple` | List | `( List -- Tuple )` | Convert list to tuple |
+| `from-tuple` | Tuple | `( Tuple -- List )` | Convert tuple to list |
+| `tuple-get` | Any | `( Int Tuple -- Any )` | Get element at 1-based index |
+| `tuple-size` | Tuple | `( Tuple -- Int )` | Number of elements |
+| `ok-tuple` | Any | `( Any -- Tuple )` | Create `{ok, Value}` |
+| `error-tuple` | Any | `( Any -- Tuple )` | Create `{error, Reason}` |
+| `is-ok` | Tuple | `( Tuple -- Bool )` | Check if starts with ok |
+| `unwrap-ok` | Tuple | `( Tuple -- Any )` | Extract value from `{ok, V}` |
+
 ### Constructors (Any dictionary)
 
 | Word | Effect | Description |
 |------|--------|-------------|
 | `int` | `( Atom -- Int )` | Parse text as integer |
 | `bool` | `( Atom -- Bool )` | Parse "True"/"False" as boolean |
+| `float` | `( Atom -- Float )` | Parse text as float |
 | `42` | `( -- Int )` | Literal handler (no explicit constructor needed) |
+| `3.14` | `( -- Float )` | Literal handler (no explicit constructor needed) |
 | `True` / `False` | `( -- Bool )` | Literal handler (no explicit constructor needed) |
 
 ### Word Definition
@@ -1688,6 +1836,9 @@ Auto-generates: constructor (`typename`), non-destructive getters (`field1`, `fi
 |------|--------|-------------|
 | `erlang-apply0` | `( Atom Atom -- Any )` | Call Module:Function() |
 | `erlang-apply` | `( Atom Atom List -- Any )` | Call Module:Function(Args...) |
+| `erlang-call` | `( Any... Atom Atom Int -- Any )` | Call Module:Function with N stack args |
+| `erlang-call0` | `( Atom Atom -- Any )` | Call Module:Function() (shorthand) |
+| `erlang-new` | `( Atom -- Tuple )` | Call Module:new() |
 
 ### Native Compilation (Any dictionary)
 
@@ -1697,6 +1848,9 @@ Auto-generates: constructor (`typename`), non-destructive getters (`field1`, `fi
 | `compile-all` | `( Atom -- Atom )` | Compile all user words to one module |
 | `save-module` | `( String Atom -- )` | Write .beam file to directory |
 | `build-escript` | `( Atom String -- )` | Build standalone executable |
+| `build-app` | `( String Atom -- )` | Generate .app file for module |
+| `build-release` | `( String String Atom -- )` | Create OTP app directory structure |
+| `gen-server-module` | `( Atom Atom -- Atom )` | Compile type to gen_server module |
 
 ### Special Tokens
 
