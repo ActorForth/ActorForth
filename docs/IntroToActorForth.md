@@ -1361,11 +1361,182 @@ The assembler builds Erlang abstract forms — the same format `compile:forms/2`
 This demonstrates the core principle: **the types on the stack determine what tokens mean.** When a `BeamFunction` is on the stack, `beam-arg` adds an argument reference. When a `BeamModule` is on the stack, `beam-compile` triggers compilation. The outer interpreter doesn't change — it's the same five-step dispatch driving everything.
 
 
-## Chapter 20: The Road Ahead
+## Chapter 20: Introspection with `see`
 
-The BEAM assembler is a proof of concept. The next step is compiling ActorForth word definitions directly to BEAM modules — taking the word body, inferring types, and emitting the equivalent abstract forms automatically. Combined with the compile-time type checker, this would give ActorForth words the full performance of native BEAM functions.
+The `see` word lets you inspect any word's definition — its type signature, body, and which type dictionary it lives in.
 
-The ultimate goal remains: a fully self-hosting ActorForth where the compiler, the type system, and the BEAM assembler are all written in ActorForth itself. The TOS-driven dictionary mechanism makes this possible — a compiler is just types for emitting code, using the same interpreter that runs user programs.
+### Viewing Built-in Words
+
+```
+ok: dup see
+  : dup Any -> Any Any ;  [built-in]
+    in type: 'Any'
+```
+
+### Viewing Compiled Words
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double see
+  : double Int -> Int ; dup + .
+    in type: 'Int'
+```
+
+For compiled words, `see` shows the body tokens — the same words you wrote in the definition.
+
+### Multiple Implementations
+
+Some words have different implementations across type dictionaries. `see` shows all of them:
+
+```
+ok: int see
+  : int Atom -> Int ;  [built-in]
+    in type: 'Any'
+  : int Atom(0) -> Int ;  [built-in]
+    in type: 'Any'
+```
+
+The `int` constructor has two signatures: a general one for any Atom, and a specialized one matching the literal `0`. When you type `0 int`, the value-constrained signature matches first.
+
+### Native Wrappers
+
+After compiling a word to native BEAM (see next chapter), `see` shows the native module:
+
+```
+ok: double see
+  : double Int -> Int ;  [native: af_ctb_wrap]
+    in type: 'Int'
+```
+
+
+## Chapter 21: Compiling to Native BEAM
+
+ActorForth can compile word definitions into native BEAM modules — producing real Erlang-callable functions with full performance. This bridges the gap between the interpreted stack language and the BEAM runtime.
+
+### The Workflow
+
+Define a word, compile it, use it — all from the REPL:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: 5 int double
+ok: stack
+0) 10 : Int
+
+# Compile to a BEAM module
+ok: double af_math compile-to-beam
+ok: stack
+0) af_math : Atom
+
+# The word still works — now via native code
+ok: 7 int double
+ok: stack
+0) 14 : Int
+1) af_math : Atom
+
+# Also callable from Erlang:
+# af_math:double(5) => 10
+```
+
+### What Happens
+
+`compile-to-beam` does three things:
+
+1. **Translates** the word body into Erlang abstract forms. Stack operations (`dup`, `swap`, `drop`) become expression manipulations. Arithmetic (`+`, `-`, `*`, `/`) becomes Erlang operators. Integer literals become constants.
+
+2. **Compiles** the abstract forms into a BEAM module using `compile:forms/2`, then loads it with `code:load_binary/3`.
+
+3. **Replaces** the interpreted word with a **transparent native wrapper**. The wrapper unwraps `{Type, Value}` tagged items from the ActorForth stack, calls the native BEAM function, and re-wraps the results. ActorForth code using the word doesn't notice any change.
+
+### Batch Compilation with `compile-all`
+
+When you have multiple words, `compile-all` compiles them all into a single module:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: : square Int -> Int ; dup * .
+ok: : inc Int -> Int ; 1 + .
+ok: af_math compile-all
+ok: stack
+0) af_math : Atom
+
+# All three functions are now native
+ok: 5 int double
+ok: stack
+0) 10 : Int
+1) af_math : Atom
+```
+
+From Erlang: `af_math:double(5)`, `af_math:square(7)`, `af_math:inc(3)`.
+
+### Saving Modules to Disk
+
+`save-module` writes the compiled BEAM binary to a directory:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double af_math compile-to-beam
+ok: "/path/to/ebin" save-module
+```
+
+The resulting `af_math.beam` file can be added to any Erlang/Elixir project's code path.
+
+### Building Standalone Applications
+
+`build-escript` creates a self-contained executable from a compiled module:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double af_math compile-to-beam
+ok: double "./my_app" build-escript
+```
+
+The escript bundles the compiled module with a generated `main/1` entry point. Run it from the command line:
+
+```bash
+$ ./my_app
+# Calls af_math:double() or the specified entry point
+```
+
+### Complete REPL-to-Executable Example
+
+```
+# 1. Define your words
+ok: : fib Int -> Int ;
+    : 0 -> 0 ;
+    : 1 -> 1 ;
+    : Int -> Int ; dup 1 - fib swap 2 - fib + .
+
+# 2. Test interactively
+ok: 10 int fib
+ok: stack
+0) 55 : Int
+
+# 3. Compile to native BEAM
+ok: fib af_fib compile-to-beam
+
+# 4. Save the module
+ok: "/my/project/ebin" save-module
+
+# 5. Or build a standalone executable
+ok: fib "./fib_app" build-escript
+```
+
+### Limitations
+
+- Only words built from known primitives (`dup`, `drop`, `swap`, `+`, `-`, `*`, `/`, integer literals) compile to pure native BEAM code.
+- Words calling other user-defined words or unknown operations fall back to runtime dispatch — the ActorForth runtime must be present.
+- Zero-argument words (like `: answer -> Int ; 42 .`) auto-execute when their name appears, so you can't push their name as an Atom for `compile-to-beam`. Use the Erlang API (`af_word_compiler:compile_words_to_module/2`) for those.
+
+
+## Chapter 22: The Road Ahead
+
+The compilation pipeline is functional: define words in the REPL, compile to BEAM, save modules, build standalone executables. But it currently handles a subset of operations natively — complex word bodies still require the ActorForth runtime.
+
+The next steps:
+- **Broader compilation coverage**: Compile words that call other compiled words, producing fully native call chains without runtime dispatch.
+- **Core Erlang target**: Generate Core Erlang instead of abstract forms for more control over optimization.
+- **Self-hosting**: Write the ActorForth compiler, type system, and BEAM assembler in ActorForth itself. The TOS-driven dictionary mechanism makes this possible — a compiler is just types for emitting code, using the same interpreter that runs user programs.
 
 ---
 
@@ -1385,6 +1556,7 @@ The ultimate goal remains: a fully self-hosting ActorForth where the compiler, t
 | `stack` | `( -- )` | Display entire stack |
 | `words` | `( -- )` | List all operations |
 | `types` | `( -- )` | List all types |
+| `see` | `( Atom -- )` | Show word definition and signatures |
 | `load` | `( String -- )` | Load and interpret a .a4 file |
 
 ### Arithmetic (Int dictionary)
@@ -1516,6 +1688,15 @@ Auto-generates: constructor (`typename`), non-destructive getters (`field1`, `fi
 |------|--------|-------------|
 | `erlang-apply0` | `( Atom Atom -- Any )` | Call Module:Function() |
 | `erlang-apply` | `( Atom Atom List -- Any )` | Call Module:Function(Args...) |
+
+### Native Compilation (Any dictionary)
+
+| Word | Effect | Description |
+|------|--------|-------------|
+| `compile-to-beam` | `( Atom Atom -- Atom )` | Compile word to BEAM module |
+| `compile-all` | `( Atom -- Atom )` | Compile all user words to one module |
+| `save-module` | `( String Atom -- )` | Write .beam file to directory |
+| `build-escript` | `( Atom String -- )` | Build standalone executable |
 
 ### Special Tokens
 
