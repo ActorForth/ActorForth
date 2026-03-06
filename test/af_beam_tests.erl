@@ -236,3 +236,33 @@ build_escript_test_() ->
             file:delete(TmpFile)
         end} end
     ]}.
+
+%% --- build-release ---
+
+build_release_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"build-release creates OTP app structure", fun() ->
+            C1 = eval(": double Int -> Int ; dup + .", af_interpreter:new_continuation()),
+            C2 = eval("double af_rel_test compile-to-beam", C1),
+            TmpDir = "/tmp/af_rel_test_" ++ integer_to_list(erlang:unique_integer([positive])),
+            C3 = eval("af_rel_test \"1.0.0\" \"" ++ TmpDir ++ "\" build-release", C2),
+            [{'Atom', "af_rel_test"}] = C3#continuation.data_stack,
+            %% Verify structure
+            EbinDir = filename:join([TmpDir, "af_rel_test-1.0.0", "ebin"]),
+            AppFile = filename:join(EbinDir, "af_rel_test.app"),
+            BeamFile = filename:join(EbinDir, "af_rel_test.beam"),
+            ?assert(filelib:is_regular(AppFile)),
+            ?assert(filelib:is_regular(BeamFile)),
+            %% Verify .app contents
+            {ok, [AppSpec]} = file:consult(AppFile),
+            {application, af_rel_test, Props} = AppSpec,
+            ?assertEqual("1.0.0", proplists:get_value(vsn, Props)),
+            ?assertEqual([af_rel_test], proplists:get_value(modules, Props)),
+            %% Cleanup
+            file:delete(BeamFile),
+            file:delete(AppFile),
+            file:del_dir(EbinDir),
+            file:del_dir(filename:join(TmpDir, "af_rel_test-1.0.0")),
+            file:del_dir(TmpDir)
+        end} end
+    ]}.

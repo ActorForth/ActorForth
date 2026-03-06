@@ -136,6 +136,24 @@ init() ->
         impl = fun op_build_escript/1
     }),
 
+    %% build-app: ( String(vsn) Atom(mod_name) -- )
+    %% Generate an OTP .app file for a compiled module.
+    af_type:add_op('Any', #operation{
+        name = "build-app",
+        sig_in = ['String', 'Atom'],
+        sig_out = [],
+        impl = fun op_build_app/1
+    }),
+
+    %% build-release: ( String(dir) String(vsn) Atom(app_name) -- )
+    %% Create a full OTP release structure.
+    af_type:add_op('Any', #operation{
+        name = "build-release",
+        sig_in = ['String', 'String', 'Atom'],
+        sig_out = [],
+        impl = fun op_build_release/1
+    }),
+
     ok.
 
 %%% --- Low-level BEAM assembler ---
@@ -302,6 +320,67 @@ op_build_escript(Cont) ->
         {error, Reason} ->
             error({build_escript, Reason})
     end.
+
+%% build-app: generate a .app file for a compiled module.
+%% Stack: [String(version), Atom(app_name), ...]
+op_build_app(Cont) ->
+    [{'String', VsnBin}, {'Atom', AppNameStr} | Rest] = Cont#continuation.data_stack,
+    AppAtom = list_to_atom(AppNameStr),
+    Vsn = binary_to_list(VsnBin),
+    %% Find all exported functions for this module
+    Modules = [AppAtom],
+    AppSpec = {application, AppAtom, [
+        {description, "ActorForth compiled application"},
+        {vsn, Vsn},
+        {modules, Modules},
+        {registered, []},
+        {applications, [kernel, stdlib]}
+    ]},
+    %% Write to ebin/<app>.app or current dir
+    AppFile = atom_to_list(AppAtom) ++ ".app",
+    AppContent = io_lib:format("~p.~n", [AppSpec]),
+    ok = file:write_file(AppFile, AppContent),
+    Cont#continuation{data_stack = Rest}.
+
+%% build-release: create an OTP release directory structure.
+%% Stack: [String(dir), String(version), Atom(app_name), ...]
+op_build_release(Cont) ->
+    [{'String', DirBin}, {'String', VsnBin}, {'Atom', AppNameStr} | Rest] = Cont#continuation.data_stack,
+    AppAtom = list_to_atom(AppNameStr),
+    Dir = binary_to_list(DirBin),
+    Vsn = binary_to_list(VsnBin),
+    case build_release(AppAtom, Vsn, Dir) of
+        ok ->
+            Cont#continuation{data_stack = Rest};
+        {error, Reason} ->
+            error({build_release, Reason})
+    end.
+
+%% Build a full OTP release structure.
+build_release(AppAtom, Vsn, BaseDir) ->
+    AppStr = atom_to_list(AppAtom),
+    %% Create directory structure
+    EbinDir = filename:join([BaseDir, AppStr ++ "-" ++ Vsn, "ebin"]),
+    ok = filelib:ensure_dir(filename:join(EbinDir, "x")),
+    %% Write .app file
+    AppSpec = {application, AppAtom, [
+        {description, "ActorForth compiled application"},
+        {vsn, Vsn},
+        {modules, [AppAtom]},
+        {registered, []},
+        {applications, [kernel, stdlib]}
+    ]},
+    AppFile = filename:join(EbinDir, AppStr ++ ".app"),
+    ok = file:write_file(AppFile, io_lib:format("~p.~n", [AppSpec])),
+    %% Write .beam file
+    case af_word_compiler:get_module_binary(AppAtom) of
+        {ok, Binary} ->
+            BeamFile = filename:join(EbinDir, AppStr ++ ".beam"),
+            ok = file:write_file(BeamFile, Binary);
+        not_found ->
+            ok  %% No binary stored — user can copy manually
+    end,
+    ok.
 
 %%% --- Internal helpers ---
 
