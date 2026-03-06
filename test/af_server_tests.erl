@@ -91,7 +91,7 @@ eval_test_() ->
      end,
      [
         fun(Pid) -> {"eval raw line", fun() ->
-            {ok, _} = af_server:eval(Pid, "dup value 5 + value!"),
+            {ok, _} = af_server:eval(Pid, "value 5 + value!"),
             {ok, [5]} = af_server:call(Pid, "count", []),
             ok
         end} end

@@ -16,7 +16,8 @@ init_types() ->
     af_type_string:init(),
     af_type_map:init(),
     af_type_list:init(),
-    af_type_actor:init().
+    af_type_actor:init(),
+    af_type_ffi:init().
 
 start() ->
     init_types(),

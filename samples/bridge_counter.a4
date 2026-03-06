@@ -12,16 +12,16 @@ type Counter
     value Int .
 
 : increment Counter -> Counter ;
-    dup value 1 + value!.
+    value 1 + value!.
 
 : decrement Counter -> Counter ;
-    dup value 1 - value!.
+    value 1 - value!.
 
 : count Counter -> Counter Int ;
-    dup value.
+    value.
 
 : add Counter Int -> Counter ;
-    swap dup value rot + value!.
+    swap value rot + value!.
 
 : reset Counter -> Counter ;
     0 value!.

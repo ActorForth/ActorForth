@@ -23,9 +23,7 @@ product_type_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
         fun(_) -> {"define a product type", fun() ->
             C1 = eval("type Point x Int y Int .", af_interpreter:new_continuation()),
-            %% Stack should be empty after definition
             ?assertEqual([], C1#continuation.data_stack),
-            %% Type should be registered
             ?assertMatch({ok, _}, af_type:get_type('Point'))
         end} end,
         fun(_) -> {"construct a product type instance", fun() ->
@@ -36,15 +34,24 @@ product_type_test_() ->
             ?assertEqual({'Int', 10}, maps:get(x, FieldMap)),
             ?assertEqual({'Int', 20}, maps:get(y, FieldMap))
         end} end,
-        fun(_) -> {"getter retrieves field value", fun() ->
+        fun(_) -> {"getter is non-destructive (leaves instance on stack)", fun() ->
             C1 = eval("type Point x Int y Int .", af_interpreter:new_continuation()),
             C2 = eval("10 int 20 int point x", C1),
-            ?assertEqual([{'Int', 10}], C2#continuation.data_stack)
+            %% Non-destructive: value on TOS, instance below
+            [{'Int', 10}, {'Point', _}] = C2#continuation.data_stack
         end} end,
         fun(_) -> {"getter retrieves second field", fun() ->
             C1 = eval("type Point x Int y Int .", af_interpreter:new_continuation()),
             C2 = eval("10 int 20 int point y", C1),
-            ?assertEqual([{'Int', 20}], C2#continuation.data_stack)
+            [{'Int', 20}, {'Point', _}] = C2#continuation.data_stack
+        end} end,
+        fun(_) -> {"multiple getters chain without dup", fun() ->
+            C1 = eval("type Point x Int y Int .", af_interpreter:new_continuation()),
+            C2 = eval("10 int 20 int point x swap y", C1),
+            %% After x: [Int(10), Point]
+            %% After swap: [Point, Int(10)]
+            %% After y: [Int(20), Point, Int(10)]
+            [{'Int', 20}, {'Point', _}, {'Int', 10}] = C2#continuation.data_stack
         end} end,
         fun(_) -> {"setter updates field value", fun() ->
             C1 = eval("type Point x Int y Int .", af_interpreter:new_continuation()),
@@ -57,7 +64,7 @@ product_type_test_() ->
         fun(_) -> {"product type with single field", fun() ->
             C1 = eval("type Wrapper val Int .", af_interpreter:new_continuation()),
             C2 = eval("42 int wrapper val", C1),
-            ?assertEqual([{'Int', 42}], C2#continuation.data_stack)
+            [{'Int', 42}, {'Wrapper', _}] = C2#continuation.data_stack
         end} end,
         fun(_) -> {"product type with three fields", fun() ->
             C1 = eval("type Color r Int g Int b Int .", af_interpreter:new_continuation()),
@@ -71,12 +78,17 @@ product_type_test_() ->
         fun(_) -> {"product type works with compiled words", fun() ->
             C1 = eval("type Point x Int y Int .", af_interpreter:new_continuation()),
             C2 = eval(": origin -> Point ; 0 int 0 int point .", C1),
-            C3 = eval("origin x", C2),
+            C3 = eval("origin x swap drop", C2),
             ?assertEqual([{'Int', 0}], C3#continuation.data_stack)
         end} end,
         fun(_) -> {"getter after setter returns updated value", fun() ->
             C1 = eval("type Point x Int y Int .", af_interpreter:new_continuation()),
-            C2 = eval("10 int 20 int point 99 int x! x", C1),
+            C2 = eval("10 int 20 int point 99 int x! x swap drop", C1),
             ?assertEqual([{'Int', 99}], C2#continuation.data_stack)
+        end} end,
+        fun(_) -> {"drop instance after getter for clean stack", fun() ->
+            C1 = eval("type Point x Int y Int .", af_interpreter:new_continuation()),
+            C2 = eval("10 int 20 int point x swap drop", C1),
+            ?assertEqual([{'Int', 10}], C2#continuation.data_stack)
         end} end
     ]}.

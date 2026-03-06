@@ -81,6 +81,12 @@ init() ->
         impl = fun op_assert_eq/1
     }),
 
+    %% load : String ->  (load and interpret a .a4 file)
+    af_type:add_op('Any', #operation{
+        name = "load", sig_in = ['String'], sig_out = [],
+        impl = fun op_load/1
+    }),
+
     %% debug : -> Debug  (pushes Debug marker, handler intercepts on/off)
     af_type:register_type(#af_type{name = 'Debug'}),
     af_type:add_op('Any', #operation{
@@ -183,6 +189,32 @@ op_assert_eq(Cont) ->
                 [af_error:format_value(Expected), af_error:format_value(Actual)]
             )),
             af_error:raise(assert_eq_failed, Msg, Cont)
+    end.
+
+%%% Load
+
+op_load(Cont) ->
+    [{'String', PathBin} | Rest] = Cont#continuation.data_stack,
+    Path = binary_to_list(PathBin),
+    %% Resolve relative paths against the current file's directory
+    ResolvedPath = case filename:pathtype(Path) of
+        absolute -> Path;
+        _ ->
+            CurrentFile = case Cont#continuation.current_token of
+                #token{file = File} when File =/= "", File =/= "stdin", File =/= "eval" ->
+                    filename:dirname(File);
+                _ -> "."
+            end,
+            filename:join(CurrentFile, Path)
+    end,
+    case file:read_file(ResolvedPath) of
+        {ok, Content} ->
+            Tokens = af_parser:parse(binary_to_list(Content), ResolvedPath),
+            Cont1 = Cont#continuation{data_stack = Rest},
+            af_interpreter:interpret_tokens(Tokens, Cont1);
+        {error, Reason} ->
+            Msg = lists:flatten(io_lib:format("Cannot load file ~s: ~p", [ResolvedPath, Reason])),
+            af_error:raise(load_error, Msg, Cont)
     end.
 
 %%% Debug

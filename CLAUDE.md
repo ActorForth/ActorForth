@@ -45,9 +45,10 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - **`src/af_interpreter.erl`** — The outer interpreter. `interpret_token/2` implements the 4-step dispatch above. Pure (no I/O).
 - **`src/af_type_int.erl`** — Int type: constructor `int` (Atom->Int), arithmetic `+`,`-`,`*`,`/`
 - **`src/af_type_bool.erl`** — Bool type: constructor `bool`, comparisons `==`,`!=`,`<`,`>`,`<=`,`>=`, `not`
-- **`src/af_type_any.erl`** — Global ops: `dup`, `drop`, `swap`, `2dup`, `print`, `stack`, `words`, `types`
-- **`src/af_type_compiler.erl`** — Word definition compiler. `: name Types -> Types ; body .` Compiled word bodies use late binding (dispatch through interpreter at runtime).
-- **`src/af_type_product.erl`** — Product type definition. `type Point x Int y Int .` Auto-generates constructor (`point`), getters (`x`, `y`), and setters (`x!`, `y!`). Product instances are `{TypeName, #{field => {Type, Val}}}`.
+- **`src/af_type_any.erl`** — Global ops: `dup`, `drop`, `swap`, `2dup`, `print`, `stack`, `words`, `types`, `load` (file loading)
+- **`src/af_type_compiler.erl`** — Word definition compiler. `: name Types -> Types ; body .` Compiled word bodies use late binding (dispatch through interpreter at runtime). Sub-clause pattern matching on Int, Bool, String values with right-aligned partial matching.
+- **`src/af_type_product.erl`** — Product type definition. `type Point x Int y Int .` Auto-generates constructor (`point`), non-destructive getters (`x`, `y`), and setters (`x!`, `y!`). Product instances are `{TypeName, #{field => {Type, Val}}}`. Getters leave the instance on the stack.
+- **`src/af_type_ffi.erl`** — Erlang FFI: `erlang-apply` (with args list) and `erlang-apply0` (zero args). Calls any Erlang function with automatic term conversion.
 - **`src/af_type_string.erl`** — String type wrapping Erlang binaries. Quoted strings auto-convert. `concat`, `length`, `to-atom`, `to-int`, `to-string`.
 - **`src/af_type_map.erl`** — Map type wrapping Erlang maps. `map-new`, `map-put`, `map-get`, `map-delete`, `map-has?`, `map-keys`, `map-values`, `map-size`.
 - **`src/af_type_list.erl`** — List type wrapping Erlang cons cells. `nil`, `cons`, `length`, `head`, `tail`.

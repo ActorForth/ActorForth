@@ -484,8 +484,8 @@ Small words are auditable. A one-line word can be verified by inspection. A sequ
 | Int/Bool types | Done | Arithmetic, comparisons, literal handlers |
 | Stack operations | Done | dup, drop, swap, rot, over, 2dup, print, stack |
 | Word compiler | Done | `: name Sig -> Sig ; body .` with late binding |
-| Pattern matching sub-clauses | Done | `: value -> value ;` inside word definitions |
-| Product types | Done | Auto-generated constructor, getters, setters |
+| Pattern matching sub-clauses | Done | Value constraints on Int, Bool, String types; right-aligned partial matching |
+| Product types | Done | Auto-generated constructor, non-destructive getters, setters |
 | List type | Done | Built-in wrapping native BEAM cons cells: nil, cons, length, head, tail |
 | String type | Done | Wraps Erlang binaries; quoted strings auto-convert; concat, length, to-atom, to-int, to-string |
 | Map type | Done | Wraps Erlang maps; map-new, map-put, map-get, map-delete, map-has?, map-keys, map-values, map-size |
@@ -496,8 +496,9 @@ Small words are auditable. A one-line word can be verified by inspection. A sequ
 | Structured errors (af_error) | Done | Consistent error records with location, word trace, stack snapshot |
 | Literal handlers | Done | Types register `literal` word; Int and Bool implemented; quoted strings handled by interpreter |
 | Debug on/off | Done | Trace output showing dispatch decisions |
-| File loading | Done | `run_file/1`, `run_file_repl/1` |
-| Non-destructive getters | Deferred | See Part V |
+| File loading (load word) | Done | `"file.a4" load` from ActorForth; `run_file/1` from Erlang; relative path resolution |
+| Erlang FFI | Done | `erlang-apply` and `erlang-apply0` call any Erlang function with term conversion |
+| Non-destructive getters | Done | Getters leave product instance on stack; eliminates dup-before-access pattern |
 | Context register for actors | Deferred | See Part V |
 | Maximal-consume parser | Deferred | Needed for Real type |
 | Core Erlang compilation | Future | Phase 2 |

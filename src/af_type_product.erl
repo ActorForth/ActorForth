@@ -183,12 +183,12 @@ make_constructor(TypeName, Fields) ->
         Cont#continuation{data_stack = [Instance | Rest]}
     end.
 
-%% Build getter function
+%% Build getter function (non-destructive: leaves instance on stack)
 make_getter(FieldName) ->
     fun(Cont) ->
-        [{_TypeName, FieldMap} | Rest] = Cont#continuation.data_stack,
+        [{_TypeName, FieldMap} = Instance | Rest] = Cont#continuation.data_stack,
         Value = maps:get(FieldName, FieldMap),
-        Cont#continuation{data_stack = [Value | Rest]}
+        Cont#continuation{data_stack = [Value, Instance | Rest]}
     end.
 
 %% Build setter function: new_value instance setter! -> updated_instance

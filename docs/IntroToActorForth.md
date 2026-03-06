@@ -352,6 +352,43 @@ Three reasons:
 
 **BEAM compatibility.** When ActorForth compiles to BEAM bytecode, pattern-matched word definitions map directly to Erlang's function clause mechanism. The BEAM VM is *built* for this — it compiles pattern matches into efficient jump tables. We get that optimization for free.
 
+### Pattern Matching on Booleans
+
+Pattern matching isn't limited to integers. Booleans work the same way — `True` and `False` are value constraints:
+
+```
+: to-int Bool -> Int ;
+    : True  -> Int ; drop 1
+    : False -> Int ; drop 0 .
+```
+
+This is ActorForth's answer to `if`/`else`. The `drop` removes the matched boolean value from the stack. More complex branching is just more sub-clauses:
+
+```
+: choose Int Int Bool -> Int ;
+    : True  -> Int ; drop drop
+    : False -> Int ; drop swap drop .
+```
+
+This `choose` word takes two Ints and a Bool. If True, keep the deeper Int (the "then" value); if False, keep the TOS Int (the "else" value). Notice that sub-clauses with fewer elements than the master signature automatically right-align — `True` matches the Bool position (rightmost/TOS), and the Int positions default to type-only matching.
+
+### Pattern Matching on Strings
+
+Quoted strings can also be value constraints:
+
+```
+: greet String -> String ;
+    : "hello"   -> String ; drop "Hello World!"
+    : "goodbye" -> String ; drop "Farewell!"
+    : String    -> String ; .
+
+ok: "hello" greet
+ok: stack
+0) "Hello World!" : String
+```
+
+The general `String` clause acts as the fallback — unmatched strings pass through unchanged.
+
 ### Composition Over Branching
 
 In ActorForth, we compose small words rather than writing long procedures with branches:
@@ -407,23 +444,33 @@ First the x value, then the y value, then `point` to assemble them.
 
 ### Field Access
 
-When a Point is on top of the stack, getter words are available:
+Getters are **non-destructive** — they push the field value while leaving the instance on the stack:
 
 ```
 ok: 10 20 point
 ok: x
 ok: stack
 0) 10 : Int
+1) {x: 10, y: 20} : Point
 ```
 
-The getter consumed the Point and pushed its `x` field value. If you need to keep the Point, `dup` first:
+This means you can access multiple fields without `dup`:
 
 ```
 ok: 10 20 point
-ok: dup x swap y
+ok: x swap y
 ok: stack
 0) 20 : Int
-1) 10 : Int
+1) {x: 10, y: 20} : Point
+2) 10 : Int
+```
+
+When you're done with the instance, `swap drop` cleans it up:
+
+```
+ok: 10 20 point x swap drop
+ok: stack
+0) 10 : Int
 ```
 
 ### Updating Fields
@@ -433,10 +480,11 @@ Setters use the `!` suffix convention (read "store", as in Forth tradition). Pus
 ```
 ok: 10 20 point     # create Point(10, 20)
 ok: 99 x!           # update x to 99
-ok: dup x swap y
+ok: x swap y
 ok: stack
 0) 20 : Int
-1) 99 : Int
+1) {x: 99, y: 20} : Point
+2) 99 : Int
 ```
 
 The setter consumes the new value and the Point, then pushes a new Point with the updated field. The original is not mutated — there is no mutation in ActorForth. Every "update" creates a new value.
@@ -451,10 +499,10 @@ type Point
     y Int .
 
 : origin -> Point ; 0 0 point .
-: move-right Point -> Point ; dup y swap x 1 + swap point .
+: move-right Point -> Point ; x 1 + x! .
 ```
 
-`origin` takes no inputs and produces a Point at (0, 0). `move-right` takes a Point, increments its x by 1, and produces a new Point. These words go in the right dictionaries automatically — `origin` in Any (no inputs), `move-right` in Point (first input is Point).
+`origin` takes no inputs and produces a Point at (0, 0). `move-right` takes a Point, reads `x` (non-destructive, leaves the Point), adds 1, then stores back with `x!`. No `dup` gymnastics needed — the getter leaves the instance for the setter.
 
 ### Types with More Fields
 
@@ -944,7 +992,93 @@ When a word is compiled, its body isn't resolved to fixed function pointers. Eac
 - **Redefinition works.** If you redefine a word, existing words that call it pick up the new definition automatically.
 
 
-## Chapter 12: Putting It All Together
+## Chapter 12: Loading Files
+
+ActorForth programs can be split across multiple files using the `load` word.
+
+### Libraries
+
+Create a library file with reusable definitions:
+
+```
+# lib_math.a4
+: square Int -> Int ; dup * .
+: double Int -> Int ; 2 * .
+: cube   Int -> Int ; dup dup * * .
+```
+
+Load it from another file or the REPL:
+
+```
+ok: "lib_math.a4" load
+ok: 5 square
+ok: stack
+0) 25 : Int
+```
+
+The `load` word takes a String path, reads the file, parses it, and interprets it into the current continuation. All word definitions from the loaded file become available immediately. Relative paths are resolved from the loading file's directory.
+
+### Building Programs from Parts
+
+```
+# main.a4
+"lib_math.a4" load
+"counter.a4" load
+
+5 square double print    # uses both libraries
+```
+
+The `load` word preserves the current stack state — it only adds definitions, it doesn't clear anything.
+
+
+## Chapter 13: Erlang FFI
+
+ActorForth runs on the BEAM VM, and sometimes you need to call existing Erlang functions directly. The FFI (Foreign Function Interface) provides this bridge.
+
+### Zero-Argument Calls
+
+```
+ok: node erlang erlang-apply0
+ok: stack
+0) nonode@nohost : Atom
+```
+
+Push the function name, then the module name, then `erlang-apply0`. The result is automatically converted to an ActorForth stack item.
+
+### Calls with Arguments
+
+For functions that take arguments, build an argument list first:
+
+```
+ok: nil -42 cons abs erlang erlang-apply
+ok: stack
+0) 42 : Int
+```
+
+Arguments go in a List (built with `nil` and `cons`), then function name, module name, then `erlang-apply`.
+
+```
+ok: nil 10 cons 20 cons max erlang erlang-apply
+ok: stack
+0) 20 : Int
+```
+
+### Type Conversion
+
+The FFI automatically converts between Erlang and ActorForth types:
+- Erlang integers ↔ `{Int, N}`
+- Erlang binaries ↔ `{String, B}`
+- Erlang atoms ↔ `{Atom, S}`
+- Erlang booleans ↔ `{Bool, V}`
+- Erlang lists ↔ `{List, Items}`
+- Erlang maps ↔ `{Map, M}`
+
+### When to Use FFI
+
+The FFI is for calling existing Erlang/OTP libraries — file I/O, networking, crypto, date/time, etc. For new logic, write it in ActorForth. The FFI is a bridge, not a crutch.
+
+
+## Chapter 14: Putting It All Together
 
 Let's trace through a complete example that uses types, words, lists, pattern matching, and actors.
 
@@ -957,13 +1091,13 @@ type Counter
     value Int .
 
 : increment Counter -> Counter ;
-    dup value 1 + value!.
+    value 1 + value!.
 
 : decrement Counter -> Counter ;
-    dup value 1 - value!.
+    value 1 - value!.
 
 : count Counter -> Counter Int ;
-    dup value.
+    value.
 
 # Create a counter starting at 0 and make it an actor
 0 counter server
@@ -1035,13 +1169,13 @@ type Stats
     errors Int .
 
 : hit Stats -> Stats ;
-    dup hits 1 + hits!.
+    hits 1 + hits!.
 
 : err Stats -> Stats ;
-    dup errors 1 + errors!.
+    errors 1 + errors!.
 
 : report Stats -> Stats Int Int ;
-    dup dup errors rot hits.
+    hits swap errors rot.
 
 0 0 stats server
 
@@ -1056,13 +1190,9 @@ type Stats
 Two counters in one actor. Each operation touches only the field it cares about. The `report` call returns both values synchronously.
 
 
-## Chapter 13: The Road Ahead
+## Chapter 15: The Road Ahead
 
 What you've seen is the prototype interpreter — ActorForth running inside Erlang. It works, it's tested, and it demonstrates the core ideas. But the vision goes further.
-
-### Reducing Stack Manipulation
-
-The current language requires explicit stack shuffling for field access — `dup` before every getter, `swap` and `rot` to thread state through multi-argument words. This is the most immediate friction point. Non-destructive getters (where the getter leaves the instance on the stack instead of consuming it) would eliminate most `dup` calls. A context register or similar mechanism could reduce the `swap`/`rot` noise in words that operate on a "self" instance. These are active areas of design.
 
 ### Compiling to BEAM
 
@@ -1106,6 +1236,7 @@ This is the promise of the TOS-driven dictionary mechanism: **any tool that proc
 | `stack` | `( -- )` | Display entire stack |
 | `words` | `( -- )` | List all operations |
 | `types` | `( -- )` | List all types |
+| `load` | `( String -- )` | Load and interpret a .a4 file |
 
 ### Arithmetic (Int dictionary)
 
@@ -1207,7 +1338,7 @@ type TypeName
     field2 Type2 .
 ```
 
-Auto-generates: constructor (`typename`), getters (`field1`, `field2`), setters (`field1!`, `field2!`).
+Auto-generates: constructor (`typename`), non-destructive getters (`field1`, `field2`), setters (`field1!`, `field2!`). Getters push the field value while leaving the instance on the stack.
 
 ### Actor Operations
 
@@ -1228,6 +1359,13 @@ Auto-generates: constructor (`typename`), getters (`field1`, `field2`), setters 
 | `af_server:cast(Pid, Word, Args)` | Async cast, returns `ok` |
 | `af_server:eval(Pid, Line)` | Evaluate raw ActorForth line |
 | `af_server:stop(Pid)` | Stop the server |
+
+### Erlang FFI (Any dictionary)
+
+| Word | Effect | Description |
+|------|--------|-------------|
+| `erlang-apply0` | `( Atom Atom -- Any )` | Call Module:Function() |
+| `erlang-apply` | `( Atom Atom List -- Any )` | Call Module:Function(Args...) |
 
 ### Special Tokens
 
