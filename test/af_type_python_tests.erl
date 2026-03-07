@@ -204,6 +204,14 @@ py_import_test_() ->
         fun(_) -> {"py-import adds path to sys.path", fun() ->
             C = eval("\"/tmp\" py-import", af_interpreter:new_continuation()),
             ?assertEqual([], C#continuation.data_stack)
+        end} end,
+        fun(_) -> {"py-import with list string (covers to_list/1 list clause)", fun() ->
+            %% Construct stack with String value as list (not binary)
+            Stack = [{'String', "/tmp"}],
+            C = #continuation{data_stack = Stack},
+            Token = #token{value = "py-import"},
+            C2 = af_interpreter:interpret_token(Token, C),
+            ?assertEqual([], C2#continuation.data_stack)
         end} end
     ]}.
 
@@ -221,22 +229,39 @@ py_venv_test_() ->
 
 py_register_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
-        fun(_) -> {"py-register with interpreted word", fun() ->
+        fun(_) -> {"py-register with interpreted word and call back", fun() ->
             C1 = eval(": triple Int -> Int ; dup dup + + .", af_interpreter:new_continuation()),
             C2 = eval("triple py-register", C1),
-            ?assertEqual([{'Atom', "triple"}], C2#continuation.data_stack)
+            ?assertEqual([{'Atom', "triple"}], C2#continuation.data_stack),
+            %% Call the registered word back from Python (covers line 197)
+            {ok, Result} = py:call(<<"erlang">>, triple, [5]),
+            ?assertEqual(15, Result)
         end} end,
         fun(_) -> {"py-register not-found word raises error", fun() ->
             ?assertError(_,
                 eval("nonexistent_word_xyz py-register", af_interpreter:new_continuation()))
         end} end,
-        fun(_) -> {"py-register with compiled native word", fun() ->
+        fun(_) -> {"py-register with compiled native word and call back", fun() ->
             af_type_beam:init(),
             C1 = eval(": dbl Int -> Int ; dup + .", af_interpreter:new_continuation()),
             C2 = eval("\"dbl\" compile", C1),
             ?assertEqual([], C2#continuation.data_stack),
             C3 = eval("dbl py-register", C2),
-            ?assertEqual([{'Atom', "dbl"}], C3#continuation.data_stack)
+            ?assertEqual([{'Atom', "dbl"}], C3#continuation.data_stack),
+            %% Call the native word back from Python (covers lines 183-186)
+            {ok, Result} = py:call(<<"erlang">>, dbl, [7]),
+            ?assertEqual(14, Result)
+        end} end,
+        fun(_) -> {"py-register native word returning empty stack", fun() ->
+            af_type_beam:init(),
+            C1 = eval(": noop Int -> ; drop .", af_interpreter:new_continuation()),
+            C2 = eval("\"noop\" compile", C1),
+            C3 = eval("noop py-register", C2),
+            ?assertEqual([{'Atom', "noop"}], C3#continuation.data_stack),
+            %% Call back — empty result returns ok (covers line 187)
+            %% Python may convert the atom 'ok' to binary <<"ok">>
+            {ok, Result} = py:call(<<"erlang">>, noop, [42]),
+            ?assert(Result =:= ok orelse Result =:= <<"ok">>)
         end} end
     ]}.
 
