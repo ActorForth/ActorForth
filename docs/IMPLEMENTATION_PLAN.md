@@ -442,6 +442,66 @@ New types for the actor system:
 
 ---
 
+### Milestone 7.5: Python Interop
+
+**Goal:** Call Python code from ActorForth via the `erlang_python` library, enabling access to Python's AI/ML ecosystem.
+
+**Status: Done.**
+
+#### 7.5.1 Python Bridge (`src/af_type_python.erl`)
+
+Words for embedding Python in the BEAM VM:
+- `py-start` — Ensure the Python runtime is started
+- `py-call` — Call `module.function(args...)` with N args from the stack
+- `py-call0` — Zero-arg shorthand for `module.function()`
+- `py-eval` — Evaluate a Python expression, push result
+- `py-exec` — Execute Python statements (no return)
+- `py-import` — Add directory to Python's `sys.path`
+- `py-venv` — Activate a Python virtual environment
+- `py-register` — Expose a compiled ActorForth word as callable from Python
+
+Key design: `af_to_python/1` converts AF stack items to Python-friendly values; `py_to_stack_item/1` converts results back. Module-level state (via `py:call`) is the working pattern since `py:exec` and `py:eval` run in separate scopes.
+
+#### 7.5.2 Sample Python Modules
+
+- `samples/python/text_tools.py` — Word count, slugify, reverse words, Levenshtein distance
+- `samples/python/ai_stub.py` — Fake embeddings, cosine similarity, JSON parsing
+- `samples/python/llm_client.py` — OpenAI/Anthropic chat, embeddings, structured output
+- `samples/python/http_client.py` — REST client with auth and rate limiting
+- `samples/python/worker.py` — Stateful key-value store
+- `samples/python/actor_bridge.py` — Module-level state pattern for actor-like Python objects
+
+### Milestone 7.6: Version 2.3 Improvements
+
+**Goal:** Production-readiness improvements — better type safety, module system, optimization.
+
+**Status: Done.**
+
+#### 7.6.1 .env Loading
+
+The REPL automatically loads a `.env` file on startup via `af_repl:load_env/0`. Supports comments (`#`), quoted values (`"value"` and `'value'`), and blank lines. Missing `.env` files are silently ignored.
+
+#### 7.6.2 Extended Tail Call Optimization
+
+TCO now applies to all compiled word calls in tail position, not just self-recursive calls. The word trace frame is popped before the tail call, putting it in Erlang tail position. The BEAM's native TCO prevents stack growth.
+
+#### 7.6.3 Inter-Module Imports
+
+The `import` word compiles a `.a4` file to a native BEAM module and registers its words:
+```
+"lib_math.a4" import    # -> Atom("lib_math")
+```
+Uses `af_compile_file:compile/1` internally. Words become native BEAM functions callable from both ActorForth and Erlang.
+
+#### 7.6.4 Compile-Time Type Checking Enforcement
+
+Type checking is now enforced at compile time:
+- **Errors** for verified type mismatches (fully-resolved types that don't match declared signatures)
+- **Warnings** for incomplete inference (unknown tokens from product type ops, different stack depth)
+- Type inference improved to recognize integer and float literals
+- Value-constrained types (`{Int, 1}` vs `{Int, 100}`) considered compatible (same base type)
+- `af_type_check.erl` handles `Any` as a type variable with concrete substitution
+
 ## Phase 3: BEAM Bytecode Compilation (Future)
 
 ### Milestone 8: Core Erlang Emission

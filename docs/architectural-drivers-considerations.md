@@ -501,8 +501,11 @@ Small words are auditable. A one-line word can be verified by inspection. A sequ
 | Non-destructive getters | Done | Getters leave product instance on stack; eliminates dup-before-access pattern |
 | Core Erlang compilation | Done | Closure-based word compilation (af_compile); BEAM module generation via compile:forms |
 | OTP supervision for actors | Done | supervised-server word; simple_one_for_one supervisor; gen_server actor workers |
-| Tail call optimization | Done | Detects self-call in tail position; pops trace before tail call for BEAM TCO |
-| Compile-time type checking | Done | af_type_check: infers stack effects, resolves Any to concrete types, warns on sig mismatch |
+| Tail call optimization | Done | Detects compiled word calls in tail position; pops trace before tail call for BEAM TCO |
+| Compile-time type checking | Done | af_type_check: infers stack effects, resolves Any to concrete types; errors on verified mismatches, warns on incomplete inference |
 | BEAM assembler types | Done | af_type_beam: BeamModule/BeamFunction types, builds abstract forms, compiles via compile:forms |
+| Python interop (erlang_python) | Done | py-start, py-call, py-eval, py-exec, py-import, py-venv, py-register; module-level state pattern |
+| .env loading | Done | REPL loads .env on startup; supports comments, quoted values |
+| Inter-module imports (`import` word) | Done | Compiles .a4 to BEAM module, registers words in type registry |
 | Context register for actors | Deferred | See Part V |
 | Maximal-consume parser | Deferred | Needed for Real type |

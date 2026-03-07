@@ -1220,7 +1220,7 @@ The module is loaded dynamically with `code:load_binary/3`. Words in the module 
 
 ### Tail Call Optimization
 
-When a word's body ends with a self-call, the compiler detects this and restructures the closure so the self-call is in Erlang tail position. This means tail-recursive ActorForth words use constant stack space:
+When a word's body ends with a call to any compiled word (including self-calls), the compiler detects this and restructures the closure so the call is in Erlang tail position. This means tail-recursive ActorForth words — and mutually-recursive word chains — use constant stack space:
 
 ```
 : countdown Int -> ;
@@ -1297,11 +1297,29 @@ Warning: type mismatch in word 'bad'
 
 The type checker resolves `Any` in operation signatures to concrete types from the actual stack. This means `dup` applied to `Bool` correctly infers `[Bool, Bool]`, not `[Any, Any]`. The `Any` type acts as a type variable that gets unified during inference.
 
+### Enforcement
+
+As of v2.3, type checking is **enforced** — verified type mismatches are compile-time errors:
+
+```
+: bad Int -> Bool ; dup + .
+** error: Type mismatch in word 'bad': declared output [Bool] but inferred [Int]
+```
+
+When inference is incomplete (product type operations, unknown words), the compiler emits a **warning** instead of an error, since the type checker can't fully resolve the stack:
+
+```
+: increment Counter -> Counter ; value 1 + value! .
+Warning: type check for 'increment' incomplete
+  declared output: ['Counter']
+  inferred output: ['Atom','Int']
+```
+
 ### Limitations
 
-- The checker warns but does not prevent compilation (words still run with dynamic dispatch)
 - Recursive calls and unknown words are treated as pushing `Atom` — full inference for user-defined words requires iterative analysis
 - Pattern matching sub-clauses are checked independently per clause
+- Product type operations (getters/setters) aren't fully resolved during inference, resulting in warnings rather than errors
 
 
 ## Chapter 19: The BEAM Assembler
@@ -1649,7 +1667,157 @@ af_compile_file:compile_to_dir("src/math.a4", "ebin/").
 | `#{k => v}` | `{Map, ...}` |
 
 
-## Chapter 23: The Road Ahead
+## Chapter 23: Python Interop
+
+ActorForth can call Python code directly via the `erlang_python` library, which embeds Python in the BEAM VM. This opens access to Python's AI/ML ecosystem from ActorForth programs.
+
+### Getting Started
+
+```
+ok: py-start
+ok: "2 + 2" py-eval
+ok: stack
+0) 4 : Int
+```
+
+`py-start` ensures the Python runtime is running. `py-eval` evaluates a Python expression and pushes the result.
+
+### Calling Python Functions
+
+```
+ok: 16 math sqrt 1 py-call
+ok: stack
+0) 4.0 : Float
+```
+
+`py-call` takes N arguments from the stack, plus the module name and function name. The format is: `arg1 ... argN module function arity py-call`. For zero-argument functions, use `py-call0`:
+
+```
+ok: random random py-call0
+ok: stack
+0) 0.7234... : Float
+```
+
+### Custom Python Modules
+
+Add a directory to Python's import path with `py-import`, then call functions from your modules:
+
+```
+ok: "samples/python" py-import
+ok: "hello world" text_tools word_count 1 py-call
+ok: stack
+0) 2 : Int
+```
+
+### Executing Python Statements
+
+```
+ok: "import sys" py-exec
+```
+
+`py-exec` runs Python statements without returning a value. Note: functions defined via `py-exec` are not visible to `py-eval` due to scope isolation — use module-level state via imported modules instead.
+
+### Virtual Environments
+
+```
+ok: ".venv" py-venv
+```
+
+`py-venv` activates a Python virtual environment, making its packages available.
+
+### Registering ActorForth Words for Python
+
+Words compiled to native BEAM can be registered as Python-callable:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double af_math compile-to-beam
+ok: double py-register
+```
+
+Now Python code can call `erlang.double(21)` and get `42`.
+
+### AI/LLM Integration
+
+The `samples/python/llm_client.py` module provides OpenAI/Anthropic access:
+
+```
+ok: py-start
+ok: "samples/python" py-import
+ok: "What is Erlang?" llm_client chat 1 py-call
+ok: print
+Erlang is a functional programming language...
+```
+
+The REPL automatically loads `.env` on startup, so `OPENAI_API_KEY` set in `.env` is available to Python modules via `os.environ`.
+
+### Type Conversion
+
+ActorForth stack items are automatically converted when passed to/from Python:
+
+| ActorForth | Python |
+|-----------|--------|
+| `{Int, 42}` | `42` |
+| `{Float, 3.14}` | `3.14` |
+| `{Bool, true}` | `True` |
+| `{String, "hello"}` | `"hello"` (str) |
+| `{Atom, "foo"}` | `"foo"` (str) |
+| `{List, Items}` | `list` |
+
+
+## Chapter 24: Inter-Module Imports
+
+The `import` word compiles a `.a4` file to a native BEAM module and makes its words available:
+
+```
+ok: "lib_math.a4" import
+ok: stack
+0) lib_math : Atom
+
+ok: 5 double    # uses the imported word
+ok: stack
+0) 10 : Int
+```
+
+### How It Works
+
+`import` calls `af_compile_file:compile/1` internally:
+1. Reads and parses the `.a4` file
+2. Interprets it to discover word definitions
+3. Compiles all defined words to a BEAM module
+4. Loads the module and registers native wrappers in the type registry
+
+The imported words become native BEAM functions — faster than interpreted words and callable from Erlang.
+
+### Import vs Load
+
+| Feature | `load` | `import` |
+|---------|--------|----------|
+| Execution | Interpreted | Compiled to BEAM |
+| Performance | Late-binding dispatch | Direct native calls |
+| Words available | In current continuation | In type registry as native |
+| Erlang-callable | No | Yes (`module:function(args)`) |
+| Return value | Nothing | Module name as Atom |
+
+Use `load` for scripts that need the current stack state. Use `import` for libraries of reusable words.
+
+### Path Resolution
+
+Relative paths are resolved from the importing file's directory, or the current working directory if called from the REPL.
+
+### Environment Configuration
+
+The REPL loads `.env` on startup. Create a `.env` file in your project root:
+
+```
+OPENAI_API_KEY=sk-xxx
+DATABASE_URL=postgres://...
+```
+
+Lines starting with `#` are comments. Values can be quoted with `"` or `'`. The variables are set via `os:putenv/2` and available to both Erlang and Python code.
+
+
+## Chapter 25: The Road Ahead
 
 ActorForth now has the full compilation pipeline, OTP integration, and BEAM interoperability needed to be a practical BEAM language. The remaining steps:
 
@@ -1678,6 +1846,7 @@ ActorForth now has the full compilation pipeline, OTP integration, and BEAM inte
 | `types` | `( -- )` | List all types |
 | `see` | `( Atom -- )` | Show word definition and signatures |
 | `load` | `( String -- )` | Load and interpret a .a4 file |
+| `import` | `( String -- Atom )` | Compile .a4 to BEAM module, load words |
 
 ### Arithmetic (Int dictionary)
 
@@ -1851,6 +2020,19 @@ Auto-generates: constructor (`typename`), non-destructive getters (`field1`, `fi
 | `build-app` | `( String Atom -- )` | Generate .app file for module |
 | `build-release` | `( String String Atom -- )` | Create OTP app directory structure |
 | `gen-server-module` | `( Atom Atom -- Atom )` | Compile type to gen_server module |
+
+### Python Interop (Any dictionary)
+
+| Word | Effect | Description |
+|------|--------|-------------|
+| `py-start` | `( -- )` | Ensure Python runtime is started |
+| `py-call` | `( a... Int Atom Atom -- Any )` | Call module.function with N args |
+| `py-call0` | `( Atom Atom -- Any )` | Call module.function() (zero args) |
+| `py-eval` | `( String -- Any )` | Evaluate Python expression |
+| `py-exec` | `( String -- )` | Execute Python statements |
+| `py-import` | `( String -- )` | Add directory to Python sys.path |
+| `py-venv` | `( String -- )` | Activate Python virtual environment |
+| `py-register` | `( Atom -- Atom )` | Register compiled word for Python |
 
 ### Special Tokens
 
