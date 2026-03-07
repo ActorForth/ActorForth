@@ -435,10 +435,15 @@ Key design decisions:
 
 #### 7.3 Actor Types
 
-New types for the actor system:
-- **`Actor`** — wraps an Erlang pid, typed by what messages it accepts
-- **`Message`** — typed envelope for inter-actor communication
-- **`Mailbox`** — selective receive with pattern matching on message types
+**Status: Done.**
+
+New types and primitives for the actor system:
+
+- **`Actor`** — wraps an Erlang pid, typed by what messages it accepts. Created by `server`, `supervised-server`, or `spawn`.
+- **`Message`** — typed envelope for inter-actor communication. Created by `msg` from a value and tag string. Non-destructive accessors `msg-tag` and `msg-data`.
+- **Selective receive** via `receive-match` (by message tag) and `receive-match-timeout`.
+- **Raw actor primitives**: `spawn` (word name -> Actor), `send`/`!` (value Actor ->), `receive` (-> value), `receive-timeout` (ms -> value Bool).
+- **Type-checked dispatch**: `<<` blocks now validate argument types against vocab signatures, raising errors for mismatches.
 
 ---
 
@@ -502,36 +507,95 @@ Type checking is now enforced at compile time:
 - Value-constrained types (`{Int, 1}` vs `{Int, 100}`) considered compatible (same base type)
 - `af_type_check.erl` handles `Any` as a type variable with concrete substitution
 
-## Phase 3: BEAM Bytecode Compilation (Future)
+### Milestone 7.7: Version 2.4 — Typed Messages & Compilation
 
-### Milestone 8: Core Erlang Emission
+**Goal:** Complete the actor type system and add on-demand native compilation.
 
-**Goal:** Compile ActorForth words to Core Erlang rather than interpreting them.
+**Status: Done.**
 
-Strategy: Target **Core Erlang** (not raw BEAM bytecode) as the initial compilation target. Core Erlang is a stable intermediate representation that the Erlang compiler can optimize and assemble.
+#### 7.7.1 Typed Actor Messages (Milestone 7.3)
 
-Why Core Erlang first:
-- Stable API across OTP versions (unlike raw BEAM opcodes which change)
-- Gets all of BEAM's optimizations for free
-- Erlang provides `compile:forms/1` to compile Core Erlang to .beam files
-- Much simpler than raw bytecode — no register allocation needed initially
+Raw actor primitives for spawn-based (non-server) actors:
+- `spawn` — `( Atom -- Actor )` spawn process running a named word
+- `send` / `!` — `( Any Actor -- )` send value to actor's mailbox
+- `receive` — `( -- Any )` blocking receive from own mailbox
+- `receive-timeout` — `( Int -- Any Bool )` receive with timeout in ms
+
+Message type for tagged inter-actor communication:
+- `msg` — `( Any String -- Message )` create tagged message
+- `msg-tag` — `( Message -- Message String )` get tag (non-destructive)
+- `msg-data` — `( Message -- Message Any )` get data (non-destructive)
+- `receive-match` — `( String -- Any )` selective receive by tag
+- `receive-match-timeout` — `( String Int -- Any Bool )` selective receive with timeout
+
+Type-checked dispatch: `<<` blocks validate argument types against the actor's vocabulary signatures, raising `actor_type_error` for mismatches.
+
+#### 7.7.2 Value Constraints in Signatures
+
+The compiler now supports value constraints in main clause signatures:
+```
+: factorial 0 Int -> Int ; drop 1 .    # {Int, 0} value constraint
+: factorial Int -> Int ; dup 1 - factorial * .
+```
+Previously this only worked in sub-clause syntax. The `handle_input_sig` and `handle_output_sig` handlers now buffer literal values (integer, float, bool) and combine them with the following type name.
+
+#### 7.7.3 On-Demand Native Compilation
+
+The `compile` word compiles interpreted words to native BEAM functions:
+```
+"factorial" compile    # replaces interpreted ops with native wrapper
+```
+Multi-clause words compile to multi-clause Erlang functions with literal patterns for value constraints.
+
+---
+
+## Phase 3: BEAM Bytecode Compilation
+
+### Milestone 8: BEAM Compilation via Abstract Forms
+
+**Goal:** Compile ActorForth words to native BEAM functions.
+
+**Status: Done (initial implementation).**
+
+Strategy: Target **Erlang abstract forms** as the compilation representation. The Erlang compiler (`compile:forms/1`) handles optimization and bytecode emission. This gives us all of BEAM's optimizations for free.
 
 ```erlang
 %% ActorForth word  : double Int -> Int ; dup + .
-%% Compiles to Core Erlang equivalent of:
+%% Compiles to Erlang abstract form equivalent of:
 %% double(X) -> X + X.
 ```
 
-Key reference: [A peak into the Erlang compiler and BEAM bytecode](https://gomoripeti.github.io/beam_by_example/)
-
 #### 8.1 Compilation Strategy
 
-For each ActorForth word:
-1. Analyze the stack signature → function arity (number of inputs)
-2. Map stack positions to Core Erlang variables
-3. Translate body operations to Core Erlang function calls
-4. Emit Core Erlang module
-5. Use `compile:forms/2` to produce .beam
+Implemented in `af_word_compiler.erl`:
+1. Stack simulation: each operation's effect is computed on an expression stack
+2. Argument patterns: value constraints become literal patterns, type-only become variables
+3. Multi-clause support: same-name words with different signatures compile to multi-clause functions
+4. Inter-word calls: resolved to local (same module) or remote (cross-module) calls
+5. `compile:forms/2` produces .beam binaries
+
+The `compile` word (in `af_type_any.erl`) allows on-demand compilation:
+```
+: factorial 0 Int -> Int ; drop 1 .
+: factorial Int -> Int ; dup 1 - factorial * .
+"factorial" compile    # compiles to native BEAM with pattern matching
+10 int factorial       # runs at native speed
+```
+
+Natively compiled operations:
+- Stack: `dup`, `drop`, `swap`, `rot`, `over`, `2dup`
+- Arithmetic: `+`, `-`, `*`, `/` (integer and float)
+- Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Boolean: `not`
+- Literals: integer, float
+
+#### 8.2 Future Compilation Work
+
+- Product type accessors (getters/setters) as native ops
+- `print` and other side-effecting ops
+- Automatic compilation of all defined words
+- Guard expressions for type constraints
+- Core Erlang target for more control over optimization
 
 ### Milestone 9: BEAM Assembler in ActorForth
 
