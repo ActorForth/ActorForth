@@ -188,6 +188,49 @@ The following generic stack manipulation operators are presently available:
     42
 
 
+### Introspection and Debugging
+
+`stack` : ->
+
+    Displays the full contents of the stack without modifying it.
+
+`words` : ->
+
+    Displays all available words grouped by type.
+
+`types` : ->
+
+    Displays all registered types.
+
+`see` : Atom ->
+
+    Shows the definition/signature of a word.
+
+    ok: double see
+      : double Int -> Int ;  dup + .
+
+`debug` : -> Debug
+
+    Pushes a Debug marker. Follow with `on` or `off` to enable/disable
+    debug tracing of the interpreter.
+
+    ok: debug on     # enables debug output
+    ok: debug off    # disables debug output
+
+### Assertions
+
+`assert` : Bool ->
+
+    Passes silently if true, raises an error with location if false.
+
+`assert-eq` : Any Any ->
+
+    Passes if both items have equal type and value, raises an error
+    showing expected vs actual if different.
+
+    ok: 5 5 assert-eq         # passes
+    ok: 5 6 assert-eq         # ERROR: Expected Int(5) but got Int(6)
+
 ### Constructors
 
 Types have a special form of operator called a constructor (**ctor**). A **ctor** is an
@@ -211,6 +254,106 @@ ok: stack
 Stack(1):
   0) 42 : Int
 ```
+
+### Built-in Types
+
+#### Int
+
+Constructor: `int` (Atom -> Int) or literal `42`.
+Operations: `+`, `-`, `*`, `/` (integer division).
+
+```
+ok: 10 3 +    # -> 13
+ok: 10 3 -    # -> 7
+ok: 10 3 *    # -> 30
+ok: 10 3 /    # -> 3
+```
+
+#### Float
+
+Constructor: `float` (Atom -> Float) or literal `3.14`.
+Operations: `+`, `-`, `*`, `/`, `to-int`, `to-float` (Int -> Float).
+
+```
+ok: 3.14 2.0 *    # -> 6.28
+ok: 3.7 to-int     # -> 3
+ok: 5 int to-float  # -> 5.0
+```
+
+#### Bool
+
+Constructor: `bool` (Atom -> Bool) or literals `true`/`True`/`false`/`False`.
+Operations: `not`, `==`, `!=`, `<`, `>`, `<=`, `>=`.
+
+Comparisons work on Int, Float, and String values:
+```
+ok: 5 3 >     # -> true
+ok: 5 5 ==    # -> true
+ok: true not   # -> false
+```
+
+#### String
+
+Constructor: `"hello"` (quoted tokens) or `string` (Atom -> String).
+Operations: `concat`, `length`, `to-atom`, `to-int`, `to-string` (Int -> String),
+`split`, `contains`, `starts-with`, `ends-with`, `trim`, `to-upper`, `to-lower`,
+`reverse`, `replace`, `substring`.
+
+```
+ok: "hello" " " "world" concat concat    # -> "hello world"
+ok: "hello" length                         # -> 5
+ok: "HELLO" to-lower                       # -> "hello"
+ok: "," "hello,world" split               # -> ["hello", "world"]
+```
+
+#### List
+
+Operations: `nil` (empty list), `cons` (prepend), `head`, `tail`, `length`,
+`append`, `reverse`, `nth`, `last`, `take`, `drop`, `empty?`, `contains?`,
+`flatten`, `zip`.
+
+```
+ok: nil 1 cons 2 cons 3 cons    # -> [3, 2, 1]
+ok: nil 1 cons 2 cons reverse   # -> [1, 2]
+ok: nil 1 cons 2 cons length    # -> 2
+ok: nil 1 cons head              # -> 1
+```
+
+#### Map
+
+Operations: `map-new`, `map-put`, `map-get`, `map-delete`, `map-has?`,
+`map-keys`, `map-values`, `map-size`, `map-merge`, `map-get-or`.
+
+```
+ok: map-new "x" 10 map-put "y" 20 map-put
+ok: "x" map-get    # -> 10
+ok: "z" map-has?   # -> false
+ok: map-size        # -> 2
+```
+
+#### Tuple
+
+Operations: `make-tuple`, `tuple-size`, `tuple-get`, `ok-tuple`, `error-tuple`,
+`is-ok`, `unwrap-ok`, `to-tuple` (List -> Tuple), `from-tuple` (Tuple -> List).
+
+```
+ok: 42 ok-tuple           # -> {ok, 42}
+ok: 42 ok-tuple is-ok     # -> true
+ok: 42 ok-tuple unwrap-ok # -> 42
+```
+
+### Erlang FFI
+
+Call Erlang functions directly:
+
+```
+ok: -5 erlang abs 1 erlang-call       # erlang:abs(-5) -> 5
+ok: 3 7 erlang max 2 erlang-call      # erlang:max(3, 7) -> 7
+ok: erlang node erlang-call0            # erlang:node() -> nonode@nohost
+```
+
+Words: `erlang-call` (args... module function arity -> result),
+`erlang-call0` (module function -> result).
 
 ### Types and Type-Driven Dispatch
 
@@ -296,6 +439,44 @@ type Counter value Int .
 - Cast (no return values) is async, Call (returns values) is sync
 - Auto-generated ops are excluded from the remote vocabulary (state is private)
 
+### Raw Actor Primitives
+
+In addition to the `server`/`<<`/`>>` pattern, ActorForth provides low-level
+actor primitives mapped directly to Erlang processes:
+
+- `spawn` : Atom -> Actor — spawn a new process running a named word
+- `send` / `!` : Any Actor -> — send a typed value to an actor's mailbox
+- `receive` : -> Any — blocking receive from own mailbox
+- `receive-timeout` : Int -> Any Bool — receive with timeout (ms)
+- `self` : -> Actor — push current process as Actor
+- `supervised-server` : creates an actor under an OTP supervisor
+
+#### Typed Messages
+
+For tagged communication between actors:
+
+- `msg` : Any String -> Message — create a tagged message
+- `msg-tag` : Message -> Message String — get tag (non-destructive)
+- `msg-data` : Message -> Message Any — get data (non-destructive)
+- `receive-match` : String -> Any — selective receive by tag
+- `receive-match-timeout` : String Int -> Any Bool — selective receive with timeout
+
+### On-Demand Native Compilation
+
+The `compile` word compiles an interpreted word to a native BEAM function:
+
+```
+: factorial Int -> Int ;
+    : 0 -> ; drop 1
+    : Int -> ; dup 1 - factorial * .
+"factorial" compile
+10 factorial    # runs at native speed
+```
+
+Multi-clause words compile to multi-clause Erlang functions with literal
+patterns for value constraints. The compiled function replaces the interpreted
+version in the type registry.
+
 ### Python Interop
 
 ActorForth can call Python code via the `erlang_python` library, embedding
@@ -370,13 +551,29 @@ MY_CONFIG=value
 
 ### Native BEAM Compilation
 
-Words can be compiled to native BEAM modules:
+Words can be compiled to native BEAM modules via `compile-to-beam` (single word)
+or `compile-all` (all defined words):
 
 ```
 : double Int -> Int ; dup + .
-double af_math compile-to-beam
+: quadruple Int -> Int ; double double .
+af_math compile-all
 # af_math:double(5) => 10 from Erlang
+# af_math:quadruple(5) => 20 from Erlang
 ```
+
+The compiler generates Erlang abstract forms with optimized inline code for:
+- Stack ops: `dup`, `drop`, `swap`, `rot`, `over`, `2dup`
+- Arithmetic: `+`, `-`, `*`, `/`
+- Comparisons: `==`, `!=`, `<`, `>`, `<=`, `>=`
+- Boolean: `not`
+- String: `concat`, `length`
+- List: `nil`, `cons`, `head`, `tail`, `reverse`, `append`, `length`
+- Map: `map-new`, `map-size`
+- Product type: getters and setters (inline field access)
+- Literals: integers, floats, `true`/`false`
+
+Unrecognized operations fall back to runtime dispatch via `af_compile:apply_impl`.
 
 ### OTP Bridge
 

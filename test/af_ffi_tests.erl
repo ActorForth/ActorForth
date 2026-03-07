@@ -50,10 +50,10 @@ apply_test_() ->
             C = eval("nil 10 cons 20 cons max erlang erlang-apply", af_interpreter:new_continuation()),
             [{'Int', 20}] = C#continuation.data_stack
         end} end,
-        fun(_) -> {"call lists:reverse/1", fun() ->
-            C = eval("nil nil 1 cons 2 cons 3 cons cons reverse lists erlang-apply", af_interpreter:new_continuation()),
-            [{'List', Reversed}] = C#continuation.data_stack,
-            ?assertEqual([{'Int', 1}, {'Int', 2}, {'Int', 3}], Reversed)
+        fun(_) -> {"call lists:sort/1", fun() ->
+            C = eval("nil nil 3 cons 1 cons 2 cons cons sort lists erlang-apply", af_interpreter:new_continuation()),
+            [{'List', Sorted}] = C#continuation.data_stack,
+            ?assertEqual([{'Int', 1}, {'Int', 2}, {'Int', 3}], Sorted)
         end} end,
         fun(_) -> {"call erlang:min/2", fun() ->
             C = eval("nil 100 cons 3 cons min erlang erlang-apply", af_interpreter:new_continuation()),

@@ -294,8 +294,66 @@ translate_op("not", [A | Rest], L, _Ctx) ->
     ValA = extract_val(A, L),
     {ok, [make_tagged('Bool', {op, L, 'not', ValA}, L) | Rest]};
 
+%% String operations
+translate_op("concat", [A, B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    ResultExpr = {op, L, '++', ValB, ValA},
+    {ok, [make_tagged('String', ResultExpr, L) | Rest]};
+translate_op("length", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, length}}, [ValA]},
+    {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
+translate_op("length", [{_Expr, 'List'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, length}}, [ValA]},
+    {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
+
+%% List operations
+translate_op("head", [{_Expr, 'List'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, hd}}, [ValA]},
+    {ok, [{ResultExpr, 'Any'} | Rest]};
+translate_op("tail", [{_Expr, 'List'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, tl}}, [ValA]},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
+translate_op("nil", Stack, L, _Ctx) ->
+    {ok, [make_tagged('List', {nil, L}, L) | Stack]};
+translate_op("cons", [Item, {ListExpr, 'List'} | Rest], L, _Ctx) ->
+    {ItemExpr, _} = Item,
+    ResultExpr = {cons, L, ItemExpr, extract_val({ListExpr, 'List'}, L)},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
+translate_op("reverse", [{_Expr, 'List'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, lists}, {atom, L, reverse}}, [ValA]},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
+translate_op("append", [{_ExprA, 'List'} = A, {_ExprB, 'List'} = B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    ResultExpr = {op, L, '++', ValB, ValA},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
+
+%% Map operations
+translate_op("map-new", Stack, L, _Ctx) ->
+    ResultExpr = {map, L, []},
+    {ok, [make_tagged('Map', ResultExpr, L) | Stack]};
+translate_op("map-size", [{_Expr, 'Map'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, size}}, [ValA]},
+    {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
+
+%% Product type getters: generates maps:get(FieldName, FieldMap)
+%% Product type setters: generates maps:put(FieldName, NewValue, FieldMap)
+translate_op(Name, Stack, L, Ctx) when length(Stack) >= 1 ->
+    case try_product_op(Name, Stack, L, Ctx) of
+        {ok, NewStack} -> {ok, NewStack};
+        not_product -> translate_op_fallback(Name, Stack, L, Ctx)
+    end;
+
 %% Literals and word calls
 translate_op(Name, Stack, L, Ctx) ->
+    translate_op_fallback(Name, Stack, L, Ctx).
+
+translate_op_fallback(Name, Stack, L, Ctx) ->
     %% Try integer literal
     case catch list_to_integer(Name) of
         N when is_integer(N) ->
@@ -338,6 +396,46 @@ runtime_dispatch(Name, Stack, L, Ctx) ->
         _ ->
             %% Has outputs or unknown — result is opaque stack
             {ok, [{CallExpr, stack}]}
+    end.
+
+%% Try to compile a product type getter or setter.
+%% Getters: instance on TOS, push field value + keep instance
+%% Setters (name!): new_value and instance on stack, return updated instance
+try_product_op(Name, [{_Expr, TosType} | _] = Stack, L, _Ctx) when is_atom(TosType), TosType =/= stack ->
+    case catch af_type:get_type(TosType) of
+        {ok, #af_type{ops = Ops}} ->
+            case maps:get(Name, Ops, []) of
+                [#operation{source = auto, sig_out = [FieldType]} | _] ->
+                    %% Getter: {TypeName, FieldMap} -> FieldValue, {TypeName, FieldMap}
+                    [{InstanceExpr, _} | Rest] = Stack,
+                    FieldName = list_to_atom(Name),
+                    FieldMapExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, element}},
+                        [{integer, L, 2}, InstanceExpr]},
+                    ValExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, get}},
+                        [{atom, L, FieldName}, FieldMapExpr]},
+                    {ok, [{ValExpr, FieldType}, {InstanceExpr, TosType} | Rest]};
+                _ -> not_product
+            end;
+        _ -> not_product
+    end;
+try_product_op(Name, Stack, L, _Ctx) ->
+    %% Check for setter (name ends with !)
+    case lists:suffix("!", Name) of
+        true when length(Stack) >= 2 ->
+            BaseName = lists:droplast(Name),
+            [{NewValExpr, _ValType}, {InstanceExpr, InstanceType} | Rest] = Stack,
+            case catch af_type:get_type(InstanceType) of
+                {ok, #af_type{ops = _Ops}} ->
+                    FieldName = list_to_atom(BaseName),
+                    FieldMapExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, element}},
+                        [{integer, L, 2}, InstanceExpr]},
+                    UpdatedMap = {call, L, {remote, L, {atom, L, maps}, {atom, L, put}},
+                        [{atom, L, FieldName}, NewValExpr, FieldMapExpr]},
+                    ResultExpr = {tuple, L, [{atom, L, InstanceType}, UpdatedMap]},
+                    {ok, [{ResultExpr, InstanceType} | Rest]};
+                _ -> not_product
+            end;
+        _ -> not_product
     end.
 
 %% Build a cons-list expression from the typed expression stack.

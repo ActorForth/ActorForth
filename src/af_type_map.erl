@@ -75,6 +75,22 @@ init() ->
         impl = fun op_map_size/1
     }),
 
+    %% map-merge: Map Map -> Map (TOS map overwrites first on conflicts)
+    af_type:add_op('Map', #operation{
+        name = "map-merge",
+        sig_in = ['Map', 'Map'],
+        sig_out = ['Map'],
+        impl = fun op_map_merge/1
+    }),
+
+    %% map-get-or: Any Any Map -> Any (TOS=default, second=key, third=map)
+    af_type:add_op('Any', #operation{
+        name = "map-get-or",
+        sig_in = ['Any', 'Any', 'Map'],
+        sig_out = ['Any'],
+        impl = fun op_map_get_or/1
+    }),
+
     ok.
 
 %%% Operations
@@ -117,3 +133,16 @@ op_map_values(Cont) ->
 op_map_size(Cont) ->
     [{'Map', M} | Rest] = Cont#continuation.data_stack,
     Cont#continuation{data_stack = [{'Int', maps:size(M)} | Rest]}.
+
+op_map_merge(Cont) ->
+    [{'Map', M2}, {'Map', M1} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'Map', maps:merge(M1, M2)} | Rest]}.
+
+op_map_get_or(Cont) ->
+    [Default, Key, {'Map', M} | Rest] = Cont#continuation.data_stack,
+    case maps:find(Key, M) of
+        {ok, Value} ->
+            Cont#continuation{data_stack = [Value | Rest]};
+        error ->
+            Cont#continuation{data_stack = [Default | Rest]}
+    end.

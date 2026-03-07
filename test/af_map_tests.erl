@@ -123,3 +123,43 @@ size_test_() ->
             [{'Int', 3}] = C#continuation.data_stack
         end} end
     ]}.
+
+%% --- map-merge ---
+
+merge_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"merge two empty maps", fun() ->
+            C = eval("map-new map-new map-merge map-size", af_interpreter:new_continuation()),
+            [{'Int', 0}] = C#continuation.data_stack
+        end} end,
+        fun(_) -> {"merge combines keys", fun() ->
+            C = eval("map-new 1 \"a\" map-put map-new 2 \"b\" map-put map-merge map-size", af_interpreter:new_continuation()),
+            [{'Int', 2}] = C#continuation.data_stack
+        end} end,
+        fun(_) -> {"merge TOS overwrites on conflict", fun() ->
+            C = eval("map-new 1 \"x\" map-put map-new 99 \"x\" map-put map-merge \"x\" map-get", af_interpreter:new_continuation()),
+            [{'Int', 99}] = C#continuation.data_stack
+        end} end,
+        fun(_) -> {"merge preserves non-conflicting keys", fun() ->
+            C = eval("map-new 1 \"a\" map-put 2 \"b\" map-put map-new 3 \"c\" map-put map-merge map-size", af_interpreter:new_continuation()),
+            [{'Int', 3}] = C#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- map-get-or ---
+
+get_or_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"get-or returns value when key exists", fun() ->
+            C = eval("map-new 42 \"x\" map-put \"x\" 0 map-get-or", af_interpreter:new_continuation()),
+            [{'Int', 42}] = C#continuation.data_stack
+        end} end,
+        fun(_) -> {"get-or returns default when key missing", fun() ->
+            C = eval("map-new \"missing\" 99 map-get-or", af_interpreter:new_continuation()),
+            [{'Int', 99}] = C#continuation.data_stack
+        end} end,
+        fun(_) -> {"get-or with string default", fun() ->
+            C = eval("map-new \"nope\" \"fallback\" map-get-or", af_interpreter:new_continuation()),
+            [{'String', <<"fallback">>}] = C#continuation.data_stack
+        end} end
+    ]}.

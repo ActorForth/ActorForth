@@ -11,11 +11,21 @@
 %% List type: wraps native Erlang lists.
 %% Representation: {List, [StackItem, ...]}
 %%
-%% nil    — ( -> List )         push empty list
-%% cons   — ( List Any -> List )  prepend item to list
-%% length — ( List -> Int )     count items (destructive; use dup first)
-%% head   — ( List -> Any )     first item (error on empty)
-%% tail   — ( List -> List )    rest of list (error on empty)
+%% nil       — ( -> List )              push empty list
+%% cons      — ( List Any -> List )     prepend item to list
+%% length    — ( List -> Int )          count items (destructive; use dup first)
+%% head      — ( List -> Any )          first item (error on empty)
+%% tail      — ( List -> List )         rest of list (error on empty)
+%% append    — ( List List -> List )    concatenate two lists
+%% reverse   — ( List -> List )         reverse a list
+%% nth       — ( List Int -> Any )      get nth element (0-based)
+%% last      — ( List -> Any )          get last element
+%% take      — ( List Int -> List )     take first N elements
+%% drop      — ( List Int -> List )     drop first N elements
+%% empty?    — ( List -> Bool )         check if list is empty
+%% contains? — ( List Any -> Bool )     check if item is in list
+%% flatten   — ( List -> List )         flatten nested lists one level
+%% zip       — ( List List -> List )    combine two lists into list of Tuple pairs
 
 init() ->
     af_type:register_type(#af_type{name = 'List'}),
@@ -50,6 +60,66 @@ init() ->
         impl = fun op_tail/1
     }),
 
+    %% append: two lists -> concatenated list
+    af_type:add_op('List', #operation{
+        name = "append", sig_in = ['List', 'List'], sig_out = ['List'],
+        impl = fun op_append/1
+    }),
+
+    %% reverse: list -> reversed list
+    af_type:add_op('List', #operation{
+        name = "reverse", sig_in = ['List'], sig_out = ['List'],
+        impl = fun op_reverse/1
+    }),
+
+    %% nth: Int on TOS, List below -> element at index
+    af_type:add_op('Int', #operation{
+        name = "nth", sig_in = ['Int', 'List'], sig_out = ['Any'],
+        impl = fun op_nth/1
+    }),
+
+    %% last: list -> last element
+    af_type:add_op('List', #operation{
+        name = "last", sig_in = ['List'], sig_out = ['Any'],
+        impl = fun op_last/1
+    }),
+
+    %% take: Int on TOS, List below -> list of first N items
+    af_type:add_op('Int', #operation{
+        name = "take", sig_in = ['Int', 'List'], sig_out = ['List'],
+        impl = fun op_take/1
+    }),
+
+    %% drop: Int on TOS, List below -> list without first N items
+    af_type:add_op('Int', #operation{
+        name = "drop", sig_in = ['Int', 'List'], sig_out = ['List'],
+        impl = fun op_drop/1
+    }),
+
+    %% empty?: list -> bool
+    af_type:add_op('List', #operation{
+        name = "empty?", sig_in = ['List'], sig_out = ['Bool'],
+        impl = fun op_empty/1
+    }),
+
+    %% contains?: Any on TOS, List below -> bool
+    af_type:add_op('Any', #operation{
+        name = "contains?", sig_in = ['Any', 'List'], sig_out = ['Bool'],
+        impl = fun op_contains/1
+    }),
+
+    %% flatten: list of lists -> flat list
+    af_type:add_op('List', #operation{
+        name = "flatten", sig_in = ['List'], sig_out = ['List'],
+        impl = fun op_flatten/1
+    }),
+
+    %% zip: two lists -> list of Tuple pairs
+    af_type:add_op('List', #operation{
+        name = "zip", sig_in = ['List', 'List'], sig_out = ['List'],
+        impl = fun op_zip/1
+    }),
+
     ok.
 
 %%% Operations
@@ -80,3 +150,58 @@ op_tail(Cont) ->
         [_ | T] -> Cont#continuation{data_stack = [{'List', T} | Rest]};
         [] -> af_error:raise(empty_list, "tail on empty list", Cont)
     end.
+
+op_append(Cont) ->
+    [{'List', B}, {'List', A} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'List', A ++ B} | Rest]}.
+
+op_reverse(Cont) ->
+    [{'List', Items} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'List', lists:reverse(Items)} | Rest]}.
+
+op_nth(Cont) ->
+    [{'Int', N}, {'List', Items} | Rest] = Cont#continuation.data_stack,
+    case N >= 0 andalso N < length(Items) of
+        true ->
+            Elem = lists:nth(N + 1, Items),
+            Cont#continuation{data_stack = [Elem | Rest]};
+        false ->
+            af_error:raise(index_out_of_range, "nth index out of range", Cont)
+    end.
+
+op_last(Cont) ->
+    [{'List', Items} | Rest] = Cont#continuation.data_stack,
+    case Items of
+        [] -> af_error:raise(empty_list, "last on empty list", Cont);
+        _ -> Cont#continuation{data_stack = [lists:last(Items) | Rest]}
+    end.
+
+op_take(Cont) ->
+    [{'Int', N}, {'List', Items} | Rest] = Cont#continuation.data_stack,
+    Taken = lists:sublist(Items, N),
+    Cont#continuation{data_stack = [{'List', Taken} | Rest]}.
+
+op_drop(Cont) ->
+    [{'Int', N}, {'List', Items} | Rest] = Cont#continuation.data_stack,
+    Dropped = lists:nthtail(min(N, length(Items)), Items),
+    Cont#continuation{data_stack = [{'List', Dropped} | Rest]}.
+
+op_empty(Cont) ->
+    [{'List', Items} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'Bool', Items =:= []} | Rest]}.
+
+op_contains(Cont) ->
+    [Item, {'List', Items} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'Bool', lists:member(Item, Items)} | Rest]}.
+
+op_flatten(Cont) ->
+    [{'List', Items} | Rest] = Cont#continuation.data_stack,
+    Flattened = lists:flatmap(fun({'List', SubItems}) -> SubItems;
+                                 (Other) -> [Other]
+                              end, Items),
+    Cont#continuation{data_stack = [{'List', Flattened} | Rest]}.
+
+op_zip(Cont) ->
+    [{'List', B}, {'List', A} | Rest] = Cont#continuation.data_stack,
+    Zipped = lists:zipwith(fun(X, Y) -> {'Tuple', {X, Y}} end, A, B),
+    Cont#continuation{data_stack = [{'List', Zipped} | Rest]}.
