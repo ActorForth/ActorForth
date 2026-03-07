@@ -5,6 +5,7 @@
 -include("af_error.hrl").
 
 -export([start/0, run_file/1, run_file_repl/1, interpret_line/2, init_types/0]).
+-export([load_env/0, load_env/1]).
 
 init_types() ->
     af_type:init(),
@@ -25,6 +26,7 @@ init_types() ->
     af_type_python:init().
 
 start() ->
+    load_env(),
     init_types(),
     io:format("ActorForth REPL. ^C to exit.~n"),
     loop(af_interpreter:new_continuation()).
@@ -67,3 +69,53 @@ loop(Cont) ->
 interpret_line(Line, Cont) ->
     Tokens = af_parser:parse(Line, "stdin"),
     af_interpreter:interpret_tokens(Tokens, Cont).
+
+%% Load environment variables from a .env file.
+%% Looks for .env in the current directory by default.
+load_env() ->
+    load_env(".env").
+
+load_env(File) ->
+    case file:read_file(File) of
+        {ok, Content} ->
+            Lines = binary:split(Content, [<<"\n">>, <<"\r\n">>], [global]),
+            lists:foreach(fun(Line) ->
+                case parse_env_line(Line) of
+                    {Key, Value} ->
+                        os:putenv(binary_to_list(Key), binary_to_list(Value));
+                    skip ->
+                        ok
+                end
+            end, Lines);
+        {error, enoent} ->
+            ok;
+        {error, _Reason} ->
+            ok
+    end.
+
+parse_env_line(Line) ->
+    Trimmed = string:trim(binary_to_list(Line)),
+    case Trimmed of
+        [] -> skip;
+        [$# | _] -> skip;
+        _ ->
+            case string:split(Trimmed, "=", leading) of
+                [Key, Value] ->
+                    K = string:trim(Key),
+                    V = unquote(string:trim(Value)),
+                    {list_to_binary(K), list_to_binary(V)};
+                _ -> skip
+            end
+    end.
+
+unquote([$" | Rest]) ->
+    case lists:reverse(Rest) of
+        [$" | Inner] -> lists:reverse(Inner);
+        _ -> [$" | Rest]
+    end;
+unquote([$' | Rest]) ->
+    case lists:reverse(Rest) of
+        [$' | Inner] -> lists:reverse(Inner);
+        _ -> [$' | Rest]
+    end;
+unquote(V) -> V.

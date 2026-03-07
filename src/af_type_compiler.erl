@@ -362,18 +362,47 @@ register_multi_word(State, Clauses, Rest, Cont) ->
     Cont#continuation{data_stack = Rest}.
 
 %% Run compile-time type check on a word body.
-%% Emits a warning on type mismatch; does not prevent compilation.
+%% Type mismatches are errors when inference is complete (no unknowns).
+%% When inference encounters unknown ops (product types, etc.), downgrade to warning.
 type_check_body(Name, SigIn, SigOut, Body) ->
     case af_type_check:check_word(Name, SigIn, SigOut, Body) of
         ok -> ok;
         {error, {type_mismatch, _, #{expected := Expected, actual := Actual}}} ->
-            io:format("Warning: type mismatch in word '~s'~n"
-                      "  declared output: ~p~n"
-                      "  inferred output: ~p~n", [Name, Expected, Actual]);
+            case has_unknown_types(Actual, Expected) of
+                true ->
+                    %% Inference was incomplete — warn only
+                    io:format("Warning: type check for '~s' incomplete~n"
+                              "  declared output: ~p~n"
+                              "  inferred output: ~p~n", [Name, Expected, Actual]);
+                false ->
+                    %% Fully resolved types don't match — error
+                    error({type_error, Name,
+                        lists:flatten(io_lib:format(
+                            "Type mismatch in word '~s': "
+                            "declared output ~p but inferred ~p",
+                            [Name, Expected, Actual]))})
+            end;
+        {error, {stack_underflow, OpName, _}} ->
+            io:format("Warning: type check for '~s' incomplete "
+                      "(stack underflow at '~p')~n", [Name, OpName]);
         {error, _Reason} ->
-            %% Other errors (stack underflow, etc.) — skip for now
+            %% Other inference errors — warn but allow
             ok
     end.
+
+%% Check if inferred types suggest incomplete inference:
+%% - Contains 'Atom' from unresolved tokens (product type ops, etc.)
+%% - Different stack depth from expected (missing type info)
+%% - Expected types include non-builtin types the checker can't verify
+has_unknown_types(Types, Expected) when length(Types) =/= length(Expected) ->
+    true;
+has_unknown_types(Types, Expected) ->
+    Builtins = ['Any', 'Int', 'Float', 'Bool', 'String', 'Atom', 'List', 'Map', 'Tuple'],
+    lists:any(fun('Atom') -> true; (_) -> false end, Types)
+    orelse lists:any(fun
+        ({_T, _V}) -> false;  %% value constraints are checkable
+        (T) -> not lists:member(T, Builtins)
+    end, Expected).
 
 get_target_type([{Type, _Value} | _]) -> Type;
 get_target_type([Type | _]) when is_atom(Type) -> Type;
@@ -415,17 +444,29 @@ pop_trace(undefined, Cont) -> Cont;
 pop_trace(_WordName, Cont) ->
     Cont#continuation{word_trace = tl(Cont#continuation.word_trace)}.
 
-%% Check if the last operation in Body is a self-call to WordName.
+%% Check if the last operation in Body is a call that can be tail-optimized.
+%% Handles self-calls (self-recursion) and calls to other compiled words.
 detect_tail_call([], _WordName) -> false;
 detect_tail_call(_Body, undefined) -> false;
 detect_tail_call(Body, WordName) ->
     Last = lists:last(Body),
-    case Last#operation.name of
+    LastName = Last#operation.name,
+    case LastName of
         WordName ->
+            %% Self-recursive tail call
             {true, lists:droplast(Body), Last};
         _ ->
-            false
+            %% Check if last op is a call to another compiled word
+            case is_word_call(Last) of
+                true -> {true, lists:droplast(Body), Last};
+                false -> false
+            end
     end.
+
+%% A compiled word call has source = {compiled, _Body} indicating it's
+%% a user-defined word (not a primitive), and thus benefits from TCO.
+is_word_call(#operation{source = {compiled, _}}) -> true;
+is_word_call(_) -> false.
 
 execute_body([], Cont) -> Cont;
 execute_body([#operation{impl = Impl} | Rest], Cont) ->

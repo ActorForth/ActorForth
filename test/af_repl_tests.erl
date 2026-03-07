@@ -48,3 +48,31 @@ repl_test_() ->
             ?assertMatch({'EXIT', _}, Result)
         end} end
     ]}.
+
+env_test_() ->
+    {foreach, fun() -> ok end, fun(_) -> ok end, [
+        fun(_) -> {"load_env reads .env file", fun() ->
+            %% Write a temporary .env file
+            File = "/tmp/af_test_env_" ++ integer_to_list(erlang:unique_integer([positive])),
+            ok = file:write_file(File, <<"TEST_AF_KEY=hello123\nTEST_AF_NUM=42\n">>),
+            af_repl:load_env(File),
+            ?assertEqual("hello123", os:getenv("TEST_AF_KEY")),
+            ?assertEqual("42", os:getenv("TEST_AF_NUM")),
+            file:delete(File),
+            os:unsetenv("TEST_AF_KEY"),
+            os:unsetenv("TEST_AF_NUM")
+        end} end,
+        fun(_) -> {"load_env handles quotes and comments", fun() ->
+            File = "/tmp/af_test_env2_" ++ integer_to_list(erlang:unique_integer([positive])),
+            ok = file:write_file(File, <<"# comment line\nQUOTED_VAL=\"with spaces\"\nSINGLE='quoted'\n">>),
+            af_repl:load_env(File),
+            ?assertEqual("with spaces", os:getenv("QUOTED_VAL")),
+            ?assertEqual("quoted", os:getenv("SINGLE")),
+            file:delete(File),
+            os:unsetenv("QUOTED_VAL"),
+            os:unsetenv("SINGLE")
+        end} end,
+        fun(_) -> {"load_env with missing file is ok", fun() ->
+            ?assertEqual(ok, af_repl:load_env("/tmp/nonexistent_env_file_12345"))
+        end} end
+    ]}.

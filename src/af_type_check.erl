@@ -47,8 +47,24 @@ resolve_stack_effect(Name, Stack) ->
         {ok, #operation{sig_in = OpSigIn, sig_out = OpSigOut}} ->
             apply_stack_effect(OpSigIn, OpSigOut, Stack, Name);
         not_found ->
-            %% Unknown token — assume it pushes an Atom
-            {ok, ['Atom' | Stack]}
+            %% Check if it's a literal (integer, float, etc.)
+            case try_literal_type(Name) of
+                {ok, Type} -> {ok, [Type | Stack]};
+                not_found ->
+                    %% Unknown token — assume it pushes an Atom
+                    {ok, ['Atom' | Stack]}
+            end
+    end.
+
+%% Try to determine if a token name is a literal value.
+try_literal_type(Name) ->
+    case catch list_to_integer(Name) of
+        N when is_integer(N) -> {ok, 'Int'};
+        _ ->
+            case catch list_to_float(Name) of
+                F when is_float(F) -> {ok, 'Float'};
+                _ -> not_found
+            end
     end.
 
 %% Find operation for type inference purposes.
@@ -114,6 +130,7 @@ type_compatible(SigType, SigType) -> true;
 type_compatible(_SigType, 'Any') -> true;  %% Unknown type on stack matches anything
 type_compatible({Type, _Value}, Type) -> true;  %% Value constraint matches base type
 type_compatible(Type, {Type, _Value}) -> true;  %% Base type matches value constraint
+type_compatible({Type, _V1}, {Type, _V2}) -> true;  %% Same base type, different value constraints
 type_compatible(_, _) -> false.
 
 %% Check if the result stack matches the declared output signature.

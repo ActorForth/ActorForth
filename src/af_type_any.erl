@@ -93,6 +93,12 @@ init() ->
         impl = fun op_load/1
     }),
 
+    %% import : String -> Atom  (compile .a4 file to BEAM module, load words)
+    af_type:add_op('Any', #operation{
+        name = "import", sig_in = ['String'], sig_out = ['Atom'],
+        impl = fun op_import/1
+    }),
+
     %% debug : -> Debug  (pushes Debug marker, handler intercepts on/off)
     af_type:register_type(#af_type{name = 'Debug'}),
     af_type:add_op('Any', #operation{
@@ -271,6 +277,30 @@ op_load(Cont) ->
         {error, Reason} ->
             Msg = lists:flatten(io_lib:format("Cannot load file ~s: ~p", [ResolvedPath, Reason])),
             af_error:raise(load_error, Msg, Cont)
+    end.
+
+%%% Import
+
+op_import(Cont) ->
+    [{'String', PathBin} | Rest] = Cont#continuation.data_stack,
+    Path = binary_to_list(PathBin),
+    %% Resolve relative paths
+    ResolvedPath = case filename:pathtype(Path) of
+        absolute -> Path;
+        _ ->
+            CurrentFile = case Cont#continuation.current_token of
+                #token{file = File} when File =/= "", File =/= "stdin", File =/= "eval" ->
+                    filename:dirname(File);
+                _ -> "."
+            end,
+            filename:join(CurrentFile, Path)
+    end,
+    case af_compile_file:compile(ResolvedPath) of
+        {ok, ModAtom} ->
+            Cont#continuation{data_stack = [{'Atom', atom_to_list(ModAtom)} | Rest]};
+        {error, Reason} ->
+            Msg = lists:flatten(io_lib:format("import failed for ~s: ~p", [ResolvedPath, Reason])),
+            af_error:raise(import_error, Msg, Cont)
     end.
 
 %%% Debug
