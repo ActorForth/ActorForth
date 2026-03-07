@@ -129,23 +129,27 @@ run_load_demo(Config) ->
     try_script_allow_known_failure("samples/load_demo.a4", Config, load_error).
 
 %%% ============================================================
-%%% Test Cases - Python bridge scripts (skip if unavailable)
+%%% Test Cases - Python bridge scripts
 %%% ============================================================
 
 run_py_ai_demo(Config) ->
-    skip_python_script("samples/py_ai_demo.a4", Config).
+    run_python_script("samples/py_ai_demo.a4", Config).
 
 run_py_bridge_demo(Config) ->
-    skip_python_script("samples/py_bridge_demo.a4", Config).
+    run_python_script("samples/py_bridge_demo.a4", Config).
 
 run_py_http_demo(Config) ->
-    skip_python_script("samples/py_http_demo.a4", Config).
+    run_python_script("samples/py_http_demo.a4", Config).
 
 run_py_llm_demo(Config) ->
-    skip_python_script("samples/py_llm_demo.a4", Config).
+    %% Requires OPENAI_API_KEY — skip if not available
+    case os:getenv("OPENAI_API_KEY") of
+        false -> {skip, "OPENAI_API_KEY not set"};
+        _ -> run_python_script("samples/py_llm_demo.a4", Config)
+    end.
 
 run_py_text_demo(Config) ->
-    skip_python_script("samples/py_text_demo.a4", Config).
+    run_python_script("samples/py_text_demo.a4", Config).
 
 %%% ============================================================
 %%% Helpers
@@ -219,8 +223,19 @@ try_script_with_timeout(RelPath, Config, Timeout) ->
             ct:fail({file_read_error, RelPath, Reason})
     end.
 
-skip_python_script(RelPath, _Config) ->
-    {skip, {python_required, RelPath}}.
+run_python_script(RelPath, Config) ->
+    ProjectRoot = ?config(project_root, Config),
+    %% Python scripts use relative py-import paths like "samples/python",
+    %% so we need to run from the project root directory.
+    {ok, OrigCwd} = file:get_cwd(),
+    ok = file:set_cwd(ProjectRoot),
+    application:ensure_all_started(erlang_python),
+    af_type_python:init(),
+    try
+        run_script(RelPath, Config)
+    after
+        file:set_cwd(OrigCwd)
+    end.
 
 find_project_root(Dir) ->
     %% Look for rebar.config to identify project root
