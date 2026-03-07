@@ -30,8 +30,9 @@ Usage from ActorForth:
 """
 
 import json
+import os
 
-_api_key = None
+_api_key = os.environ.get("OPENAI_API_KEY")
 _model = "gpt-4o"
 _embed_model = "text-embedding-3-small"
 _temperature = 0.7

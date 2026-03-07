@@ -21,3 +21,4 @@ rebar3.crashdump
 .venv
 __pycache__
 *.pyc
+.env
