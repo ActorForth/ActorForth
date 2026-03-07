@@ -82,7 +82,8 @@ init() ->
 %% : — Push WordDefinition state onto stack, changing the dictionary context.
 op_colon(Cont) ->
     State = #{name => undefined, sig_in => [], sig_out => [], body => [],
-              clauses => [], current_sub => undefined},
+              clauses => [], current_sub => undefined,
+              pending_value => undefined},
     Cont#continuation{
         data_stack = [{'WordDefinition', State} | Cont#continuation.data_stack]
     }.
@@ -134,26 +135,66 @@ handle_word_definition(TokenValue, Cont) ->
     }.
 
 %% Handler: InputTypeSignature
-%% Accumulate type names into sig_in
+%% Accumulate type names into sig_in.
+%% Supports value constraints: "0 Int" -> {Int, 0}
+%% When a literal (integer/float/bool) is seen, buffer it as pending_value.
+%% When the next type name arrives, combine into {Type, Value}.
 handle_input_sig(TokenValue, Cont) ->
     [{'InputTypeSignature', State} | Rest] = Cont#continuation.data_stack,
-    #{sig_in := SigIn} = State,
-    TypeAtom = list_to_atom(TokenValue),
-    NewState = State#{sig_in => SigIn ++ [TypeAtom]},
-    Cont#continuation{
-        data_stack = [{'InputTypeSignature', NewState} | Rest]
-    }.
+    #{sig_in := SigIn, pending_value := PendingValue} = State,
+    case PendingValue of
+        undefined ->
+            case try_parse_literal_value(TokenValue) of
+                {ok, Value} ->
+                    NewState = State#{pending_value => Value},
+                    Cont#continuation{
+                        data_stack = [{'InputTypeSignature', NewState} | Rest]
+                    };
+                not_found ->
+                    TypeAtom = list_to_atom(TokenValue),
+                    NewState = State#{sig_in => SigIn ++ [TypeAtom]},
+                    Cont#continuation{
+                        data_stack = [{'InputTypeSignature', NewState} | Rest]
+                    }
+            end;
+        Value ->
+            TypeAtom = list_to_atom(TokenValue),
+            NewState = State#{sig_in => SigIn ++ [{TypeAtom, Value}],
+                              pending_value => undefined},
+            Cont#continuation{
+                data_stack = [{'InputTypeSignature', NewState} | Rest]
+            }
+    end.
 
 %% Handler: OutputTypeSignature
-%% Accumulate type names into sig_out
+%% Accumulate type names into sig_out.
+%% Supports value constraints same as input sig.
 handle_output_sig(TokenValue, Cont) ->
     [{'OutputTypeSignature', State} | Rest] = Cont#continuation.data_stack,
-    #{sig_out := SigOut} = State,
-    TypeAtom = list_to_atom(TokenValue),
-    NewState = State#{sig_out => SigOut ++ [TypeAtom]},
-    Cont#continuation{
-        data_stack = [{'OutputTypeSignature', NewState} | Rest]
-    }.
+    #{sig_out := SigOut, pending_value := PendingValue} = State,
+    case PendingValue of
+        undefined ->
+            case try_parse_literal_value(TokenValue) of
+                {ok, Value} ->
+                    NewState = State#{pending_value => Value},
+                    Cont#continuation{
+                        data_stack = [{'OutputTypeSignature', NewState} | Rest]
+                    };
+                not_found ->
+                    TypeAtom = list_to_atom(TokenValue),
+                    NewState = State#{sig_out => SigOut ++ [TypeAtom]},
+                    Cont#continuation{
+                        data_stack = [{'OutputTypeSignature', NewState} | Rest]
+                    }
+            end;
+        Value ->
+            TypeAtom = list_to_atom(TokenValue),
+            NewState = State#{sig_out => SigOut ++ [{TypeAtom, Value}],
+                              pending_value => undefined},
+            Cont#continuation{
+                data_stack = [{'OutputTypeSignature', NewState} | Rest]
+            }
+    end.
 
 %% Handler: CodeCompile
 %% ":" starts a sub-clause; other tokens are compiled as body ops.
@@ -216,6 +257,23 @@ handle_sub_clause_output(TokenValue, Cont) ->
         data_stack = [{'SubClauseOutput', NewState} | Rest]
     }.
 
+
+%% Try to parse a token value as a literal (integer, float, bool).
+%% Used for value constraints in signatures: "0 Int" -> {Int, 0}
+try_parse_literal_value(TokenValue) ->
+    case catch list_to_integer(TokenValue) of
+        N when is_integer(N) -> {ok, N};
+        _ ->
+            case catch list_to_float(TokenValue) of
+                F when is_float(F) -> {ok, F};
+                _ ->
+                    case TokenValue of
+                        "true" -> {ok, true};
+                        "false" -> {ok, false};
+                        _ -> not_found
+                    end
+            end
+    end.
 
 %% Try to parse a token as a literal of a specific type using its literal handler.
 try_literal_for_type(TokenValue, TypeName) ->
@@ -397,7 +455,8 @@ type_check_body(Name, SigIn, SigOut, Body) ->
 has_unknown_types(Types, Expected) when length(Types) =/= length(Expected) ->
     true;
 has_unknown_types(Types, Expected) ->
-    Builtins = ['Any', 'Int', 'Float', 'Bool', 'String', 'Atom', 'List', 'Map', 'Tuple'],
+    Builtins = ['Any', 'Int', 'Float', 'Bool', 'String', 'Atom', 'List', 'Map', 'Tuple',
+                'Actor', 'Message'],
     lists:any(fun('Atom') -> true; (_) -> false end, Types)
     orelse lists:any(fun
         ({_T, _V}) -> false;  %% value constraints are checkable

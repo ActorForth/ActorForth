@@ -224,3 +224,148 @@ self_test_() ->
             ?assertEqual(self(), maps:get(pid, Info))
         end} end
     ]}.
+
+%% --- Milestone 7.3: spawn / send / receive ---
+
+spawn_send_receive_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"spawn creates actor from word name", fun() ->
+            %% Define a word that receives and stores
+            C1 = eval(": echo -> ; receive .", af_interpreter:new_continuation()),
+            C2 = eval("echo spawn", C1),
+            [{'Actor', Info}] = C2#continuation.data_stack,
+            ?assert(is_pid(maps:get(pid, Info)))
+        end} end,
+        fun(_) -> {"send delivers value to spawned actor", fun() ->
+            %% Spawned process sends back via raw Erlang msg
+            Self = self(),
+            SelfPid = Self,
+            %% Use erlang process directly to test send/receive
+            Pid = spawn(fun() ->
+                receive
+                    {af_msg, Value} -> SelfPid ! {got, Value}
+                end
+            end),
+            ActorVal = #{pid => Pid, type_name => undefined, vocab => #{}},
+            C1 = #continuation{data_stack = [{'Actor', ActorVal}, {'Int', 42}]},
+            Token = #token{value = "send"},
+            C2 = af_interpreter:interpret_token(Token, C1),
+            ?assertEqual([], C2#continuation.data_stack),
+            receive
+                {got, {'Int', 42}} -> ok
+            after 1000 ->
+                ?assert(false)
+            end
+        end} end,
+        fun(_) -> {"! is alias for send", fun() ->
+            Pid = spawn(fun() ->
+                receive {af_msg, _} -> ok end
+            end),
+            ActorVal = #{pid => Pid, type_name => undefined, vocab => #{}},
+            C1 = #continuation{data_stack = [{'Actor', ActorVal}, {'Int', 99}]},
+            Token = #token{value = "!"},
+            C2 = af_interpreter:interpret_token(Token, C1),
+            ?assertEqual([], C2#continuation.data_stack)
+        end} end,
+        fun(_) -> {"receive blocks until message arrives", fun() ->
+            Self = self(),
+            Pid = spawn(fun() ->
+                Cont = #continuation{},
+                Token = #token{value = "receive"},
+                ResultCont = af_interpreter:interpret_token(Token, Cont),
+                [Value] = ResultCont#continuation.data_stack,
+                Self ! {received, Value}
+            end),
+            timer:sleep(50),
+            Pid ! {af_msg, {'Int', 777}},
+            receive
+                {received, {'Int', 777}} -> ok
+            after 1000 ->
+                ?assert(false)
+            end
+        end} end,
+        fun(_) -> {"receive-timeout returns false on timeout", fun() ->
+            C1 = eval("50 int receive-timeout", af_interpreter:new_continuation()),
+            [{'Bool', false}, {'Atom', "timeout"}] = C1#continuation.data_stack
+        end} end,
+        fun(_) -> {"receive-timeout returns value when message arrives", fun() ->
+            Self = self(),
+            spawn(fun() ->
+                timer:sleep(10),
+                Self ! {af_msg, {'Int', 42}}
+            end),
+            C1 = eval("200 int receive-timeout", af_interpreter:new_continuation()),
+            [{'Bool', true}, {'Int', 42}] = C1#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- Message type ---
+
+message_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"msg creates tagged message", fun() ->
+            C1 = eval("42 int \"answer\" msg", af_interpreter:new_continuation()),
+            [{'Message', #{tag := <<"answer">>, data := {'Int', 42}}}] =
+                C1#continuation.data_stack
+        end} end,
+        fun(_) -> {"msg-tag extracts tag non-destructively", fun() ->
+            C1 = eval("42 int \"answer\" msg msg-tag", af_interpreter:new_continuation()),
+            [{'String', <<"answer">>}, {'Message', _}] = C1#continuation.data_stack
+        end} end,
+        fun(_) -> {"msg-data extracts data non-destructively", fun() ->
+            C1 = eval("42 int \"answer\" msg msg-data", af_interpreter:new_continuation()),
+            [{'Int', 42}, {'Message', _}] = C1#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- Selective receive ---
+
+selective_receive_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"receive-match selects by tag", fun() ->
+            Self = self(),
+            spawn(fun() ->
+                timer:sleep(10),
+                Self ! {af_msg, {'Message', #{tag => <<"noise">>, data => {'Int', 0}}}},
+                timer:sleep(10),
+                Self ! {af_msg, {'Message', #{tag => <<"target">>, data => {'Int', 42}}}}
+            end),
+            C1 = eval("\"target\" receive-match", af_interpreter:new_continuation()),
+            [{'Int', 42}] = C1#continuation.data_stack,
+            %% The noise message is still in mailbox
+            receive
+                {af_msg, {'Message', #{tag := <<"noise">>}}} -> ok
+            after 500 ->
+                ?assert(false)
+            end
+        end} end,
+        fun(_) -> {"receive-match-timeout returns false on timeout", fun() ->
+            C1 = eval("\"missing\" 50 int receive-match-timeout",
+                       af_interpreter:new_continuation()),
+            [{'Bool', false}, {'Atom', "timeout"}] = C1#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- Type-checked dispatch ---
+
+type_checked_dispatch_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"dispatch validates argument types", fun() ->
+            C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
+            C2 = eval(": add Counter Int -> Counter ; swap value rot + value! .", C1),
+            C3 = eval("0 int counter server", C2),
+            %% Correct type: Int arg
+            C4 = eval("<< 5 int add >>", C3),
+            [{'Actor', _}] = C4#continuation.data_stack,
+            eval("<< stop >>", C4),
+            ok
+        end} end,
+        fun(_) -> {"dispatch rejects wrong argument type", fun() ->
+            C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
+            C2 = eval(": add Counter Int -> Counter ; swap value rot + value! .", C1),
+            C3 = eval("0 int counter server", C2),
+            %% Wrong type: Bool instead of Int
+            ?assertError({actor_type_error, "add", _},
+                eval("<< true bool add >>", C3))
+        end} end
+    ]}.

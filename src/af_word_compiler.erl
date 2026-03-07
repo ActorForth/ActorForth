@@ -8,6 +8,8 @@
 -export([compile_words_to_module/2, compile_words_to_binary/2]).
 -export([make_wrapper/4, get_module_binary/1, store_module_binary/2]).
 -export([find_native_word/1]).
+-export([find_compiled_word_defs/1]).
+-export([group_by_name/1]).
 
 -define(BINARY_TABLE, af_module_binaries).
 
@@ -48,17 +50,20 @@ get_module_binary(ModuleName) ->
     end.
 
 %% Compile word definitions to a BEAM binary without loading.
+%% Groups same-name words into multi-clause functions for pattern matching.
 %% Returns {ok, ModuleName, Binary} | {error, Reason}.
 compile_words_to_binary(ModuleName, WordDefs) when is_atom(ModuleName) ->
     L = 1,
     %% Build compile context: maps word names to {Arity, NumOutputs} for inter-word calls
     Ctx = #{module => ModuleName, words => build_word_index(WordDefs)},
-    FunForms = lists:filtermap(fun({Name, SigIn, SigOut, Body}) ->
-        case compile_word_to_form(Name, SigIn, SigOut, Body, L, Ctx) of
+    %% Group word defs by name for multi-clause compilation
+    Groups = group_by_name(WordDefs),
+    FunForms = lists:filtermap(fun({Name, Defs}) ->
+        case compile_word_group(Name, Defs, L, Ctx) of
             {ok, Form, Export} -> {true, {Form, Export}};
             {error, _Reason} -> false
         end
-    end, WordDefs),
+    end, Groups),
     case FunForms of
         [] -> {error, no_compilable_words};
         _ ->
@@ -77,6 +82,75 @@ compile_words_to_binary(ModuleName, WordDefs) when is_atom(ModuleName) ->
                     {error, {compile_error, Errors}}
             end
     end.
+
+%% Group word definitions by name, preserving order.
+group_by_name(WordDefs) ->
+    {Groups, Order} = lists:foldl(fun({Name, SI, SO, Body}, {Acc, Ord}) ->
+        Existing = maps:get(Name, Acc, []),
+        NewAcc = maps:put(Name, Existing ++ [{Name, SI, SO, Body}], Acc),
+        NewOrd = case lists:member(Name, Ord) of
+            true -> Ord;
+            false -> Ord ++ [Name]
+        end,
+        {NewAcc, NewOrd}
+    end, {#{}, []}, WordDefs),
+    [{Name, maps:get(Name, Groups)} || Name <- Order].
+
+%% Compile a group of same-name word defs.
+%% Single def: single-clause function. Multiple defs: multi-clause with patterns.
+compile_word_group(Name, [{_, SigIn, SigOut, Body}], L, Ctx) ->
+    compile_word_to_form(Name, SigIn, SigOut, Body, L, Ctx);
+compile_word_group(Name, Defs, L, Ctx) ->
+    FunAtom = list_to_atom(Name),
+    {_, FirstSigIn, _, _} = hd(Defs),
+    Arity = length(FirstSigIn),
+    Clauses = lists:filtermap(fun({_N, SigIn, SigOut, Body}) ->
+        case compile_clause(SigIn, SigOut, Body, L, Ctx) of
+            {ok, Clause} -> {true, Clause};
+            {error, _} -> false
+        end
+    end, Defs),
+    case Clauses of
+        [] -> {error, no_compilable_clauses};
+        _ ->
+            Form = {function, L, FunAtom, Arity, Clauses},
+            {ok, Form, {FunAtom, Arity}}
+    end.
+
+%% Compile a single clause for a multi-clause function.
+%% Value constraints in sig_in become literal patterns.
+compile_clause(SigIn, SigOut, Body, L, Ctx) ->
+    Arity = length(SigIn),
+    {ArgPatterns, InitExprStack} = build_arg_patterns(SigIn, Arity, L),
+    case simulate_body(Body, InitExprStack, L, Ctx) of
+        {ok, ResultStack} ->
+            ReturnExpr = build_return(ResultStack, SigOut, L),
+            Clause = {clause, L, ArgPatterns, [], [ReturnExpr]},
+            {ok, Clause};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%% Build argument patterns and expression stack from sig_in.
+%% Value constraints become literal patterns; type-only become variables.
+build_arg_patterns(SigIn, _Arity, L) ->
+    {Patterns, Exprs, _} = lists:foldl(fun(SigEntry, {Pats, Exps, I}) ->
+        case SigEntry of
+            {_Type, Value} when is_integer(Value) ->
+                Pat = {integer, L, Value},
+                {Pats ++ [Pat], Exps ++ [Pat], I + 1};
+            {_Type, Value} when is_float(Value) ->
+                Pat = {float, L, Value},
+                {Pats ++ [Pat], Exps ++ [Pat], I + 1};
+            {_Type, Value} when is_boolean(Value) ->
+                Pat = {atom, L, Value},
+                {Pats ++ [Pat], Exps ++ [Pat], I + 1};
+            _ ->
+                Var = {var, L, arg_name(I)},
+                {Pats ++ [Var], Exps ++ [Var], I + 1}
+        end
+    end, {[], [], 1}, SigIn),
+    {Patterns, Exprs}.
 
 %% Build an ActorForth wrapper operation that calls a native BEAM function.
 %% The wrapper unwraps {Type, Value} stack items, calls the native function,
@@ -173,16 +247,21 @@ translate_op(">=", [A, B | Rest], L, _Ctx) ->
 translate_op("not", [A | Rest], L, _Ctx) ->
     {ok, [{op, L, 'not', A} | Rest]};
 
-%% Integer literals and inter-word/cross-module calls
+%% Integer/float literals and inter-word/cross-module calls
 translate_op(Name, Stack, L, Ctx) ->
     case catch list_to_integer(Name) of
         N when is_integer(N) ->
             {ok, [{integer, L, N} | Stack]};
         _ ->
-            case resolve_word_call(Name, Stack, L, Ctx) of
-                {ok, NewStack} -> {ok, NewStack};
-                not_found ->
-                    {error, {unknown_op, Name}}
+            case catch list_to_float(Name) of
+                F when is_float(F) ->
+                    {ok, [{float, L, F} | Stack]};
+                _ ->
+                    case resolve_word_call(Name, Stack, L, Ctx) of
+                        {ok, NewStack} -> {ok, NewStack};
+                        not_found ->
+                            {error, {unknown_op, Name}}
+                    end
             end
     end.
 
@@ -318,6 +397,22 @@ store_binary(ModuleName, Binary) ->
 %% Public version for other modules that compile BEAM modules.
 store_module_binary(ModuleName, Binary) ->
     store_binary(ModuleName, Binary).
+
+%% Find all compiled word definitions for a given name across all types.
+%% Returns [{Name, SigIn, SigOut, Body}] grouped by target type.
+find_compiled_word_defs(Name) ->
+    AllTypes = af_type:all_types(),
+    lists:flatmap(fun(#af_type{ops = Ops}) ->
+        case maps:get(Name, Ops, []) of
+            [] -> [];
+            OpList ->
+                lists:filtermap(fun
+                    (#operation{name = N, sig_in = SI, sig_out = SO, source = {compiled, Body}}) ->
+                        {true, {N, SI, SO, Body}};
+                    (_) -> false
+                end, OpList)
+        end
+    end, AllTypes).
 
 %% Wrap a native function result back into tagged stack items.
 %% Single value -> [{Type, Value}]

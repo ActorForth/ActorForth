@@ -54,13 +54,13 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - **`src/af_type_string.erl`** — String type wrapping Erlang binaries. Quoted strings auto-convert. `concat`, `length`, `to-atom`, `to-int`, `to-string`.
 - **`src/af_type_map.erl`** — Map type wrapping Erlang maps. `map-new`, `map-put`, `map-get`, `map-delete`, `map-has?`, `map-keys`, `map-values`, `map-size`.
 - **`src/af_type_list.erl`** — List type wrapping Erlang cons cells. `nil`, `cons`, `length`, `head`, `tail`.
-- **`src/af_type_actor.erl`** — Actor model: `server` and `supervised-server` (type instance -> Actor), `<<`/`>>` send protocol, cast/call auto-classification, state privacy via vocab filtering.
+- **`src/af_type_actor.erl`** — Actor model: `server` and `supervised-server` (type instance -> Actor), `<<`/`>>` send protocol, cast/call auto-classification, state privacy via vocab filtering. Raw primitives: `spawn` (word -> Actor), `send`/`!` (value Actor ->), `receive` (-> value), `receive-timeout` (ms -> value Bool). `Message` type with `msg` constructor, `msg-tag`/`msg-data` accessors, `receive-match`/`receive-match-timeout` for selective receive by tag. Type-checked dispatch validates args in `<<` blocks.
 - **`src/af_actor_sup.erl`** — OTP supervisor for actor processes. `simple_one_for_one` strategy with `transient` restart.
 - **`src/af_actor_worker.erl`** — gen_server wrapper for supervised actors. Handles cast/call messages through ActorForth word dispatch.
 - **`src/af_compile.erl`** — Word compilation: closure-based (`compile_word/4`) and BEAM module generation (`compile_module/2`). Optimizes known primitives inline.
 - **`src/af_type_check.erl`** — Compile-time type inference. `check_word/4` and `infer_stack/2`. Resolves `Any` to concrete types via substitution.
 - **`src/af_type_beam.erl`** — BEAM assembler types + high-level compilation words. `compile-to-beam`, `compile-all`, `save-module`, `build-escript`, `build-app`, `build-release`.
-- **`src/af_word_compiler.erl`** — Automatic word-to-BEAM compiler. Simulates the stack with abstract form expressions. Inter-word calls within the same module compile to direct BEAM calls. Cross-module native calls resolved automatically. `make_wrapper/4` generates transparent wrappers.
+- **`src/af_word_compiler.erl`** — Automatic word-to-BEAM compiler. Simulates the stack with abstract form expressions. Multi-clause compilation: same-name words with different signatures (pattern matching) compile to multi-clause Erlang functions with literal patterns for value constraints. Inter-word calls within the same module compile to direct BEAM calls. Cross-module native calls resolved automatically. `make_wrapper/4` generates transparent wrappers. `compile` word (in af_type_any) compiles interpreted words to native BEAM on demand.
 - **`src/af_type_otp.erl`** — OTP behaviour generation. `gen-server-module` compiles ActorForth product types into real gen_server modules for OTP supervision trees.
 - **`src/af_otp_dispatch.erl`** — Bridges ActorForth word dispatch into gen_server callbacks. `call_word/3`, `cast_word/3`.
 - **`src/af_compile_file.erl`** — Standalone .a4 file compiler. `compile/1`, `compile/2`, `compile_to_dir/2`.
@@ -82,7 +82,8 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - Constructors (like `int`) are registered in the Any dictionary with typed sig_in constraints
 - Type-specific ops (like `+`) are registered in that type's dictionary
 - Pattern matching via overloaded word signatures preferred over if/else
+- Value constraints in signatures: `: factorial 0 Int -> Int ;` creates `{Int, 0}` in sig_in
 - Compiled word bodies use late binding: each token dispatches through interpreter at runtime
-- Compiled words store their body ops in `#operation.source = {compiled, Body}` for later BEAM compilation via `compile-to-beam`
-- Tail self-calls in word bodies are detected and restructured for BEAM TCO (trace popped before tail call)
+- Compiled words store their body ops in `#operation.source = {compiled, Body}` for later BEAM compilation via `compile-to-beam` or `compile`
+- Tail calls (self-recursive and to other compiled words) are detected and restructured for BEAM TCO
 - ActorForth script files use `.a4` extension (see `samples/`)

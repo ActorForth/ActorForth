@@ -136,3 +136,69 @@ compile_module_test_() ->
             ?assertEqual([{'Atom', "unknown_word"}, {'Int', 5}], Result)
         end} end
     ]}.
+
+%% --- Milestone 8: Multi-clause compilation and compile word ---
+
+multi_clause_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"multi-clause factorial compiles to native BEAM", fun() ->
+            C1 = eval(": factorial 0 Int -> Int ; drop 1 .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": factorial Int -> Int ; dup 1 - factorial * .", C1),
+            %% Verify interpreted version works first
+            C3 = eval("5 int factorial", C2),
+            [{'Int', 120}] = C3#continuation.data_stack,
+            %% Now compile to native
+            C4 = eval("\"factorial\" compile", C2),
+            ?assertEqual([], C4#continuation.data_stack),
+            %% Run the native version
+            C5 = eval("10 int factorial", C4),
+            [{'Int', 3628800}] = C5#continuation.data_stack
+        end} end,
+        fun(_) -> {"compile word replaces interpreted with native", fun() ->
+            C1 = eval(": double Int -> Int ; dup + .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"double\" compile", C1),
+            C3 = eval("21 int double", C2),
+            [{'Int', 42}] = C3#continuation.data_stack,
+            %% Verify it's actually native
+            {ok, Op} = af_type:find_op_by_name("double", 'Int'),
+            ?assertMatch({native, _}, Op#operation.source)
+        end} end,
+        fun(_) -> {"compile with pattern matching: identity base case", fun() ->
+            C1 = eval(": myid 0 Int -> Int ; drop 0 .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": myid Int -> Int ; dup + .", C1),
+            %% Compile
+            C3 = eval("\"myid\" compile", C2),
+            %% Base case: 0 returns 0
+            C4 = eval("0 int myid", C3),
+            [{'Int', 0}] = C4#continuation.data_stack,
+            %% General case: 5 returns 10 (dup +)
+            C5 = eval("5 int myid", C3),
+            [{'Int', 10}] = C5#continuation.data_stack
+        end} end,
+        fun(_) -> {"compile error for nonexistent word", fun() ->
+            ?assertError(_,
+                eval("\"nonexistent\" compile", af_interpreter:new_continuation()))
+        end} end,
+        fun(_) -> {"multi-clause grouping preserves clause order", fun() ->
+            %% Value-constrained clause first (more specific), general clause second
+            WordDefs = [
+                {"fib", [{'Int', 0}], ['Int'], [#operation{name = "drop"}, #operation{name = "0"}]},
+                {"fib", [{'Int', 1}], ['Int'], [#operation{name = "drop"}, #operation{name = "1"}]},
+                {"fib", ['Int'], ['Int'], [#operation{name = "dup"}, #operation{name = "1"},
+                    #operation{name = "-"}, #operation{name = "fib"},
+                    #operation{name = "swap"}, #operation{name = "2"},
+                    #operation{name = "-"}, #operation{name = "fib"},
+                    #operation{name = "+"}]}
+            ],
+            Groups = af_word_compiler:group_by_name(WordDefs),
+            [{_, Defs}] = Groups,
+            ?assertEqual(3, length(Defs))
+        end} end
+    ]}.
+
+%% Expose group_by_name for testing
+group_by_name(WordDefs) ->
+    af_word_compiler:group_by_name(WordDefs).

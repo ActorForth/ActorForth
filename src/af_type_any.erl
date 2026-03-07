@@ -99,6 +99,12 @@ init() ->
         impl = fun op_import/1
     }),
 
+    %% compile : String ->  (compile a word to native BEAM function)
+    af_type:add_op('Any', #operation{
+        name = "compile", sig_in = ['String'], sig_out = [],
+        impl = fun op_compile/1
+    }),
+
     %% debug : -> Debug  (pushes Debug marker, handler intercepts on/off)
     af_type:register_type(#af_type{name = 'Debug'}),
     af_type:add_op('Any', #operation{
@@ -318,3 +324,61 @@ handle_debug("off", Cont) ->
     Cont#continuation{data_stack = Rest, debug = false};
 handle_debug(Other, _Cont) ->
     error({debug_expected_on_off, Other}).
+
+%%% Compile
+
+op_compile(Cont) ->
+    [{'String', NameBin} | Rest] = Cont#continuation.data_stack,
+    Name = binary_to_list(NameBin),
+    WordDefs = af_word_compiler:find_compiled_word_defs(Name),
+    case WordDefs of
+        [] ->
+            Msg = lists:flatten(io_lib:format("No compiled word '~s' found", [Name])),
+            af_error:raise(compile_error, Msg, Cont);
+        _ ->
+            ModAtom = list_to_atom("af_native_" ++ Name),
+            case af_word_compiler:compile_words_to_module(ModAtom, WordDefs) of
+                {ok, ModAtom} ->
+                    FunAtom = list_to_atom(Name),
+                    %% For multi-clause words, use the broadest (type-only) sig
+                    %% for the wrapper so it matches any input of the right types.
+                    ByType = group_defs_by_type(WordDefs),
+                    lists:foreach(fun({TargetType, Defs}) ->
+                        BroadSigIn = broadest_sig_in(Defs),
+                        {_, _, BroadSigOut, _} = find_broadest_def(Defs),
+                        Wrapper = af_word_compiler:make_wrapper(ModAtom, FunAtom, BroadSigIn, BroadSigOut),
+                        af_type:replace_ops(TargetType, Name, [Wrapper])
+                    end, ByType),
+                    Cont#continuation{data_stack = Rest};
+                {error, Reason} ->
+                    Msg = lists:flatten(io_lib:format("Compile failed for '~s': ~p", [Name, Reason])),
+                    af_error:raise(compile_error, Msg, Cont)
+            end
+    end.
+
+%% Get the broadest sig_in (strip value constraints to bare types).
+broadest_sig_in(Defs) ->
+    {_, SigIn, _, _} = find_broadest_def(Defs),
+    [case S of {T, _V} -> T; T -> T end || S <- SigIn].
+
+%% Find the def with the broadest (no value constraints) sig_in,
+%% or fall back to the last def if all have constraints.
+find_broadest_def(Defs) ->
+    case lists:filter(fun({_, SigIn, _, _}) ->
+        not lists:any(fun(S) -> is_tuple(S) end, SigIn)
+    end, Defs) of
+        [Def | _] -> Def;
+        [] -> lists:last(Defs)
+    end.
+
+group_defs_by_type(WordDefs) ->
+    Groups = lists:foldl(fun({_Name, SigIn, _SigOut, _Body} = Def, Acc) ->
+        TargetType = case SigIn of
+            [{T, _} | _] -> T;
+            [T | _] when is_atom(T) -> T;
+            [] -> 'Any'
+        end,
+        Existing = maps:get(TargetType, Acc, []),
+        maps:put(TargetType, Existing ++ [Def], Acc)
+    end, #{}, WordDefs),
+    maps:to_list(Groups).

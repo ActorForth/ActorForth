@@ -76,6 +76,89 @@ init() ->
         handler = fun handle_actor_send/2
     }),
 
+    %% --- Milestone 7.3: Typed Actor Messages ---
+
+    %% spawn: ( Atom -- Actor ) spawn process running a named word
+    af_type:add_op('Any', #operation{
+        name = "spawn",
+        sig_in = ['Atom'],
+        sig_out = ['Actor'],
+        impl = fun op_spawn/1
+    }),
+
+    %% send / !: ( Any Actor -- ) send value to actor mailbox
+    af_type:add_op('Actor', #operation{
+        name = "send",
+        sig_in = ['Actor', 'Any'],
+        sig_out = [],
+        impl = fun op_send/1
+    }),
+    af_type:add_op('Actor', #operation{
+        name = "!",
+        sig_in = ['Actor', 'Any'],
+        sig_out = [],
+        impl = fun op_send/1
+    }),
+
+    %% receive: ( -- Any ) blocking receive from mailbox
+    af_type:add_op('Any', #operation{
+        name = "receive",
+        sig_in = [],
+        sig_out = ['Any'],
+        impl = fun op_receive/1
+    }),
+
+    %% receive-timeout: ( Int -- Any Bool ) receive with timeout in ms
+    af_type:add_op('Any', #operation{
+        name = "receive-timeout",
+        sig_in = ['Int'],
+        sig_out = ['Any', 'Bool'],
+        impl = fun op_receive_timeout/1
+    }),
+
+    %% Message type — typed envelope for inter-actor communication
+    af_type:register_type(#af_type{name = 'Message'}),
+
+    %% msg: ( Any String -- Message ) create tagged message
+    af_type:add_op('Any', #operation{
+        name = "msg",
+        sig_in = ['String', 'Any'],
+        sig_out = ['Message'],
+        impl = fun op_msg/1
+    }),
+
+    %% msg-tag: ( Message -- Message String ) get tag (non-destructive)
+    af_type:add_op('Message', #operation{
+        name = "msg-tag",
+        sig_in = ['Message'],
+        sig_out = ['String', 'Message'],
+        impl = fun op_msg_tag/1
+    }),
+
+    %% msg-data: ( Message -- Message Any ) get data (non-destructive)
+    af_type:add_op('Message', #operation{
+        name = "msg-data",
+        sig_in = ['Message'],
+        sig_out = ['Any', 'Message'],
+        impl = fun op_msg_data/1
+    }),
+
+    %% receive-match: ( String -- Any ) selective receive by message tag
+    af_type:add_op('Any', #operation{
+        name = "receive-match",
+        sig_in = ['String'],
+        sig_out = ['Any'],
+        impl = fun op_receive_match/1
+    }),
+
+    %% receive-match-timeout: ( String Int -- Any Bool ) selective receive with timeout
+    af_type:add_op('Any', #operation{
+        name = "receive-match-timeout",
+        sig_in = ['Int', 'String'],
+        sig_out = ['Any', 'Bool'],
+        impl = fun op_receive_match_timeout/1
+    }),
+
     ok.
 
 get_ops(TypeName) ->
@@ -189,7 +272,14 @@ dispatch_actor_word(WordName, Entries, ActorInfo, LocalStack, State, Rest, Cont)
     Entry = find_matching_entry(Entries, LocalStack),
     #{args := ArgsIn, returns := Returns} = Entry,
     NumArgs = length(ArgsIn),
+    case length(LocalStack) < NumArgs of
+        true ->
+            error({actor_arg_error, WordName,
+                {expected, NumArgs, args, got, length(LocalStack)}});
+        false -> ok
+    end,
     {Args, RemainingStack} = lists:split(NumArgs, LocalStack),
+    validate_actor_args(WordName, ArgsIn, Args),
     case Returns of
         [] ->
             %% Cast: async, no reply
@@ -222,11 +312,25 @@ dispatch_actor_word(WordName, Entries, ActorInfo, LocalStack, State, Rest, Cont)
     end.
 
 find_matching_entry([Entry], _Stack) ->
-    %% Single entry — just use it (validation could be added later)
     Entry;
-find_matching_entry([Entry | _Rest], _Stack) ->
-    %% TODO: signature matching against local stack for overloaded words
-    Entry.
+find_matching_entry(Entries, Stack) ->
+    case find_typed_match(Entries, Stack) of
+        {ok, Entry} -> Entry;
+        not_found -> hd(Entries)
+    end.
+
+find_typed_match([], _Stack) -> not_found;
+find_typed_match([#{args := Args} = Entry | Rest], Stack) ->
+    case match_args(Args, Stack) of
+        true -> {ok, Entry};
+        false -> find_typed_match(Rest, Stack)
+    end.
+
+match_args([], _Stack) -> true;
+match_args(_, []) -> false;
+match_args(['Any' | TRest], [_ | SRest]) -> match_args(TRest, SRest);
+match_args([Type | TRest], [{Type, _} | SRest]) -> match_args(TRest, SRest);
+match_args(_, _) -> false.
 
 %%% --- self ---
 
@@ -290,3 +394,89 @@ separate_reply(TypeName, [Item | Rest], ReplyAcc) ->
 separate_reply(_TypeName, [], ReplyAcc) ->
     %% No state found — shouldn't happen with well-behaved words
     {lists:reverse(ReplyAcc), undefined}.
+
+%%% --- Milestone 7.3: Typed Actor Messages ---
+
+%% Validate that args match expected types before sending to actor.
+validate_actor_args(_WordName, [], []) -> ok;
+validate_actor_args(WordName, [ExpType | ERest], [{ActType, _} | ARest]) ->
+    case ExpType =:= 'Any' orelse ExpType =:= ActType of
+        true -> validate_actor_args(WordName, ERest, ARest);
+        false ->
+            error({actor_type_error, WordName,
+                {expected, ExpType, got, ActType}})
+    end;
+validate_actor_args(_WordName, _, _) -> ok.
+
+%%% --- spawn: run a word in a new process ---
+
+op_spawn(Cont) ->
+    [{'Atom', WordName} | Rest] = Cont#continuation.data_stack,
+    Pid = erlang:spawn_link(fun() ->
+        SpawnCont = #continuation{},
+        Token = #token{value = WordName},
+        af_interpreter:interpret_token(Token, SpawnCont)
+    end),
+    ActorVal = #{pid => Pid, type_name => undefined, vocab => #{}},
+    Cont#continuation{data_stack = [{'Actor', ActorVal} | Rest]}.
+
+%%% --- send / !: send a value to an actor's mailbox ---
+
+op_send(Cont) ->
+    [{'Actor', #{pid := Pid}}, Value | Rest] = Cont#continuation.data_stack,
+    Pid ! {af_msg, Value},
+    Cont#continuation{data_stack = Rest}.
+
+%%% --- receive: blocking receive from mailbox ---
+
+op_receive(Cont) ->
+    receive
+        {af_msg, Value} ->
+            Cont#continuation{data_stack = [Value | Cont#continuation.data_stack]}
+    end.
+
+%%% --- receive-timeout: receive with timeout (ms) ---
+
+op_receive_timeout(Cont) ->
+    [{'Int', Timeout} | Rest] = Cont#continuation.data_stack,
+    receive
+        {af_msg, Value} ->
+            Cont#continuation{data_stack = [{'Bool', true}, Value | Rest]}
+    after Timeout ->
+        Cont#continuation{data_stack = [{'Bool', false}, {'Atom', "timeout"} | Rest]}
+    end.
+
+%%% --- Message type: tagged envelope ---
+
+op_msg(Cont) ->
+    [{'String', Tag}, Data | Rest] = Cont#continuation.data_stack,
+    MsgVal = #{tag => Tag, data => Data},
+    Cont#continuation{data_stack = [{'Message', MsgVal} | Rest]}.
+
+op_msg_tag(Cont) ->
+    [{'Message', #{tag := Tag}} = Msg | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'String', Tag}, Msg | Rest]}.
+
+op_msg_data(Cont) ->
+    [{'Message', #{data := Data}} = Msg | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [Data, Msg | Rest]}.
+
+%%% --- receive-match: selective receive by message tag ---
+
+op_receive_match(Cont) ->
+    [{'String', Tag} | Rest] = Cont#continuation.data_stack,
+    receive
+        {af_msg, {'Message', #{tag := Tag, data := Data}}} ->
+            Cont#continuation{data_stack = [Data | Rest]}
+    end.
+
+%%% --- receive-match-timeout: selective receive with timeout ---
+
+op_receive_match_timeout(Cont) ->
+    [{'Int', Timeout}, {'String', Tag} | Rest] = Cont#continuation.data_stack,
+    receive
+        {af_msg, {'Message', #{tag := Tag, data := Data}}} ->
+            Cont#continuation{data_stack = [{'Bool', true}, Data | Rest]}
+    after Timeout ->
+        Cont#continuation{data_stack = [{'Bool', false}, {'Atom', "timeout"} | Rest]}
+    end.
