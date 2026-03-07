@@ -230,11 +230,15 @@ self_test_() ->
 spawn_send_receive_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
         fun(_) -> {"spawn creates actor from word name", fun() ->
-            %% Define a word that receives and stores
-            C1 = eval(": echo -> ; receive .", af_interpreter:new_continuation()),
+            %% Define a word with sig_in so name pushed as Atom (not executed)
+            C1 = eval(": echo Int -> ; receive drop .", af_interpreter:new_continuation()),
             C2 = eval("echo spawn", C1),
             [{'Actor', Info}] = C2#continuation.data_stack,
-            ?assert(is_pid(maps:get(pid, Info)))
+            ?assert(is_pid(maps:get(pid, Info))),
+            %% Cleanup: send a message so the spawned process terminates
+            Pid = maps:get(pid, Info),
+            Pid ! {af_msg, {'Int', 0}},
+            timer:sleep(50)
         end} end,
         fun(_) -> {"send delivers value to spawned actor", fun() ->
             %% Spawned process sends back via raw Erlang msg
@@ -367,5 +371,108 @@ type_checked_dispatch_test_() ->
             %% Wrong type: Bool instead of Int
             ?assertError({actor_type_error, "add", _},
                 eval("<< true bool add >>", C3))
+        end} end
+    ]}.
+
+%% --- Multi-clause dispatch (find_matching_entry with multiple entries) ---
+
+multi_clause_dispatch_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"dispatch with overloaded word picks correct clause", fun() ->
+            C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
+            %% Define two overloads: add with Int arg and add with Bool arg
+            C2 = eval(": add Counter Int -> Counter ; swap value rot + value! .", C1),
+            C3 = eval(": toggle Counter Bool -> Counter ; drop value 1 int + value! .", C2),
+            C4 = eval(": count Counter -> Counter Int ; value .", C3),
+            C5 = eval("0 int counter server", C4),
+            C6 = eval("<< 5 int add >>", C5),
+            C7 = eval("<< count >>", C6),
+            [{'Int', 5}, {'Actor', _}] = C7#continuation.data_stack,
+            eval("<< stop >>", C7),
+            ok
+        end} end,
+        fun(_) -> {"dispatch with not enough args raises error", fun() ->
+            C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
+            C2 = eval(": add Counter Int -> Counter ; swap value rot + value! .", C1),
+            C3 = eval("0 int counter server", C2),
+            %% Try to call add with no args on the local stack
+            ?assertError({actor_arg_error, "add", _},
+                eval("<< add >>", C3))
+        end} end
+    ]}.
+
+%% --- supervised-server ---
+
+supervised_server_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"supervised-server spawns actor under supervisor", fun() ->
+            C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
+            C2 = eval(": count Counter -> Counter Int ; value .", C1),
+            C3 = eval("0 int counter supervised-server", C2),
+            [{'Actor', Info}] = C3#continuation.data_stack,
+            ?assert(is_pid(maps:get(pid, Info))),
+            ?assertEqual(true, maps:get(supervised, Info)),
+            ?assertEqual('Counter', maps:get(type_name, Info)),
+            %% Cleanup: stop the supervised actor
+            gen_server:cast(maps:get(pid, Info), {cast, "stop", []})
+        end} end
+    ]}.
+
+%% --- spawn via ActorForth word ---
+
+spawn_word_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"spawn word creates actor from atom", fun() ->
+            %% Define a word with a sig_in so typing its name pushes as Atom
+            C1 = eval(": echo-back Int -> ; receive drop .", af_interpreter:new_continuation()),
+            %% Now echo-back has sig_in [Int], so typing it without Int won't match
+            %% and it gets pushed as Atom
+            C2 = eval("echo-back spawn", C1),
+            [{'Actor', Info}] = C2#continuation.data_stack,
+            ?assert(is_pid(maps:get(pid, Info))),
+            %% Cleanup: send a message so the spawned process terminates
+            Pid = maps:get(pid, Info),
+            Pid ! {af_msg, {'Int', 0}},
+            timer:sleep(50)
+        end} end
+    ]}.
+
+%% --- find_matching_entry / find_typed_match / match_args ---
+
+matching_entry_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"multi-overload word dispatches to correct entry based on arg type", fun() ->
+            C1 = eval("type Box value Int .", af_interpreter:new_continuation()),
+            %% Define two overloads of 'put' that differ by arg type
+            C2 = eval(": put Box Int -> Box ; value! .", C1),
+            C3 = eval(": reset Box -> Box ; 0 int value! .", C2),
+            C4 = eval(": get Box -> Box Int ; value .", C3),
+            C5 = eval("0 int box server", C4),
+            %% put with Int arg should hit the first overload
+            C6 = eval("<< 42 int put >>", C5),
+            C7 = eval("<< get >>", C6),
+            [{'Int', 42}, {'Actor', _}] = C7#continuation.data_stack,
+            %% reset should hit the no-arg overload
+            C8 = eval("drop << reset >>", C7),
+            C9 = eval("<< get >>", C8),
+            [{'Int', 0}, {'Actor', _}] = C9#continuation.data_stack,
+            eval("<< stop >>", C9),
+            ok
+        end} end
+    ]}.
+
+%% --- receive-match-timeout success path ---
+
+receive_match_timeout_success_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"receive-match-timeout returns data when tag matches", fun() ->
+            Self = self(),
+            spawn(fun() ->
+                timer:sleep(10),
+                Self ! {af_msg, {'Message', #{tag => <<"hello">>, data => {'Int', 99}}}}
+            end),
+            C1 = eval("\"hello\" 200 int receive-match-timeout",
+                       af_interpreter:new_continuation()),
+            [{'Bool', true}, {'Int', 99}] = C1#continuation.data_stack
         end} end
     ]}.

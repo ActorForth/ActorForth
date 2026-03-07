@@ -159,3 +159,230 @@ inter_word_complex_test() ->
     ?assertEqual([{'Int', 9}], af_wc_test_complex:square([{'Int', 3}])),
     ?assertEqual([{'Int', 25}], af_wc_test_complex:sum_sq([{'Int', 3}, {'Int', 4}])),
     ?assertEqual([{'Int', 2}], af_wc_test_complex:sum_sq([{'Int', 1}, {'Int', 1}])).
+
+%% --- get_module_binary / store_module_binary tests ---
+%% Covers lines 46, and the store/retrieve paths
+
+get_module_binary_not_found_test() ->
+    %% Ensure table exists but module is not stored
+    af_word_compiler:store_module_binary(af_wc_test_bintable_sentinel, <<>>),
+    ?assertEqual(not_found, af_word_compiler:get_module_binary(af_wc_nonexistent_mod)).
+
+get_module_binary_found_test() ->
+    %% Store and retrieve a binary
+    Def = word_def("id", ['Int'], ['Int'], []),
+    {ok, af_wc_test_binget} = af_word_compiler:compile_words_to_module(af_wc_test_binget, [Def]),
+    {ok, Bin} = af_word_compiler:get_module_binary(af_wc_test_binget),
+    ?assert(is_binary(Bin)).
+
+store_module_binary_test() ->
+    %% Public store_module_binary should work
+    af_word_compiler:store_module_binary(af_wc_test_manual_store, <<"fake_binary">>),
+    ?assertEqual({ok, <<"fake_binary">>}, af_word_compiler:get_module_binary(af_wc_test_manual_store)).
+
+%% --- Value-constrained patterns (float, boolean) ---
+%% Covers lines 154-160
+
+float_value_constraint_test() ->
+    %% Float value in sig_in: {Float, 0.0}
+    Def = {"fzero", [{'Float', 0.0}], ['Int'], [#operation{name = "drop"}, #operation{name = "1"}]},
+    {ok, af_wc_test_fval} = af_word_compiler:compile_words_to_module(af_wc_test_fval, [Def]),
+    ?assertEqual([{'Int', 1}], af_wc_test_fval:fzero([{'Float', 0.0}])).
+
+bool_value_constraint_test() ->
+    %% Boolean value in sig_in: {Bool, true}
+    Def = {"btrue", [{'Bool', true}], ['Int'], [#operation{name = "drop"}, #operation{name = "1"}]},
+    {ok, af_wc_test_bval} = af_word_compiler:compile_words_to_module(af_wc_test_bval, [Def]),
+    ?assertEqual([{'Int', 1}], af_wc_test_bval:btrue([{'Bool', true}])).
+
+%% --- Comparison ops (==, !=, <, <=, >=) ---
+%% Covers lines 274-290
+
+eq_comparison_test() ->
+    Def = word_def("eq", ['Int', 'Int'], ['Bool'], ["=="]),
+    {ok, af_wc_test_eq} = af_word_compiler:compile_words_to_module(af_wc_test_eq, [Def]),
+    ?assertEqual([{'Bool', true}], af_wc_test_eq:eq([{'Int', 5}, {'Int', 5}])),
+    ?assertEqual([{'Bool', false}], af_wc_test_eq:eq([{'Int', 5}, {'Int', 3}])).
+
+neq_comparison_test() ->
+    Def = word_def("neq", ['Int', 'Int'], ['Bool'], ["!="]),
+    {ok, af_wc_test_neq} = af_word_compiler:compile_words_to_module(af_wc_test_neq, [Def]),
+    ?assertEqual([{'Bool', false}], af_wc_test_neq:neq([{'Int', 5}, {'Int', 5}])),
+    ?assertEqual([{'Bool', true}], af_wc_test_neq:neq([{'Int', 5}, {'Int', 3}])).
+
+lt_comparison_test() ->
+    Def = word_def("lt", ['Int', 'Int'], ['Bool'], ["<"]),
+    {ok, af_wc_test_lt} = af_word_compiler:compile_words_to_module(af_wc_test_lt, [Def]),
+    %% Stack is TOS-first: lt([TOS, Below]) computes Below < TOS
+    ?assertEqual([{'Bool', true}], af_wc_test_lt:lt([{'Int', 5}, {'Int', 3}])),
+    ?assertEqual([{'Bool', false}], af_wc_test_lt:lt([{'Int', 3}, {'Int', 5}])).
+
+le_comparison_test() ->
+    Def = word_def("le", ['Int', 'Int'], ['Bool'], ["<="]),
+    {ok, af_wc_test_le} = af_word_compiler:compile_words_to_module(af_wc_test_le, [Def]),
+    %% Stack is TOS-first: le([TOS, Below]) computes Below <= TOS
+    ?assertEqual([{'Bool', true}], af_wc_test_le:le([{'Int', 5}, {'Int', 3}])),
+    ?assertEqual([{'Bool', true}], af_wc_test_le:le([{'Int', 5}, {'Int', 5}])),
+    ?assertEqual([{'Bool', false}], af_wc_test_le:le([{'Int', 3}, {'Int', 5}])).
+
+ge_comparison_test() ->
+    Def = word_def("ge", ['Int', 'Int'], ['Bool'], [">="]),
+    {ok, af_wc_test_ge} = af_word_compiler:compile_words_to_module(af_wc_test_ge, [Def]),
+    %% Stack is TOS-first: ge([TOS, Below]) computes Below >= TOS
+    ?assertEqual([{'Bool', true}], af_wc_test_ge:ge([{'Int', 3}, {'Int', 5}])),
+    ?assertEqual([{'Bool', true}], af_wc_test_ge:ge([{'Int', 5}, {'Int', 5}])),
+    ?assertEqual([{'Bool', false}], af_wc_test_ge:ge([{'Int', 5}, {'Int', 3}])).
+
+%% --- Float and boolean literals in body ---
+%% Covers lines 307, 311, 313
+
+float_literal_in_body_test() ->
+    Def = word_def("addfloat", ['Int'], ['Int'], ["1.5"]),
+    {ok, af_wc_test_flit} = af_word_compiler:compile_words_to_module(af_wc_test_flit, [Def]),
+    Result = af_wc_test_flit:addfloat([{'Int', 5}]),
+    %% Float literal 1.5 gets pushed as {Float, 1.5} on top of stack
+    ?assertEqual([{'Float', 1.5}, {'Int', 5}], Result).
+
+true_literal_in_body_test() ->
+    Def = word_def("pushtrue", ['Int'], ['Bool', 'Int'], ["true"]),
+    {ok, af_wc_test_tlit} = af_word_compiler:compile_words_to_module(af_wc_test_tlit, [Def]),
+    ?assertEqual([{'Bool', true}, {'Int', 5}], af_wc_test_tlit:pushtrue([{'Int', 5}])).
+
+false_literal_in_body_test() ->
+    Def = word_def("pushfalse", ['Int'], ['Bool', 'Int'], ["false"]),
+    {ok, af_wc_test_flit2} = af_word_compiler:compile_words_to_module(af_wc_test_flit2, [Def]),
+    ?assertEqual([{'Bool', false}, {'Int', 5}], af_wc_test_flit2:pushfalse([{'Int', 5}])).
+
+%% --- Multi-clause word compilation ---
+%% Covers lines 103, 107 (multi-clause with errors / no compilable clauses)
+
+multi_clause_integer_pattern_test() ->
+    %% Two clauses for same word name with integer value constraints
+    Def1 = {"absval", [{'Int', 0}], ['Int'],
+            [#operation{name = "drop"}, #operation{name = "0"}]},
+    Def2 = {"absval", ['Int'], ['Int'], [#operation{name = "dup"}, #operation{name = "*"}]},
+    {ok, af_wc_test_mclause} = af_word_compiler:compile_words_to_module(af_wc_test_mclause, [Def1, Def2]),
+    ?assertEqual([{'Int', 0}], af_wc_test_mclause:absval([{'Int', 0}])),
+    ?assertEqual([{'Int', 25}], af_wc_test_mclause:absval([{'Int', 5}])).
+
+%% --- Runtime dispatch (unknown ops go through apply_impl) ---
+%% Covers lines 319, 329-340
+
+runtime_dispatch_test() ->
+    setup_types(),
+    %% Use a body op that isn't a known primitive or literal — forces runtime dispatch
+    %% "print" is a side-effect op (0 outputs) registered in Any
+    Def = word_def("show", ['Int'], ['Int'], ["print"]),
+    {ok, af_wc_test_rt} = af_word_compiler:compile_words_to_module(af_wc_test_rt, [Def]),
+    %% print returns the stack unchanged (side-effect only)
+    Result = af_wc_test_rt:show([{'Int', 42}]),
+    ?assertEqual([{'Int', 42}], Result).
+
+runtime_dispatch_unknown_op_test() ->
+    setup_types(),
+    %% An op that isn't found anywhere — runtime dispatch with unknown effect
+    Def = word_def("mystery", ['Int'], ['Int'], ["totally_unknown_xyz"]),
+    {ok, af_wc_test_rt2} = af_word_compiler:compile_words_to_module(af_wc_test_rt2, [Def]),
+    %% apply_impl pushes as Atom for unknown words
+    Result = af_wc_test_rt2:mystery([{'Int', 42}]),
+    ?assertEqual([{'Atom', "totally_unknown_xyz"}, {'Int', 42}], Result).
+
+%% --- find_native_word ---
+%% Covers lines 465, 472, 476, 480
+
+find_native_word_not_found_test() ->
+    setup_types(),
+    ?assertEqual(not_found, af_word_compiler:find_native_word("no_such_native_word_xyz")).
+
+find_native_word_found_test() ->
+    setup_types(),
+    %% Compile a word to native, then find it
+    Def = word_def("nfind", ['Int'], ['Int'], ["dup", "+"]),
+    {ok, af_wc_test_nfind} = af_word_compiler:compile_words_to_module(af_wc_test_nfind, [Def]),
+    %% Register the native word in the type system
+    Wrapper = af_word_compiler:make_wrapper(af_wc_test_nfind, nfind, ['Int'], ['Int']),
+    af_type:add_op('Int', Wrapper),
+    ?assertMatch({ok, af_wc_test_nfind, _, _}, af_word_compiler:find_native_word("nfind")).
+
+%% --- find_compiled_word_defs ---
+%% Covers lines 453-454
+
+find_compiled_word_defs_empty_test() ->
+    setup_types(),
+    ?assertEqual([], af_word_compiler:find_compiled_word_defs("nonexistent_compiled_word")).
+
+find_compiled_word_defs_found_test() ->
+    setup_types(),
+    %% Register a compiled operation
+    Body = [#operation{name = "dup"}, #operation{name = "+"}],
+    Op = #operation{
+        name = "cdef_test",
+        sig_in = ['Int'],
+        sig_out = ['Int'],
+        impl = fun(_) -> ok end,
+        source = {compiled, Body}
+    },
+    af_type:add_op('Int', Op),
+    Defs = af_word_compiler:find_compiled_word_defs("cdef_test"),
+    ?assertEqual(1, length(Defs)),
+    [{_, ['Int'], ['Int'], _}] = Defs.
+
+%% --- Cross-module (remote) word call ---
+%% Covers lines 372-384, 398-403
+
+cross_module_native_call_test() ->
+    setup_types(),
+    %% Compile "helper" word to a module
+    HelperDef = word_def("helper", ['Int'], ['Int'], ["dup", "+"]),
+    {ok, af_wc_test_helper} = af_word_compiler:compile_words_to_module(af_wc_test_helper, [HelperDef]),
+    %% Register it as native in the type system
+    Wrapper = af_word_compiler:make_wrapper(af_wc_test_helper, helper, ['Int'], ['Int']),
+    af_type:add_op('Int', Wrapper),
+    %% Now compile another module that calls "helper" — should resolve via find_native_word
+    CallerDef = word_def("use_helper", ['Int'], ['Int'], ["helper"]),
+    {ok, af_wc_test_caller} = af_word_compiler:compile_words_to_module(af_wc_test_caller, [CallerDef]),
+    ?assertEqual([{'Int', 10}], af_wc_test_caller:use_helper([{'Int', 5}])).
+
+%% --- arg_name for N > 3 ---
+%% Covers line 419
+
+four_arg_word_test() ->
+    %% Uses 4 args, triggering arg_name(4) = 'Arg4'
+    Def = word_def("sum4", ['Int', 'Int', 'Int', 'Int'], ['Int'],
+                   ["+", "+", "+"]),
+    {ok, af_wc_test_4arg} = af_word_compiler:compile_words_to_module(af_wc_test_4arg, [Def]),
+    ?assertEqual([{'Int', 10}], af_wc_test_4arg:sum4([{'Int', 1}, {'Int', 2}, {'Int', 3}, {'Int', 4}])).
+
+%% --- compile_words_to_binary directly ---
+%% Covers line 75 (warnings path)
+
+compile_words_to_binary_test() ->
+    Def = word_def("bin_id", ['Int'], ['Int'], []),
+    {ok, af_wc_test_bin, Bin} = af_word_compiler:compile_words_to_binary(af_wc_test_bin, [Def]),
+    ?assert(is_binary(Bin)).
+
+compile_words_to_binary_empty_test() ->
+    ?assertEqual({error, no_compilable_words},
+                 af_word_compiler:compile_words_to_binary(af_wc_test_empty2, [])).
+
+%% --- Opaque stack dispatch (simulate_body with stack type) ---
+%% Covers lines 202-213 (opaque stack paths)
+
+opaque_stack_local_call_test() ->
+    setup_types(),
+    %% After a local call, the stack becomes opaque. Subsequent ops dispatch via apply_impl.
+    Def1 = word_def("dbl", ['Int'], ['Int'], ["dup", "+"]),
+    Def2 = word_def("dbl_dbl", ['Int'], ['Int'], ["dbl", "dbl"]),
+    {ok, af_wc_test_opaque} = af_word_compiler:compile_words_to_module(af_wc_test_opaque, [Def1, Def2]),
+    ?assertEqual([{'Int', 20}], af_wc_test_opaque:dbl_dbl([{'Int', 5}])).
+
+%% --- make_wrapper tests ---
+
+make_wrapper_test() ->
+    Def = word_def("wrap_test", ['Int'], ['Int'], ["dup", "+"]),
+    {ok, af_wc_test_wrap} = af_word_compiler:compile_words_to_module(af_wc_test_wrap, [Def]),
+    Wrapper = af_word_compiler:make_wrapper(af_wc_test_wrap, wrap_test, ['Int'], ['Int']),
+    ?assertEqual("wrap_test", Wrapper#operation.name),
+    ?assertEqual(['Int'], Wrapper#operation.sig_in),
+    ?assertEqual(['Int'], Wrapper#operation.sig_out),
+    ?assertMatch({native, af_wc_test_wrap}, Wrapper#operation.source).

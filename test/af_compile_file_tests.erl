@@ -36,5 +36,27 @@ compile_file_test_() ->
 
         fun(_) -> {"compile nonexistent file returns error", fun() ->
             {error, {read_error, _, enoent}} = af_compile_file:compile("nonexistent.a4")
+        end} end,
+
+        fun(_) -> {"compile_to_dir nonexistent file returns error", fun() ->
+            Result = af_compile_file:compile_to_dir("nonexistent.a4", "/tmp/af_test"),
+            ?assertMatch({error, {read_error, _, enoent}}, Result)
+        end} end,
+
+        fun(_) -> {"compile file with no word definitions returns error", fun() ->
+            %% Create a temp .a4 file with no word definitions (just pushes atoms)
+            TmpFile = "/tmp/af_no_words_test.a4",
+            ok = file:write_file(TmpFile, "hello world"),
+            Result = af_compile_file:compile(TmpFile),
+            ?assertMatch({error, {no_compilable_words, _}}, Result),
+            file:delete(TmpFile)
+        end} end,
+
+        fun(_) -> {"compile_to_dir file with no word definitions returns error", fun() ->
+            TmpFile = "/tmp/af_no_words_test2.a4",
+            ok = file:write_file(TmpFile, "hello world"),
+            Result = af_compile_file:compile_to_dir(TmpFile, "/tmp/af_test_out"),
+            ?assertMatch({error, {no_compilable_words, _}}, Result),
+            file:delete(TmpFile)
         end} end
     ]}.

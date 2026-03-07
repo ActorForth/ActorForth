@@ -63,6 +63,90 @@ format_test_() ->
             },
             Formatted = af_error:format(Err),
             ?assertNotEqual(nomatch, string:find(Formatted, "my-word"))
+        end},
+        {"format_value for List", fun() ->
+            ?assertEqual("[42, hello]",
+                af_error:format_value({'List', [{'Int', 42}, {'Atom', "hello"}]}))
+        end},
+        {"format_value for Map", fun() ->
+            ?assertEqual("<Map>", af_error:format_value({'Map', #{}}))
+        end},
+        {"format_value for Actor", fun() ->
+            ?assertEqual("<Actor>", af_error:format_value({'Actor', self()}))
+        end},
+        {"format_value for generic tuple type", fun() ->
+            ?assertEqual("Foo(...)", af_error:format_value({'Foo', something}))
+        end},
+        {"format_value for non-tuple", fun() ->
+            Result = af_error:format_value(12345),
+            ?assert(is_list(Result))
+        end},
+        {"format with undefined token (no location)", fun() ->
+            Err = #af_error{
+                type = some_error,
+                message = "Test error",
+                token = undefined,
+                stack = [],
+                word_trace = []
+            },
+            Formatted = af_error:format(Err),
+            ?assert(is_list(Formatted)),
+            %% Should show empty stack
+            ?assertNotEqual(nomatch, string:find(Formatted, "(empty)"))
+        end},
+        {"format_stack with empty stack", fun() ->
+            Err = #af_error{
+                type = test_error,
+                message = "msg",
+                token = undefined,
+                stack = [],
+                word_trace = []
+            },
+            Formatted = af_error:format(Err),
+            ?assertNotEqual(nomatch, string:find(Formatted, "(empty)"))
+        end}
+    ].
+
+%% --- raise/4 with Extra ---
+
+raise_with_extra_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"raise/4 appends extra info", fun() ->
+            Cont = af_interpreter:new_continuation(),
+            try
+                af_error:raise(test_error, "base message", Cont, [extra1, extra2]),
+                ?assert(false)
+            catch error:#af_error{message = Msg} ->
+                ?assertNotEqual(nomatch, string:find(Msg, "base message")),
+                ?assertNotEqual(nomatch, string:find(Msg, "extra1")),
+                ?assertNotEqual(nomatch, string:find(Msg, "extra2"))
+            end
+        end} end,
+        fun(_) -> {"raise/4 with empty extra list", fun() ->
+            Cont = af_interpreter:new_continuation(),
+            try
+                af_error:raise(test_error, "base message", Cont, []),
+                ?assert(false)
+            catch error:#af_error{message = Msg} ->
+                ?assertEqual("base message", Msg)
+            end
+        end} end
+    ]}.
+
+%% --- format_typed with non-tuple ---
+
+format_typed_test_() ->
+    [
+        {"format with non-tuple stack item", fun() ->
+            Err = #af_error{
+                type = test_error,
+                message = "msg",
+                token = undefined,
+                stack = [not_a_tuple],
+                word_trace = []
+            },
+            Formatted = af_error:format(Err),
+            ?assert(is_list(Formatted))
         end}
     ].
 

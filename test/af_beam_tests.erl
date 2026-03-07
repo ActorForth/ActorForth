@@ -266,3 +266,98 @@ build_release_test_() ->
             file:del_dir(TmpDir)
         end} end
     ]}.
+
+%% --- build-app ---
+
+build_app_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"build-app generates .app file", fun() ->
+            C1 = eval(": double Int -> Int ; dup + .", af_interpreter:new_continuation()),
+            C2 = eval("double af_app_test compile-to-beam", C1),
+            C3 = eval("af_app_test \"0.1.0\" build-app", C2),
+            [{'Atom', "af_app_test"}] = C3#continuation.data_stack,
+            %% Verify the .app file was created in current dir
+            AppFile = "af_app_test.app",
+            ?assert(filelib:is_regular(AppFile)),
+            {ok, [AppSpec]} = file:consult(AppFile),
+            {application, af_app_test, Props} = AppSpec,
+            ?assertEqual("0.1.0", proplists:get_value(vsn, Props)),
+            file:delete(AppFile)
+        end} end
+    ]}.
+
+%% --- compile-to-beam error: no word found ---
+
+compile_to_beam_error_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"compile-to-beam with nonexistent word errors", fun() ->
+            ?assertError({compile_to_beam, no_word_found, "nonexistent_xyz"},
+                eval("nonexistent_xyz af_err_test compile-to-beam",
+                     af_interpreter:new_continuation()))
+        end} end
+    ]}.
+
+%% --- compile-all error: no compiled words ---
+
+compile_all_error_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"compile-all with no user words errors", fun() ->
+            ?assertError({compile_all, no_compiled_words_found},
+                eval("af_empty_mod compile-all",
+                     af_interpreter:new_continuation()))
+        end} end
+    ]}.
+
+%% --- save-module error: module not compiled ---
+
+save_module_error_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"save-module with uncompiled module errors", fun() ->
+            ?assertError({save_module, module_not_compiled, af_nonexistent_mod},
+                eval("af_nonexistent_mod \"/tmp\" save-module",
+                     af_interpreter:new_continuation()))
+        end} end
+    ]}.
+
+%% --- build-escript error: module not compiled ---
+
+build_escript_error_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"build-escript with uncompiled module returns error", fun() ->
+            Result = af_type_beam:build_escript(af_nonexistent_mod, main, "/tmp/test_escript"),
+            ?assertEqual({error, {module_not_compiled, af_nonexistent_mod}}, Result)
+        end} end
+    ]}.
+
+%% --- compile-all with multiple words ---
+
+compile_all_multi_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"compile-all compiles multiple words with different types", fun() ->
+            C1 = eval(": inc Int -> Int ; 1 + .", af_interpreter:new_continuation()),
+            C2 = eval(": dec Int -> Int ; 1 - .", C1),
+            C3 = eval(": dbl Int -> Int ; dup + .", C2),
+            C4 = eval("af_multi_all compile-all", C3),
+            [{'Atom', "af_multi_all"}] = C4#continuation.data_stack,
+            %% All three should work through ActorForth
+            C5 = eval("5 int inc", C4),
+            [{'Int', 6}, {'Atom', "af_multi_all"}] = C5#continuation.data_stack,
+            %% Direct calls should work too
+            ?assertEqual([{'Int', 10}], af_multi_all:dbl([{'Int', 5}]))
+        end} end
+    ]}.
+
+%% --- register_wrappers with type not found in target ---
+
+register_wrappers_edge_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"compile-to-beam replaces ops and word still works", fun() ->
+            %% Define a word with sig_in and compile it
+            C1 = eval(": negate Int -> Int ; 0 swap - .", af_interpreter:new_continuation()),
+            C2 = eval("negate af_neg_wrap compile-to-beam", C1),
+            [{'Atom', "af_neg_wrap"}] = C2#continuation.data_stack,
+            %% Word should still work via native wrapper
+            C3 = eval("5 int negate", C2),
+            [{'Int', -5}, {'Atom', "af_neg_wrap"}] = C3#continuation.data_stack
+        end} end
+    ]}.

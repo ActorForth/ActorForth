@@ -199,6 +199,137 @@ multi_clause_test_() ->
         end} end
     ]}.
 
+%% --- Additional coverage tests ---
+
+additional_coverage_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"compile_module single-op body (no chain)", fun() ->
+            %% Single-op body exercises the base case of build_body_chain (line 102-103)
+            DupOp = #operation{name = "dup", impl = fun(Cont) ->
+                [H | _] = Cont#continuation.data_stack,
+                Cont#continuation{data_stack = [H | Cont#continuation.data_stack]}
+            end},
+            WordDefs = [{"mydup", ['Int'], ['Int', 'Int'], [DupOp]}],
+            {ok, af_test_single_op} = af_compile:compile_module(af_test_single_op, WordDefs),
+            ?assertEqual([{'Int', 5}, {'Int', 5}], af_test_single_op:mydup([{'Int', 5}]))
+        end} end,
+
+        fun(_) -> {"compile_module three-op body chain", fun() ->
+            %% Three ops exercises the block/match path multiple times (lines 104-108)
+            Ops = [
+                #operation{name = "dup", impl = fun(Cont) ->
+                    [H | _] = Cont#continuation.data_stack,
+                    Cont#continuation{data_stack = [H | Cont#continuation.data_stack]}
+                end},
+                #operation{name = "+", impl = fun(Cont) ->
+                    [{'Int', A}, {'Int', B} | R] = Cont#continuation.data_stack,
+                    Cont#continuation{data_stack = [{'Int', B + A} | R]}
+                end},
+                #operation{name = "dup", impl = fun(Cont) ->
+                    [H | _] = Cont#continuation.data_stack,
+                    Cont#continuation{data_stack = [H | Cont#continuation.data_stack]}
+                end}
+            ],
+            WordDefs = [{"dbl_dup", ['Int'], ['Int', 'Int'], Ops}],
+            {ok, af_test_3op} = af_compile:compile_module(af_test_3op, WordDefs),
+            ?assertEqual([{'Int', 10}, {'Int', 10}], af_test_3op:dbl_dup([{'Int', 5}]))
+        end} end,
+
+        fun(_) -> {"compile_module empty body (identity)", fun() ->
+            %% Empty body: build_body_chain returns CurrentVar directly (line 96-97)
+            WordDefs = [{"noop", ['Int'], ['Int'], []}],
+            {ok, af_test_empty_body} = af_compile:compile_module(af_test_empty_body, WordDefs),
+            ?assertEqual([{'Int', 42}], af_test_empty_body:noop([{'Int', 42}]))
+        end} end,
+
+        fun(_) -> {"apply_impl with dup operation", fun() ->
+            %% Tests apply_impl with stack operations
+            Stack = [{'Int', 5}],
+            Result = af_compile:apply_impl("dup", Stack),
+            ?assertEqual([{'Int', 5}, {'Int', 5}], Result)
+        end} end,
+
+        fun(_) -> {"apply_impl with swap operation", fun() ->
+            Stack = [{'Int', 3}, {'Int', 7}],
+            Result = af_compile:apply_impl("swap", Stack),
+            ?assertEqual([{'Int', 7}, {'Int', 3}], Result)
+        end} end,
+
+        fun(_) -> {"apply_impl with drop operation", fun() ->
+            Stack = [{'Int', 3}, {'Int', 7}],
+            Result = af_compile:apply_impl("drop", Stack),
+            ?assertEqual([{'Int', 7}], Result)
+        end} end,
+
+        fun(_) -> {"apply_impl with subtract operation", fun() ->
+            Stack = [{'Int', 3}, {'Int', 10}],
+            Result = af_compile:apply_impl("-", Stack),
+            ?assertEqual([{'Int', 7}], Result)
+        end} end,
+
+        fun(_) -> {"apply_impl with multiply operation", fun() ->
+            Stack = [{'Int', 3}, {'Int', 7}],
+            Result = af_compile:apply_impl("*", Stack),
+            ?assertEqual([{'Int', 21}], Result)
+        end} end,
+
+        fun(_) -> {"compile_word with rot optimization", fun() ->
+            RotOp = #operation{name = "rot", impl = fun(_) -> error(unused) end},
+            Compiled = af_compile:compile_word("myrot", ['Int', 'Int', 'Int'], ['Int', 'Int', 'Int'], [RotOp]),
+            Cont = #continuation{data_stack = [{'Int', 1}, {'Int', 2}, {'Int', 3}]},
+            Result = (Compiled#operation.impl)(Cont),
+            ?assertEqual([{'Int', 3}, {'Int', 1}, {'Int', 2}], Result#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"compile_word with over optimization", fun() ->
+            OverOp = #operation{name = "over", impl = fun(_) -> error(unused) end},
+            Compiled = af_compile:compile_word("myover", ['Int', 'Int'], ['Int', 'Int', 'Int'], [OverOp]),
+            Cont = #continuation{data_stack = [{'Int', 1}, {'Int', 2}]},
+            Result = (Compiled#operation.impl)(Cont),
+            ?assertEqual([{'Int', 2}, {'Int', 1}, {'Int', 2}], Result#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"compile_word with drop optimization", fun() ->
+            DropOp = #operation{name = "drop", impl = fun(_) -> error(unused) end},
+            Compiled = af_compile:compile_word("mydrop", ['Int'], [], [DropOp]),
+            Cont = #continuation{data_stack = [{'Int', 5}, {'Int', 10}]},
+            Result = (Compiled#operation.impl)(Cont),
+            ?assertEqual([{'Int', 10}], Result#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"compile_word with general case (non-optimized op)", fun() ->
+            %% Use an op name that doesn't match any optimized case
+            CustomImpl = fun(Cont) ->
+                [{'Int', V} | R] = Cont#continuation.data_stack,
+                Cont#continuation{data_stack = [{'Int', V * 10} | R]}
+            end,
+            CustomOp = #operation{name = "times10", impl = CustomImpl},
+            Compiled = af_compile:compile_word("t10", ['Int'], ['Int'], [CustomOp]),
+            Cont = #continuation{data_stack = [{'Int', 3}]},
+            Result = (Compiled#operation.impl)(Cont),
+            ?assertEqual([{'Int', 30}], Result#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"compile_word with multiply optimization", fun() ->
+            MulOp = #operation{name = "*", impl = fun(_) -> error(unused) end},
+            Compiled = af_compile:compile_word("sq", ['Int'], ['Int'],
+                [#operation{name = "dup", impl = fun(_) -> error(unused) end}, MulOp]),
+            Cont = #continuation{data_stack = [{'Int', 4}]},
+            Result = (Compiled#operation.impl)(Cont),
+            ?assertEqual([{'Int', 16}], Result#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"compile_word with subtract optimization", fun() ->
+            SubOp = #operation{name = "-", impl = fun(_) -> error(unused) end},
+            Compiled = af_compile:compile_word("dec", ['Int'], ['Int'],
+                [#operation{name = "dup", impl = fun(_) -> error(unused) end}, SubOp]),
+            Cont = #continuation{data_stack = [{'Int', 5}]},
+            Result = (Compiled#operation.impl)(Cont),
+            %% dup gives [5, 5], then - gives 5 - 5 = 0
+            ?assertEqual([{'Int', 0}], Result#continuation.data_stack)
+        end} end
+    ]}.
+
 %% Expose group_by_name for testing
 group_by_name(WordDefs) ->
     af_word_compiler:group_by_name(WordDefs).
