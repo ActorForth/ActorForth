@@ -172,9 +172,16 @@ op_py_register(Cont) ->
     %% Look up the word in the type registry to find its native module
     case af_word_compiler:find_native_word(WordName) of
         {ok, NativeMod, _Arity, _NumOut} ->
-            %% Register the native BEAM function as callable from Python
+            %% Register the native BEAM function as callable from Python.
+            %% Native functions now take/return tagged stack lists,
+            %% so we convert raw Python args to tagged items and unwrap the result.
             WrapperFun = fun(Args) ->
-                erlang:apply(NativeMod, WordAtom, Args)
+                TaggedStack = lists:reverse([af_term:to_stack_item(A) || A <- Args]),
+                ResultStack = erlang:apply(NativeMod, WordAtom, [TaggedStack]),
+                case ResultStack of
+                    [{_Type, Val} | _] -> Val;
+                    [] -> ok
+                end
             end,
             py:register_function(WordAtom, WrapperFun),
             Cont#continuation{data_stack = [{'Atom', WordName} | Rest]};

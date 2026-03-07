@@ -157,7 +157,7 @@ compile_interword_test_() ->
             %% Compile all — inter-word calls should be native
             C4 = eval("af_interword_test compile-all", C2),
             [{'Atom', "af_interword_test"}] = C4#continuation.data_stack,
-            ?assertEqual(10, af_interword_test:double(5)),
-            ?assertEqual(20, af_interword_test:quadruple(5))
+            ?assertEqual([{'Int', 10}], af_interword_test:double([{'Int', 5}])),
+            ?assertEqual([{'Int', 20}], af_interword_test:quadruple([{'Int', 5}]))
         end} end
     ]}.

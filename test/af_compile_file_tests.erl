@@ -11,16 +11,16 @@ compile_file_test_() ->
         fun(_) -> {"compile .a4 file to module", fun() ->
             File = "test/test_lib.a4",
             {ok, test_lib} = af_compile_file:compile(File),
-            ?assertEqual(10, test_lib:double(5)),
-            ?assertEqual(49, test_lib:square(7)),
-            ?assertEqual(6, test_lib:inc(5))
+            ?assertEqual([{'Int', 10}], test_lib:double([{'Int', 5}])),
+            ?assertEqual([{'Int', 49}], test_lib:square([{'Int', 7}])),
+            ?assertEqual([{'Int', 6}], test_lib:inc([{'Int', 5}]))
         end} end,
 
         fun(_) -> {"compile .a4 file with custom module name", fun() ->
             File = "test/test_lib.a4",
             {ok, af_test_math} = af_compile_file:compile(File, af_test_math),
-            ?assertEqual(10, af_test_math:double(5)),
-            ?assertEqual(49, af_test_math:square(7))
+            ?assertEqual([{'Int', 10}], af_test_math:double([{'Int', 5}])),
+            ?assertEqual([{'Int', 49}], af_test_math:square([{'Int', 7}]))
         end} end,
 
         fun(_) -> {"compile .a4 file to directory", fun() ->

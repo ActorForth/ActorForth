@@ -492,7 +492,7 @@ build_main_module(MainMod, AppMod, EntryFun) ->
                 [
                     {call, L,
                         {remote, L, {atom, L, AppMod}, {atom, L, EntryFun}},
-                        []},
+                        [{nil, L}]},
                     {call, L,
                         {remote, L, {atom, L, erlang}, {atom, L, halt}},
                         [{integer, L, 0}]}

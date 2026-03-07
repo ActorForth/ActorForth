@@ -130,14 +130,14 @@ compile_to_beam_test_() ->
             C4 = eval("7 int double", C3),
             [{'Int', 14}, {'Atom', "af_ctb_wrap"}] = C4#continuation.data_stack,
             %% Native function also callable directly
-            ?assertEqual(10, af_ctb_wrap:double(5))
+            ?assertEqual([{'Int', 10}], af_ctb_wrap:double([{'Int', 5}]))
         end} end,
 
         fun(_) -> {"compile-to-beam with arithmetic word", fun() ->
             C1 = eval(": inc Int -> Int ; 1 + .", af_interpreter:new_continuation()),
             C2 = eval("inc af_ctb_inc compile-to-beam", C1),
             [{'Atom', "af_ctb_inc"}] = C2#continuation.data_stack,
-            ?assertEqual(6, af_ctb_inc:inc(5)),
+            ?assertEqual([{'Int', 6}], af_ctb_inc:inc([{'Int', 5}])),
             %% Use through ActorForth
             C3 = eval("10 int inc", C2),
             [{'Int', 11}, {'Atom', "af_ctb_inc"}] = C3#continuation.data_stack
@@ -154,8 +154,8 @@ compile_all_test_() ->
             C3 = eval("af_ctb_all compile-all", C2),
             [{'Atom', "af_ctb_all"}] = C3#continuation.data_stack,
             %% Both functions exist in the module
-            ?assertEqual(10, af_ctb_all:double(5)),
-            ?assertEqual(49, af_ctb_all:square(7)),
+            ?assertEqual([{'Int', 10}], af_ctb_all:double([{'Int', 5}])),
+            ?assertEqual([{'Int', 49}], af_ctb_all:square([{'Int', 7}])),
             %% Both work through ActorForth via wrappers
             C4 = eval("3 int double", C3),
             [{'Int', 6}, {'Atom', "af_ctb_all"}] = C4#continuation.data_stack,
@@ -212,7 +212,7 @@ build_escript_test_() ->
             %% Compile a zero-arg word directly via Erlang API
             WordDef = {"answer", [], ['Int'], [#operation{name = "42"}]},
             {ok, af_escript_run} = af_word_compiler:compile_words_to_module(af_escript_run, [WordDef]),
-            ?assertEqual(42, af_escript_run:answer()),
+            ?assertEqual([{'Int', 42}], af_escript_run:answer([])),
             TmpFile = "/tmp/af_escript_run_" ++ integer_to_list(erlang:unique_integer([positive])),
             ok = af_type_beam:build_escript(af_escript_run, answer, TmpFile),
             %% Run it — main calls answer() then halt(0)
