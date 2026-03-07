@@ -1,0 +1,6 @@
+# load_demo.a4 - Demonstrates loading a library file
+
+"samples/lib_math.a4" load
+
+5 square
+# Stack: 25

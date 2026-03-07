@@ -1,0 +1,29 @@
+# LLM integration demo — call OpenAI from ActorForth
+# Run: source .venv/bin/activate && export $(cat .env | xargs)
+#      rebar3 shell
+#      af_repl:run_file("samples/py_llm_demo.a4").
+#
+# Prerequisites:
+#   source .venv/bin/activate
+#   pip install openai
+#   Create .env with: OPENAI_API_KEY=sk-xxx
+#   export $(cat .env | xargs)
+
+py-start
+"samples/python" py-import
+
+# Simple chat — ask GPT-4o a question
+"What is the BEAM virtual machine? Answer in one sentence." llm_client chat 1 py-call
+print
+
+# Chat with system prompt
+"You are an expert on concatenative programming languages"
+"Compare Forth and Factor in 2 sentences"
+llm_client chat_with_system 2 py-call
+print
+
+# Semantic similarity via real embeddings
+"Erlang is a concurrent programming language"
+"The BEAM VM supports massive concurrency"
+llm_client similarity 2 py-call
+print

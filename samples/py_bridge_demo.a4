@@ -1,0 +1,36 @@
+# Python actor bridge demo — stateful Python worker from ActorForth
+# Run: source .venv/bin/activate && rebar3 shell
+#      af_repl:run_file("samples/py_bridge_demo.a4").
+
+py-start
+"samples/python" py-import
+
+# Initialize the bridge
+actor_bridge setup 0 py-call
+print
+
+# Store some values
+"language" "ActorForth" actor_bridge store 2 py-call drop
+"target" "BEAM" actor_bridge store 2 py-call drop
+"year" "2026" actor_bridge store 2 py-call drop
+
+# Fetch them back
+"language" actor_bridge fetch 1 py-call
+print
+"target" actor_bridge fetch 1 py-call
+print
+
+# Check count
+actor_bridge count 0 py-call
+print
+
+# Get all keys
+actor_bridge keys 0 py-call
+print
+
+# Get operation history
+actor_bridge history 0 py-call
+print
+
+# Clean up
+actor_bridge clear 0 py-call drop

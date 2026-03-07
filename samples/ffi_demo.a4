@@ -1,0 +1,17 @@
+# ffi_demo.a4 - Demonstrates calling Erlang functions from ActorForth
+
+# Call erlang:node/0 to get current node name
+node erlang erlang-apply0
+print
+
+# Call erlang:abs/1 with -42
+nil -42 cons abs erlang erlang-apply
+print
+
+# Call erlang:max/2 with 10, 20
+nil 10 cons 20 cons max erlang erlang-apply
+print
+
+# Call lists:seq/2 to generate [1,2,3,4,5]
+nil 1 cons 5 cons seq lists erlang-apply
+print

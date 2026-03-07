@@ -2,6 +2,8 @@
 
 *A language where the stack is the state, types are the syntax, and actors are the concurrency.*
 
+*In the style of Leo Brodie's "Starting FORTH" and "Thinking FORTH"*
+
 ---
 
 ## Chapter 1: The Stack Is Everything
@@ -11,10 +13,18 @@ If you've used Forth before, you know the feeling: there are no variables clutte
 In traditional Forth, a number is just bits. The programmer remembers what those bits mean. In ActorForth, there are no naked values. Everything on the stack is a typed pair: a type tag and a value, married together for life. When you type:
 
 ```
+42
+```
+
+The interpreter tries to find an operation named `42`. No dictionary has one. Before giving up, it asks each type: "Do you want to claim this token?" The Int type's literal handler recognizes `42` as an integer and pushes `{Int, 42}` onto the stack. The type stays with the value everywhere it goes.
+
+You can also be explicit:
+
+```
 42 int
 ```
 
-Two things happen. First, `42` lands on the stack as an Atom — it's just text that didn't match any operation. Then `int` sees that Atom, converts it to a proper integer, and puts `{Int, 42}` on the stack. The type stays with the value everywhere it goes.
+Here `42` lands on the stack as an Atom — just text that didn't match any operation or literal handler. Then `int` sees that Atom, converts it to a proper integer, and puts `{Int, 42}` on the stack. Both forms produce the same result. The explicit form matters when literal handlers can't guess what you want, or when you want to be clear about your intent.
 
 This isn't just bookkeeping. The type of the value on top of the stack determines what every subsequent word *means*. This is the central idea of ActorForth, and everything else follows from it.
 
@@ -32,10 +42,10 @@ ok:
 That `ok:` prompt is waiting. Let's put some numbers on the stack:
 
 ```
-ok: 10 int 20 int
+ok: 10 20
 ```
 
-The stack now holds two integers. `10` and `20` each arrived as Atoms, then `int` converted each one. We can see the stack:
+The stack now holds two integers — both claimed by the Int literal handler. We can see the stack:
 
 ```
 ok: stack
@@ -55,10 +65,10 @@ The `+` word consumed both integers and left their sum. Notice we didn't write `
 
 ### Stack Manipulation
 
-Four words handle most stack shuffling:
+A handful of words handle stack shuffling:
 
 ```
-ok: 5 int dup
+ok: 5 dup
 ```
 
 `dup` copies the top item. The stack now has two copies of `{Int, 5}`.
@@ -76,7 +86,7 @@ ok: drop
 `drop` discards the top item. Back to one `5`.
 
 ```
-ok: 3 int swap
+ok: 3 swap
 ```
 
 `swap` exchanges the top two items. Now `5` is on top and `3` is underneath. Or rather — `3` was on top after pushing it, then `swap` put `5` back on top:
@@ -87,17 +97,24 @@ ok: stack
 1) 3 : Int
 ```
 
-There's also `2dup`, which copies the top *two* items:
+`rot` rotates the third item to the top:
 
 ```
-ok: 2dup stack
-0) 5 : Int
+ok: 1 2 3
+ok: stack
+0) 3 : Int
+1) 2 : Int
+2) 1 : Int
+ok: rot
+ok: stack
+0) 1 : Int
 1) 3 : Int
-2) 5 : Int
-3) 3 : Int
+2) 2 : Int
 ```
 
-These four words — `dup`, `drop`, `swap`, `2dup` — work on any type. They're in the global dictionary because they don't care what's on the stack. An Int, a Bool, a user-defined Point — all the same to `swap`.
+There's also `over`, which copies the second item to the top, and `2dup`, which copies the top *two* items.
+
+These words — `dup`, `drop`, `swap`, `rot`, `over`, `2dup` — work on any type. They're in the global dictionary because they don't care what's on the stack. An Int, a Bool, a user-defined Point — all the same to `swap`.
 
 
 ## Chapter 2: Types Drive Everything
@@ -110,59 +127,66 @@ This means the *same word* can mean completely different things depending on wha
 
 ### The Dispatch Rules
 
-When the interpreter encounters a token, it follows four steps:
+When the interpreter encounters a token, it follows these steps:
 
 1. **Search TOS type's dictionary.** If TOS is `{Int, 42}`, look in Int's dictionary.
 2. **Check TOS type's handler.** Some types (like compiler states) intercept all tokens.
 3. **Search the Any dictionary.** Global operations live here.
-4. **Push as Atom.** Nothing matched — it's just text. Put `{Atom, "whatever"}` on the stack.
+4. **Try literal handlers.** Each type gets a chance to claim the token.
+5. **Push as Atom.** Nothing matched — it's just text. Put `{Atom, "whatever"}` on the stack.
 
-That's the entire interpreter. Four steps. It never changes. What changes is what's on the stack, and therefore which dictionary is consulted first.
+That's the entire interpreter. Five steps. It never changes. What changes is what's on the stack, and therefore which dictionary is consulted first.
 
 ### Constructors: The Gateway Between Types
 
 Every type needs a way to create instances. The convention is: the constructor is a lowercase version of the type name, and it converts from some input type.
 
 ```
-ok: 42 int         # Atom -> Int
-ok: True bool      # Atom -> Bool
+ok: 42 int         # Atom -> Int (explicit constructor)
+ok: True bool      # Atom -> Bool (explicit constructor)
 ```
 
-Constructors live in the Any dictionary because they need to be reachable regardless of what's currently on the stack. The input type constraint ensures they only fire when the right type is available:
+Constructors live in the Any dictionary because they need to be reachable regardless of what's currently on the stack. The input type constraint ensures they only fire when the right type is available.
+
+For common types, literal handlers provide a shorthand:
 
 ```
-ok: hello int      # "hello" is not a valid integer — this will error
+ok: 42             # Literal handler claims it -> {Int, 42}
+ok: True           # Literal handler claims it -> {Bool, true}
+ok: False          # Literal handler claims it -> {Bool, false}
 ```
+
+Both forms are valid. The explicit constructor is still there when you need it — for example, when a token could be ambiguous, or when you're passing a string that happens to look like a number.
 
 ### Arithmetic and Comparison
 
 Integer operations live in the Int dictionary:
 
 ```
-ok: 10 int 3 int -     # 10 - 3 = 7
-ok: 7 int 6 int *      # 7 * 6 = 42
-ok: 100 int 3 int /    # 100 div 3 = 33  (integer division)
+ok: 10 3 -         # 10 - 3 = 7
+ok: 7 6 *          # 7 * 6 = 42
+ok: 100 3 /        # 100 div 3 = 33  (integer division)
 ```
 
-Arithmetic follows the Forth convention: the *second* item on the stack is the left operand. So `10 int 3 int -` computes `10 - 3`, not `3 - 10`. Think of it as: "put 10 down, put 3 on top, subtract the top from what's underneath."
+Arithmetic follows the Forth convention: the *second* item on the stack is the left operand. So `10 3 -` computes `10 - 3`, not `3 - 10`. Think of it as: "put 10 down, put 3 on top, subtract the top from what's underneath."
 
-Comparisons are global — they work on any pair of values:
+Comparisons produce Booleans:
 
 ```
-ok: 10 int 20 int <    # Is 10 < 20?  -> {Bool, true}
-ok: 5 int 5 int ==     # Is 5 == 5?   -> {Bool, true}
-ok: 3 int 7 int >=     # Is 3 >= 7?   -> {Bool, false}
+ok: 10 20 <        # Is 10 < 20?  -> {Bool, true}
+ok: 5 5 ==         # Is 5 == 5?   -> {Bool, true}
+ok: 3 7 >=         # Is 3 >= 7?   -> {Bool, false}
 ```
 
 Boolean operations live in the Bool dictionary:
 
 ```
-ok: True bool not      # -> {Bool, false}
+ok: True not       # -> {Bool, false}
 ```
 
 ### No Syntax Errors, Only Type Errors
 
-If you type something the interpreter doesn't recognize, it doesn't complain. It just puts it on the stack as an Atom:
+If you type something the interpreter doesn't recognize — and no literal handler claims it — it simply goes on the stack as an Atom:
 
 ```
 ok: hello world foo
@@ -189,23 +213,23 @@ The syntax mirrors traditional Forth, extended with type signatures:
 : word-name  InputTypes -> OutputTypes ; body .
 ```
 
-Let's define a word that doubles an integer:
+Let's define a word that squares an integer:
 
 ```
-ok: : double Int -> Int ; dup + .
+ok: : square Int -> Int ; dup * .
 ```
 
-Read it aloud: "Define `double`. It takes an Int, returns an Int. The body is: duplicate the top, then add." The `.` at the end closes the definition.
+Read it aloud: "Define `square`. It takes an Int, returns an Int. The body is: duplicate the top, then multiply." The `.` at the end closes the definition.
 
 Now use it:
 
 ```
-ok: 5 int double
+ok: 7 square
 ok: stack
-0) 10 : Int
+0) 49 : Int
 ```
 
-Because the first input type is `Int`, `double` was automatically registered in the Int dictionary. The interpreter finds it by the same mechanism it finds `+` — TOS is Int, search Int's dictionary.
+Because the input type is `Int`, `square` was automatically registered in the Int dictionary. The interpreter finds it by the same mechanism it finds `+` — TOS is Int, search Int's dictionary.
 
 ### Building Words from Words
 
@@ -219,7 +243,7 @@ Words can call other words:
 `quadruple` calls `double` twice. Each call does the full dispatch — TOS is Int, find `double` in Int's dictionary, execute it. No special calling convention.
 
 ```
-ok: 3 int quadruple
+ok: 3 quadruple
 ok: stack
 0) 12 : Int
 ```
@@ -229,31 +253,26 @@ ok: stack
 A word can consume several stack items:
 
 ```
-: add3 Int Int -> Int ; + .
+: add3 Int Int Int -> Int ; + + .
 ```
 
-This takes two Ints and produces one. The `+` inside consumes both inputs:
+This takes three Ints from the stack and produces their sum:
 
 ```
-ok: 10 int 20 int add3
+ok: 10 20 30 add3
 ok: stack
-0) 30 : Int
+0) 60 : Int
 ```
 
-### Words with No Inputs
+### Where Words Live
 
-A word with no input types goes into the Any dictionary — available everywhere:
+A word's home dictionary is determined by the rightmost input type — the type that will be on top of the stack when the word is called. This happens automatically:
 
-```
-: answer -> Int ; 42 int .
-: pi-ish -> Int ; 355 int 113 int / .
-```
+- `: square Int -> Int ;` — lives in Int dict (TOS will be Int)
+- `: origin -> Point ;` — lives in Any dict (no inputs)
+- `: add Counter Int -> Counter ;` — lives in Int dict (TOS will be Int)
 
-```
-ok: answer
-ok: stack
-0) 42 : Int
-```
+You never specify which dictionary to use. The type signatures do it for you.
 
 ### How Compilation Works
 
@@ -263,7 +282,7 @@ Then the TOS type becomes `InputTypeSignature`. Now every token is interpreted a
 
 Same pattern continues: type names accumulate into the output signature. `;` transitions to `CodeCompile`. Now tokens are recorded as operation references — the body of the word. Finally `.` finishes compilation, saves the word, and pops all the compiler state off the stack.
 
-**The interpreter never changed.** It's still doing the same four-step dispatch it always does. The compiler is just four types — `WordDefinition`, `InputTypeSignature`, `OutputTypeSignature`, `CodeCompile` — each with a tiny dictionary. The types on the stack redirected what the tokens meant.
+**The interpreter never changed.** It's still doing the same dispatch it always does. The compiler is just four types — `WordDefinition`, `InputTypeSignature`, `OutputTypeSignature`, `CodeCompile` — each with a tiny dictionary. The types on the stack redirected what the tokens meant.
 
 This is why the compiler is so small. It's not a separate system. It's just more types.
 
@@ -272,78 +291,118 @@ This is why the compiler is so small. It's not a separate system. It's just more
 
 Traditional Forth — and most languages — uses `if`/`else` for branching. ActorForth takes a different path. The preferred control flow mechanism is **pattern matching through overloaded word definitions.**
 
-### Multiple Definitions, One Name
+### Value Constraints
 
-You can define the same word multiple times with different input signatures. The dispatcher walks the list of definitions and picks the first one whose signature matches the actual stack. Here's a word that behaves differently depending on what *type* is on the stack:
+The dispatch mechanism doesn't just match on type — it can match on specific values within a type. A word whose signature says `0` for an Int parameter matches only when that parameter is exactly zero. The general signature `Int` matches any integer. When both are registered under the same name, the more specific value-constrained version is tried first.
 
-```
-: describe Int -> ; drop print .
-: describe Bool -> ; drop print .
-```
+### Fibonacci: The Canonical Example
 
-Both are named `describe`, but one is registered in the Int dictionary, the other in Bool. When you call `describe`, the dispatcher checks TOS — if it's an Int, it finds the first definition; if it's a Bool, it finds the second. Same name, different behavior, selected by the types already on the stack.
-
-But the real power comes from **value constraints**. The dispatch mechanism doesn't just match on type — it can match on specific values within a type. A signature entry like `{Int, 0}` matches only when TOS is an Int whose value is exactly zero. The general signature `Int` matches any integer. When both are registered under the same name, the more specific value-constrained version is tried first.
-
-### Factorial: The Classic Example
-
-The factorial function shows this at its best. In most languages you'd write `if n == 0 then 1 else n * factorial(n-1)`. In ActorForth, you write two separate definitions of the same word:
+Here's the actual `fib.a4` from the samples directory:
 
 ```
-: fact 0 Int -> Int ; drop 1 int .          # base case: fact(0) = 1
-: fact Int -> Int ; dup 1 int - fact * .     # recursive case: n * fact(n-1)
+: fib Int -> Int ;
+    : 0 -> 0 ;
+    : 1 -> 1 ;
+    : Int -> Int ;
+        dup
+        1 -
+        fib
+        swap
+        2 -
+        fib
+        +.
 ```
 
-Both definitions are named `fact` and both live in the Int dictionary. When `fact` is called, the dispatcher tries each definition's input signature against the actual stack:
+The master signature `: fib Int -> Int ;` establishes the word name and provides type context. Inside it, three sub-clauses handle different cases:
 
-- If TOS is `{Int, 0}`, the first definition matches — its signature `0 Int` requires both the type *and* the value to match. It drops the zero and pushes 1.
-- If TOS is any other Int, the first definition fails (wrong value) and the second matches — its signature `Int` requires only the type. It does the recursive computation.
+- `: 0 -> 0 ;` — when the input is exactly 0, return 0
+- `: 1 -> 1 ;` — when the input is exactly 1, return 1
+- `: Int -> Int ;` — for any other Int, compute `fib(n-1) + fib(n-2)`
 
-The value constraint `0 Int` is more specific than `Int` alone, so it's tried first. No `if` statement needed. The dispatch *is* the branch.
+No `if` statement. No `else`. The dispatch *is* the branch. Each case reads independently, and adding a new case means adding a new sub-clause — you don't modify existing code.
 
-Let's trace `3 int fact`:
+Test it:
 
 ```
-Stack: [3]  → fact matches "Int" case → dup 1 int - fact *
-Stack: [3, 3] → 1 int → [1, 3, 3] → - → [2, 3] → fact (recurse)
-Stack: [2, 3] → fact matches "Int" case → dup 1 int - fact *
-Stack: [2, 2, 3] → 1 int → [1, 2, 2, 3] → - → [1, 2, 3] → fact (recurse)
-Stack: [1, 2, 3] → fact matches "Int" case → dup 1 int - fact *
-Stack: [1, 1, 2, 3] → 1 int → [1, 1, 1, 2, 3] → - → [0, 1, 2, 3] → fact (recurse)
-Stack: [0, 1, 2, 3] → fact matches "0 Int" case → drop 1 int
-Stack: [1, 1, 2, 3] → * → [1, 2, 3] → * → [2, 3] → * → [6]
+ok: 0 fib 0 assert-eq
+ok: 1 fib 1 assert-eq
+ok: 6 fib 8 assert-eq
+ok: 10 fib 55 assert-eq
 ```
 
-Result: `{Int, 6}`. Three recursive calls, three multiplications, no branching logic.
+### Recursive Countdown
+
+Pattern matching naturally expresses recursion with a base case:
+
+```
+: countdown Int -> ;
+    : 0 -> ; drop
+    : Int -> ; 1 - countdown.
+```
+
+Two sub-clauses: when the value is 0, drop it and stop. For any other Int, subtract 1 and recurse. The BEAM VM handles tail recursion efficiently, so this is as fast as a loop.
 
 ### Why Pattern Matching?
 
 Three reasons:
 
-**Clarity.** Each case is a separate definition. You can read them independently. There's no nested `if`/`else` to untangle.
+**Clarity.** Each case is a separate clause. You can read them independently. There's no nested `if`/`else` to untangle.
 
-**Extensibility.** Adding a new case means adding a new definition. You don't modify existing code. This is the Open/Closed Principle, enforced by the language.
+**Extensibility.** Adding a new case means adding a new clause. You don't modify existing code. This is the Open/Closed Principle, enforced by the language.
 
 **BEAM compatibility.** When ActorForth compiles to BEAM bytecode, pattern-matched word definitions map directly to Erlang's function clause mechanism. The BEAM VM is *built* for this — it compiles pattern matches into efficient jump tables. We get that optimization for free.
+
+### Pattern Matching on Booleans
+
+Pattern matching isn't limited to integers. Booleans work the same way — `True` and `False` are value constraints:
+
+```
+: to-int Bool -> Int ;
+    : True  -> Int ; drop 1
+    : False -> Int ; drop 0 .
+```
+
+This is ActorForth's answer to `if`/`else`. The `drop` removes the matched boolean value from the stack. More complex branching is just more sub-clauses:
+
+```
+: choose Int Int Bool -> Int ;
+    : True  -> Int ; drop drop
+    : False -> Int ; drop swap drop .
+```
+
+This `choose` word takes two Ints and a Bool. If True, keep the deeper Int (the "then" value); if False, keep the TOS Int (the "else" value). Notice that sub-clauses with fewer elements than the master signature automatically right-align — `True` matches the Bool position (rightmost/TOS), and the Int positions default to type-only matching.
+
+### Pattern Matching on Strings
+
+Quoted strings can also be value constraints:
+
+```
+: greet String -> String ;
+    : "hello"   -> String ; drop "Hello World!"
+    : "goodbye" -> String ; drop "Farewell!"
+    : String    -> String ; .
+
+ok: "hello" greet
+ok: stack
+0) "Hello World!" : String
+```
+
+The general `String` clause acts as the fallback — unmatched strings pass through unchanged.
 
 ### Composition Over Branching
 
 In ActorForth, we compose small words rather than writing long procedures with branches:
 
 ```
-# Instead of one big word with if/else:
-: process Int -> Int ; ... complex branching logic ... .
-
-# Prefer small, focused words:
 : double Int -> Int ; dup + .
 : square Int -> Int ; dup * .
-: bump Int -> Int ; 1 int + .
+: bump Int -> Int ; 1 + .
 ```
 
 Each word does one thing. Combine them as needed:
 
 ```
-ok: 5 int double bump square
+ok: 5 double bump square
 ok: stack
 0) 121 : Int
 ```
@@ -358,7 +417,9 @@ Numbers and booleans are fine, but real programs need structured data. ActorFort
 ### Defining a Type
 
 ```
-type Point x Int y Int .
+type Point
+    x Int
+    y Int .
 ```
 
 This registers a new type called `Point` with two fields: `x` (an Int) and `y` (an Int). The system auto-generates three things:
@@ -367,12 +428,14 @@ This registers a new type called `Point` with two fields: `x` (an Int) and `y` (
 2. **Getters** — `x` and `y`, registered in the Point dictionary
 3. **Setters** — `x!` and `y!`, for updating fields
 
+Put each field name and its type on its own line. It makes it easy for the eye to parse what's a name and what's a type. The syntax is the same either way — `type Point x Int y Int .` works too — but the vertical layout is clearer.
+
 ### Construction
 
 The constructor takes field values from the stack in definition order:
 
 ```
-ok: 10 int 20 int point
+ok: 10 20 point
 ok: stack
 0) {x: 10, y: 20} : Point
 ```
@@ -381,155 +444,301 @@ First the x value, then the y value, then `point` to assemble them.
 
 ### Field Access
 
-When a Point is on top of the stack, getter words are available:
+Getters are **non-destructive** — they push the field value while leaving the instance on the stack:
 
 ```
-ok: 10 int 20 int point
+ok: 10 20 point
 ok: x
+ok: stack
+0) 10 : Int
+1) {x: 10, y: 20} : Point
+```
+
+This means you can access multiple fields without `dup`:
+
+```
+ok: 10 20 point
+ok: x swap y
+ok: stack
+0) 20 : Int
+1) {x: 10, y: 20} : Point
+2) 10 : Int
+```
+
+When you're done with the instance, `swap drop` cleans it up:
+
+```
+ok: 10 20 point x swap drop
 ok: stack
 0) 10 : Int
 ```
 
-The getter consumed the Point and pushed its `x` field value. If you need to keep the Point, `dup` first:
-
-```
-ok: 10 int 20 int point
-ok: dup x swap y
-ok: stack
-0) 20 : Int
-1) 10 : Int
-```
-
 ### Updating Fields
 
-Setters use the `!` suffix convention. Push the new value, then apply the setter:
+Setters use the `!` suffix convention (read "store", as in Forth tradition). Push the new value, then apply the setter:
 
 ```
-ok: 10 int 20 int point     # create Point(10, 20)
-ok: 99 int x!               # update x to 99
-ok: dup x swap y
+ok: 10 20 point     # create Point(10, 20)
+ok: 99 x!           # update x to 99
+ok: x swap y
 ok: stack
 0) 20 : Int
-1) 99 : Int
+1) {x: 99, y: 20} : Point
+2) 99 : Int
 ```
 
-The setter consumes the new value and the Point, then pushes a new Point with the updated field. The original is not mutated — there is no mutation in ActorForth.
-
-### Types with More Fields
-
-Product types can have any number of fields:
-
-```
-type Color r Int g Int b Int .
-
-255 int 128 int 0 int color
-```
-
-That creates `Color(r: 255, g: 128, b: 0)`.
+The setter consumes the new value and the Point, then pushes a new Point with the updated field. The original is not mutated — there is no mutation in ActorForth. Every "update" creates a new value.
 
 ### Types Compose with Words
 
 Define operations that work with your types:
 
 ```
-type Point x Int y Int .
+type Point
+    x Int
+    y Int .
 
-: origin -> Point ; 0 int 0 int point .
-: move-right Point -> Point ; dup y swap x 1 int + swap point .
+: origin -> Point ; 0 0 point .
+: move-right Point -> Point ; x 1 + x! .
 ```
 
-`origin` takes no inputs and produces a Point at (0, 0). `move-right` takes a Point, increments its x by 1, and produces a new Point. These words go in the right dictionaries automatically — `origin` in Any (no inputs), `move-right` in Point (first input is Point).
+`origin` takes no inputs and produces a Point at (0, 0). `move-right` takes a Point, reads `x` (non-destructive, leaves the Point), adds 1, then stores back with `x!`. No `dup` gymnastics needed — the getter leaves the instance for the setter.
+
+### Types with More Fields
+
+Product types can have any number of fields with mixed types:
 
 ```
-ok: origin move-right move-right move-right x
-ok: stack
-0) 3 : Int
+type Account
+    balance Int
+    ledger List .
 ```
+
+Fields can be of any registered type — Int, Bool, List, or even another product type.
 
 ### Why Product Types Matter
 
 Product types make ActorForth a viable language for real programs. You're not limited to loose values on the stack — you can bundle related data together, name the fields, and define operations that work on the bundle. And because the type goes on the stack, it participates in dispatch just like Int or Bool. When a Point is on top, Point-specific words become available. The stack is still the state machine.
 
-Product types are also the foundation for more complex structures. A product type can contain fields of other product types. You can build trees, records, domain objects — whatever your program needs.
+Product types are also the foundation for actors. Any product type instance can become an actor's state — and the operations defined on that type become the actor's interface.
 
 
-## Chapter 6: Actors — Concurrency as a Primitive
+## Chapter 6: Lists
+
+ActorForth provides a built-in List type that wraps native Erlang cons cells. This isn't an accident — BEAM lists are already singly-linked cons cells with O(1) prepend, which is exactly what a stack-based language needs.
+
+### Building Lists
+
+`nil` pushes an empty list. `cons` prepends an item:
+
+```
+ok: nil
+ok: stack
+0) [] : List
+
+ok: 1 cons 2 cons 3 cons
+ok: stack
+0) [3, 2, 1] : List
+```
+
+Each `cons` takes an item and a list, and produces a new list with the item on front. Building left-to-right with cons means the last item consed is the first in the list.
+
+### Decomposing Lists
+
+`head` returns the first element. `tail` returns everything after the first:
+
+```
+ok: nil 1 cons 2 cons 3 cons
+ok: dup head
+ok: stack
+0) 3 : Int
+1) [3, 2, 1] : List
+
+ok: drop tail
+ok: stack
+0) [2, 1] : List
+```
+
+`length` tells you how many elements:
+
+```
+ok: nil 1 cons 2 cons 3 cons length
+ok: stack
+0) 3 : Int
+```
+
+### Lists Are Heterogeneous
+
+Any stack item can be consed onto any list. The items keep their original types:
+
+```
+ok: nil 42 cons True cons
+ok: stack
+0) [True : Bool, 42 : Int] : List
+```
+
+This matches Erlang's own list semantics. Each element is a full `{Type, Value}` pair.
+
+### Lists in Practice
+
+Lists become powerful when combined with product types. Here's a ledger that tracks transactions:
+
+```
+type Transaction
+    kind Atom
+    amount Int .
+
+# Build a list of transactions
+nil
+Deposit 500 transaction cons
+Withdrawal 100 transaction cons
+```
+
+The list holds typed values — each element is a full Transaction, carrying its type information along.
+
+
+## Chapter 7: Actors — Concurrency as a Primitive
 
 Most languages bolt concurrency on as an afterthought — threads, locks, mutexes, all the things that make parallel programming a nightmare. ActorForth takes a different approach: concurrency is built in from the beginning, using the actor model, and it maps directly to Erlang's battle-tested process system.
 
-An actor is a process with its own stack, its own state, and a mailbox. Actors communicate by sending messages. There is no shared state. No locks. No races. If you need another actor to do something, you send it a message and move on.
+An actor is a process with its own stack, its own state, and a mailbox. Actors communicate by sending messages. There is no shared state. No locks. No races. If you need another actor to do something, you send it a message.
 
-### Spawning an Actor
+### The `server` Pattern
 
-First, define a word that will be the actor's behavior. This word receives a message (pushed onto its stack) and does something with it:
+The `server` word takes any typed instance from the stack and spawns an Erlang process to hold it. That process becomes a stateful actor — it holds the instance as its state, and accepts messages that correspond to user-defined words operating on that type.
 
-```
-: printer Int -> ; print .
-```
-
-`printer` takes an Int and prints it. Now spawn an actor that runs this word:
+Let's build a counter:
 
 ```
-ok: printer spawn
-ok: stack
-0) <0.123.0> : Actor
+type Counter
+    value Int .
+
+: increment Counter -> Counter ;
+    dup value 1 + value!.
+
+: count Counter -> Counter Int ;
+    dup value.
+
+0 counter server
 ```
 
-`spawn` consumed the Atom `printer` and produced an Actor. The actor is alive — it's an Erlang process, running in the background, waiting for messages.
+That last line does three things: pushes `{Int, 0}`, calls `counter` to build `{Counter, #{value => {Int, 0}}}`, then `server` spawns a process to hold it. The stack now has an Actor reference.
 
-### Sending Messages
+### Sending Messages with `<< >>`
 
-Send a value to an actor with `send` (or its alias `!`):
-
-```
-ok: printer spawn       # spawn the actor
-ok: 42 int swap send    # send it 42
-```
-
-The actor receives `{Int, 42}`, pushes it onto a fresh stack, and runs `printer` — which prints `42`. Then it goes back to waiting.
-
-You can send as many messages as you want:
+The `<<` word enters send mode. Inside the block, tokens that match the actor's **vocabulary** are dispatched to the actor. Other tokens execute locally. `>>` exits send mode.
 
 ```
-ok: printer spawn
-ok: dup 10 int swap send
-ok: dup 20 int swap send
-ok: dup 30 int swap send
+<< increment >>
+<< increment >>
+<< increment >>
+<< count >> 3 assert-eq
 ```
 
-Each message is handled independently. The actor processes them one at a time, in order.
+Three increments, then a count. But notice something: `increment` and `count` behave differently:
 
-### Talking to Yourself
+- `increment` takes `Counter -> Counter` — same type in, same type out. No extra return values. This is a **cast** — fire-and-forget, asynchronous.
+- `count` takes `Counter -> Counter Int` — it returns an extra Int beyond the state. This is a **call** — synchronous, waits for the reply.
 
-`self` pushes the current process's actor reference:
+The actor system classifies each word automatically based on its signature. You don't specify cast vs call — the types tell the story.
+
+After the `<< count >>` call, the Int result (`3`) is pushed onto *your* stack, on top of the Actor reference. That's why `3 assert-eq` works — it pops the 3 and compares it.
+
+### What's In the Vocabulary?
+
+The actor's vocabulary is built automatically from user-defined words whose signature includes the actor's state type. But **auto-generated ops are excluded**. The getter `value` and setter `value!` that the type system created? Not in the vocabulary. The actor's internal structure is private.
+
+This is state encapsulation, enforced by the language. Want to read the counter's value? Define a word for it (`count`). Want to modify it? Define a word for it (`increment`). The auto-generated accessors work *inside* those word bodies — they execute within the actor process, where the state is on the stack. But from outside, you go through the public interface.
+
+### Local vs Remote Execution
+
+Inside a `<< >>` block, not everything goes to the actor. Only vocabulary words are dispatched remotely. Everything else runs locally:
 
 ```
-ok: self
-ok: stack
-0) <0.85.0> : Actor
+<< 5 add >>
 ```
 
-Combined with `receive`, you can send yourself a message:
+Here `5` is a literal — it executes locally, pushing `{Int, 5}` onto a temporary local stack. Then `add` (if it's in the actor's vocabulary) dispatches to the actor with that `5` as an argument.
+
+This is how you pass arguments to actor operations. Compute them locally, then the vocabulary word scoops them up and sends them along.
+
+### Stopping an Actor
+
+Every actor has a built-in `stop` word:
 
 ```
-ok: 42 int self send    # send 42 to yourself
-ok: receive             # block until it arrives
-ok: stack
-0) 42 : Int
+<< stop >> drop
 ```
 
-This is more useful than it sounds — it's the basic pattern for request/reply between actors.
+`stop` terminates the actor process and pushes its final state onto your stack (the `drop` discards it). After `stop`, the Actor reference is no longer valid.
 
-### The Actor Model in Practice
+### A Real Example: Bank Account
 
-Think of actors as independent workers, each with their own desk (stack) and inbox (mailbox). They can't reach over to another worker's desk. They can only drop notes in each other's inboxes.
+Here's the full bank actor from `samples/bank_actor.a4`:
 
-This maps naturally to ActorForth's stack-based computation:
+```
+type Transaction
+    kind Atom
+    amount Int .
 
-- Each actor has its own continuation (stacks + execution state)
-- Messages are typed stack items — they carry their type with them
-- An actor's behavior is just a word — a sequence of stack operations
-- Actors are Erlang processes — you get supervision, fault tolerance, and distribution for free
+type Account
+    balance Int
+    ledger List .
+
+# Helper: build a Transaction
+: make-tx Atom Int -> Transaction ;
+    transaction.
+
+# Helper: prepend a Transaction onto Account's ledger
+: add-tx Account Transaction -> Account ;
+    swap dup ledger rot cons ledger!.
+
+# Helper: add to Account balance
+: credit Account Int -> Account ;
+    swap dup balance rot + balance!.
+
+# Helper: subtract from Account balance
+: debit Account Int -> Account ;
+    swap dup balance rot - balance!.
+
+: deposit Account Int -> Account ;
+    dup Deposit swap make-tx rot swap add-tx swap credit.
+
+: withdraw Account Int -> Account ;
+    dup Withdrawal swap make-tx rot swap add-tx swap debit.
+
+: get-balance Account -> Account Int ;
+    dup balance.
+
+: get-ledger Account -> Account List ;
+    dup ledger.
+
+: tx-count Account -> Account Int ;
+    dup ledger length.
+
+# Open account with $1000 and empty ledger
+1000 nil account server
+
+# Deposits
+<< 500 deposit >>
+<< 250 deposit >>
+
+# Withdrawal
+<< 100 withdraw >>
+
+# Check balance: 1000 + 500 + 250 - 100 = 1650
+<< get-balance >> 1650 assert-eq
+
+# Check transaction count
+<< tx-count >> 3 assert-eq
+
+# Clean up
+<< stop >> drop
+```
+
+Notice the helper words: `make-tx`, `add-tx`, `credit`, `debit`. Each does one thing. The higher-level words (`deposit`, `withdraw`) compose them. This is Thinking Forth — decompose until each word is small and clear.
+
+Also notice the stack manipulation. Words like `credit` start with `swap dup balance rot` — that's three stack shuffling words before you get to the business logic (`+`). This is the honest cost of explicit stack threading with destructive getters. It works, it's correct, but it pushes the developer's mind away from the problem domain and into the mechanics of stack ordering. Future language improvements (non-destructive getters, possibly a context register) aim to reduce this friction.
 
 ### Why Actors Belong in a Forth
 
@@ -539,21 +748,226 @@ And because ActorForth runs on the BEAM, you inherit decades of engineering arou
 
 ActorForth doesn't try to reinvent this. It exposes it directly, with stack-friendly syntax.
 
+### `self`
 
-## Chapter 7: The Interpreter Is the Language
+The `self` word pushes the current process's actor reference:
+
+```
+ok: self
+ok: stack
+0) <0.85.0> : Actor
+```
+
+This is useful for actors that need to send messages to themselves, or pass their own reference to other actors.
+
+
+## Chapter 8: Testing Your Code
+
+ActorForth provides two assertion words that make it easy to test programs inline. Both are in the Any dictionary, available everywhere.
+
+### `assert`
+
+Pops a Bool from the stack. If it's true, nothing happens. If it's false, execution stops with an error that includes the file, line, and column where the assertion failed:
+
+```
+ok: 5 3 > assert         # passes — 5 > 3 is true
+ok: 3 5 > assert         # FAILS — 3 > 5 is false
+Error: assertion_failed at stdin:1:7
+  Assertion failed: expected True on stack
+  Stack(1): False:Bool
+```
+
+### `assert-eq`
+
+Pops two values from the stack. If they're equal (same type and value), nothing happens. If not, the error shows you what was expected and what was actually there:
+
+```
+ok: 7 square 49 assert-eq     # passes — 49 == 49
+ok: 7 square 50 assert-eq     # FAILS
+Error: assert_eq_failed at stdin:1:14
+  Expected 50 but got 49
+  Stack(2): 50:Int 49:Int
+```
+
+### Testing in Sample Files
+
+Every sample file uses assertions as self-tests. Run them and silence means success:
+
+```
+# From fib.a4
+0 fib 0 assert-eq
+1 fib 1 assert-eq
+6 fib 8 assert-eq
+10 fib 55 assert-eq
+```
+
+No output means all assertions passed. An error halts execution at the exact point of failure with the exact values involved. No test framework needed — the assertions are just words, like everything else.
+
+
+## Chapter 9: Maps
+
+Maps are dynamic key-value structures — the complement to product types. Where product types have fixed schemas defined at type-definition time, maps can hold any keys and values, added and removed at runtime.
+
+### Building Maps
+
+`map-new` pushes an empty map. `map-put` adds entries:
+
+```
+ok: map-new 100 "Alice" map-put 200 "Bob" map-put
+ok: map-size
+ok: stack
+0) 2 : Int
+```
+
+The stack order for `map-put` is: map (deepest), value, key (TOS). Think of it as: "starting with this map, store this value at this key."
+
+### Retrieving Values
+
+```
+ok: map-new 42 "answer" map-put
+ok: "answer" map-get
+ok: stack
+0) 42 : Int
+```
+
+`map-get` takes a key and a map, and pushes the value. If the key doesn't exist, you get a clear error:
+
+```
+Error: map_key_not_found at stdin:1:10
+  Key "missing" not found in map
+  Stack(2): "missing":String <Map>:Map
+```
+
+### Other Map Operations
+
+```
+ok: map-new 1 "a" map-put 2 "b" map-put
+
+ok: dup "a" map-has?       # -> True
+ok: drop dup "c" map-has?  # -> False
+ok: drop dup map-keys      # -> List of keys
+ok: drop map-values        # -> List of values
+```
+
+`map-delete` removes a key. `map-size` returns the count of entries.
+
+### Maps with Product Types
+
+Maps and product types work well together. A product type can have a Map field:
+
+```
+type Config
+    name String
+    settings Map .
+
+"myapp" map-new 8080 "port" map-put config
+```
+
+This creates a Config with a fixed `name` field and a flexible `settings` map.
+
+
+## Chapter 10: The OTP Bridge
+
+ActorForth actors can participate in Erlang/OTP applications today — without BEAM compilation. The `af_server` module is a gen_server that wraps an ActorForth interpreter, making ActorForth actors supervisable, callable from Erlang or Elixir, and fully integrated with OTP.
+
+### How It Works
+
+Write your actor logic in a `.a4` file:
+
+```
+# bridge_counter.a4
+type Counter
+    value Int .
+
+: increment Counter -> Counter ;
+    dup value 1 + value!.
+
+: count Counter -> Counter Int ;
+    dup value.
+
+: add Counter Int -> Counter ;
+    swap dup value rot + value!.
+
+0 counter
+```
+
+The last line leaves a Counter instance on the stack. `af_server` loads this file and uses that instance as the server's state.
+
+### Calling from Erlang
+
+```erlang
+{ok, Pid} = af_server:start_link("samples/bridge_counter.a4"),
+
+%% Cast (async, no return):
+af_server:cast(Pid, "increment", []),
+
+%% Call (sync, returns values):
+{ok, [1]} = af_server:call(Pid, "count", []),
+
+%% Call with arguments:
+af_server:call(Pid, "add", [10]),
+{ok, [11]} = af_server:call(Pid, "count", []),
+
+%% Stop:
+af_server:stop(Pid).
+```
+
+### Term Conversion
+
+At the bridge boundary, Erlang terms are automatically converted to ActorForth stack items and back:
+
+| Erlang | ActorForth |
+|--------|-----------|
+| `42` | `{Int, 42}` |
+| `<<"hello">>` | `{String, <<"hello">>}` |
+| `true` / `false` | `{Bool, true/false}` |
+| `foo` (atom) | `{Atom, "foo"}` |
+| `[1, 2, 3]` | `{List, [{Int,1}, {Int,2}, {Int,3}]}` |
+| `#{<<"k">> => 1}` | `{Map, ...}` |
+
+Product type instances convert to Erlang maps with a `type` key: `#{type => 'Counter', value => 0}`.
+
+### Supervision
+
+Because `af_server` is a gen_server, it slots into supervision trees:
+
+```erlang
+ChildSpec = #{
+    id => my_counter,
+    start => {af_server, start_link, ["counter.a4"]},
+    restart => permanent,
+    type => worker
+},
+```
+
+If the ActorForth actor crashes, the supervisor restarts it — loading the `.a4` file fresh and starting from the initial state. This is standard OTP behavior, no special handling needed.
+
+### Raw Evaluation
+
+For more flexible interaction, `af_server:eval/2` interprets a raw ActorForth line against the server's current state:
+
+```erlang
+af_server:eval(Pid, "dup value 5 + value!").
+```
+
+This is useful for debugging, REPL-like interaction, or dynamic behavior.
+
+
+## Chapter 11: The Interpreter Is the Language
 
 We've saved the deepest idea for near the end, because it requires everything before it to make sense.
 
-Traditional language implementations have separate phases: parsing, analysis, compilation, execution. ActorForth has **one phase**: interpretation. Everything — including compilation — happens through the same four-step dispatch mechanism.
+Traditional language implementations have separate phases: parsing, analysis, compilation, execution. ActorForth has **one phase**: interpretation. Everything — including compilation — happens through the same dispatch mechanism.
 
-### The Four Steps, Always
+### The Five Steps, Always
 
 Every token, every time:
 
 1. Look in the TOS type's dictionary
 2. Check the TOS type's handler
 3. Look in the Any dictionary
-4. Push as Atom
+4. Try literal handlers
+5. Push as Atom
 
 That's it. When you're "just running code," TOS is Int or Bool or whatever, and tokens resolve to arithmetic or stack operations. When you're "compiling a word," TOS is CodeCompile, and tokens resolve to "record this operation for later." The interpreter doesn't know the difference. It doesn't need to.
 
@@ -561,7 +975,9 @@ That's it. When you're "just running code," TOS is Int or Bool or whatever, and 
 
 This is where the idea becomes truly powerful. The compiler isn't special — it's just four types with dictionaries. **You can create your own types with their own dictionaries.** Any type can intercept tokens and give them meaning.
 
-The product type system works this way. When you type `type`, it pushes a `TypeDefinition` onto the stack. Now every subsequent token is interpreted in the context of defining a type — field names, field types — until `.` finishes the definition. Same mechanism. Same interpreter. Different types on the stack.
+The product type system works this way. When you type `type`, it pushes a `TypeDefinition` onto the stack. Now every subsequent token is interpreted in the context of defining a type — the type name, then alternating field names and field types — until `.` finishes the definition. Same mechanism. Same interpreter. Different types on the stack.
+
+The actor send protocol works the same way. `<<` pushes an `ActorSend` onto the stack. Now tokens are classified as local or remote and dispatched accordingly. `>>` finishes the send block. No special syntax — just types redirecting what tokens mean.
 
 You could define a type whose dictionary contains words for describing state machines. Or regular expressions. Or SQL queries. Or BEAM bytecode instructions. Each domain gets its own syntax, built from the same primitive: types with dictionaries.
 
@@ -575,107 +991,840 @@ When a word is compiled, its body isn't resolved to fixed function pointers. Eac
 - **Forward references work.** A word can call a word that hasn't been defined yet. As long as it exists by the time the call happens, it's fine.
 - **Redefinition works.** If you redefine a word, existing words that call it pick up the new definition automatically.
 
-This is the same strategy that makes Lisp's `eval` powerful, adapted to a stack-based, type-driven world.
 
+## Chapter 12: Loading Files
 
-## Chapter 8: Putting It All Together
+ActorForth programs can be split across multiple files using the `load` word.
 
-Let's build something that uses everything: types, words, product types, and actors.
+### Libraries
 
-### A Counter Service
-
-```
-# Define a counter type
-type Counter name Atom value Int .
-
-# Create a counter
-: new-counter Atom -> Counter ; 0 int counter .
-
-# Increment
-: increment Counter -> Counter ; dup value 1 int + swap name swap counter .
-
-# Get the current value
-: count Counter -> Int ; value .
-```
-
-Use it interactively:
+Create a library file with reusable definitions:
 
 ```
-ok: hits new-counter
-ok: increment increment increment
-ok: count
-ok: stack
-0) 3 : Int
+# lib_math.a4
+: square Int -> Int ; dup * .
+: double Int -> Int ; 2 * .
+: cube   Int -> Int ; dup dup * * .
 ```
 
-### A Temperature Converter
+Load it from another file or the REPL:
 
 ```
-: f-to-c Int -> Int ; 32 int - 5 int * 9 int / .
-: c-to-f Int -> Int ; 9 int * 5 int / 32 int + .
-```
-
-```
-ok: 212 int f-to-c
-ok: stack
-0) 100 : Int
-
-ok: drop 0 int c-to-f
-ok: stack
-0) 32 : Int
-```
-
-### Stack Juggling: Computing the Distance Between Two Points
-
-```
-type Point x Int y Int .
-
-: diff-sq Int Int -> Int ; - dup * .
-
-: dist-sq Point Point -> Int ;
-    swap x swap x diff-sq
-    swap y swap y diff-sq
-    + .
-```
-
-This computes the squared distance between two points. (We don't have floating point or square roots yet — that's a future type to define.)
-
-```
-ok: 0 int 0 int point 3 int 4 int point dist-sq
+ok: "lib_math.a4" load
+ok: 5 square
 ok: stack
 0) 25 : Int
 ```
 
-`3^2 + 4^2 = 25`. The classic 3-4-5 triangle.
+The `load` word takes a String path, reads the file, parses it, and interprets it into the current continuation. All word definitions from the loaded file become available immediately. Relative paths are resolved from the loading file's directory.
+
+### Building Programs from Parts
+
+```
+# main.a4
+"lib_math.a4" load
+"counter.a4" load
+
+5 square double print    # uses both libraries
+```
+
+The `load` word preserves the current stack state — it only adds definitions, it doesn't clear anything.
 
 
-## Chapter 9: The Road Ahead
+## Chapter 13: Erlang FFI
 
-What you've seen is the prototype interpreter — ActorForth running inside Erlang. It works, it's tested, and it demonstrates the core ideas. But the vision goes further.
+ActorForth runs on the BEAM VM, and sometimes you need to call existing Erlang functions directly. The FFI (Foreign Function Interface) provides this bridge.
 
-### Phase 2: Compiling to BEAM
+### Zero-Argument Calls
 
-The interpreter is useful for exploration, but ActorForth should compile to BEAM bytecode. The first target is **Core Erlang** — a stable intermediate representation that the Erlang compiler can optimize. An ActorForth word like:
+```
+ok: node erlang erlang-apply0
+ok: stack
+0) nonode@nohost : Atom
+```
+
+Push the function name, then the module name, then `erlang-apply0`. The result is automatically converted to an ActorForth stack item.
+
+### Calls with Arguments
+
+For functions that take arguments, build an argument list first:
+
+```
+ok: nil -42 cons abs erlang erlang-apply
+ok: stack
+0) 42 : Int
+```
+
+Arguments go in a List (built with `nil` and `cons`), then function name, module name, then `erlang-apply`.
+
+```
+ok: nil 10 cons 20 cons max erlang erlang-apply
+ok: stack
+0) 20 : Int
+```
+
+### Type Conversion
+
+The FFI automatically converts between Erlang and ActorForth types:
+- Erlang integers ↔ `{Int, N}`
+- Erlang binaries ↔ `{String, B}`
+- Erlang atoms ↔ `{Atom, S}`
+- Erlang booleans ↔ `{Bool, V}`
+- Erlang lists ↔ `{List, Items}`
+- Erlang maps ↔ `{Map, M}`
+
+### When to Use FFI
+
+The FFI is for calling existing Erlang/OTP libraries — file I/O, networking, crypto, date/time, etc. For new logic, write it in ActorForth. The FFI is a bridge, not a crutch.
+
+
+## Chapter 14: Putting It All Together
+
+Let's trace through a complete example that uses types, words, lists, pattern matching, and actors.
+
+### A Stateful Counter Actor
+
+From `samples/counter_actor.a4`:
+
+```
+type Counter
+    value Int .
+
+: increment Counter -> Counter ;
+    value 1 + value!.
+
+: decrement Counter -> Counter ;
+    value 1 - value!.
+
+: count Counter -> Counter Int ;
+    value.
+
+# Create a counter starting at 0 and make it an actor
+0 counter server
+
+# Increment three times (cast - async)
+<< increment >>
+<< increment >>
+<< increment >>
+
+# Decrement once
+<< decrement >>
+
+# Get the count (call - sync) and verify
+<< count >> 2 assert-eq
+
+# Increment two more
+<< increment >>
+<< increment >>
+<< count >> 4 assert-eq
+
+# Clean up
+<< stop >> drop
+```
+
+Every line is either a definition or a test. The assertions at the bottom prove the actor behaves correctly. Run the file and silence means it works.
+
+### A Temperature Converter
+
+```
+: f-to-c Int -> Int ; 32 - 5 * 9 / .
+: c-to-f Int -> Int ; 9 * 5 / 32 + .
+
+212 f-to-c 100 assert-eq
+0 c-to-f 32 assert-eq
+```
+
+Small words, clear intent, self-testing.
+
+### Fibonacci with Pattern Matching
+
+From `samples/fib.a4`:
+
+```
+: fib Int -> Int ;
+    : 0 -> 0 ;
+    : 1 -> 1 ;
+    : Int -> Int ;
+        dup
+        1 -
+        fib
+        swap
+        2 -
+        fib
+        +.
+
+0 fib 0 assert-eq
+1 fib 1 assert-eq
+6 fib 8 assert-eq
+10 fib 55 assert-eq
+```
+
+No branching. No if/else. The dispatch mechanism selects the right clause based on the value on the stack.
+
+### An Event Statistics Actor
+
+```
+type Stats
+    hits Int
+    errors Int .
+
+: hit Stats -> Stats ;
+    hits 1 + hits!.
+
+: err Stats -> Stats ;
+    errors 1 + errors!.
+
+: report Stats -> Stats Int Int ;
+    hits swap errors rot.
+
+0 0 stats server
+
+<< hit >>
+<< hit >>
+<< hit >>
+<< err >>
+<< report >>
+# Stack now has: 3 (hits), 1 (errors), Actor
+```
+
+Two counters in one actor. Each operation touches only the field it cares about. The `report` call returns both values synchronously.
+
+
+## Chapter 15: Compiling Words
+
+ActorForth includes two compilation strategies that go beyond the interpreter's late-binding dispatch.
+
+### Closure-Based Compilation
+
+`af_compile:compile_word/4` takes a word's name, input/output signatures, and body operations, and pre-resolves all body tokens at compile time. Known primitives (`dup`, `drop`, `swap`, `+`, `-`, `*`) get replaced with optimized inline funs that skip the interpreter entirely:
+
+```erlang
+%% Instead of ETS lookup + dispatch for every "dup":
+fun(S) -> [hd(S) | S] end
+```
+
+The result is an `#operation{}` with `source = compiled` that can replace the interpreted version.
+
+### BEAM Module Generation
+
+`af_compile:compile_module/2` goes further — it generates a real BEAM module via `compile:forms/2`. Each word becomes an exported function:
+
+```erlang
+%% From ActorForth: : double Int -> Int ; dup + .
+%% Generated:
+double(Stack0) ->
+    af_compile:apply_impl("dup", af_compile:apply_impl("+", Stack0)).
+```
+
+The module is loaded dynamically with `code:load_binary/3`. Words in the module are callable as regular Erlang functions.
+
+### Tail Call Optimization
+
+When a word's body ends with a call to any compiled word (including self-calls), the compiler detects this and restructures the closure so the call is in Erlang tail position. This means tail-recursive ActorForth words — and mutually-recursive word chains — use constant stack space:
+
+```
+: countdown Int -> ;
+    : 0 -> ; drop
+    : Int -> ; 1 - countdown .
+
+1000 countdown    # Uses O(1) stack, not O(n)
+```
+
+The mechanism: the word trace frame is popped *before* the tail call, putting it in true Erlang tail position. The BEAM's native TCO handles the rest.
+
+
+## Chapter 16: Supervised Actors
+
+While `server` spawns a raw Erlang process, `supervised-server` creates an actor under OTP supervision — giving you automatic restart on failure.
+
+### Basic Usage
+
+```
+type Counter value Int .
+: increment Counter -> Counter ; value 1 + value! .
+: count Counter -> Counter Int ; value .
+
+0 counter supervised-server
+```
+
+This spawns the actor under a `simple_one_for_one` supervisor. The actor is implemented as a `gen_server` that handles `cast` (async) and `call` (sync) messages through the same word dispatch mechanism.
+
+### How It Works
+
+- `supervised-server` creates a `gen_server` worker via `af_actor_worker`
+- The supervisor (`af_actor_sup`) uses `transient` restart strategy — actors restart on abnormal termination but not on normal `stop`
+- `<< ... >>` send blocks work identically for both `server` and `supervised-server` actors
+- The `supervised` flag in the Actor map routes messages through `gen_server:call/cast` instead of raw `!`
+
+### Differences from `server`
+
+| Feature | `server` | `supervised-server` |
+|---------|----------|---------------------|
+| Process type | `spawn_link` | `gen_server` under supervisor |
+| Crash behavior | Crashes caller | Restarts automatically |
+| Message passing | Raw `!` and `receive` | `gen_server:cast/call` |
+| Stop behavior | Process exits | `{stop, normal, State}` |
+
+
+## Chapter 18: Compile-Time Type Checking
+
+ActorForth checks word definitions at compile time by inferring the stack effect of each body token and comparing the result against the declared output signature.
+
+### How It Works
+
+When you define a word:
 
 ```
 : double Int -> Int ; dup + .
 ```
 
-would compile to something equivalent to:
+The compiler:
+1. Starts with the declared input stack: `[Int]`
+2. Looks up `dup` — sig is `Any -> Any Any` — but since the input is `Int`, resolves `Any` to `Int`: stack becomes `[Int, Int]`
+3. Looks up `+` — sig is `Int Int -> Int` — consumes two Ints, produces one: stack becomes `[Int]`
+4. Compares `[Int]` against declared output `[Int]` — match!
 
-```erlang
-double(X) -> X + X.
+If there's a mismatch, the compiler emits a warning:
+
+```
+: bad Int -> Int ; dup .
+Warning: type mismatch in word 'bad'
+  declared output: ['Int']
+  inferred output: ['Int','Int']
 ```
 
-This gets all of BEAM's optimizations for free — dead code elimination, constant folding, register allocation. ActorForth words become real BEAM functions.
+### Type Variable Resolution
 
-### Phase 3: Self-Hosting
+The type checker resolves `Any` in operation signatures to concrete types from the actual stack. This means `dup` applied to `Bool` correctly infers `[Bool, Bool]`, not `[Any, Any]`. The `Any` type acts as a type variable that gets unified during inference.
 
-The ultimate goal: write the BEAM assembler in ActorForth itself. The assembler would be a set of types — `BeamModule`, `BeamFunction`, `BeamInstruction` — whose dictionaries give tokens meaning in the context of emitting bytecode. The same interpreter that runs your program would also compile it.
+### Enforcement
 
-A `BeamModule` on the stack means tokens are module-level directives. A `BeamFunction` means tokens are function instructions. A `BeamInstruction` means tokens are opcodes and operands. The outer interpreter doesn't change — it still does the same four-step dispatch. The types on the stack determine whether you're writing a program or writing a compiler.
+As of v2.3, type checking is **enforced** — verified type mismatches are compile-time errors:
 
-This is the promise of the TOS-driven dictionary mechanism: **any tool that processes text can be built as a set of types.** A compiler is just types for emitting code. A test framework is just types for asserting conditions. A network protocol handler is just types for parsing packets. The same interpreter drives them all.
+```
+: bad Int -> Bool ; dup + .
+** error: Type mismatch in word 'bad': declared output [Bool] but inferred [Int]
+```
+
+When inference is incomplete (product type operations, unknown words), the compiler emits a **warning** instead of an error, since the type checker can't fully resolve the stack:
+
+```
+: increment Counter -> Counter ; value 1 + value! .
+Warning: type check for 'increment' incomplete
+  declared output: ['Counter']
+  inferred output: ['Atom','Int']
+```
+
+### Limitations
+
+- Recursive calls and unknown words are treated as pushing `Atom` — full inference for user-defined words requires iterative analysis
+- Pattern matching sub-clauses are checked independently per clause
+- Product type operations (getters/setters) aren't fully resolved during inference, resulting in warnings rather than errors
+
+
+## Chapter 19: The BEAM Assembler
+
+ActorForth can compile functions directly to BEAM bytecode using the `BeamModule` and `BeamFunction` types. This is the first step toward self-hosting.
+
+### Building a BEAM Module
+
+```
+# Create a module
+my_math beam-module
+
+# Define: double(X) -> X + X
+double 1 int beam-fun
+    1 int beam-arg        # push Arg1
+    1 int beam-arg        # push Arg1 again
+    + 2 int beam-op       # apply + to the two args
+beam-return
+
+# Define: square(X) -> X * X
+square 1 int beam-fun
+    1 int beam-arg
+    1 int beam-arg
+    * 2 int beam-op
+beam-return
+
+# Compile and load the module
+beam-compile
+# Stack: [Atom("my_math")]
+```
+
+After `beam-compile`, the module is loaded and callable from Erlang:
+
+```erlang
+my_math:double(5).   %% => 10
+my_math:square(7).   %% => 49
+```
+
+### Available Words
+
+| Word | Stack Effect | Description |
+|------|-------------|-------------|
+| `beam-module` | `( Atom -- BeamModule )` | Start new module |
+| `beam-fun` | `( BeamModule Atom Int -- BeamFunction )` | Start function (name, arity) |
+| `beam-arg` | `( BeamFunction Int -- BeamFunction )` | Reference argument N (1-based) |
+| `beam-int` | `( BeamFunction Int -- BeamFunction )` | Integer literal |
+| `beam-atom` | `( BeamFunction Atom -- BeamFunction )` | Atom literal |
+| `beam-op` | `( BeamFunction Atom Int -- BeamFunction )` | Apply operator (+, -, *, etc.) |
+| `beam-call` | `( BeamFunction Atom Atom Int -- BeamFunction )` | Remote call Mod:Fun/Arity |
+| `beam-return` | `( BeamFunction -- BeamModule )` | Finish function |
+| `beam-compile` | `( BeamModule -- Atom )` | Compile and load module |
+
+### How It Works
+
+The assembler builds Erlang abstract forms — the same format `compile:forms/2` expects. Each `beam-*` word adds to the form tree. `beam-compile` hands the forms to the Erlang compiler, which generates optimized BEAM bytecode and loads it into the VM.
+
+This demonstrates the core principle: **the types on the stack determine what tokens mean.** When a `BeamFunction` is on the stack, `beam-arg` adds an argument reference. When a `BeamModule` is on the stack, `beam-compile` triggers compilation. The outer interpreter doesn't change — it's the same five-step dispatch driving everything.
+
+
+## Chapter 20: Introspection with `see`
+
+The `see` word lets you inspect any word's definition — its type signature, body, and which type dictionary it lives in.
+
+### Viewing Built-in Words
+
+```
+ok: dup see
+  : dup Any -> Any Any ;  [built-in]
+    in type: 'Any'
+```
+
+### Viewing Compiled Words
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double see
+  : double Int -> Int ; dup + .
+    in type: 'Int'
+```
+
+For compiled words, `see` shows the body tokens — the same words you wrote in the definition.
+
+### Multiple Implementations
+
+Some words have different implementations across type dictionaries. `see` shows all of them:
+
+```
+ok: int see
+  : int Atom -> Int ;  [built-in]
+    in type: 'Any'
+  : int Atom(0) -> Int ;  [built-in]
+    in type: 'Any'
+```
+
+The `int` constructor has two signatures: a general one for any Atom, and a specialized one matching the literal `0`. When you type `0 int`, the value-constrained signature matches first.
+
+### Native Wrappers
+
+After compiling a word to native BEAM (see next chapter), `see` shows the native module:
+
+```
+ok: double see
+  : double Int -> Int ;  [native: af_ctb_wrap]
+    in type: 'Int'
+```
+
+
+## Chapter 21: Compiling to Native BEAM
+
+ActorForth can compile word definitions into native BEAM modules — producing real Erlang-callable functions with full performance. This bridges the gap between the interpreted stack language and the BEAM runtime.
+
+### The Workflow
+
+Define a word, compile it, use it — all from the REPL:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: 5 int double
+ok: stack
+0) 10 : Int
+
+# Compile to a BEAM module
+ok: double af_math compile-to-beam
+ok: stack
+0) af_math : Atom
+
+# The word still works — now via native code
+ok: 7 int double
+ok: stack
+0) 14 : Int
+1) af_math : Atom
+
+# Also callable from Erlang:
+# af_math:double(5) => 10
+```
+
+### What Happens
+
+`compile-to-beam` does three things:
+
+1. **Translates** the word body into Erlang abstract forms. Stack operations (`dup`, `swap`, `drop`) become expression manipulations. Arithmetic (`+`, `-`, `*`, `/`) becomes Erlang operators. Integer literals become constants.
+
+2. **Compiles** the abstract forms into a BEAM module using `compile:forms/2`, then loads it with `code:load_binary/3`.
+
+3. **Replaces** the interpreted word with a **transparent native wrapper**. The wrapper unwraps `{Type, Value}` tagged items from the ActorForth stack, calls the native BEAM function, and re-wraps the results. ActorForth code using the word doesn't notice any change.
+
+### Batch Compilation with `compile-all`
+
+When you have multiple words, `compile-all` compiles them all into a single module:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: : square Int -> Int ; dup * .
+ok: : inc Int -> Int ; 1 + .
+ok: af_math compile-all
+ok: stack
+0) af_math : Atom
+
+# All three functions are now native
+ok: 5 int double
+ok: stack
+0) 10 : Int
+1) af_math : Atom
+```
+
+From Erlang: `af_math:double(5)`, `af_math:square(7)`, `af_math:inc(3)`.
+
+### Saving Modules to Disk
+
+`save-module` writes the compiled BEAM binary to a directory:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double af_math compile-to-beam
+ok: "/path/to/ebin" save-module
+```
+
+The resulting `af_math.beam` file can be added to any Erlang/Elixir project's code path.
+
+### Building Standalone Applications
+
+`build-escript` creates a self-contained executable from a compiled module:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double af_math compile-to-beam
+ok: double "./my_app" build-escript
+```
+
+The escript bundles the compiled module with a generated `main/1` entry point. Run it from the command line:
+
+```bash
+$ ./my_app
+# Calls af_math:double() or the specified entry point
+```
+
+### Complete REPL-to-Executable Example
+
+```
+# 1. Define your words
+ok: : fib Int -> Int ;
+    : 0 -> 0 ;
+    : 1 -> 1 ;
+    : Int -> Int ; dup 1 - fib swap 2 - fib + .
+
+# 2. Test interactively
+ok: 10 int fib
+ok: stack
+0) 55 : Int
+
+# 3. Compile to native BEAM
+ok: fib af_fib compile-to-beam
+
+# 4. Save the module
+ok: "/my/project/ebin" save-module
+
+# 5. Or build a standalone executable
+ok: fib "./fib_app" build-escript
+```
+
+### Inter-Word Compilation
+
+When `compile-all` compiles multiple words into the same module, calls between words become direct BEAM function calls — no interpreter dispatch overhead:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: : quadruple Int -> Int ; double double .
+ok: af_math compile-all
+# quadruple calls double directly as a native BEAM call
+```
+
+### OTP Application Packaging
+
+`build-release` creates a proper OTP application directory structure:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double af_math compile-to-beam
+ok: af_math "1.0.0" "/my/releases" build-release
+# Creates /my/releases/af_math-1.0.0/ebin/ with .app and .beam files
+```
+
+### OTP Behaviour Generation
+
+`gen-server-module` compiles an ActorForth product type and its words into a proper gen_server module:
+
+```
+ok: type Counter value Int .
+ok: : increment Counter -> Counter ; value 1 + value! .
+ok: : count Counter -> Counter Int ; value .
+ok: af_counter Counter gen-server-module
+
+# Now af_counter is a gen_server module:
+# gen_server:start_link(af_counter, InitState, [])
+# gen_server:cast(Pid, increment)
+# gen_server:call(Pid, count) => {ok, 3}
+```
+
+The generated module can be placed in any OTP supervision tree.
+
+### Limitations
+
+- Words calling other user-defined words within the same module compile to direct native calls. Cross-module calls to already-compiled native words are also resolved.
+- Words using operations that aren't known primitives fall back to runtime dispatch — the ActorForth runtime must be present.
+- Zero-argument words (like `: answer -> Int ; 42 .`) auto-execute when their name appears, so you can't push their name as an Atom for `compile-to-beam`. Use the Erlang API (`af_word_compiler:compile_words_to_module/2`) for those.
+
+
+## Chapter 22: Full BEAM Interoperability
+
+ActorForth is a first-class BEAM language. Here's the full interoperability picture.
+
+### Calling Erlang/Elixir from ActorForth
+
+The `erlang-call` word provides natural FFI — push arguments, then module, function, and arity:
+
+```
+ok: -5 int erlang abs 1 int erlang-call
+ok: stack
+0) 5 : Int
+
+ok: 3 int 7 int erlang max 2 int erlang-call
+ok: stack
+0) 7 : Int
+```
+
+For Elixir modules (they're atoms like `'Elixir.String'`):
+
+```
+ok: "hello" Elixir.String upcase 1 int erlang-call
+```
+
+### Calling ActorForth from Erlang/Elixir
+
+Compiled words are standard BEAM functions:
+
+```erlang
+%% From Erlang
+af_math:double(5).        %% => 10
+af_math:square(7).        %% => 49
+
+%% From Elixir
+AfMath.double(5)           # => 10
+```
+
+### OTP Integration
+
+Generated gen_server modules work in any supervision tree:
+
+```erlang
+%% Start the ActorForth-compiled gen_server
+{ok, Pid} = gen_server:start_link(af_counter, InitState, []),
+gen_server:cast(Pid, increment),
+{ok, Count} = gen_server:call(Pid, count).
+```
+
+### Build Integration
+
+The rebar3 plugin compiles `.a4` files automatically:
+
+```erlang
+%% rebar.config
+{plugins, [rebar3_actorforth]}.
+```
+
+Or compile programmatically:
+
+```erlang
+af_compile_file:compile("src/math.a4").
+af_compile_file:compile_to_dir("src/math.a4", "ebin/").
+```
+
+### Type Bridging
+
+`af_term` handles bidirectional conversion at all boundaries:
+
+| Erlang | ActorForth |
+|--------|-----------|
+| `42` | `{Int, 42}` |
+| `3.14` | `{Float, 3.14}` |
+| `true` | `{Bool, true}` |
+| `<<"hello">>` | `{String, <<"hello">>}` |
+| `foo` | `{Atom, "foo"}` |
+| `{ok, 42}` | `{Tuple, {ok, 42}}` |
+| `[1, 2]` | `{List, [{Int,1}, {Int,2}]}` |
+| `#{k => v}` | `{Map, ...}` |
+
+
+## Chapter 23: Python Interop
+
+ActorForth can call Python code directly via the `erlang_python` library, which embeds Python in the BEAM VM. This opens access to Python's AI/ML ecosystem from ActorForth programs.
+
+### Getting Started
+
+```
+ok: py-start
+ok: "2 + 2" py-eval
+ok: stack
+0) 4 : Int
+```
+
+`py-start` ensures the Python runtime is running. `py-eval` evaluates a Python expression and pushes the result.
+
+### Calling Python Functions
+
+```
+ok: 16 math sqrt 1 py-call
+ok: stack
+0) 4.0 : Float
+```
+
+`py-call` takes N arguments from the stack, plus the module name and function name. The format is: `arg1 ... argN module function arity py-call`. For zero-argument functions, use `py-call0`:
+
+```
+ok: random random py-call0
+ok: stack
+0) 0.7234... : Float
+```
+
+### Custom Python Modules
+
+Add a directory to Python's import path with `py-import`, then call functions from your modules:
+
+```
+ok: "samples/python" py-import
+ok: "hello world" text_tools word_count 1 py-call
+ok: stack
+0) 2 : Int
+```
+
+### Executing Python Statements
+
+```
+ok: "import sys" py-exec
+```
+
+`py-exec` runs Python statements without returning a value. Note: functions defined via `py-exec` are not visible to `py-eval` due to scope isolation — use module-level state via imported modules instead.
+
+### Virtual Environments
+
+```
+ok: ".venv" py-venv
+```
+
+`py-venv` activates a Python virtual environment, making its packages available.
+
+### Registering ActorForth Words for Python
+
+Words compiled to native BEAM can be registered as Python-callable:
+
+```
+ok: : double Int -> Int ; dup + .
+ok: double af_math compile-to-beam
+ok: double py-register
+```
+
+Now Python code can call `erlang.double(21)` and get `42`.
+
+### AI/LLM Integration
+
+The `samples/python/llm_client.py` module provides OpenAI/Anthropic access:
+
+```
+ok: py-start
+ok: "samples/python" py-import
+ok: "What is Erlang?" llm_client chat 1 py-call
+ok: print
+Erlang is a functional programming language...
+```
+
+The REPL automatically loads `.env` on startup, so `OPENAI_API_KEY` set in `.env` is available to Python modules via `os.environ`.
+
+### Type Conversion
+
+ActorForth stack items are automatically converted when passed to/from Python:
+
+| ActorForth | Python |
+|-----------|--------|
+| `{Int, 42}` | `42` |
+| `{Float, 3.14}` | `3.14` |
+| `{Bool, true}` | `True` |
+| `{String, "hello"}` | `"hello"` (str) |
+| `{Atom, "foo"}` | `"foo"` (str) |
+| `{List, Items}` | `list` |
+
+
+## Chapter 24: Inter-Module Imports
+
+The `import` word compiles a `.a4` file to a native BEAM module and makes its words available:
+
+```
+ok: "lib_math.a4" import
+ok: stack
+0) lib_math : Atom
+
+ok: 5 double    # uses the imported word
+ok: stack
+0) 10 : Int
+```
+
+### How It Works
+
+`import` calls `af_compile_file:compile/1` internally:
+1. Reads and parses the `.a4` file
+2. Interprets it to discover word definitions
+3. Compiles all defined words to a BEAM module
+4. Loads the module and registers native wrappers in the type registry
+
+The imported words become native BEAM functions — faster than interpreted words and callable from Erlang.
+
+### Import vs Load
+
+| Feature | `load` | `import` |
+|---------|--------|----------|
+| Execution | Interpreted | Compiled to BEAM |
+| Performance | Late-binding dispatch | Direct native calls |
+| Words available | In current continuation | In type registry as native |
+| Erlang-callable | No | Yes (`module:function(args)`) |
+| Return value | Nothing | Module name as Atom |
+
+Use `load` for scripts that need the current stack state. Use `import` for libraries of reusable words.
+
+### Path Resolution
+
+Relative paths are resolved from the importing file's directory, or the current working directory if called from the REPL.
+
+### Environment Configuration
+
+The REPL loads `.env` on startup. Create a `.env` file in your project root:
+
+```
+OPENAI_API_KEY=sk-xxx
+DATABASE_URL=postgres://...
+```
+
+Lines starting with `#` are comments. Values can be quoted with `"` or `'`. The variables are set via `os:putenv/2` and available to both Erlang and Python code.
+
+
+## Chapter 25: The Road Ahead
+
+ActorForth now has the full compilation pipeline, OTP integration, and BEAM interoperability needed to be a practical BEAM language. The remaining steps:
+
+- **Core Erlang target**: Generate Core Erlang instead of abstract forms for more control over optimization.
+- **Self-hosting**: Write the ActorForth compiler, type system, and BEAM assembler in ActorForth itself. The TOS-driven dictionary mechanism makes this possible — a compiler is just types for emitting code, using the same interpreter that runs user programs.
+- **Mix integration**: A Mix task for Elixir projects using ActorForth modules.
+- **Protocol support**: Let ActorForth types implement Elixir protocols and OTP behaviours beyond gen_server.
 
 ---
 
@@ -688,11 +1837,16 @@ This is the promise of the TOS-driven dictionary mechanism: **any tool that proc
 | `dup` | `( a -- a a )` | Duplicate top |
 | `drop` | `( a -- )` | Discard top |
 | `swap` | `( a b -- b a )` | Swap top two |
+| `rot` | `( a b c -- b c a )` | Rotate third to top |
+| `over` | `( a b -- a b a )` | Copy second to top |
 | `2dup` | `( a b -- a b a b )` | Duplicate top two |
 | `print` | `( a -- )` | Print and consume top |
 | `stack` | `( -- )` | Display entire stack |
 | `words` | `( -- )` | List all operations |
 | `types` | `( -- )` | List all types |
+| `see` | `( Atom -- )` | Show word definition and signatures |
+| `load` | `( String -- )` | Load and interpret a .a4 file |
+| `import` | `( String -- Atom )` | Compile .a4 to BEAM module, load words |
 
 ### Arithmetic (Int dictionary)
 
@@ -720,36 +1874,165 @@ This is the promise of the TOS-driven dictionary mechanism: **any tool that proc
 |------|--------|-------------|
 | `not` | `( bool -- bool )` | Logical negation |
 
+### Assertions (Any dictionary)
+
+| Word | Effect | Description |
+|------|--------|-------------|
+| `assert` | `( Bool -- )` | Error with location if false |
+| `assert-eq` | `( a b -- )` | Error with expected/actual if not equal |
+
+### List Operations
+
+| Word | Dict | Effect | Description |
+|------|------|--------|-------------|
+| `nil` | Any | `( -- List )` | Push empty list |
+| `cons` | Any | `( a List -- List )` | Prepend item to list |
+| `length` | List | `( List -- Int )` | Count elements |
+| `head` | List | `( List -- a )` | First element |
+| `tail` | List | `( List -- List )` | All but first |
+
+### String Operations
+
+| Word | Dict | Effect | Description |
+|------|------|--------|-------------|
+| `"hello"` | — | `( -- String )` | Quoted string literal |
+| `string` | Any | `( Atom -- String )` | Explicit constructor |
+| `concat` | String | `( Str Str -- Str )` | Concatenate (second + top) |
+| `length` | String | `( Str -- Int )` | Byte length |
+| `to-atom` | String | `( Str -- Atom )` | Convert to Atom |
+| `to-int` | String | `( Str -- Int )` | Parse as integer |
+| `to-string` | Int | `( Int -- Str )` | Convert to String |
+
+### Map Operations
+
+| Word | Dict | Effect | Description |
+|------|------|--------|-------------|
+| `map-new` | Any | `( -- Map )` | Push empty map |
+| `map-put` | Any | `( Map val key -- Map )` | Add/update entry |
+| `map-get` | Any | `( Map key -- val )` | Get value (errors if missing) |
+| `map-delete` | Any | `( Map key -- Map )` | Remove entry |
+| `map-has?` | Any | `( Map key -- Bool )` | Check key exists |
+| `map-keys` | Map | `( Map -- List )` | All keys as list |
+| `map-values` | Map | `( Map -- List )` | All values as list |
+| `map-size` | Map | `( Map -- Int )` | Count of entries |
+
+### Float Operations
+
+| Word | Dict | Effect | Description |
+|------|------|--------|-------------|
+| `3.14` | — | `( -- Float )` | Float literal (auto-detected) |
+| `float` | Any | `( Atom -- Float )` | Parse text as float |
+| `to-float` | Int | `( Int -- Float )` | Convert Int to Float |
+| `to-int` | Float | `( Float -- Int )` | Truncate Float to Int |
+| `+` `-` `*` `/` | Float | `( Float Float -- Float )` | Arithmetic |
+
+Mixed Float/Int arithmetic is supported (e.g., `5.5 2 int +` → `7.5`).
+
+### Tuple Operations
+
+| Word | Dict | Effect | Description |
+|------|------|--------|-------------|
+| `make-tuple` | Any | `( a... Int -- Tuple )` | Build tuple from N stack items |
+| `to-tuple` | List | `( List -- Tuple )` | Convert list to tuple |
+| `from-tuple` | Tuple | `( Tuple -- List )` | Convert tuple to list |
+| `tuple-get` | Any | `( Int Tuple -- Any )` | Get element at 1-based index |
+| `tuple-size` | Tuple | `( Tuple -- Int )` | Number of elements |
+| `ok-tuple` | Any | `( Any -- Tuple )` | Create `{ok, Value}` |
+| `error-tuple` | Any | `( Any -- Tuple )` | Create `{error, Reason}` |
+| `is-ok` | Tuple | `( Tuple -- Bool )` | Check if starts with ok |
+| `unwrap-ok` | Tuple | `( Tuple -- Any )` | Extract value from `{ok, V}` |
+
 ### Constructors (Any dictionary)
 
 | Word | Effect | Description |
 |------|--------|-------------|
 | `int` | `( Atom -- Int )` | Parse text as integer |
 | `bool` | `( Atom -- Bool )` | Parse "True"/"False" as boolean |
+| `float` | `( Atom -- Float )` | Parse text as float |
+| `42` | `( -- Int )` | Literal handler (no explicit constructor needed) |
+| `3.14` | `( -- Float )` | Literal handler (no explicit constructor needed) |
+| `True` / `False` | `( -- Bool )` | Literal handler (no explicit constructor needed) |
 
 ### Word Definition
 
 ```
-: name  InputType1 InputType2 -> OutputType1 ; body words here .
+: name  InputTypes -> OutputTypes ; body .
+```
+
+### Pattern Matching Sub-Clauses
+
+```
+: name MasterSig ;
+    : value-constrained-sig ;
+    : value-constrained-sig ; body
+    : general-sig ; body.
 ```
 
 ### Product Type Definition
 
 ```
-type TypeName field1 Type1 field2 Type2 .
+type TypeName
+    field1 Type1
+    field2 Type2 .
 ```
 
-Auto-generates: constructor (`typename`), getters (`field1`, `field2`), setters (`field1!`, `field2!`).
+Auto-generates: constructor (`typename`), non-destructive getters (`field1`, `field2`), setters (`field1!`, `field2!`). Getters push the field value while leaving the instance on the stack.
 
-### Actor Primitives
+### Actor Operations
 
 | Word | Effect | Description |
 |------|--------|-------------|
-| `spawn` | `( Atom -- Actor )` | Spawn process running named word |
+| `server` | `( instance -- Actor )` | Spawn stateful actor from any typed instance |
+| `supervised-server` | `( instance -- Actor )` | Spawn supervised actor (OTP gen_server) |
 | `self` | `( -- Actor )` | Push current process reference |
-| `send` | `( val Actor -- )` | Send value to actor |
-| `!` | `( val Actor -- )` | Alias for send |
-| `receive` | `( -- val )` | Block for next message |
+| `<<` | Enter send mode | Start actor message block |
+| `>>` | Exit send mode | End actor message block, push results |
+| `stop` | (inside `<< >>`) | Terminate actor, push final state |
+
+### OTP Bridge (Erlang API)
+
+| Function | Description |
+|----------|-------------|
+| `af_server:start_link(Script)` | Start bridge server from .a4 file |
+| `af_server:call(Pid, Word, Args)` | Sync call, returns `{ok, Results}` |
+| `af_server:cast(Pid, Word, Args)` | Async cast, returns `ok` |
+| `af_server:eval(Pid, Line)` | Evaluate raw ActorForth line |
+| `af_server:stop(Pid)` | Stop the server |
+
+### Erlang FFI (Any dictionary)
+
+| Word | Effect | Description |
+|------|--------|-------------|
+| `erlang-apply0` | `( Atom Atom -- Any )` | Call Module:Function() |
+| `erlang-apply` | `( Atom Atom List -- Any )` | Call Module:Function(Args...) |
+| `erlang-call` | `( Any... Atom Atom Int -- Any )` | Call Module:Function with N stack args |
+| `erlang-call0` | `( Atom Atom -- Any )` | Call Module:Function() (shorthand) |
+| `erlang-new` | `( Atom -- Tuple )` | Call Module:new() |
+
+### Native Compilation (Any dictionary)
+
+| Word | Effect | Description |
+|------|--------|-------------|
+| `compile-to-beam` | `( Atom Atom -- Atom )` | Compile word to BEAM module |
+| `compile-all` | `( Atom -- Atom )` | Compile all user words to one module |
+| `save-module` | `( String Atom -- )` | Write .beam file to directory |
+| `build-escript` | `( Atom String -- )` | Build standalone executable |
+| `build-app` | `( String Atom -- )` | Generate .app file for module |
+| `build-release` | `( String String Atom -- )` | Create OTP app directory structure |
+| `gen-server-module` | `( Atom Atom -- Atom )` | Compile type to gen_server module |
+
+### Python Interop (Any dictionary)
+
+| Word | Effect | Description |
+|------|--------|-------------|
+| `py-start` | `( -- )` | Ensure Python runtime is started |
+| `py-call` | `( a... Int Atom Atom -- Any )` | Call module.function with N args |
+| `py-call0` | `( Atom Atom -- Any )` | Call module.function() (zero args) |
+| `py-eval` | `( String -- Any )` | Evaluate Python expression |
+| `py-exec` | `( String -- )` | Execute Python statements |
+| `py-import` | `( String -- )` | Add directory to Python sys.path |
+| `py-venv` | `( String -- )` | Activate Python virtual environment |
+| `py-register` | `( Atom -- Atom )` | Register compiled word for Python |
 
 ### Special Tokens
 
@@ -757,4 +2040,4 @@ Auto-generates: constructor (`typename`), getters (`field1`, `field2`), setters 
 |-------|----------|
 | `.` `:` `;` | Self-delimiting (no whitespace needed) |
 | `#` | Comment to end of line |
-| `"..."` | String literal |
+| `"..."` | String literal (auto-converts to String type) |

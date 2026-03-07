@@ -4,7 +4,7 @@
 -include("af_type.hrl").
 
 -export([init/0, reset/0]).
--export([register_type/1, add_op/2]).
+-export([register_type/1, add_op/2, replace_ops/3]).
 -export([find_op/2, find_op_in_tos/2, find_op_in_any/2, find_op_by_name/2, match_sig/2]).
 -export([get_type/1, all_types/0]).
 
@@ -41,6 +41,17 @@ add_op(TypeName, #operation{} = Op) ->
             Existing = maps:get(OpName, Ops, []),
             NewOps = maps:put(OpName, Existing ++ [Op], Ops),
             ets:insert(?TABLE, Type#af_type{ops = NewOps}),
+            ok;
+        [] ->
+            {error, {unknown_type, TypeName}}
+    end.
+
+%% Replace all operations with a given name in a type's dictionary.
+replace_ops(TypeName, OpName, NewOps) when is_list(NewOps) ->
+    case ets:lookup(?TABLE, TypeName) of
+        [#af_type{ops = Ops} = Type] ->
+            UpdatedOps = maps:put(OpName, NewOps, Ops),
+            ets:insert(?TABLE, Type#af_type{ops = UpdatedOps}),
             ok;
         [] ->
             {error, {unknown_type, TypeName}}

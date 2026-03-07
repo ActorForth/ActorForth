@@ -180,55 +180,42 @@ handle_code_compile(":", Cont) ->
 handle_code_compile(TokenValue, Cont) ->
     [{'CodeCompile', State} | Rest] = Cont#continuation.data_stack,
     #{body := Body} = State,
-    %% Compile token as a late-binding thunk
-    Op = resolve_compile_token(TokenValue),
+    %% Compile token as a late-binding thunk, preserving quoted flag
+    OrigToken = Cont#continuation.current_token,
+    Op = resolve_compile_token(TokenValue, OrigToken),
     NewState = State#{body => Body ++ [Op]},
     Cont#continuation{
         data_stack = [{'CodeCompile', NewState} | Rest]
     }.
 
 %% Handler: SubClauseInput
-%% Resolve tokens as either value constraints or type names against master sig.
+%% Accumulate raw token info; resolution happens in op_sub_arrow after all tokens collected.
 handle_sub_clause_input(TokenValue, Cont) ->
     [{'SubClauseInput', State} | Rest] = Cont#continuation.data_stack,
-    #{sig_in := MasterSigIn, sub_sig_in := SubSigIn, sub_position := Pos} = State,
-    Resolved = resolve_sub_token(TokenValue, MasterSigIn, Pos),
+    #{sub_sig_in := SubSigIn} = State,
+    Token = Cont#continuation.current_token,
+    IsQuoted = case Token of #token{quoted = true} -> true; _ -> false end,
     NewState = State#{
-        sub_sig_in => SubSigIn ++ [Resolved],
-        sub_position => Pos + 1
+        sub_sig_in => SubSigIn ++ [{TokenValue, IsQuoted}]
     },
     Cont#continuation{
         data_stack = [{'SubClauseInput', NewState} | Rest]
     }.
 
 %% Handler: SubClauseOutput
-%% Resolve tokens as either value constraints or type names against master sig.
+%% Accumulate raw token info; resolution happens in op_sub_semicolon.
 handle_sub_clause_output(TokenValue, Cont) ->
     [{'SubClauseOutput', State} | Rest] = Cont#continuation.data_stack,
-    #{sig_out := MasterSigOut, sub_sig_out := SubSigOut, sub_out_position := Pos} = State,
-    Resolved = resolve_sub_token(TokenValue, MasterSigOut, Pos),
+    #{sub_sig_out := SubSigOut} = State,
+    Token = Cont#continuation.current_token,
+    IsQuoted = case Token of #token{quoted = true} -> true; _ -> false end,
     NewState = State#{
-        sub_sig_out => SubSigOut ++ [Resolved],
-        sub_out_position => Pos + 1
+        sub_sig_out => SubSigOut ++ [{TokenValue, IsQuoted}]
     },
     Cont#continuation{
         data_stack = [{'SubClauseOutput', NewState} | Rest]
     }.
 
-%% Resolve a sub-clause token against the master signature.
-%% If the token can be parsed as a literal of the master type at this position,
-%% it becomes a value constraint {Type, Value}. Otherwise it's a type name atom.
-resolve_sub_token(TokenValue, MasterSig, Pos) ->
-    case Pos < length(MasterSig) of
-        true ->
-            MasterType = lists:nth(Pos + 1, MasterSig),
-            case try_literal_for_type(TokenValue, MasterType) of
-                {ok, {Type, Value}} -> {Type, Value};
-                not_found -> list_to_atom(TokenValue)
-            end;
-        false ->
-            list_to_atom(TokenValue)
-    end.
 
 %% Try to parse a token as a literal of a specific type using its literal handler.
 try_literal_for_type(TokenValue, TypeName) ->
@@ -246,14 +233,18 @@ try_literal_for_type(TokenValue, TypeName) ->
             not_found
     end.
 
-%% Compile a token as a late-binding thunk.
-resolve_compile_token(TokenValue) ->
+%% Compile a token as a late-binding thunk, preserving quoted flag.
+resolve_compile_token(TokenValue, OrigToken) ->
+    IsQuoted = case OrigToken of
+        #token{quoted = Q} -> Q;
+        _ -> false
+    end,
     #operation{
         name = TokenValue,
         sig_in = [],
         sig_out = [],
         impl = fun(Cont) ->
-            Token = #token{value = TokenValue},
+            Token = #token{value = TokenValue, quoted = IsQuoted},
             af_interpreter:interpret_token(Token, Cont)
         end
     }.
@@ -272,20 +263,24 @@ op_semicolon(Cont) ->
         data_stack = [{'CodeCompile', State} | Rest]
     }.
 
-%% -> in SubClauseInput: freeze sub_sig_in, transition to SubClauseOutput
+%% -> in SubClauseInput: resolve accumulated tokens right-aligned, transition to SubClauseOutput
 op_sub_arrow(Cont) ->
     [{'SubClauseInput', State} | Rest] = Cont#continuation.data_stack,
-    NewState = State#{sub_sig_out => [], sub_out_position => 0},
+    #{sub_sig_in := RawSubSigIn, sig_in := MasterSigIn} = State,
+    %% Resolve raw tokens right-aligned against master sig
+    ResolvedSubSigIn = resolve_sub_tokens_right_aligned(RawSubSigIn, MasterSigIn),
+    NewState = State#{sub_sig_in => ResolvedSubSigIn, sub_sig_out => [], sub_out_position => 0},
     Cont#continuation{
         data_stack = [{'SubClauseOutput', NewState} | Rest]
     }.
 
-%% ; in SubClauseOutput: transition back to CodeCompile with sub-clause context
+%% ; in SubClauseOutput: resolve output tokens right-aligned, transition to CodeCompile
 op_sub_semicolon(Cont) ->
     [{'SubClauseOutput', State} | Rest] = Cont#continuation.data_stack,
-    #{sub_sig_in := SubSigIn, sub_sig_out := SubSigOut} = State,
+    #{sub_sig_in := SubSigIn, sub_sig_out := RawSubSigOut, sig_out := MasterSigOut} = State,
+    ResolvedSubSigOut = resolve_sub_tokens_right_aligned(RawSubSigOut, MasterSigOut),
     NewState = State#{
-        current_sub => #{sub_sig_in => SubSigIn, sub_sig_out => SubSigOut},
+        current_sub => #{sub_sig_in => SubSigIn, sub_sig_out => ResolvedSubSigOut},
         body => []
     },
     Cont#continuation{
@@ -318,7 +313,10 @@ register_single_word(State, Rest, Cont) ->
     SigIn = lists:reverse(SigIn0),
     SigOut = lists:reverse(SigOut0),
 
-    Impl = make_word_impl(Body),
+    %% Compile-time type check
+    type_check_body(Name, SigIn, SigOut, Body),
+
+    Impl = make_word_impl(Body, Name),
 
     %% Register in the TOS type's dict (first element after reversal).
     TargetType = get_target_type(SigIn),
@@ -327,7 +325,8 @@ register_single_word(State, Rest, Cont) ->
         name = Name,
         sig_in = SigIn,
         sig_out = SigOut,
-        impl = Impl
+        impl = Impl,
+        source = {compiled, Body}
     },
 
     ensure_type(TargetType),
@@ -347,17 +346,63 @@ register_multi_word(State, Clauses, Rest, Cont) ->
     lists:foreach(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody}) ->
         CSigIn = lists:reverse(CSigIn0),
         CSigOut = lists:reverse(CSigOut0),
-        Impl = make_word_impl(CBody),
+        %% Type check each clause body
+        type_check_body(Name, CSigIn, CSigOut, CBody),
+        Impl = make_word_impl(CBody, Name),
         Op = #operation{
             name = Name,
             sig_in = CSigIn,
             sig_out = CSigOut,
-            impl = Impl
+            impl = Impl,
+            source = {compiled, CBody}
         },
         af_type:add_op(TargetType, Op)
     end, Clauses),
 
     Cont#continuation{data_stack = Rest}.
+
+%% Run compile-time type check on a word body.
+%% Type mismatches are errors when inference is complete (no unknowns).
+%% When inference encounters unknown ops (product types, etc.), downgrade to warning.
+type_check_body(Name, SigIn, SigOut, Body) ->
+    case af_type_check:check_word(Name, SigIn, SigOut, Body) of
+        ok -> ok;
+        {error, {type_mismatch, _, #{expected := Expected, actual := Actual}}} ->
+            case has_unknown_types(Actual, Expected) of
+                true ->
+                    %% Inference was incomplete — warn only
+                    io:format("Warning: type check for '~s' incomplete~n"
+                              "  declared output: ~p~n"
+                              "  inferred output: ~p~n", [Name, Expected, Actual]);
+                false ->
+                    %% Fully resolved types don't match — error
+                    error({type_error, Name,
+                        lists:flatten(io_lib:format(
+                            "Type mismatch in word '~s': "
+                            "declared output ~p but inferred ~p",
+                            [Name, Expected, Actual]))})
+            end;
+        {error, {stack_underflow, OpName, _}} ->
+            io:format("Warning: type check for '~s' incomplete "
+                      "(stack underflow at '~p')~n", [Name, OpName]);
+        {error, _Reason} ->
+            %% Other inference errors — warn but allow
+            ok
+    end.
+
+%% Check if inferred types suggest incomplete inference:
+%% - Contains 'Atom' from unresolved tokens (product type ops, etc.)
+%% - Different stack depth from expected (missing type info)
+%% - Expected types include non-builtin types the checker can't verify
+has_unknown_types(Types, Expected) when length(Types) =/= length(Expected) ->
+    true;
+has_unknown_types(Types, Expected) ->
+    Builtins = ['Any', 'Int', 'Float', 'Bool', 'String', 'Atom', 'List', 'Map', 'Tuple'],
+    lists:any(fun('Atom') -> true; (_) -> false end, Types)
+    orelse lists:any(fun
+        ({_T, _V}) -> false;  %% value constraints are checkable
+        (T) -> not lists:member(T, Builtins)
+    end, Expected).
 
 get_target_type([{Type, _Value} | _]) -> Type;
 get_target_type([Type | _]) when is_atom(Type) -> Type;
@@ -370,12 +415,96 @@ ensure_type(TypeName) ->
     end.
 
 %% Build an execution function from a compiled word body.
-make_word_impl(Body) ->
-    fun(Cont) ->
-        execute_body(Body, Cont)
+%% For tail-recursive words (last body token is a self-call), we pop the
+%% trace frame BEFORE the tail call so the self-call is in Erlang tail
+%% position, allowing the BEAM's native TCO to prevent stack growth.
+make_word_impl(Body, WordName) ->
+    case detect_tail_call(Body, WordName) of
+        {true, InitBody, TailOp} ->
+            fun(Cont) ->
+                Cont1 = push_trace(WordName, Cont),
+                Cont2 = execute_body(InitBody, Cont1),
+                Cont3 = pop_trace(WordName, Cont2),
+                (TailOp#operation.impl)(Cont3)
+            end;
+        false ->
+            fun(Cont) ->
+                Cont1 = push_trace(WordName, Cont),
+                ResultCont = execute_body(Body, Cont1),
+                pop_trace(WordName, ResultCont)
+            end
     end.
+
+push_trace(undefined, Cont) -> Cont;
+push_trace(WordName, Cont) ->
+    Frame = {WordName, Cont#continuation.current_token},
+    Cont#continuation{word_trace = [Frame | Cont#continuation.word_trace]}.
+
+pop_trace(undefined, Cont) -> Cont;
+pop_trace(_WordName, Cont) ->
+    Cont#continuation{word_trace = tl(Cont#continuation.word_trace)}.
+
+%% Check if the last operation in Body is a call that can be tail-optimized.
+%% Handles self-calls (self-recursion) and calls to other compiled words.
+detect_tail_call([], _WordName) -> false;
+detect_tail_call(_Body, undefined) -> false;
+detect_tail_call(Body, WordName) ->
+    Last = lists:last(Body),
+    LastName = Last#operation.name,
+    case LastName of
+        WordName ->
+            %% Self-recursive tail call
+            {true, lists:droplast(Body), Last};
+        _ ->
+            %% Check if last op is a call to another compiled word
+            case is_word_call(Last) of
+                true -> {true, lists:droplast(Body), Last};
+                false -> false
+            end
+    end.
+
+%% A compiled word call has source = {compiled, _Body} indicating it's
+%% a user-defined word (not a primitive), and thus benefits from TCO.
+is_word_call(#operation{source = {compiled, _}}) -> true;
+is_word_call(_) -> false.
 
 execute_body([], Cont) -> Cont;
 execute_body([#operation{impl = Impl} | Rest], Cont) ->
     NewCont = Impl(Cont),
     execute_body(Rest, NewCont).
+
+%% Resolve accumulated raw sub-clause tokens right-aligned against master sig.
+%% Raw tokens are {TokenValue, IsQuoted} pairs.
+%% If sub has fewer tokens than master, pad left with master type atoms (wildcard match).
+resolve_sub_tokens_right_aligned(RawTokens, MasterSig) ->
+    SubLen = length(RawTokens),
+    MasterLen = length(MasterSig),
+    %% Right-align: tokens match rightmost positions of master sig
+    Offset = MasterLen - SubLen,
+    Resolved = lists:map(fun({Idx, {TokenValue, IsQuoted}}) ->
+        MasterPos = Offset + Idx,
+        case MasterPos >= 0 andalso MasterPos < MasterLen of
+            true ->
+                MasterType = lists:nth(MasterPos + 1, MasterSig),
+                resolve_single_sub_token(TokenValue, IsQuoted, MasterType);
+            false ->
+                list_to_atom(TokenValue)
+        end
+    end, lists:zip(lists:seq(0, SubLen - 1), RawTokens)),
+    %% Pad left with master types for unspecified positions
+    case Offset > 0 of
+        true ->
+            Padding = lists:sublist(MasterSig, Offset),
+            Padding ++ Resolved;
+        false ->
+            Resolved
+    end.
+
+%% Resolve a single sub-clause token against its master type.
+resolve_single_sub_token(TokenValue, true, 'String') ->
+    {'String', list_to_binary(TokenValue)};
+resolve_single_sub_token(TokenValue, _IsQuoted, MasterType) ->
+    case try_literal_for_type(TokenValue, MasterType) of
+        {ok, {Type, Value}} -> {Type, Value};
+        not_found -> list_to_atom(TokenValue)
+    end.

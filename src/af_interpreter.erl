@@ -44,13 +44,20 @@ interpret_token(#token{value = Value} = Token, Cont) ->
                             debug_trace(Debug, Value, Stack, {any, Op}),
                             Impl(Cont1);
                         not_found ->
-                            case try_literals(Value) of
-                                {ok, TypedValue} ->
-                                    debug_trace(Debug, Value, Stack, {literal, TypedValue}),
-                                    Cont1#continuation{data_stack = [TypedValue | Stack]};
-                                not_found ->
-                                    debug_trace(Debug, Value, Stack, atom),
-                                    Cont1#continuation{data_stack = [{'Atom', Value} | Stack]}
+                            case Token#token.quoted of
+                                true ->
+                                    StringVal = {'String', list_to_binary(Value)},
+                                    debug_trace(Debug, Value, Stack, {literal, StringVal}),
+                                    Cont1#continuation{data_stack = [StringVal | Stack]};
+                                false ->
+                                    case try_literals(Value) of
+                                        {ok, TypedValue} ->
+                                            debug_trace(Debug, Value, Stack, {literal, TypedValue}),
+                                            Cont1#continuation{data_stack = [TypedValue | Stack]};
+                                        not_found ->
+                                            debug_trace(Debug, Value, Stack, atom),
+                                            Cont1#continuation{data_stack = [{'Atom', Value} | Stack]}
+                                    end
                             end
                     end
             end

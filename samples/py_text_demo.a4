@@ -1,0 +1,30 @@
+# Python text tools demo
+# Run: source .venv/bin/activate && rebar3 shell
+#      af_repl:run_file("samples/py_text_demo.a4").
+
+py-start
+"samples/python" py-import
+
+# Count words in a string
+"hello world from actorforth" text_tools word_count 1 py-call
+print
+
+# Reverse words
+"ActorForth meets Python on BEAM" text_tools reverse_words 1 py-call
+print
+
+# Slugify a title
+"ActorForth: A BEAM Language!" text_tools slugify 1 py-call
+print
+
+# Edit distance between two strings
+"kitten" "sitting" text_tools levenshtein 2 py-call
+print
+
+# Capitalize words
+"the quick brown fox" text_tools capitalize_words 1 py-call
+print
+
+# Extract numbers from text
+"I have 3 cats and 12 dogs" text_tools extract_numbers 1 py-call
+print

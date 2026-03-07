@@ -1,0 +1,4 @@
+# Test library for compile_file tests
+: double Int -> Int ; dup + .
+: square Int -> Int ; dup * .
+: inc Int -> Int ; 1 + .

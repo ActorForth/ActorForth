@@ -263,6 +263,38 @@ The master signature provides type context for resolving literal values in sub-c
 
 **Consequence:** New types (Real, String, etc.) can add their own literal handlers without modifying the interpreter. The mechanism is open and extensible. Both explicit (`42 int`) and implicit (`42`) syntax remain valid.
 
+### Decision: String Type — Wrapping Erlang Binaries
+
+**What:** `{'String', Binary}` wraps native Erlang binaries. Quoted strings (`"hello"`) are automatically converted by the interpreter (via a `quoted` flag on the token record, checked before literal handlers and Atom fallback). Operations: `string` constructor, `concat`, `length`, `to-atom`, `to-int`, `to-string`.
+
+**Why:** BEAM strings are binaries. Using binaries directly means zero-cost interop with Erlang/Elixir code and efficient memory representation. The `quoted` flag approach keeps the parser opinion-free — it doesn't know what a String is, it just marks tokens that came from `"..."` syntax.
+
+**Consequence:** Quoted strings bypass literal handlers entirely. This is correct: `"42"` should always be a String, never an Int. The explicit `string` constructor handles Atom-to-String conversion for unquoted tokens.
+
+### Decision: Map Type — Wrapping Erlang Maps
+
+**What:** `{'Map', ErlangMap}` wraps native Erlang maps. Keys and values are full `{Type, Value}` stack items, preserving type information. Operations: `map-new`, `map-put`, `map-get`, `map-delete`, `map-has?`, `map-keys`, `map-values`, `map-size`.
+
+**Why:** Erlang maps are the standard dynamic key-value structure on BEAM. Product types handle fixed schemas; Maps handle dynamic/open schemas (JSON payloads, configuration, session state).
+
+**Consequence:** Maps are heterogeneous in both keys and values. `map-get` on a missing key raises a structured error rather than returning a sentinel — fail fast, consistent with the language's type-error philosophy.
+
+### Decision: OTP Bridge via gen_server (af_server)
+
+**What:** `af_server` is a gen_server that wraps an ActorForth interpreter. It loads a `.a4` script during init, then dispatches Erlang `call`/`cast` messages to ActorForth words with automatic term conversion at boundaries.
+
+**Why:** This makes ActorForth actors supervisable OTP citizens without requiring BEAM compilation. An ActorForth actor can participate in supervision trees, be called via `:erpc` from Elixir, and be monitored/restarted — all standard OTP patterns. Compilation becomes a performance optimization, not a prerequisite for interop.
+
+**Consequence:** The type registry (`af_type` ETS table) is shared across all `af_server` instances in the same VM. Type initialization happens once; each server only runs its script to build per-server vocabulary and state. Term conversion (`af_term`) handles the Erlang <-> ActorForth type mapping at every boundary.
+
+### Decision: Structured Error Records (af_error)
+
+**What:** Errors are `#af_error{}` records containing type, message, token (location), stack snapshot, and word trace (call chain). Compiled words push/pop trace frames automatically. `af_error:format/1` produces human-readable multi-line error messages.
+
+**Why:** Ad-hoc error tuples made debugging difficult — no call chain, no stack context, inconsistent formats. Structured errors provide everything needed to diagnose problems: where it happened, what was on the stack, and how execution got there.
+
+**Consequence:** The REPL pattern-matches on `#af_error{}` for pretty printing. `af_server` returns `{error, #af_error{}}` for structured error information to Erlang callers. Word trace adds minimal overhead (one cons/tl per word call).
+
 ---
 
 ## Part IV: Actor Model Decisions
@@ -452,16 +484,28 @@ Small words are auditable. A one-line word can be verified by inspection. A sequ
 | Int/Bool types | Done | Arithmetic, comparisons, literal handlers |
 | Stack operations | Done | dup, drop, swap, rot, over, 2dup, print, stack |
 | Word compiler | Done | `: name Sig -> Sig ; body .` with late binding |
-| Pattern matching sub-clauses | Done | `: value -> value ;` inside word definitions |
-| Product types | Done | Auto-generated constructor, getters, setters |
+| Pattern matching sub-clauses | Done | Value constraints on Int, Bool, String types; right-aligned partial matching |
+| Product types | Done | Auto-generated constructor, non-destructive getters, setters |
 | List type | Done | Built-in wrapping native BEAM cons cells: nil, cons, length, head, tail |
-| Assertions (assert, assert-eq) | Done | Built-in test primitives with file/line/col error reporting |
+| String type | Done | Wraps Erlang binaries; quoted strings auto-convert; concat, length, to-atom, to-int, to-string |
+| Map type | Done | Wraps Erlang maps; map-new, map-put, map-get, map-delete, map-has?, map-keys, map-values, map-size |
+| Assertions (assert, assert-eq) | Done | Built-in test primitives with structured error reporting |
 | Actor model (server, << >>, stop) | Done | Spawn, cast/call, vocab building, state privacy |
-| Literal handlers | Done | Types register `literal` word; Int and Bool implemented |
+| Bridge module (af_server) | Done | gen_server wrapping ActorForth interpreter; OTP-supervisable; term conversion at boundaries |
+| Term conversion (af_term) | Done | Bidirectional Erlang term <-> ActorForth stack item conversion |
+| Structured errors (af_error) | Done | Consistent error records with location, word trace, stack snapshot |
+| Literal handlers | Done | Types register `literal` word; Int and Bool implemented; quoted strings handled by interpreter |
 | Debug on/off | Done | Trace output showing dispatch decisions |
-| File loading | Done | `run_file/1`, `run_file_repl/1` |
-| Non-destructive getters | Deferred | See Part V |
+| File loading (load word) | Done | `"file.a4" load` from ActorForth; `run_file/1` from Erlang; relative path resolution |
+| Erlang FFI | Done | `erlang-apply` and `erlang-apply0` call any Erlang function with term conversion |
+| Non-destructive getters | Done | Getters leave product instance on stack; eliminates dup-before-access pattern |
+| Core Erlang compilation | Done | Closure-based word compilation (af_compile); BEAM module generation via compile:forms |
+| OTP supervision for actors | Done | supervised-server word; simple_one_for_one supervisor; gen_server actor workers |
+| Tail call optimization | Done | Detects compiled word calls in tail position; pops trace before tail call for BEAM TCO |
+| Compile-time type checking | Done | af_type_check: infers stack effects, resolves Any to concrete types; errors on verified mismatches, warns on incomplete inference |
+| BEAM assembler types | Done | af_type_beam: BeamModule/BeamFunction types, builds abstract forms, compiles via compile:forms |
+| Python interop (erlang_python) | Done | py-start, py-call, py-eval, py-exec, py-import, py-venv, py-register; module-level state pattern |
+| .env loading | Done | REPL loads .env on startup; supports comments, quoted values |
+| Inter-module imports (`import` word) | Done | Compiles .a4 to BEAM module, registers words in type registry |
 | Context register for actors | Deferred | See Part V |
 | Maximal-consume parser | Deferred | Needed for Real type |
-| Core Erlang compilation | Future | Phase 2 |
-| Self-hosting BEAM assembler | Future | Phase 3 |

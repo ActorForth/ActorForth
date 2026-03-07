@@ -1,0 +1,14 @@
+# HTTP client demo — call REST APIs from ActorForth
+# Run: source .venv/bin/activate && rebar3 shell
+#      af_repl:run_file("samples/py_http_demo.a4").
+
+py-start
+"samples/python" py-import
+
+# GET a public API endpoint
+"https://httpbin.org/get" http_client get 1 py-call
+print
+
+# Check request stats
+http_client stats 0 py-call
+print

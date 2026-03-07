@@ -170,3 +170,28 @@ session_test_() ->
             ?assertEqual([{'Int', 30}], C3#continuation.data_stack)
         end} end
     ]}.
+
+%% --- see word ---
+
+setup_with_compiler() ->
+    setup(),
+    af_type_compiler:init().
+
+see_test_() ->
+    {foreach, fun setup_with_compiler/0, fun(_) -> ok end, [
+        fun(_) -> {"see shows built-in word", fun() ->
+            C1 = eval("dup see", af_interpreter:new_continuation()),
+            ?assertEqual([], C1#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"see shows compiled word body", fun() ->
+            C1 = eval(": double Int -> Int ; dup + .", af_interpreter:new_continuation()),
+            C2 = eval("double see", C1),
+            ?assertEqual([], C2#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"see unknown word says not found", fun() ->
+            C1 = eval("nonexistent see", af_interpreter:new_continuation()),
+            ?assertEqual([], C1#continuation.data_stack)
+        end} end
+    ]}.

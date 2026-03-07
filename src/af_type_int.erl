@@ -4,6 +4,7 @@
 -include("operation.hrl").
 -include("continuation.hrl").
 -include("af_type.hrl").
+-include("af_error.hrl").
 
 -export([init/0]).
 
@@ -81,4 +82,7 @@ op_multiply(Cont) ->
 
 op_divide(Cont) ->
     [{'Int', A}, {'Int', B} | Rest] = Cont#continuation.data_stack,
-    Cont#continuation{data_stack = [{'Int', B div A} | Rest]}.
+    case A of
+        0 -> af_error:raise(division_by_zero, "Division by zero", Cont);
+        _ -> Cont#continuation{data_stack = [{'Int', B div A} | Rest]}
+    end.
