@@ -1,0 +1,35 @@
+# LLM integration demo — call OpenAI/Anthropic from ActorForth
+# Run: source .venv/bin/activate && rebar3 shell
+#      af_repl:run_file("samples/py_llm_demo.a4").
+#
+# Prerequisites:
+#   source .venv/bin/activate
+#   pip install openai
+#   export OPENAI_API_KEY=sk-xxx
+#
+# For Anthropic:
+#   pip install anthropic
+#   Then: "anthropic" llm_client set_provider 1 py-call drop
+#         "claude-sonnet-4-20250514" llm_client set_model 1 py-call drop
+
+py-start
+"samples/python" py-import
+
+# NOTE: Uncomment and set your key, or set OPENAI_API_KEY env var
+# "sk-your-key-here" llm_client set_api_key 1 py-call drop
+
+# Simple chat
+# "What is the BEAM virtual machine?" llm_client chat 1 py-call print
+
+# Chat with system prompt
+# "You are an expert on programming languages"
+# "Compare Forth and Erlang in 3 sentences"
+# llm_client chat_with_system 2 py-call print
+
+# Structured JSON output
+# "List 3 stack-based languages with name and year fields"
+# llm_client chat_json 1 py-call print
+
+# Semantic similarity (requires embeddings)
+# "Erlang runs on the BEAM" "BEAM is Erlang's virtual machine"
+# llm_client similarity 2 py-call print

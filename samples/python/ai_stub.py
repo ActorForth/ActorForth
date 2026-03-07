@@ -51,15 +51,16 @@ def find_most_similar(query, documents):
 
 # --- Chat completion (stub) ---
 
-def chat_complete(messages):
+def chat_complete(prompt):
     """
-    Stub chat completion.
-    Replace with: openai.ChatCompletion.create(model="gpt-4", messages=messages)
-
-    messages: list of {"role": "user"|"assistant"|"system", "content": "..."}
+    Stub chat completion. Takes a string prompt (not message list).
+    Replace with real LLM calls via llm_client.py for production use.
     """
-    last_msg = messages[-1]["content"] if messages else ""
-    # Simple echo-bot for demonstration
+    if isinstance(prompt, list):
+        # Handle legacy message-list format
+        last_msg = prompt[-1].get("content", "") if prompt else ""
+    else:
+        last_msg = str(prompt)
     return {
         "role": "assistant",
         "content": f"[stub] I received: {last_msg}"

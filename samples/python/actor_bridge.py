@@ -1,90 +1,82 @@
 """
-Python actor that communicates with ActorForth actors via message passing.
+Python actor bridge — module-level state pattern for ActorForth interop.
 
-This module demonstrates the bidirectional actor pattern:
-- ActorForth spawns an actor that owns some state
-- Python code calls into that actor via registered Erlang functions
-- The actor processes requests and returns results
+The erlang_python library runs py:exec in isolated scopes, so Python-side
+state must live at module level (not in py:exec blocks). This module
+demonstrates the working pattern: module-level objects with plain functions
+that ActorForth calls via py-call.
 
 Usage from ActorForth:
     py-start
     "samples/python" py-import
-    "actor_bridge" "setup_bridge" 0 py-call drop
+    actor_bridge setup 0 py-call drop      # initialize
+    "name" "Ada" actor_bridge store 2 py-call drop
+    "name" actor_bridge fetch 1 py-call     # -> String("Ada")
+    actor_bridge count 0 py-call            # -> Int(1)
+    actor_bridge history 0 py-call          # -> List of operations
+    actor_bridge clear 0 py-call drop       # reset
 """
 
-import erlang
+_data = {}
+_history = []
 
 
-class PythonWorker:
-    """
-    A Python-side worker that maintains state and processes requests.
-    Registered functions allow ActorForth actors to interact with it.
-    """
-
-    def __init__(self):
-        self.memory = {}
-        self.history = []
-
-    def store(self, key, value):
-        """Store a key-value pair."""
-        self.memory[key] = value
-        self.history.append(("store", key))
-        return "ok"
-
-    def fetch(self, key):
-        """Fetch a value by key."""
-        return self.memory.get(key, "not_found")
-
-    def get_history(self):
-        """Return operation history."""
-        return self.history
-
-    def process(self, operation, *args):
-        """Generic operation dispatcher."""
-        if operation == "store" and len(args) == 2:
-            return self.store(args[0], args[1])
-        elif operation == "fetch" and len(args) == 1:
-            return self.fetch(args[0])
-        elif operation == "history":
-            return self.get_history()
-        elif operation == "count":
-            return len(self.memory)
-        else:
-            return {"error": f"unknown operation: {operation}"}
+def setup():
+    """Initialize/reset the bridge state."""
+    global _data, _history
+    _data = {}
+    _history = []
+    return "ready"
 
 
-# Global worker instance
-_worker = None
+def store(key, value):
+    """Store a key-value pair."""
+    _data[key] = value
+    _history.append(("store", key, value))
+    return "ok"
 
 
-def setup_bridge():
-    """
-    Initialize the bridge and register functions callable from Erlang/ActorForth.
-    Call this once from ActorForth: "actor_bridge" "setup_bridge" 0 py-call
-    """
-    global _worker
-    _worker = PythonWorker()
-
-    # Register Python functions as callable from Erlang
-    erlang.register_function("py_store",
-        lambda key, value: _worker.store(key, value))
-    erlang.register_function("py_fetch",
-        lambda key: _worker.fetch(key))
-    erlang.register_function("py_history",
-        lambda: _worker.get_history())
-    erlang.register_function("py_count",
-        lambda: _worker.process("count"))
-
-    return "bridge_ready"
+def fetch(key):
+    """Fetch a value by key. Returns 'not_found' if missing."""
+    return _data.get(key, "not_found")
 
 
-def teardown_bridge():
-    """Clean up registered functions."""
-    global _worker
-    _worker = None
-    for name in ["py_store", "py_fetch", "py_history", "py_count"]:
-        try:
-            erlang.unregister_function(name)
-        except Exception:
-            pass
-    return "bridge_torn_down"
+def delete(key):
+    """Delete a key. Returns the old value or 'not_found'."""
+    val = _data.pop(key, "not_found")
+    if val != "not_found":
+        _history.append(("delete", key))
+    return val
+
+
+def count():
+    """Return number of stored items."""
+    return len(_data)
+
+
+def keys():
+    """Return list of all keys."""
+    return list(_data.keys())
+
+
+def values():
+    """Return list of all values."""
+    return list(_data.values())
+
+
+def history():
+    """Return operation history as list of tuples."""
+    return _history
+
+
+def clear():
+    """Clear all data and history."""
+    global _data, _history
+    _data = {}
+    _history = []
+    return "ok"
+
+
+def to_dict():
+    """Return a copy of the entire store as a dict."""
+    return dict(_data)
