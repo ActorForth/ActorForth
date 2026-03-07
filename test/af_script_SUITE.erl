@@ -142,10 +142,23 @@ run_py_http_demo(Config) ->
     run_python_script("samples/py_http_demo.a4", Config).
 
 run_py_llm_demo(Config) ->
-    %% Requires OPENAI_API_KEY — skip if not available
-    case os:getenv("OPENAI_API_KEY") of
-        false -> {skip, "OPENAI_API_KEY not set"};
-        _ -> run_python_script("samples/py_llm_demo.a4", Config)
+    %% Requires openai Python package and OPENAI_API_KEY
+    ProjectRoot = ?config(project_root, Config),
+    af_repl:load_env(filename:join(ProjectRoot, ".env")),
+    application:ensure_all_started(erlang_python),
+    try
+        py:exec(<<"import openai">>),
+        case os:getenv("OPENAI_API_KEY") of
+            false -> {skip, "OPENAI_API_KEY not set"};
+            ApiKey ->
+                SetEnv = list_to_binary(io_lib:format(
+                    "import os; os.environ['OPENAI_API_KEY'] = '~s'", [ApiKey])),
+                py:exec(SetEnv),
+                af_type_python:init(),
+                run_python_script("samples/py_llm_demo.a4", Config)
+        end
+    catch
+        _:_ -> {skip, "openai Python package not installed"}
     end.
 
 run_py_text_demo(Config) ->
