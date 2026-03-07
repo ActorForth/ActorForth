@@ -8,6 +8,10 @@
 
 -export([init/0, ensure_started/0]).
 
+-ifdef(TEST).
+-export([py_to_stack_item/1, af_to_python/1, run_word_with_args/2]).
+-endif.
+
 init() ->
     %% py-start : ->
     %% Ensure the Python runtime is started
@@ -258,9 +262,14 @@ py_to_stack_item(Value) ->
 
 %% Find a word operation by name in the type registry
 find_word_op(Name) ->
-    case af_type:find_op_by_name(Name) of
+    AllTypes = af_type:all_types(),
+    find_word_in_types(Name, AllTypes).
+
+find_word_in_types(_Name, []) -> not_found;
+find_word_in_types(Name, [#af_type{name = TypeName} | Rest]) ->
+    case af_type:find_op_by_name(Name, TypeName) of
         {ok, Op} -> {ok, Op};
-        error -> not_found
+        not_found -> find_word_in_types(Name, Rest)
     end.
 
 %% Run an interpreted word with args from Python
