@@ -1,1 +1,8 @@
-[].
+{"1.2.0",
+[{<<"erlang_python">>,{pkg,<<"erlang_python">>,<<"1.8.1">>},0}]}.
+[
+{pkg_hash,[
+ {<<"erlang_python">>, <<"4DAFC7AFD315F0D5D45792F722364D8721CED438E396B7D14F19518DC78D198B">>}]},
+{pkg_hash_ext,[
+ {<<"erlang_python">>, <<"0F5893100A92285096519F8111D3A6D3F5DCD18668545ADF9F4144899D5997C2">>}]}
+].

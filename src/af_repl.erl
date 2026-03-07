@@ -21,7 +21,8 @@ init_types() ->
     af_type_float:init(),
     af_type_tuple:init(),
     af_type_beam:init(),
-    af_type_otp:init().
+    af_type_otp:init(),
+    af_type_python:init().
 
 start() ->
     init_types(),

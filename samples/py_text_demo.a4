@@ -1,0 +1,22 @@
+# Python text tools demo
+# Run with: rebar3 shell, then af_repl:run_file("samples/py_text_demo.a4").
+# Requires: source .venv/bin/activate before starting rebar3 shell
+
+py-start
+"samples/python" py-import
+
+# Count words in a string
+"hello world from actorforth" text_tools word_count 1 py-call
+print
+
+# Reverse words
+"ActorForth meets Python" text_tools reverse_words 1 py-call
+print
+
+# Slugify
+"ActorForth: A BEAM Language!" text_tools slugify 1 py-call
+print
+
+# Edit distance
+"kitten" "sitting" text_tools levenshtein 2 py-call
+print

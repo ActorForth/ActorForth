@@ -1,0 +1,24 @@
+# Python AI integration demo (using stubs)
+# Run with: rebar3 shell, then af_repl:run_file("samples/py_ai_demo.a4").
+# Replace ai_stub functions with real AI library calls for production use.
+
+py-start
+"samples/python" py-import
+
+# Generate an embedding vector for text
+"ActorForth is a stack-based language" ai_stub embed_text 1 py-call
+print
+
+# Compute similarity between two texts
+"ActorForth is a stack-based language" ai_stub embed_text 1 py-call
+"Forth is a concatenative language" ai_stub embed_text 1 py-call
+# Now we have two vectors on the stack — use py-eval with a lambda
+# (cosine_similarity needs both vectors passed to Python)
+
+# Chat completion stub
+"What is ActorForth?" py-eval
+print
+
+# JSON round-trip through Python
+"[1, 2, 3]" ai_stub from_json 1 py-call
+print
