@@ -551,6 +551,285 @@ All tests run via `rebar3 eunit` and are included in CI. The Python runtime star
 
 ---
 
+## Advice for Erlang Developers: Connecting Python to OTP
+
+This section is for Erlang/OTP developers who want to embed Python in their BEAM applications — independent of ActorForth. It covers the `erlang_python` hex package, how to wrap Python modules in gen_servers, and how to supervise them with OTP.
+
+### Prerequisites: Python 3.12 from Source
+
+The `erlang_python` package embeds CPython via dirty NIFs. It requires Python 3.12+ built with shared library support. A working build is available at:
+
+```
+/home/scherrey/python312/
+```
+
+If you need to build your own:
+
+```bash
+wget https://www.python.org/ftp/python/3.12.4/Python-3.12.4.tgz
+tar xzf Python-3.12.4.tgz
+cd Python-3.12.4
+./configure --prefix=$HOME/python312 --enable-shared --enable-optimizations
+make -j$(nproc) && make install
+```
+
+The `--enable-shared` flag is **mandatory** — without it, the NIF cannot link against `libpython3.12.so`. You must set `LD_LIBRARY_PATH` before starting the BEAM:
+
+```bash
+export LD_LIBRARY_PATH=/home/scherrey/python312/lib:$LD_LIBRARY_PATH
+```
+
+Add this to your shell profile or startup script. Without it, `py:start/0` will fail with a shared library load error.
+
+### Adding erlang_python to Your Project
+
+In `rebar.config`:
+
+```erlang
+{deps, [
+    {erlang_python, "1.8.1"}
+]}.
+```
+
+Then `rebar3 compile`. The package compiles a C NIF that links against your system's `libpython3.12.so`.
+
+### The Core API
+
+```erlang
+%% Start the Python interpreter (call once at app startup)
+py:start().
+
+%% Call a Python function: Module, Function, Args
+py:call(math, sqrt, [16]).          %% => 4.0
+py:call(json, dumps, [[{a, 1}]]).   %% => "{\"a\": 1}"
+
+%% Execute Python code (for imports, setup)
+py:exec("import sys; sys.path.insert(0, 'lib/python')").
+
+%% Evaluate a Python expression
+py:eval("2 + 2").                   %% => 4
+
+%% Async calls (returns a reference, await later)
+Ref = py:call_async(heavy_module, compute, [BigData]),
+%% ... do other BEAM work ...
+Result = py:await(Ref).             %% blocks until Python returns
+
+%% Streaming from Python generators
+py:stream(my_module, generate_items, [100]).
+%% Returns items one at a time as messages
+
+%% Python asyncio integration
+Ref = py:async_call(aiohttp_wrapper, fetch, [Url]),
+Result = py:async_await(Ref).
+
+%% Parallel execution across sub-interpreters (Python 3.12+)
+Results = py:parallel([
+    {mod1, func1, [args1]},
+    {mod2, func2, [args2]}
+]).
+
+%% Virtual environment activation
+py:activate_venv("/path/to/venv").
+
+%% Register an Erlang function callable from Python
+py:register_function(my_callback, fun(Args) -> do_something(Args) end).
+```
+
+### The Scope Isolation Gotcha
+
+**This is the single most important thing to understand.** `py:exec/1` and `py:eval/1` run in separate scopes. Variables set in `exec` are not visible in `eval`:
+
+```erlang
+py:exec("x = 42").
+py:eval("x").       %% => NameError: name 'x' is not defined
+```
+
+The solution is to **always work through Python modules**. Create `.py` files with module-level state:
+
+```python
+# mystate.py
+_counter = 0
+
+def increment():
+    global _counter
+    _counter += 1
+    return _counter
+
+def get():
+    return _counter
+```
+
+Then from Erlang:
+
+```erlang
+py:exec("import sys; sys.path.insert(0, 'lib/python')").
+py:call(mystate, increment, []).  %% => 1
+py:call(mystate, increment, []).  %% => 2
+py:call(mystate, get, []).        %% => 2
+```
+
+Module-level state persists across `py:call` invocations. This is the foundation for everything that follows.
+
+### Wrapping Python in a gen_server
+
+The natural pattern is one gen_server per Python module, with the gen_server serializing access to the module's state:
+
+```erlang
+-module(py_worker).
+-behaviour(gen_server).
+
+-export([start_link/1, call_python/3]).
+-export([init/1, handle_call/3, handle_cast/2, terminate/2]).
+
+%% API
+start_link(PyModule) ->
+    gen_server:start_link(?MODULE, PyModule, []).
+
+call_python(Pid, Function, Args) ->
+    gen_server:call(Pid, {py_call, Function, Args}).
+
+%% Callbacks
+init(PyModule) ->
+    %% Ensure Python is started (idempotent)
+    py:start(),
+    %% Add your Python module path
+    py:exec("import sys; sys.path.insert(0, 'lib/python')"),
+    %% Import the module to verify it exists
+    py:exec(lists:flatten(io_lib:format("import ~s", [PyModule]))),
+    {ok, #{module => PyModule}}.
+
+handle_call({py_call, Function, Args}, _From, State = #{module := Mod}) ->
+    try
+        Result = py:call(Mod, Function, Args),
+        {reply, {ok, Result}, State}
+    catch
+        error:Reason ->
+            {reply, {error, Reason}, State}
+    end;
+handle_call(_Request, _From, State) ->
+    {reply, {error, unknown_request}, State}.
+
+handle_cast(_Msg, State) ->
+    {noreply, State}.
+
+terminate(_Reason, _State) ->
+    ok.
+```
+
+Usage:
+
+```erlang
+{ok, Pid} = py_worker:start_link(mystate),
+{ok, 1} = py_worker:call_python(Pid, increment, []),
+{ok, 2} = py_worker:call_python(Pid, increment, []),
+{ok, 2} = py_worker:call_python(Pid, get, []).
+```
+
+The gen_server gives you:
+- **Serialized access** — no concurrent mutations to Python module state
+- **Crash isolation** — a Python exception becomes an Erlang error, caught by the gen_server
+- **Message queue buffering** — callers don't block each other; requests queue in the mailbox
+
+### OTP Supervision
+
+Add your Python-backed gen_servers to a supervision tree:
+
+```erlang
+-module(py_sup).
+-behaviour(supervisor).
+
+-export([start_link/0, init/1]).
+
+start_link() ->
+    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+
+init([]) ->
+    %% Start Python once before any children need it
+    py:start(),
+    py:exec("import sys; sys.path.insert(0, 'lib/python')"),
+
+    Children = [
+        #{id => counter_worker,
+          start => {py_worker, start_link, [mystate]},
+          restart => permanent,
+          type => worker},
+        #{id => ml_worker,
+          start => {py_worker, start_link, [ml_model]},
+          restart => permanent,
+          type => worker}
+    ],
+    {ok, {#{strategy => one_for_one, intensity => 5, period => 10}, Children}}.
+```
+
+Key considerations for supervision:
+
+1. **`py:start()` is idempotent** — call it in the supervisor's `init/1` and in each worker's `init/1`. The first call initializes; subsequent calls are no-ops.
+
+2. **Restart strategy matters.** Python module-level state is lost when the NIF restarts. If your Python module has accumulated state (e.g., a loaded ML model), the gen_server's `init/1` must re-initialize it. Use `permanent` restart for workers that should always be running.
+
+3. **`one_for_one` is usually right.** Python workers are typically independent — one crashing shouldn't affect others.
+
+4. **GIL and dirty schedulers.** Python's GIL runs on BEAM dirty scheduler threads. Long-running Python computations block that dirty scheduler but NOT regular BEAM schedulers. If you have many concurrent Python calls, consider increasing dirty scheduler count: `+SDio N` flag when starting the BEAM.
+
+### Async Python Patterns
+
+For non-blocking Python calls from gen_servers:
+
+```erlang
+handle_cast({async_compute, Args, ReplyTo}, State = #{module := Mod}) ->
+    Ref = py:call_async(Mod, heavy_computation, Args),
+    {noreply, State#{pending => {Ref, ReplyTo}}};
+
+handle_info({py_async_result, Ref, Result}, State = #{pending := {Ref, ReplyTo}}) ->
+    ReplyTo ! {computation_result, Result},
+    {noreply, maps:remove(pending, State)}.
+```
+
+For Python 3.12+ sub-interpreters (true parallelism, bypassing the GIL):
+
+```erlang
+%% Check if sub-interpreters are available
+true = py:subinterp_supported(),
+
+%% Run multiple Python calls in parallel
+Results = py:parallel([
+    {data_processor, clean, [Dataset1]},
+    {data_processor, clean, [Dataset2]},
+    {data_processor, clean, [Dataset3]}
+]).
+```
+
+### Virtual Environments
+
+To use Python packages installed in a venv:
+
+```erlang
+init(PyModule) ->
+    py:start(),
+    py:activate_venv("/path/to/your/venv"),
+    py:exec("import sys; sys.path.insert(0, 'lib/python')"),
+    {ok, #{module => PyModule}}.
+```
+
+Create the venv with the same Python 3.12 used by the NIF:
+
+```bash
+/home/scherrey/python312/bin/python3 -m venv /path/to/your/venv
+/path/to/your/venv/bin/pip install numpy pandas  # whatever you need
+```
+
+### Summary of Recommendations
+
+1. **Always use module-level state** — never rely on `exec`/`eval` scope sharing.
+2. **One gen_server per Python module** — serializes access, provides crash isolation.
+3. **Supervise your Python workers** — OTP supervision handles crashes and restarts.
+4. **Re-initialize state in `init/1`** — Python module state doesn't survive restarts.
+5. **Use `call_async`/`await` for heavy work** — keeps your gen_server responsive.
+6. **Set `LD_LIBRARY_PATH` before starting the BEAM** — the shared library must be findable.
+7. **Build Python with `--enable-shared`** — the NIF requires `libpython3.12.so`.
+
+---
+
 ## Future Directions
 
 - **Async Python calls.** The `erlang_python` library supports `py_async_pool` and `py_async_worker` modules. Exposing these as ActorForth words would allow non-blocking Python calls from actors.
