@@ -121,7 +121,7 @@ private:
     std::jthread thread_;
 };
 
-void run_once(int n = 10000) {
+void run_once(int n = 100000) {
     CounterActor actor;
     actor.start();
     for (int i = 0; i < n; ++i) {
@@ -132,7 +132,7 @@ void run_once(int n = 10000) {
     actor.stop();
 }
 
-void bench(int iters, int n = 10000) {
+void bench(int iters, int n = 100000) {
     // Warm-up
     run_once(n);
 
@@ -160,7 +160,7 @@ void bench(int iters, int n = 10000) {
 
 int main(int argc, char* argv[]) {
     run_once();
-    std::cout << "C++20 throughput test passed (10000 messages)." << std::endl;
+    std::cout << "C++20 throughput test passed (100000 messages)." << std::endl;
 
     if (argc >= 3 && std::string(argv[1]) == "--bench") {
         bench(std::stoi(argv[2]));

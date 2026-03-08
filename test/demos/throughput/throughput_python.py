@@ -72,7 +72,7 @@ class CounterActor(Actor):
         return self._state
 
 
-def run_once(n=10000):
+def run_once(n=100000):
     actor = CounterActor().start()
     for _ in range(n):
         actor.cast("bump")
@@ -81,7 +81,7 @@ def run_once(n=10000):
     actor.stop()
 
 
-def bench(iters: int, n: int = 10000):
+def bench(iters: int, n: int = 100000):
     # Warm-up
     run_once(n)
 
@@ -99,8 +99,8 @@ def bench(iters: int, n: int = 10000):
 if __name__ == "__main__":
     if len(sys.argv) >= 3 and sys.argv[1] == "--bench":
         run_once()
-        print("Python throughput test passed (10000 messages).")
+        print("Python throughput test passed (100000 messages).")
         bench(int(sys.argv[2]))
     else:
         run_once()
-        print("Python throughput test passed (10000 messages).")
+        print("Python throughput test passed (100000 messages).")

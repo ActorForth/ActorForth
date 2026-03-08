@@ -40,7 +40,7 @@ blast(N, Pid) ->
     blast(N - 1, Pid).
 
 run_once() ->
-    run_once(10000).
+    run_once(100000).
 
 run_once(N) ->
     {ok, Pid} = gen_server:start_link(?MODULE, 0, []),
@@ -51,10 +51,10 @@ run_once(N) ->
 
 start_test() ->
     run_once(),
-    io:format("Erlang throughput test passed (10000 messages).~n").
+    io:format("Erlang throughput test passed (100000 messages).~n").
 
 bench(Iters) when Iters > 0 ->
-    bench(Iters, 10000).
+    bench(Iters, 100000).
 
 bench(Iters, N) when Iters > 0 ->
     %% Warm-up

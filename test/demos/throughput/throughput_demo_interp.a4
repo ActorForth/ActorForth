@@ -19,6 +19,6 @@ type Counter
     << bump >> swap 1 - swap blast .
 
 0 counter server
-10000 swap blast
-<< get_count >> 10000 assert-eq
+100000 swap blast
+<< get_count >> 100000 assert-eq
 << stop >> drop

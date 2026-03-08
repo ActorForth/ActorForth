@@ -104,7 +104,7 @@ PY_EBIN="$PROJECT_ROOT/_build/default/lib/erlang_python/ebin"
 echo -e "${BOLD}================================================${RESET}"
 echo -e "${BOLD} Throughput Demo — All Implementations${RESET}"
 echo -e "${BOLD}================================================${RESET}"
-echo -e " 10,000 actor messages per run, no sleep delays"
+echo -e " 100,000 actor messages per run, no sleep delays"
 echo
 
 # ------------------------------------------------------------------
@@ -140,7 +140,7 @@ bench_a4() {
         Min = lists:min(Times),
         Max = lists:max(Times),
         Avg = lists:sum(Times) div $n,
-        io:format(\"BENCH_RESULT: min=~b avg=~b max=~b iters=~b msgs=10000~n\",
+        io:format(\"BENCH_RESULT: min=~b avg=~b max=~b iters=~b msgs=100000~n\",
                   [Min, Avg, Max, $n]),
         halt(0).
     "

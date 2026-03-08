@@ -15,7 +15,7 @@
 # - Recursive word dispatch for looping (pattern-matched base case)
 # - Total throughput: N actor messages through the full dispatch pipeline
 #
-# N=10000 is safe for interpreted recursive words on the BEAM.
+# N=100000 is safe for interpreted recursive words on the BEAM.
 # Each iteration: construct Int literal, dispatch bump, decrement, recurse.
 
 # Counter state — tracks number of bump messages received
@@ -60,11 +60,11 @@ type Counter
 
 0 counter server
 
-# Send 10000 bump messages via recursive dispatch
-10000 swap blast
+# Send 100000 bump messages via recursive dispatch
+100000 swap blast
 
 # Verify all messages arrived (sync call acts as barrier)
-<< get_count >> 10000 assert-eq
+<< get_count >> 100000 assert-eq
 
 # Cleanup
 << stop >> drop
