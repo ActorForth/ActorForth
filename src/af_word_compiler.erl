@@ -55,14 +55,19 @@ compile_words_to_binary(ModuleName, WordDefs) when is_atom(ModuleName) ->
     Groups = group_by_name(WordDefs),
     FunForms = lists:filtermap(fun({Name, Defs}) ->
         case compile_word_group(Name, Defs, L, Ctx) of
-            {ok, Form, Export} -> {true, {Form, Export}};
+            {ok, FormList, ExportList} when is_list(FormList) ->
+                {true, {FormList, ExportList}};
+            {ok, Form, Export} ->
+                {true, {[Form], [Export]}};
             {error, _Reason} -> false
         end
     end, Groups),
     case FunForms of
         [] -> {error, no_compilable_words};
         _ ->
-            {Forms, Exports} = lists:unzip(FunForms),
+            {FormLists, ExportLists} = lists:unzip(FunForms),
+            Forms = lists:flatten(FormLists),
+            Exports = lists:flatten(ExportLists),
             AllForms = [
                 {attribute, L, module, ModuleName},
                 {attribute, L, export, Exports}
@@ -96,18 +101,24 @@ group_by_name(WordDefs) ->
 compile_word_group(Name, [{_, SigIn, SigOut, Body}], L, Ctx) ->
     compile_single_word(Name, SigIn, SigOut, Body, L, Ctx);
 compile_word_group(Name, Defs, L, Ctx) ->
-    FunAtom = list_to_atom(Name),
-    Clauses = lists:filtermap(fun({_N, SigIn, SigOut, Body}) ->
-        case compile_clause(SigIn, SigOut, Body, L, Ctx) of
-            {ok, Clause} -> {true, Clause};
-            {error, _} -> false
-        end
-    end, Defs),
-    case Clauses of
-        [] -> {error, no_compilable_clauses};
-        _ ->
-            Form = {function, L, FunAtom, 1, Clauses},
-            {ok, Form, {FunAtom, 1}}
+    %% Try loop optimization for self-recursive words with << >> blocks
+    case try_loop_opt(Name, Defs, L, Ctx) of
+        {ok, Forms, Exports} ->
+            {ok, Forms, Exports};
+        not_applicable ->
+            FunAtom = list_to_atom(Name),
+            Clauses = lists:filtermap(fun({_N, SigIn, SigOut, Body}) ->
+                case compile_clause(SigIn, SigOut, Body, L, Ctx) of
+                    {ok, Clause} -> {true, Clause};
+                    {error, _} -> false
+                end
+            end, Defs),
+            case Clauses of
+                [] -> {error, no_compilable_clauses};
+                _ ->
+                    Form = {function, L, FunAtom, 1, Clauses},
+                    {ok, Form, {FunAtom, 1}}
+            end
     end.
 
 %% Compile a single-clause word function.
@@ -137,6 +148,167 @@ compile_clause(SigIn, SigOut, Body, L, Ctx) ->
             {ok, Clause};
         {error, Reason} ->
             {error, Reason}
+    end.
+
+%% Loop optimization for self-recursive words.
+%% Detects words like blast that have << >> send blocks and self-recursive
+%% tail calls, and generates an inner loop with unpacked arguments to avoid
+%% per-iteration list reconstruction and map lookups.
+
+try_loop_opt(Name, Defs, L, Ctx) ->
+    %% Partition into base cases and recursive cases
+    {BaseCases, RecCases} = lists:partition(fun({_, _, _, Body}) ->
+        case Body of
+            [] -> true;
+            _ ->
+                LastOp = lists:last(Body),
+                LastOp#operation.name =/= Name
+        end
+    end, Defs),
+    case {BaseCases, RecCases} of
+        {[_ | _], [{_, RecSigIn, _RecSigOut, RecBody}]} ->
+            %% Single recursive clause with base case(s)
+            %% Check if body starts with << word >> (send block)
+            case has_send_block(RecBody) of
+                {true, SendWord, BodyAfterSend} ->
+                    %% Check if the body after send ends with self-recursive call
+                    case lists:last(BodyAfterSend) of
+                        #operation{name = Name} ->
+                            generate_loop_opt(Name, BaseCases, RecSigIn,
+                                              SendWord, BodyAfterSend, L, Ctx);
+                        _ -> not_applicable
+                    end;
+                false -> not_applicable
+            end;
+        _ -> not_applicable
+    end.
+
+%% Check if body starts with << word >> pattern
+has_send_block([#operation{name = "<<"}, #operation{name = Word}, #operation{name = ">>"} | Rest]) ->
+    {true, Word, Rest};
+has_send_block(_) -> false.
+
+%% Generate optimized entry function + inner loop for self-recursive send patterns.
+%% Entry: blast([{Actor,Info},{Int,N}|Rest]) -> blast_loop(Pid, ActorTuple, N, Rest)
+%% Loop:  blast_loop(_, AT, 0, R) -> [AT|R]
+%%        blast_loop(Pid, AT, N, R) -> cast, blast_loop(Pid, AT, N-1, R)
+generate_loop_opt(Name, BaseCases, RecSigIn, SendWord, _BodyAfterSend, L, _Ctx) ->
+    FunAtom = list_to_atom(Name),
+    LoopAtom = list_to_atom(Name ++ "_loop"),
+
+    %% Find which stack position is the Actor (check SigIn for Actor type)
+    ActorPos = find_type_pos('Actor', RecSigIn),
+    case ActorPos of
+        not_found -> not_applicable;
+        _ ->
+            %% Find the variant position (typically Int for the counter)
+            %% It's the position that changes in the recursive call
+            VariantPos = find_variant_pos(RecSigIn, ActorPos),
+
+            %% Generate entry function
+            %% Pattern: [{Type1, V1}, {Type2, V2} | Rest]
+            {EntryPat, TuplePats, ValVars, RestVar} = build_loop_entry_pattern(RecSigIn, L),
+            ActorTuplePat = lists:nth(ActorPos + 1, TuplePats),
+            ActorValVar = lists:nth(ActorPos + 1, ValVars),
+            PidVar = {var, L, '__Pid'},
+            PidBind = {match, L, PidVar, {call, L,
+                {remote, L, {atom, L, maps}, {atom, L, get}},
+                [{atom, L, pid}, ActorValVar]}},
+
+            %% Build loop call args: Pid, ActorTuple, N, Rest
+            NVar = lists:nth(VariantPos + 1, ValVars),
+            LoopCallArgs = [PidVar, ActorTuplePat, NVar, RestVar],
+            LoopCall = {call, L, {atom, L, LoopAtom}, LoopCallArgs},
+
+            EntryClause = {clause, L, [EntryPat], [], [PidBind, LoopCall]},
+            EntryForm = {function, L, FunAtom, 1, [EntryClause]},
+
+            %% Generate loop function
+            %% Base case(s): from the original base cases
+            LoopBaseClauses = lists:filtermap(fun({_, BaseSigIn, _BaseSigOut, BaseBody}) ->
+                generate_loop_base_clause(BaseSigIn, BaseBody, ActorPos, VariantPos, L)
+            end, BaseCases),
+
+            %% Recursive case: gen_server:cast(Pid, Msg), loop(Pid, AT, N-1, Rest)
+            LoopPidVar = {var, L, '__LoopPid'},
+            LoopActorVar = {var, L, '__LoopActor'},
+            LoopNVar = {var, L, '__LoopN'},
+            LoopRestVar = {var, L, '__LoopRest'},
+
+            %% Generate send: Pid ! {cast, Word, []}
+            MsgExpr = {tuple, L, [{atom, L, cast}, {string, L, SendWord}, {nil, L}]},
+            CastExpr = {op, L, '!', LoopPidVar, MsgExpr},
+
+            %% Recursive call: loop(Pid, AT, N-1, Rest)
+            RecCallArgs = [LoopPidVar, LoopActorVar,
+                           {op, L, '-', LoopNVar, {integer, L, 1}}, LoopRestVar],
+            RecCall = {call, L, {atom, L, LoopAtom}, RecCallArgs},
+
+            RecClause = {clause, L,
+                [LoopPidVar, LoopActorVar, LoopNVar, LoopRestVar],
+                [], [CastExpr, RecCall]},
+
+            LoopForm = {function, L, LoopAtom, 4,
+                LoopBaseClauses ++ [RecClause]},
+
+            {ok, [EntryForm, LoopForm],
+                 [{FunAtom, 1}, {LoopAtom, 4}]}
+    end.
+
+%% Find the position (0-indexed) of a type in the SigIn list
+find_type_pos(Type, SigIn) ->
+    find_type_pos(Type, SigIn, 0).
+find_type_pos(_Type, [], _I) -> not_found;
+find_type_pos(Type, [Type | _], I) -> I;
+find_type_pos(Type, [{Type, _} | _], I) -> I;
+find_type_pos(Type, [_ | Rest], I) -> find_type_pos(Type, Rest, I + 1).
+
+%% Find the position of the variant (non-Actor) argument
+find_variant_pos(SigIn, ActorPos) ->
+    find_variant_pos(SigIn, ActorPos, 0).
+find_variant_pos([], _AP, _I) -> 0;
+find_variant_pos([_ | Rest], AP, I) when I =:= AP ->
+    find_variant_pos(Rest, AP, I + 1);
+find_variant_pos([_ | _], _AP, I) -> I;
+find_variant_pos(_, _, I) -> I.
+
+%% Build pattern for entry function: [{Type, Var}, ... | Rest]
+build_loop_entry_pattern(SigIn, L) ->
+    {Pats, ValVars, _} = lists:foldl(fun(SigEntry, {PatAcc, VarAcc, I}) ->
+        ValVar = {var, L, list_to_atom("__V" ++ integer_to_list(I))},
+        Type = case SigEntry of {T, _} -> T; T -> T end,
+        Pat = {tuple, L, [{atom, L, Type}, ValVar]},
+        {PatAcc ++ [Pat], VarAcc ++ [ValVar], I + 1}
+    end, {[], [], 0}, SigIn),
+    FinalRestVar = {var, L, '__EntryRest'},
+    HeadPat = lists:foldr(fun(Pat, Acc) ->
+        {cons, L, Pat, Acc}
+    end, FinalRestVar, Pats),
+    %% Returns: {HeadPattern, TuplePatterns, ValueVars, RestVar}
+    {HeadPat, Pats, ValVars, FinalRestVar}.
+
+%% Generate a loop base case clause
+generate_loop_base_clause(BaseSigIn, _BaseBody, _ActorPos, VariantPos, L) ->
+    %% Find the value constraint in the base case
+    VariantType = lists:nth(VariantPos + 1, BaseSigIn),
+    case VariantType of
+        {_Type, Value} when is_integer(Value) ->
+            %% Base case with value constraint (e.g., 0 Int)
+            %% loop(_, ActorTuple, 0, Rest) -> [ActorTuple | Rest]
+            LoopPidVar = {var, L, '_BasePid'},
+            LoopActorVar = {var, L, '__BaseActor'},
+            LoopNPat = {integer, L, Value},
+            LoopRestVar = {var, L, '__BaseRest'},
+
+            %% Build return: [ActorTuple | Rest]
+            ReturnExpr = {cons, L, LoopActorVar, LoopRestVar},
+
+            Clause = {clause, L,
+                [LoopPidVar, LoopActorVar, LoopNPat, LoopRestVar],
+                [], [ReturnExpr]},
+            {true, Clause};
+        _ ->
+            false
     end.
 
 %% Build a function head pattern for tagged stack items.
@@ -198,6 +370,17 @@ simulate_body(Ops, Stack, L, Ctx) ->
 
 simulate_body([], Stack, _L, _Ctx, SideEffects) ->
     {ok, Stack, lists:reverse(SideEffects)};
+%% Detect << ... >> send blocks and compile them directly
+simulate_body([#operation{name = "<<"} | Rest], Stack, L, Ctx, SideEffects) ->
+    {SendOps, AfterSend} = collect_send_block(Rest),
+    case compile_send_block(SendOps, Stack, L, Ctx) of
+        {ok, NewStack, NewSideEffects} ->
+            simulate_body(AfterSend, NewStack, L, Ctx,
+                          lists:reverse(NewSideEffects) ++ SideEffects);
+        {error, _Reason} ->
+            %% Can't compile send block — fall through to runtime
+            simulate_body(Rest, Stack, L, Ctx, SideEffects)
+    end;
 %% Opaque stack: check for same-module words first, then fall back to apply_impl
 simulate_body([#operation{name = OpName} | Rest], [{StackExpr, stack}], L, Ctx, SideEffects) ->
     Words = maps:get(words, Ctx, #{}),
@@ -402,26 +585,9 @@ runtime_dispatch(Name, Stack, L, Ctx) ->
 %% Getters: instance on TOS, push field value + keep instance
 %% Setters (name!): new_value and instance on stack, return updated instance
 try_product_op(Name, [{_Expr, TosType} | _] = Stack, L, _Ctx) when is_atom(TosType), TosType =/= stack ->
-    case catch af_type:get_type(TosType) of
-        {ok, #af_type{ops = Ops}} ->
-            case maps:get(Name, Ops, []) of
-                [#operation{source = auto, sig_out = [FieldType]} | _] ->
-                    %% Getter: {TypeName, FieldMap} -> FieldValue, {TypeName, FieldMap}
-                    [{InstanceExpr, _} | Rest] = Stack,
-                    FieldName = list_to_atom(Name),
-                    FieldMapExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, element}},
-                        [{integer, L, 2}, InstanceExpr]},
-                    ValExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, get}},
-                        [{atom, L, FieldName}, FieldMapExpr]},
-                    {ok, [{ValExpr, FieldType}, {InstanceExpr, TosType} | Rest]};
-                _ -> not_product
-            end;
-        _ -> not_product
-    end;
-try_product_op(Name, Stack, L, _Ctx) ->
-    %% Check for setter (name ends with !)
     case lists:suffix("!", Name) of
         true when length(Stack) >= 2 ->
+            %% Setter: TOS is the new value, second item is the instance
             BaseName = lists:droplast(Name),
             [{NewValExpr, _ValType}, {InstanceExpr, InstanceType} | Rest] = Stack,
             case catch af_type:get_type(InstanceType) of
@@ -435,7 +601,126 @@ try_product_op(Name, Stack, L, _Ctx) ->
                     {ok, [{ResultExpr, InstanceType} | Rest]};
                 _ -> not_product
             end;
-        _ -> not_product
+        _ ->
+            %% Getter: look in TOS type's ops
+            case catch af_type:get_type(TosType) of
+                {ok, #af_type{ops = Ops}} ->
+                    case maps:get(Name, Ops, []) of
+                        [#operation{source = auto, sig_out = [FieldType]} | _] ->
+                            [{InstanceExpr, _} | Rest] = Stack,
+                            FieldName = list_to_atom(Name),
+                            FieldMapExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, element}},
+                                [{integer, L, 2}, InstanceExpr]},
+                            ValExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, get}},
+                                [{atom, L, FieldName}, FieldMapExpr]},
+                            {ok, [{ValExpr, FieldType}, {InstanceExpr, TosType} | Rest]};
+                        _ -> not_product
+                    end;
+                _ -> not_product
+            end
+    end;
+try_product_op(_Name, _Stack, _L, _Ctx) ->
+    not_product.
+
+%% Collect operations between << and >>. Returns {SendOps, RemainingOps}.
+collect_send_block(Ops) ->
+    collect_send_block(Ops, []).
+collect_send_block([#operation{name = ">>"} | Rest], Acc) ->
+    {lists:reverse(Acc), Rest};
+collect_send_block([Op | Rest], Acc) ->
+    collect_send_block(Rest, [Op | Acc]);
+collect_send_block([], Acc) ->
+    {lists:reverse(Acc), []}.
+
+%% Compile a << ... >> send block to native BEAM code.
+%% Handles: << word >> (no args, cast)
+%%          << arg1 arg2 word >> (with args, cast or call)
+%% Returns {ok, NewExprStack, SideEffects} | {error, Reason}.
+compile_send_block([#operation{name = WordName}], Stack, L, _Ctx) ->
+    %% Simple case: << word >> with no args
+    case Stack of
+        [{ActorExpr, 'Actor'} | RestStack] ->
+            ActorInfoExpr = extract_val({ActorExpr, 'Actor'}, L),
+            %% Determine cast vs call by looking up the word
+            case is_actor_word_cast(WordName) of
+                true ->
+                    %% Generate: af_type_actor:send_cast(ActorInfo, Word, [])
+                    %% Handles both supervised (gen_server) and raw actors
+                    CastExpr = {call, L,
+                        {remote, L, {atom, L, af_type_actor}, {atom, L, send_cast}},
+                        [ActorInfoExpr, {string, L, WordName}, {nil, L}]},
+                    {ok, [{ActorExpr, 'Actor'} | RestStack], [CastExpr]};
+                false ->
+                    %% Call: generate af_type_actor:send_call and push results
+                    CallExpr = {call, L,
+                        {remote, L, {atom, L, af_type_actor}, {atom, L, send_call}},
+                        [ActorInfoExpr, {string, L, WordName}, {nil, L}]},
+                    %% Result is a list of tagged values — go opaque
+                    ResultExpr = {op, L, '++', CallExpr,
+                        {cons, L, ActorExpr, build_stack_list(RestStack, L, {nil, L})}},
+                    {ok, [{ResultExpr, stack}], []}
+            end;
+        _ ->
+            {error, {no_actor_on_tos, Stack}}
+    end;
+compile_send_block(Ops, Stack, L, Ctx) when length(Ops) > 1 ->
+    %% Multiple tokens: compute args on local stack, last token is the word
+    WordOp = lists:last(Ops),
+    ArgOps = lists:droplast(Ops),
+    WordName = WordOp#operation.name,
+    case Stack of
+        [{ActorExpr, 'Actor'} | RestStack] ->
+            %% Simulate arg computation on an empty local stack
+            case simulate_body(ArgOps, [], L, Ctx, []) of
+                {ok, ArgStack, ArgSideEffects} ->
+                    ActorInfoExpr = extract_val({ActorExpr, 'Actor'}, L),
+                    %% Build args list from local stack
+                    ArgsListExpr = lists:foldr(fun({Expr, _Type}, Acc) ->
+                        {cons, L, Expr, Acc}
+                    end, {nil, L}, ArgStack),
+                    case is_actor_word_cast(WordName) of
+                        true ->
+                            CastExpr = {call, L,
+                                {remote, L, {atom, L, af_type_actor}, {atom, L, send_cast}},
+                                [ActorInfoExpr, {string, L, WordName}, ArgsListExpr]},
+                            {ok, [{ActorExpr, 'Actor'} | RestStack],
+                                 lists:reverse(ArgSideEffects) ++ [CastExpr]};
+                        false ->
+                            CallExpr = {call, L,
+                                {remote, L, {atom, L, af_type_actor}, {atom, L, send_call}},
+                                [ActorInfoExpr, {string, L, WordName}, ArgsListExpr]},
+                            ResultExpr = {op, L, '++', CallExpr,
+                                {cons, L, ActorExpr, build_stack_list(RestStack, L, {nil, L})}},
+                            {ok, [{ResultExpr, stack}], lists:reverse(ArgSideEffects)}
+                    end;
+                {error, _} = Err -> Err
+            end;
+        _ ->
+            {error, {no_actor_on_tos, Stack}}
+    end;
+compile_send_block(_, _, _, _) ->
+    {error, empty_send_block}.
+
+%% Check if an actor word is a cast (no return values beyond state).
+%% Looks up the word in all types and checks if sig_out has only one type
+%% (the state type, meaning it's a cast).
+is_actor_word_cast(WordName) ->
+    AllTypes = af_type:all_types(),
+    case find_word_sig(WordName, AllTypes) of
+        {ok, SigIn, SigOut} ->
+            %% Cast if outputs == inputs (only state changes, no return values)
+            length(SigOut) =< length(SigIn);
+        not_found ->
+            %% Unknown word — assume cast (safer default for fire-and-forget)
+            true
+    end.
+
+find_word_sig(_Name, []) -> not_found;
+find_word_sig(Name, [#af_type{ops = Ops} | Rest]) ->
+    case maps:get(Name, Ops, []) of
+        [] -> find_word_sig(Name, Rest);
+        [#operation{sig_in = SI, sig_out = SO} | _] -> {ok, SI, SO};
+        _ -> find_word_sig(Name, Rest)
     end.
 
 %% Build a cons-list expression from the typed expression stack.
@@ -462,7 +747,7 @@ lookup_op_in_types(Name, [#af_type{ops = Ops} | Rest]) ->
     end.
 
 %% Resolve a word call: same-module or cross-module native.
-resolve_word_call(Name, Stack, L, #{module := Mod, words := Words} = Ctx) ->
+resolve_word_call(Name, Stack, L, #{module := _Mod, words := Words} = Ctx) ->
     case maps:get(Name, Words, undefined) of
         {_Arity, _NumOut} ->
             generate_local_call(Name, Stack, L, Ctx);

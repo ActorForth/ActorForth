@@ -48,11 +48,13 @@ type Counter
 # path, but the word body executes as native Erlang instead of
 # token-by-token interpretation.
 #
-# blast cannot be compiled (uses << >> actor protocol which the
-# BEAM compiler doesn't support yet), but the actor-side words can.
+# All words including blast are compiled to native BEAM functions.
+# The word compiler now supports << >> send blocks, generating
+# direct gen_server:cast/call instead of interpreter dispatch.
 
 "bump" compile
 "get_count" compile
+"blast" compile
 
 # ============================================================
 # Run the benchmark

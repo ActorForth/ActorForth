@@ -6,6 +6,7 @@
 -include("af_type.hrl").
 
 -export([init/0]).
+-export([send_cast/3, send_call/3]).  %% Used by compiled word code
 
 %% Actor model:
 %%   Any type instance can become an actor via 'server'.
@@ -171,7 +172,8 @@ op_server(Cont) ->
     [{TypeName, _Value} = Instance | Rest] = Cont#continuation.data_stack,
     Vocab0 = build_vocab(TypeName),
     Vocab = Vocab0#{"stop" => [#{args => [], returns => []}]},
-    Pid = erlang:spawn_link(fun() -> actor_loop(TypeName, Instance) end),
+    Pid = erlang:spawn_opt(fun() -> actor_loop(TypeName, Instance) end,
+                           [link, {min_heap_size, 100000}]),
     ActorVal = #{pid => Pid, type_name => TypeName, vocab => Vocab},
     Cont#continuation{data_stack = [{'Actor', ActorVal} | Rest]}.
 
@@ -344,16 +346,37 @@ op_self(Cont) ->
 %%% --- Actor process loop ---
 
 actor_loop(TypeName, StateInstance) ->
+    Cache = af_actor_worker:build_native_cache(TypeName),
+    actor_loop(TypeName, StateInstance, Cache).
+
+actor_loop(TypeName, StateInstance, Cache) ->
     receive
         {cast, "stop", _Args} ->
             ok;
         {cast, WordName, Args} ->
-            NewState = execute_actor_word(WordName, Args, TypeName, StateInstance),
-            actor_loop(TypeName, NewState);
+            NewState = case maps:find(WordName, Cache) of
+                {ok, {Mod, Fun}} ->
+                    case Args of
+                        [] -> hd(Mod:Fun([StateInstance]));
+                        _  -> lists:last(Mod:Fun(Args ++ [StateInstance]))
+                    end;
+                error ->
+                    execute_actor_word(WordName, Args, TypeName, StateInstance)
+            end,
+            actor_loop(TypeName, NewState, Cache);
         {call, WordName, Args, From, Ref} ->
-            {ReplyValues, NewState} = execute_actor_call(WordName, Args, TypeName, StateInstance),
+            {ReplyValues, NewState} = case maps:find(WordName, Cache) of
+                {ok, {Mod, Fun}} ->
+                    ResultStack = case Args of
+                        [] -> Mod:Fun([StateInstance]);
+                        _  -> Mod:Fun(Args ++ [StateInstance])
+                    end,
+                    separate_reply(TypeName, ResultStack);
+                error ->
+                    execute_actor_call(WordName, Args, TypeName, StateInstance)
+            end,
             From ! {reply, Ref, ReplyValues},
-            actor_loop(TypeName, NewState)
+            actor_loop(TypeName, NewState, Cache)
     end.
 
 %% Execute a word on the actor's stack (state instance + pushed args).
@@ -479,4 +502,35 @@ op_receive_match_timeout(Cont) ->
             Cont#continuation{data_stack = [{'Bool', true}, Data | Rest]}
     after Timeout ->
         Cont#continuation{data_stack = [{'Bool', false}, {'Atom', "timeout"} | Rest]}
+    end.
+
+%%% --- Direct send helpers for compiled word code ---
+
+%% Send a cast message to an actor. Used by BEAM-compiled words
+%% that contain << word >> blocks.
+%% ActorInfo is the map from {Actor, ActorInfo}.
+send_cast(ActorInfo, WordName, Args) ->
+    Pid = maps:get(pid, ActorInfo),
+    case maps:get(supervised, ActorInfo, false) of
+        true -> gen_server:cast(Pid, {cast, WordName, Args});
+        false -> Pid ! {cast, WordName, Args}
+    end,
+    ok.
+
+%% Send a call message to an actor and wait for reply.
+%% Returns the list of reply values.
+send_call(ActorInfo, WordName, Args) ->
+    Pid = maps:get(pid, ActorInfo),
+    case maps:get(supervised, ActorInfo, false) of
+        true ->
+            {ok, ReplyValues} = gen_server:call(Pid, {call, WordName, Args}, 5000),
+            ReplyValues;
+        false ->
+            Ref = make_ref(),
+            Pid ! {call, WordName, Args, self(), Ref},
+            receive
+                {reply, Ref, ReplyValues} -> ReplyValues
+            after 5000 ->
+                error({actor_call_timeout, WordName})
+            end
     end.
