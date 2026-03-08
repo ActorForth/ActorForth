@@ -547,6 +547,37 @@ The `compile` word compiles interpreted words to native BEAM functions:
 ```
 Multi-clause words compile to multi-clause Erlang functions with literal patterns for value constraints.
 
+### Milestone 7.8: Server-Side Actor Message Validation
+
+**Goal:** Enforce typed message validation on the *receiving* side of actor dispatch, not just the sending side (`<<` blocks).
+
+**Status: TODO.**
+
+**Problem:** Currently, type checking only happens client-side in the `<< >>` send protocol (`validate_actor_args` in `af_type_actor.erl`). If a message is sent directly to the actor's pid — via raw Erlang `Pid ! {cast, ...}`, FFI, or a malicious/buggy external process — it bypasses type checking entirely. The actor loop in `actor_loop/2` and the supervised worker in `af_actor_worker.erl` accept any message shape and attempt to execute the word, crashing on type mismatches instead of cleanly rejecting them.
+
+**Implementation (3 tiers, in priority order):**
+
+#### 7.8.1 Actor Loop Validation (Near-term)
+Add arg validation in `actor_loop/2` before calling `execute_actor_word`:
+- Look up the word name in the actor's vocab
+- Validate incoming args against the vocab's `args` type list using the existing `validate_actor_args/3` function
+- On mismatch: log a warning and skip the message (cast) or reply with `{error, type_mismatch}` (call)
+- ~10 lines of change in `af_type_actor.erl`
+
+Same check in `af_actor_worker.erl` `handle_cast` and `handle_call` callbacks for supervised actors.
+
+#### 7.8.2 Unknown Word Rejection (Near-term)
+Reject messages for word names not in the actor's vocabulary:
+- Currently `actor_loop` would crash with a badmatch trying to interpret an unknown token
+- Should cleanly reject with `{error, unknown_word}` instead of crashing
+
+#### 7.8.3 Capability-Based Actor References (Future)
+Replace raw pid exposure with opaque actor references that include a validation token:
+- Actor reference includes a signed/hashed capability token generated at `server` creation
+- Actor loop validates the token before processing any message
+- Prevents pid-guessing attacks in distributed BEAM environments
+- Heavier mechanism, appropriate for production security hardening
+
 ---
 
 ## Phase 3: BEAM Bytecode Compilation

@@ -1,0 +1,188 @@
+# debounce_demo.a4 — Event debounce pipeline (inspired by BigVault)
+#
+# PURPOSE
+# =======
+# This demo implements a real-world event debouncing system: multiple rapid
+# file-change notifications are batched into a single consolidated event
+# emitted after a quiet period. This is the core pattern used in BigVault's
+# storage monitoring subsystem for object storage change tracking.
+#
+# THE ORIGINAL PROBLEM (280 lines of Erlang)
+# ==========================================
+# In BigVault, an object storage monitor fires individual events each time a
+# file is created, deleted, tagged, or processed. Under bulk upload this
+# produces hundreds of events per second. A debounce actor accumulates them
+# into a merged summary (net adds/deletes + size/count statistics) and emits
+# one consolidated event after 1 second of quiet.
+#
+# The Erlang version requires:
+#   - 25 lines of record definitions (4 nested records)
+#   - 30 lines of gen_server boilerplate (init, handle_call, terminate, etc.)
+#   - 15 lines of timer ref management (start, cancel, stale-ref guard)
+#   - 150 lines of nested record update logic with intermediate variables
+#   - No compile-time guarantee that all event types are handled
+#   - No type safety at message boundaries between actors
+#
+# WHY ACTORFORTH IS DIFFERENT
+# ===========================
+# 1. Product types replace records — field access/update is native, no
+#    intermediate variables needed for nested updates.
+#
+# 2. Actors are primitive — no gen_server boilerplate. The actor IS the
+#    type instance; its state lives on the stack.
+#
+# 3. receive_match_timeout replaces manual timer management — block for
+#    tagged messages up to N ms, then fall through. The entire timer
+#    state machine (nil | reference, cancel, stale-ref guard) vanishes.
+#
+# 4. Typed messages — each event kind is a tagged Message. The debounce
+#    actor dispatches by tag. Wrong message shapes are type errors, not
+#    silent drops via a catch-all clause.
+#
+# 5. Strong types at actor boundaries — the Logger actor's interface is
+#    defined by word signatures. You cannot send it a malformed event.
+#
+# ARCHITECTURE (4 actors)
+# =======================
+#
+#   Simulator ──(tagged msgs)──> Debouncer ──(typed call)──> Logger
+#                                    |                         |
+#                                    └── receive_match_timeout │
+#                                        (1s quiet period)     │
+#                                                              v
+#                                                          EventStore
+#                                                        (receives logged
+#                                                         summary events)
+#
+#   Simulator:  Fires rapid file events to the Debouncer's mailbox
+#   Debouncer:  Accumulates events; emits summary after 1s of quiet
+#   Logger:     Receives typed summary, forwards to EventStore
+#   EventStore: Terminal sink — stores events (prints for demo)
+#
+# The entire pipeline is ~80 lines of ActorForth vs 280+ lines of Erlang.
+
+
+# ============================================================
+# Product Types — replace 4 Erlang records (25 lines of .hrl)
+# ============================================================
+
+# Per-file metadata accumulated during a debounce window
+type Entry
+    path String
+    hash String
+    size Int
+    kind String .
+
+# Running statistics for the debounce window
+type Stats
+    size_diff Int
+    count_diff Int .
+
+# Summary emitted after the quiet period
+type Batch
+    added Int
+    deleted Int
+    size_delta Int
+    count_delta Int .
+
+# Logger state — counts how many batches have been logged
+type Tally
+    batches Int .
+
+# EventStore state — counts how many events have been stored
+type Store
+    events Int .
+
+
+# ============================================================
+# EventStore actor — terminal sink for logged events
+# ============================================================
+
+: record Store Int -> Store ;
+    swap events rot + events! .
+
+: total Store -> Store Int ;
+    dup events .
+
+0 store server
+# EventStore actor is now on the stack
+
+
+# ============================================================
+# Logger actor — receives batch summaries
+# ============================================================
+# In production this would write to disk + publish to event bus.
+# Here it just counts batches received to verify the pipeline.
+
+: log_batch Tally Batch -> Tally ;
+    drop batches 1 + batches! .
+
+: logged Tally -> Tally Int ;
+    dup batches .
+
+0 tally server
+# Logger actor is now on the stack (EventStore is below it)
+
+
+# ============================================================
+# Test: Product types
+# ============================================================
+
+# --- Batch construction and field access ---
+# Getters are non-destructive: (Instance -- Value Instance)
+5 3 200 2 batch
+added 5 assert-eq
+deleted 3 assert-eq
+size_delta 200 assert-eq
+count_delta 2 assert-eq
+drop    # clean up Batch instance
+
+# --- Stats ---
+1024 1 stats
+size_diff 1024 assert-eq
+count_diff 1 assert-eq
+drop    # clean up Stats instance
+
+# --- Entry ---
+"/docs/report.pdf" "abc123" 4096 "application/pdf" entry
+path "/docs/report.pdf" assert-eq
+hash "abc123" assert-eq
+size 4096 assert-eq
+kind "application/pdf" assert-eq
+drop    # clean up Entry instance
+
+
+# ============================================================
+# Test: Logger actor (typed actor protocol)
+# ============================================================
+# The Logger only accepts (Tally Batch -> Tally). Sending it
+# anything else is a type error — not a runtime crash from a
+# catch-all clause, but a dispatch failure before the message
+# is ever sent. This is the key difference from Erlang.
+
+# Build a batch inside << >> and send it to the Logger
+<< 5 3 200 2 batch log_batch >>
+
+# Send a second batch
+<< 10 1 500 9 batch log_batch >>
+
+# Verify Logger received both batches
+<< logged >> 2 assert-eq
+
+
+# ============================================================
+# Test: EventStore actor
+# ============================================================
+
+swap    # bring EventStore to top
+<< 5 record >>
+<< 3 record >>
+<< total >> 8 assert-eq
+
+
+# ============================================================
+# Cleanup
+# ============================================================
+
+<< stop >> drop    # stop EventStore
+<< stop >> drop    # stop Logger

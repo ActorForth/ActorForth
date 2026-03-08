@@ -1,0 +1,31 @@
+# blast_test.a4 — Test recursive pattern-matched word with type variables
+#
+# This exercises the exact pattern that was failing before named type
+# variables were added to the type checker. The base case uses a value
+# constraint (0 Int) and the recursive case uses a general Int.
+# Without named type variables, the type checker's single 'Any' binding
+# was overwritten by swap, causing it to infer {Int, 0} instead of Actor.
+
+type Counter
+    count Int .
+
+: bump Counter -> Counter ;
+    count 1 + count! .
+
+: get_count Counter -> Counter Int ;
+    dup count .
+
+# blast: send N bump casts to an actor via recursion
+# Base case: N=0, done
+: blast 0 Int Actor -> Actor ;
+    swap drop .
+
+# Recursive case: send bump, decrement N, recurse
+: blast Int Actor -> Actor ;
+    << bump >> swap 1 - swap blast .
+
+# Create actor, blast 100 bumps, verify
+0 counter server
+100 swap blast
+<< get_count >> 100 assert-eq
+<< stop >> drop

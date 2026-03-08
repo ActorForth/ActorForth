@@ -455,12 +455,14 @@ type_check_body(Name, SigIn, SigOut, Body) ->
 has_unknown_types(Types, Expected) when length(Types) =/= length(Expected) ->
     true;
 has_unknown_types(Types, Expected) ->
-    Builtins = ['Any', 'Int', 'Float', 'Bool', 'String', 'Atom', 'List', 'Map', 'Tuple',
+    Builtins = ['Any', '_', 'Int', 'Float', 'Bool', 'String', 'Atom', 'List', 'Map', 'Tuple',
                 'Actor', 'Message'],
     lists:any(fun('Atom') -> true; (_) -> false end, Types)
     orelse lists:any(fun
         ({_T, _V}) -> false;  %% value constraints are checkable
-        (T) -> not lists:member(T, Builtins)
+        (T) ->
+            not lists:member(T, Builtins)
+            andalso not af_type_check:is_type_variable(T)
     end, Expected).
 
 get_target_type([{Type, _Value} | _]) -> Type;

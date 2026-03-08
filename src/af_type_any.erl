@@ -9,39 +9,39 @@
 -export([init/0]).
 
 init() ->
-    %% dup : Any -> Any, Any
+    %% dup : _a -> _a _a
     af_type:add_op('Any', #operation{
-        name = "dup", sig_in = ['Any'], sig_out = ['Any', 'Any'],
+        name = "dup", sig_in = ['_a'], sig_out = ['_a', '_a'],
         impl = fun op_dup/1
     }),
 
-    %% drop : Any ->
+    %% drop : _ ->
     af_type:add_op('Any', #operation{
-        name = "drop", sig_in = ['Any'], sig_out = [],
+        name = "drop", sig_in = ['_'], sig_out = [],
         impl = fun op_drop/1
     }),
 
-    %% swap : Any, Any -> Any, Any
+    %% swap : _a _b -> _b _a
     af_type:add_op('Any', #operation{
-        name = "swap", sig_in = ['Any', 'Any'], sig_out = ['Any', 'Any'],
+        name = "swap", sig_in = ['_a', '_b'], sig_out = ['_b', '_a'],
         impl = fun op_swap/1
     }),
 
-    %% rot : Any, Any, Any -> Any, Any, Any  (brings 3rd to top)
+    %% rot : _a _b _c -> _c _a _b  (brings 3rd to top)
     af_type:add_op('Any', #operation{
-        name = "rot", sig_in = ['Any', 'Any', 'Any'], sig_out = ['Any', 'Any', 'Any'],
+        name = "rot", sig_in = ['_a', '_b', '_c'], sig_out = ['_c', '_a', '_b'],
         impl = fun op_rot/1
     }),
 
-    %% over : Any, Any -> Any, Any, Any  (copies 2nd to top)
+    %% over : _a _b -> _b _a _b  (copies 2nd to top)
     af_type:add_op('Any', #operation{
-        name = "over", sig_in = ['Any', 'Any'], sig_out = ['Any', 'Any', 'Any'],
+        name = "over", sig_in = ['_a', '_b'], sig_out = ['_b', '_a', '_b'],
         impl = fun op_over/1
     }),
 
-    %% 2dup : Any, Any -> Any, Any, Any, Any
+    %% 2dup : _a _b -> _a _b _a _b
     af_type:add_op('Any', #operation{
-        name = "2dup", sig_in = ['Any', 'Any'], sig_out = ['Any', 'Any', 'Any', 'Any'],
+        name = "2dup", sig_in = ['_a', '_b'], sig_out = ['_a', '_b', '_a', '_b'],
         impl = fun op_2dup/1
     }),
 

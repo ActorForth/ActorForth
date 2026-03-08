@@ -1,0 +1,55 @@
+# throughput_demo.a4 — Actor message dispatch throughput benchmark
+#
+# PURPOSE
+# =======
+# Measure actual actor message dispatch performance without sleep delays.
+# A single Counter actor receives N bump casts via recursive word dispatch,
+# then a synchronous get_count call verifies all messages were processed.
+# The sync call acts as a barrier — FIFO mailbox ordering guarantees
+# all preceding casts have been handled before the call returns.
+#
+# WHAT IT TESTS
+# =============
+# - Actor creation from product type
+# - Typed message dispatch (cast and call)
+# - Recursive word dispatch for looping (pattern-matched base case)
+# - Total throughput: N actor messages through the full dispatch pipeline
+#
+# N=10000 is safe for interpreted recursive words on the BEAM.
+# Each iteration: construct Int literal, dispatch bump, decrement, recurse.
+
+# Counter state — tracks number of bump messages received
+type Counter
+    count Int .
+
+# bump: increment the counter (cast — no return value beyond state)
+: bump Counter -> Counter ;
+    count 1 + count! .
+
+# get_count: return the current count (call — returns Int)
+: get_count Counter -> Counter Int ;
+    dup count .
+
+# blast: send N bump casts to an actor via recursion
+# Base case: N=0, done — just leave the Actor on the stack
+: blast 0 Int Actor -> Actor ;
+    swap drop .
+
+# Recursive case: send bump, decrement N, recurse
+: blast Int Actor -> Actor ;
+    << bump >> swap 1 - swap blast .
+
+# ============================================================
+# Run the benchmark
+# ============================================================
+
+0 counter server
+
+# Send 10000 bump messages via recursive dispatch
+10000 swap blast
+
+# Verify all messages arrived (sync call acts as barrier)
+<< get_count >> 10000 assert-eq
+
+# Cleanup
+<< stop >> drop

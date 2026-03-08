@@ -3,7 +3,7 @@
 -include("operation.hrl").
 -include("af_type.hrl").
 
--export([check_word/4, infer_stack/2]).
+-export([check_word/4, infer_stack/2, is_type_variable/1]).
 
 %% Check a word definition's body against its declared signatures.
 %% Returns ok | {error, Reason}.
@@ -89,12 +89,12 @@ types_to_mock_stack(TypeStack) ->
     end, TypeStack).
 
 %% Apply a stack effect: consume sig_in types, produce sig_out types.
-%% When sig_in contains 'Any', build a substitution map so sig_out 'Any'
-%% entries resolve to the concrete type from the stack.
+%% Named type variables (_name) bind to concrete types positionally.
+%% Anonymous wildcard (_) and 'Any' match anything without tracking.
 apply_stack_effect(SigIn, SigOut, Stack, Name) ->
     case consume_types(SigIn, Stack) of
         {ok, RemainingStack, Bindings} ->
-            %% Substitute Any in sig_out with concrete types from bindings
+            %% Substitute type variables in sig_out with concrete types
             ResolvedOut = [resolve_type(T, Bindings) || T <- SigOut],
             NewStack = ResolvedOut ++ RemainingStack,
             {ok, NewStack};
@@ -103,35 +103,103 @@ apply_stack_effect(SigIn, SigOut, Stack, Name) ->
     end.
 
 %% Consume types from the stack according to sig_in.
-%% Returns {ok, RemainingStack, Bindings} where Bindings maps 'Any' positions
-%% to the concrete types that were matched.
+%% Returns {ok, RemainingStack, Bindings} where Bindings maps type variable
+%% names to the concrete types that were matched.
+%%
+%% Type variables:
+%%   'Any' or '_' — anonymous wildcard, matches anything, binding not tracked
+%%   '_name'      — named type variable, binds to concrete type on first use,
+%%                  subsequent uses must match the same type
 consume_types(SigIn, Stack) ->
     consume_types(SigIn, Stack, #{}).
 
 consume_types([], Stack, Bindings) -> {ok, Stack, Bindings};
 consume_types([_SigType | _], [], _Bindings) -> {error, stack_empty};
-consume_types(['Any' | SigRest], [StackType | StackRest], Bindings) ->
-    %% 'Any' matches anything; record the binding
-    NewBindings = Bindings#{'Any' => StackType},
-    consume_types(SigRest, StackRest, NewBindings);
 consume_types([SigType | SigRest], [StackType | StackRest], Bindings) ->
-    case type_compatible(SigType, StackType) of
-        true -> consume_types(SigRest, StackRest, Bindings);
-        false -> {error, {expected, SigType, got, StackType}}
+    case classify_sig_type(SigType) of
+        anonymous_wildcard ->
+            %% 'Any' or '_' — matches anything, no binding tracked
+            consume_types(SigRest, StackRest, Bindings);
+        {named_variable, VarName} ->
+            %% Named type variable — bind on first use, verify on subsequent
+            case maps:find(VarName, Bindings) of
+                {ok, BoundType} ->
+                    %% Already bound — verify compatible
+                    case type_compatible(BoundType, StackType) of
+                        true ->
+                            consume_types(SigRest, StackRest, Bindings);
+                        false ->
+                            {error, {expected, BoundType, got, StackType}}
+                    end;
+                error ->
+                    %% First binding
+                    NewBindings = Bindings#{VarName => StackType},
+                    consume_types(SigRest, StackRest, NewBindings)
+            end;
+        concrete_type ->
+            case type_compatible(SigType, StackType) of
+                true -> consume_types(SigRest, StackRest, Bindings);
+                false -> {error, {expected, SigType, got, StackType}}
+            end
     end.
 
-%% Resolve 'Any' in output types using bindings from input matching.
-resolve_type('Any', #{'Any' := ConcreteType}) -> ConcreteType;
-resolve_type(Type, _Bindings) -> Type.
+%% Classify a signature type entry.
+classify_sig_type('Any') -> anonymous_wildcard;
+classify_sig_type('_') -> anonymous_wildcard;
+classify_sig_type(Type) when is_atom(Type) ->
+    case is_type_variable(Type) of
+        true -> {named_variable, Type};
+        false -> concrete_type
+    end;
+classify_sig_type(_) -> concrete_type.  %% {Type, Value} constraints
+
+%% Check if an atom is a named type variable: starts with _ followed by
+%% at least one character (e.g., '_a', '_1', '_alpha').
+%% Bare '_' is NOT a named variable — it's an anonymous wildcard.
+is_type_variable(Atom) when is_atom(Atom) ->
+    case atom_to_list(Atom) of
+        [$_ | Rest] when Rest =/= [] -> true;
+        _ -> false
+    end;
+is_type_variable(_) -> false.
+
+%% Resolve type variables in output signatures using bindings from input matching.
+resolve_type('Any', Bindings) ->
+    %% Legacy: if there's exactly one binding, resolve 'Any' to it for
+    %% backward compatibility with ops that still use plain 'Any' sigs.
+    case maps:size(Bindings) of
+        1 -> hd(maps:values(Bindings));
+        _ -> 'Any'
+    end;
+resolve_type('_', _Bindings) -> 'Any';  %% anonymous wildcard stays generic
+resolve_type(Type, Bindings) when is_atom(Type) ->
+    case is_type_variable(Type) of
+        true ->
+            case maps:find(Type, Bindings) of
+                {ok, ConcreteType} -> ConcreteType;
+                error -> Type  %% unbound — keep as-is
+            end;
+        false -> Type
+    end;
+resolve_type(Type, _Bindings) -> Type.  %% {Type, Value} constraints pass through
 
 %% Check if a stack type is compatible with a signature type.
 type_compatible('Any', _StackType) -> true;
-type_compatible(SigType, SigType) -> true;
-type_compatible(_SigType, 'Any') -> true;  %% Unknown type on stack matches anything
-type_compatible({Type, _Value}, Type) -> true;  %% Value constraint matches base type
-type_compatible(Type, {Type, _Value}) -> true;  %% Base type matches value constraint
-type_compatible({Type, _V1}, {Type, _V2}) -> true;  %% Same base type, different value constraints
-type_compatible(_, _) -> false.
+type_compatible('_', _StackType) -> true;
+type_compatible(SigType, _StackType) when is_atom(SigType) ->
+    case is_type_variable(SigType) of
+        true -> true;  %% type variables match anything
+        false -> type_compatible_concrete(SigType, _StackType)
+    end;
+type_compatible(SigType, StackType) ->
+    type_compatible_concrete(SigType, StackType).
+
+type_compatible_concrete(SigType, SigType) -> true;
+type_compatible_concrete(_SigType, 'Any') -> true;
+type_compatible_concrete({Type, _Value}, Type) -> true;
+type_compatible_concrete(Type, {Type, _Value}) -> true;
+type_compatible_concrete({Type, _V1}, {Type, _V2}) -> true;
+type_compatible_concrete(_, _) -> false.
 
 %% Check if the result stack matches the declared output signature.
 match_output(ResultStack, SigOut) ->

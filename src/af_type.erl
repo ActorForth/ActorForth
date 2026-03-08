@@ -90,14 +90,32 @@ find_op_by_name(TokenName, TypeName) ->
     end.
 
 %% Match a signature against the top of the stack.
+%% Type variables ('_', '_a', '_b', etc.) and 'Any' match any stack item.
 match_sig([], _Stack) -> true;
 match_sig([_ | _], []) -> false;
 match_sig(['Any' | SigRest], [_ | StackRest]) ->
     match_sig(SigRest, StackRest);
+match_sig(['_' | SigRest], [_ | StackRest]) ->
+    match_sig(SigRest, StackRest);
 match_sig([{Type, Value} | SigRest], [{Type, Value} | StackRest]) ->
     match_sig(SigRest, StackRest);
 match_sig([Type | SigRest], [{Type, _} | StackRest]) when is_atom(Type) ->
-    match_sig(SigRest, StackRest);
+    case af_type_check:is_type_variable(Type) of
+        true ->
+            %% Type variable — already matched by name coincidence, but
+            %% should match ANY type. Re-do: this clause matched because
+            %% the stack item's type atom happened to equal the variable name.
+            %% That's fine — it matches. Continue.
+            match_sig(SigRest, StackRest);
+        false ->
+            match_sig(SigRest, StackRest)
+    end;
+match_sig([Type | SigRest], [_ | StackRest]) when is_atom(Type) ->
+    %% Type didn't match stack item's type — check if it's a type variable
+    case af_type_check:is_type_variable(Type) of
+        true -> match_sig(SigRest, StackRest);
+        false -> false
+    end;
 match_sig(_, _) -> false.
 
 get_type(Name) ->

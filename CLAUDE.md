@@ -83,6 +83,8 @@ This means the TOS type IS the interpreter's state. The compiler is just four ty
 - Type-specific ops (like `+`) are registered in that type's dictionary
 - Pattern matching via overloaded word signatures preferred over if/else
 - Value constraints in signatures: `: factorial 0 Int -> Int ;` creates `{Int, 0}` in sig_in
+- Named type variables in signatures: `_` is anonymous wildcard (like `Any`), `_name` binds positionally. E.g., `swap` is `_a _b -> _b _a`. The type checker tracks each named variable separately so stack ops preserve type identity through permutations.
+- Stack ops use type variables: `dup` (`_a -> _a _a`), `drop` (`_ ->`), `swap` (`_a _b -> _b _a`), `rot` (`_a _b _c -> _c _a _b`), `over` (`_a _b -> _b _a _b`), `2dup` (`_a _b -> _a _b _a _b`)
 - Compiled word bodies use late binding: each token dispatches through interpreter at runtime
 - Compiled words store their body ops in `#operation.source = {compiled, Body}` for later BEAM compilation via `compile-to-beam` or `compile`
 - Tail calls (self-recursive and to other compiled words) are detected and restructured for BEAM TCO

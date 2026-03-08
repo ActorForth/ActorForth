@@ -110,15 +110,55 @@ Both explicit (`42 int`) and implicit (`42`) forms produce the same result. Floa
 and Bool types also have literal handlers (`3.14` → `{Float, 3.14}`,
 `True`/`False` → `{Bool, true/false}`).
 
-### The 'Any' Type
+### The 'Any' Type and Type Variables
 
 There is also one more special type, ***Any***. It is used for generic matching in stack
 type signatures and will match any type. This is critical for operations like those that
 manipulate generic stack items like `dup` and `swap`.
 
-The following generic stack manipulation operators are presently available:
+#### Named Type Variables
 
-`dup` : Any -> Any, Any
+Type variables provide positional type tracking in signatures. A type variable is any
+name starting with `_` (underscore):
+
+- **`_`** (bare underscore) — anonymous wildcard, equivalent to `Any`. Matches any type
+  but does not track the binding. Use for positions where the type is consumed and
+  never referenced again (e.g., `drop`).
+
+- **`_name`** (underscore followed by any identifier) — named type variable. Binds to
+  whatever concrete type occupies that stack position. When the same name appears in the
+  output signature, it resolves to the bound type. This ensures the type checker correctly
+  tracks which types flow through stack-manipulating operations.
+
+Named type variables are scoped to a single signature declaration — they create no
+permanent type registration. The name after `_` can be anything: `_a`, `_1`, `_alpha`,
+`_item`, etc.
+
+**Example — swap with type safety:**
+
+    : swap _a _b -> _b _a ;
+
+This tells the type checker that swap takes two items of potentially different types
+and returns them in reversed order. Without named variables, the checker would lose
+track of which type is which.
+
+**Example — recursive word with value constraint:**
+
+    : blast 0 Int Actor -> Actor ;
+        swap drop .
+
+    : blast Int Actor -> Actor ;
+        << bump >> swap 1 - swap blast .
+
+The base case signature `0 Int Actor -> Actor` uses a value constraint on the first
+parameter and a concrete type for the second. The type checker verifies that after
+`swap drop`, the Actor (not the Int) remains on the stack. Before named type variables,
+this pattern caused a hard type error because the checker's single `Any` binding was
+overwritten by `swap`, losing the Actor type.
+
+The following generic stack manipulation operators use named type variables:
+
+`dup` : _a -> _a _a
 
     Takes one input and copies it twice onto the stack.
 
@@ -128,7 +168,7 @@ The following generic stack manipulation operators are presently available:
       0) hello : Atom
       1) hello : Atom
 
-`swap` : Any, Any -> Any, Any
+`swap` : _a _b -> _b _a
 
     Takes two inputs and switches their order on the stack.
 
@@ -138,15 +178,16 @@ The following generic stack manipulation operators are presently available:
       0) 10 : Int
       1) 20 : Int
 
-`drop` : Any ->
+`drop` : _ ->
 
-    Removes the top object from the stack.
+    Removes the top object from the stack. Uses anonymous wildcard since the
+    dropped value's type is never referenced.
 
     ok: hello drop
     ok: stack
     Stack empty
 
-`rot` : Any, Any, Any -> Any, Any, Any
+`rot` : _a _b _c -> _c _a _b
 
     Brings the third item to the top.
 
@@ -157,7 +198,7 @@ The following generic stack manipulation operators are presently available:
       1) 3 : Int
       2) 2 : Int
 
-`over` : Any, Any -> Any, Any, Any
+`over` : _a _b -> _b _a _b
 
     Copies the second item to the top.
 
@@ -168,7 +209,7 @@ The following generic stack manipulation operators are presently available:
       1) 2 : Int
       2) 1 : Int
 
-`2dup` : Any, Any -> Any, Any, Any, Any
+`2dup` : _a _b -> _a _b _a _b
 
     Duplicates the top two items.
 
