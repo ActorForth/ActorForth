@@ -153,9 +153,9 @@ void bench(int iters, int n = 10000) {
     for (auto t : times) sum += t;
     auto avg_t = sum / iters;
 
-    std::cout << "BENCH_RESULT: min=" << min_t << "us avg=" << avg_t
-              << "us max=" << max_t << "us (" << iters << " iterations, "
-              << n << " msgs each)" << std::endl;
+    std::cout << "BENCH_RESULT: min=" << min_t << " avg=" << avg_t
+              << " max=" << max_t << " iters=" << iters
+              << " msgs=" << n << std::endl;
 }
 
 int main(int argc, char* argv[]) {

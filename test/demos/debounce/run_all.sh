@@ -38,10 +38,27 @@ fi
 
 PASS=0
 FAIL=0
-declare -A TIMES
+declare -A BENCH_MIN BENCH_AVG BENCH_MAX BENCH_N
 
 pass() { PASS=$((PASS + 1)); echo -e "  ${GREEN}PASS${RESET}"; }
 fail() { FAIL=$((FAIL + 1)); echo -e "  ${RED}FAIL${RESET}"; }
+
+# Format microseconds to human-readable (us, ms, or s)
+fmt_us() {
+    local us="$1"
+    if ((us >= 1000000)); then
+        local ms=$((us / 1000))
+        local s_int=$((ms / 1000))
+        local s_frac=$((ms % 1000))
+        printf "%d.%03ds" "$s_int" "$s_frac"
+    elif ((us >= 1000)); then
+        local ms_int=$((us / 1000))
+        local ms_frac=$((us % 1000))
+        printf "%d.%03dms" "$ms_int" "$ms_frac"
+    else
+        printf "%dus" "$us"
+    fi
+}
 
 # Time a command (wall clock). Sets $ELAPSED_MS.
 time_cmd() {
@@ -57,6 +74,20 @@ time_cmd() {
 # Extract BENCH_RESULT line from command output
 extract_bench() {
     "$@" 2>/dev/null | grep "^BENCH_RESULT:" | head -1
+}
+
+# Parse BENCH_RESULT line and store in associative arrays
+parse_bench() {
+    local lang="$1" line="$2"
+    local min avg max iters
+    min=$(echo "$line" | sed -n 's/.*min=\([0-9]*\).*/\1/p')
+    avg=$(echo "$line" | sed -n 's/.*avg=\([0-9]*\).*/\1/p')
+    max=$(echo "$line" | sed -n 's/.*max=\([0-9]*\).*/\1/p')
+    iters=$(echo "$line" | sed -n 's/.*iters=\([0-9]*\).*/\1/p')
+    BENCH_MIN[$lang]="${min:-0}"
+    BENCH_AVG[$lang]="${avg:-0}"
+    BENCH_MAX[$lang]="${max:-0}"
+    BENCH_N[$lang]="${iters:-0}"
 }
 
 # Collect erl lib paths from the rebar3 build
@@ -101,7 +132,7 @@ bench_a4() {
         Min = lists:min(Times),
         Max = lists:max(Times),
         Avg = lists:sum(Times) div $n,
-        io:format(\"BENCH_RESULT: min=~bus avg=~bus max=~bus (~b iterations)~n\",
+        io:format(\"BENCH_RESULT: min=~b avg=~b max=~b iters=~b~n\",
                   [Min, Avg, Max, $n]),
         halt(0).
     "
@@ -122,8 +153,8 @@ fi
 if ((BENCH_ITERS > 0)); then
     echo -n "  Benchmarking ($BENCH_ITERS iterations, in-process)... "
     RESULT=$(extract_bench bench_a4 "$BENCH_ITERS" "test/demos/debounce/debounce_demo.a4")
-    TIMES["ActorForth"]="${RESULT#BENCH_RESULT: }"
-    echo "${TIMES[ActorForth]}"
+    parse_bench "ActorForth" "$RESULT"
+    echo "done."
 fi
 
 # ------------------------------------------------------------------
@@ -148,8 +179,8 @@ if ((BENCH_ITERS > 0)); then
     echo -n "  Benchmarking ($BENCH_ITERS iterations, in-process)... "
     RESULT=$(extract_bench erl -noshell -pa "$BUILD_DIR" -eval \
         "debounce_erlang_equivalent:bench($BENCH_ITERS), halt(0).")
-    TIMES["Erlang"]="${RESULT#BENCH_RESULT: }"
-    echo "${TIMES[Erlang]}"
+    parse_bench "Erlang" "$RESULT"
+    echo "done."
 fi
 
 # ------------------------------------------------------------------
@@ -168,8 +199,8 @@ if ((BENCH_ITERS > 0)); then
     echo -n "  Benchmarking ($BENCH_ITERS iterations, in-process)... "
     RESULT=$(extract_bench python3 "$SCRIPT_DIR/debounce_python_equivalent.py" \
         --bench "$BENCH_ITERS")
-    TIMES["Python"]="${RESULT#BENCH_RESULT: }"
-    echo "${TIMES[Python]}"
+    parse_bench "Python" "$RESULT"
+    echo "done."
 fi
 
 # ------------------------------------------------------------------
@@ -194,8 +225,8 @@ fi
 if ((BENCH_ITERS > 0)); then
     echo -n "  Benchmarking ($BENCH_ITERS iterations, in-process)... "
     RESULT=$(extract_bench "$CPP_BIN" --bench "$BENCH_ITERS")
-    TIMES["C++20"]="${RESULT#BENCH_RESULT: }"
-    echo "${TIMES[C++20]}"
+    parse_bench "C++20" "$RESULT"
+    echo "done."
 fi
 
 # ------------------------------------------------------------------
@@ -237,11 +268,18 @@ echo -e "${BOLD}========================================${RESET}"
 
 if ((BENCH_ITERS > 0)); then
     echo
-    echo -e "${BOLD}Timing Summary (in-process, excludes startup)${RESET}"
-    echo -e "${BOLD}──────────────────────────────────────────────${RESET}"
+    echo -e "${BOLD}Timing Summary (in-process, excludes VM startup)${RESET}"
+    echo -e "${BOLD}──────────────────────────────────────────────────────────────────────${RESET}"
+    printf "  ${BOLD}%-14s %12s %12s %12s   %s${RESET}\n" "Language" "Min" "Avg" "Max" "Iterations"
+    echo -e "  ${BOLD}──────────────────────────────────────────────────────────────────${RESET}"
     for lang in "ActorForth" "Erlang" "Python" "C++20"; do
-        if [[ -n "${TIMES[$lang]:-}" ]]; then
-            printf "  %-14s %s\n" "$lang" "${TIMES[$lang]}"
+        if [[ -n "${BENCH_AVG[$lang]:-}" ]]; then
+            local_min=$(fmt_us "${BENCH_MIN[$lang]}")
+            local_avg=$(fmt_us "${BENCH_AVG[$lang]}")
+            local_max=$(fmt_us "${BENCH_MAX[$lang]}")
+            local_n="${BENCH_N[$lang]}"
+            printf "  %-14s %12s %12s %12s   %s\n" \
+                "$lang" "$local_min" "$local_avg" "$local_max" "$local_n"
         fi
     done
 fi

@@ -40,6 +40,21 @@ type Counter
     << bump >> swap 1 - swap blast .
 
 # ============================================================
+# Compile actor words to native BEAM for faster dispatch
+# ============================================================
+# The actor worker dispatches through the interpreter, which looks up
+# the word in the type's operation dictionary. Compiling replaces the
+# interpreted closure with a direct BEAM function call — same dispatch
+# path, but the word body executes as native Erlang instead of
+# token-by-token interpretation.
+#
+# blast cannot be compiled (uses << >> actor protocol which the
+# BEAM compiler doesn't support yet), but the actor-side words can.
+
+"bump" compile
+"get_count" compile
+
+# ============================================================
 # Run the benchmark
 # ============================================================
 

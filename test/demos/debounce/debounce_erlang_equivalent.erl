@@ -178,7 +178,7 @@ bench(N) when N > 0 ->
     Min = lists:min(Times),
     Max = lists:max(Times),
     Avg = lists:sum(Times) div N,
-    io:format("BENCH_RESULT: min=~bus avg=~bus max=~bus (~b iterations)~n",
+    io:format("BENCH_RESULT: min=~b avg=~b max=~b iters=~b~n",
               [Min, Avg, Max, N]).
 
 run_once() ->

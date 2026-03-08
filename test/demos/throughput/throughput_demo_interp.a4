@@ -1,0 +1,24 @@
+# throughput_demo_interp.a4 — Interpreted (no BEAM compilation)
+#
+# Same benchmark as throughput_demo.a4 but without compiling actor words
+# to native BEAM. This shows the pure interpreter overhead for comparison.
+
+type Counter
+    count Int .
+
+: bump Counter -> Counter ;
+    count 1 + count! .
+
+: get_count Counter -> Counter Int ;
+    dup count .
+
+: blast 0 Int Actor -> Actor ;
+    swap drop .
+
+: blast Int Actor -> Actor ;
+    << bump >> swap 1 - swap blast .
+
+0 counter server
+10000 swap blast
+<< get_count >> 10000 assert-eq
+<< stop >> drop

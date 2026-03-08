@@ -92,8 +92,8 @@ def bench(iters: int, n: int = 10000):
         elapsed_us = int((time.perf_counter() - start) * 1_000_000)
         times.append(elapsed_us)
 
-    print(f"BENCH_RESULT: min={min(times)}us avg={sum(times)//iters}us "
-          f"max={max(times)}us ({iters} iterations, {n} msgs each)")
+    print(f"BENCH_RESULT: min={min(times)} avg={sum(times)//iters} "
+          f"max={max(times)} iters={iters} msgs={n}")
 
 
 if __name__ == "__main__":
