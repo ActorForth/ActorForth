@@ -92,3 +92,40 @@ product_type_test_() ->
             ?assertEqual([{'Int', 10}], C2#continuation.data_stack)
         end} end
     ]}.
+
+%% Regression: the pattern "swap dup <getter> rot <op> <setter>" was broken
+%% because non-destructive getters push value AND keep instance on stack,
+%% producing wrong stack layout after rot. The correct pattern is:
+%% "over <getter> rot <op> <setter> swap drop"
+field_update_pattern_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"over-getter-rot-op-setter pattern updates field correctly", fun() ->
+            C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
+            %% over: [Int(5), Counter(val=10)] -> [Counter, Int(5), Counter]
+            %% value: -> [Int(10), Counter, Int(5), Counter]
+            %% rot:  -> [Int(5), Int(10), Counter, Counter]
+            %% +:    -> [Int(15), Counter, Counter]
+            %% value!: -> [Counter(val=15), Counter]
+            %% swap drop: -> [Counter(val=15)]
+            C2 = eval(": add-value Counter Int -> Counter ; over value rot + value! swap drop .", C1),
+            C3 = eval("10 counter 5 add-value", C2),
+            [{'Counter', Fields}] = C3#continuation.data_stack,
+            ?assertEqual({'Int', 15}, maps:get(value, Fields))
+        end} end,
+
+        fun(_) -> {"field subtract pattern works correctly", fun() ->
+            C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
+            C2 = eval(": sub-value Counter Int -> Counter ; over value rot - value! swap drop .", C1),
+            C3 = eval("10 counter 3 sub-value", C2),
+            [{'Counter', Fields}] = C3#continuation.data_stack,
+            ?assertEqual({'Int', 7}, maps:get(value, Fields))
+        end} end,
+
+        fun(_) -> {"chained field updates preserve state", fun() ->
+            C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
+            C2 = eval(": add-value Counter Int -> Counter ; over value rot + value! swap drop .", C1),
+            C3 = eval("0 counter 10 add-value 20 add-value 30 add-value", C2),
+            [{'Counter', Fields}] = C3#continuation.data_stack,
+            ?assertEqual({'Int', 60}, maps:get(value, Fields))
+        end} end
+    ]}.

@@ -476,3 +476,520 @@ receive_match_timeout_success_test_() ->
             [{'Bool', true}, {'Int', 99}] = C1#continuation.data_stack
         end} end
     ]}.
+
+%% --- Compiled actor loop tests ---
+
+compiled_loop_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"compile_actor_loop returns error for unknown type", fun() ->
+            ?assertEqual(error, af_type_actor:compile_actor_loop('NonExistentType'))
+        end} end,
+
+        fun(_) -> {"compile_actor_loop generates module for Counter", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            eval("\"bump\" compile", C2),
+            {ok, Mod} = af_type_actor:compile_actor_loop('Counter'),
+            ?assert(is_atom(Mod)),
+            ?assert(erlang:module_loaded(Mod))
+        end} end,
+
+        fun(_) -> {"compiled loop handles cast via pattern match", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"bump\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            C4 = eval("0 counter server", C3),
+            [{'Actor', ActorInfo} | _] = C4#continuation.data_stack,
+            Pid = maps:get(pid, ActorInfo),
+            %% Send atom-keyed bump (from compiled code path)
+            Pid ! {cast, bump, []},
+            Pid ! {cast, bump, []},
+            timer:sleep(50),
+            Ref = make_ref(),
+            Pid ! {call, get_count, [], self(), Ref},
+            receive {reply, Ref, [{'Int', Count}]} ->
+                ?assertEqual(2, Count)
+            after 2000 -> ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end,
+
+        fun(_) -> {"compiled loop handles string stop for backwards compat", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            eval("\"bump\" compile", C2),
+            C3 = eval("0 counter server", C2),
+            [{'Actor', ActorInfo} | _] = C3#continuation.data_stack,
+            Pid = maps:get(pid, ActorInfo),
+            MonRef = monitor(process, Pid),
+            Pid ! {cast, "stop", []},
+            receive {'DOWN', MonRef, process, Pid, _} -> ok
+            after 2000 -> ?assert(false)
+            end
+        end} end,
+
+        fun(_) -> {"actor_loop_module_name generates correct name", fun() ->
+            ?assertEqual(af_actor_loop_counter, af_type_actor:actor_loop_module_name('Counter'))
+        end} end
+    ]}.
+
+%% --- Product field update via actor (regression: bank_actor.a4 bug) ---
+%% The pattern "swap dup <getter> rot <op> <setter>" was broken because
+%% non-destructive getters push value AND keep instance, making rot produce
+%% wrong stack layout. Correct pattern: "over <getter> rot <op> <setter> swap drop"
+
+product_field_update_actor_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"credit updates balance through actor (cast word with args)", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Account balance Int .", C0),
+            C2 = eval(": credit Account Int -> Account ; over balance rot + balance! swap drop .", C1),
+            C3 = eval(": get-balance Account -> Account Int ; dup balance .", C2),
+            C4 = eval("1000 account server", C3),
+            C5 = eval("<< 500 credit >>", C4),
+            C6 = eval("<< get-balance >>", C5),
+            [{'Int', 1500}, {'Actor', _}] = C6#continuation.data_stack,
+            eval("<< stop >>", C6),
+            ok
+        end} end,
+
+        fun(_) -> {"debit subtracts balance through actor", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Account balance Int .", C0),
+            C2 = eval(": credit Account Int -> Account ; over balance rot + balance! swap drop .", C1),
+            C3 = eval(": debit Account Int -> Account ; over balance rot - balance! swap drop .", C2),
+            C4 = eval(": get-balance Account -> Account Int ; dup balance .", C3),
+            C5 = eval("1000 account server", C4),
+            C6 = eval("<< 500 credit >>", C5),
+            C7 = eval("<< 200 debit >>", C6),
+            C8 = eval("<< get-balance >>", C7),
+            [{'Int', 1300}, {'Actor', _}] = C8#continuation.data_stack,
+            eval("<< stop >>", C8),
+            ok
+        end} end,
+
+        fun(_) -> {"multi-word actor pipeline (deposit = add-tx + credit)", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Transaction kind Atom amount Int .", C0),
+            C2 = eval("type Account balance Int ledger List .", C1),
+            C3 = eval(": make-tx Atom Int -> Transaction ; transaction .", C2),
+            C4 = eval(": add-tx Account Transaction -> Account ; over ledger rot cons ledger! swap drop .", C3),
+            C5 = eval(": credit Account Int -> Account ; over balance rot + balance! swap drop .", C4),
+            C6 = eval(": deposit Account Int -> Account ; dup Deposit swap make-tx rot swap add-tx swap credit .", C5),
+            C7 = eval(": get-balance Account -> Account Int ; dup balance .", C6),
+            C8 = eval(": tx-count Account -> Account Int ; dup ledger length .", C7),
+            C9 = eval("1000 nil account server", C8),
+            C10 = eval("<< 500 deposit >>", C9),
+            C11 = eval("<< 250 deposit >>", C10),
+            C12 = eval("<< get-balance >>", C11),
+            [{'Int', 1750}, {'Actor', _}] = C12#continuation.data_stack,
+            C13 = eval("drop << tx-count >>", C12),
+            [{'Int', 2}, {'Actor', _}] = C13#continuation.data_stack,
+            eval("<< stop >>", C13),
+            ok
+        end} end,
+
+        fun(_) -> {"execute_actor_word returns correct state via separate_reply", fun() ->
+            %% Regression: execute_actor_word used lists:last which returned wrong item
+            %% when word body produced extra stack items due to bugs
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Account balance Int .", C0),
+            C2 = eval(": credit Account Int -> Account ; over balance rot + balance! swap drop .", C1),
+            Instance = {'Account', #{balance => {'Int', 1000}}},
+            NewState = af_type_actor:execute_actor_word("credit", [{'Int', 500}], 'Account', Instance),
+            ?assertMatch({'Account', _}, NewState),
+            {'Account', Fields} = NewState,
+            ?assertEqual({'Int', 1500}, maps:get(balance, Fields))
+        end} end,
+
+        fun(_) -> {"execute_actor_call returns reply values and updated state", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Account balance Int .", C0),
+            _C2 = eval(": get-balance Account -> Account Int ; dup balance .", C1),
+            Instance = {'Account', #{balance => {'Int', 1000}}},
+            {Reply, NewState} = af_type_actor:execute_actor_call("get-balance", [], 'Account', Instance),
+            ?assertEqual([{'Int', 1000}], Reply),
+            ?assertEqual(Instance, NewState)
+        end} end
+    ]}.
+
+%% --- actor_loop coverage: direct message dispatch ---
+
+actor_loop_direct_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"actor_loop handles string cast messages (legacy compat)", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            C4 = eval("0 counter server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            Pid = maps:get(pid, Info),
+            %% Send string-keyed cast (legacy format) — should be converted to atom
+            Pid ! {cast, "bump", []},
+            timer:sleep(50),
+            %% Query via string-keyed call (legacy format)
+            Ref = make_ref(),
+            Pid ! {call, "get_count", [], self(), Ref},
+            receive {reply, Ref, [{'Int', Count}]} ->
+                ?assertEqual(1, Count)
+            after 2000 -> ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end,
+
+        fun(_) -> {"actor_loop handles atom cast/call with cache hit", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"bump\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            C4 = eval("0 counter server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            Pid = maps:get(pid, Info),
+            %% These should hit the native cache (compiled words)
+            Pid ! {cast, bump, []},
+            Pid ! {cast, bump, []},
+            Pid ! {cast, bump, []},
+            timer:sleep(50),
+            Ref = make_ref(),
+            Pid ! {call, get_count, [], self(), Ref},
+            receive {reply, Ref, [{'Int', Count}]} ->
+                ?assertEqual(3, Count)
+            after 2000 -> ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end,
+
+        fun(_) -> {"actor_loop handles cast with args via cache", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": add Counter Int -> Counter ; over count rot + count! swap drop .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"add\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            C4 = eval("0 counter server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            Pid = maps:get(pid, Info),
+            Pid ! {cast, add, [{'Int', 10}]},
+            timer:sleep(50),
+            Ref = make_ref(),
+            Pid ! {call, get_count, [], self(), Ref},
+            receive {reply, Ref, [{'Int', Count}]} ->
+                ?assertEqual(10, Count)
+            after 2000 -> ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end,
+
+        fun(_) -> {"actor_loop call with args via cache", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": add-get Counter Int -> Counter Int ; over count rot + dup rot swap count! swap .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"add-get\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            C4 = eval("0 counter server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            Pid = maps:get(pid, Info),
+            Ref = make_ref(),
+            Pid ! {call, 'add-get', [{'Int', 7}], self(), Ref},
+            receive {reply, Ref, [{'Int', 7}]} -> ok
+            after 2000 -> ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end
+    ]}.
+
+%% --- Generic actor_loop with native cache (covers cache-hit path) ---
+
+actor_loop_cache_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"actor_loop/3 dispatches cast through native cache", fun() ->
+            %% Directly test generic actor_loop with a pre-populated cache
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"bump\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            %% Build cache manually and spawn generic loop
+            Cache = af_actor_worker:build_native_cache('Counter'),
+            Instance = {'Counter', #{count => {'Int', 0}}},
+            Self = self(),
+            Pid = spawn(fun() ->
+                %% Tell parent we're ready
+                Self ! ready,
+                af_type_actor:actor_loop('Counter', Instance, Cache)
+            end),
+            receive ready -> ok end,
+            %% Cast with atom key (cache hit, no args)
+            Pid ! {cast, bump, []},
+            Pid ! {cast, bump, []},
+            timer:sleep(50),
+            %% Call with atom key (cache hit, no args)
+            Ref = make_ref(),
+            Pid ! {call, get_count, [], self(), Ref},
+            receive {reply, Ref, [{'Int', Count}]} ->
+                ?assertEqual(2, Count)
+            after 2000 -> ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end,
+
+        fun(_) -> {"actor_loop/3 dispatches cast with args through cache", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": add Counter Int -> Counter ; over count rot + count! swap drop .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"add\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            Cache = af_actor_worker:build_native_cache('Counter'),
+            Instance = {'Counter', #{count => {'Int', 0}}},
+            Self = self(),
+            Pid = spawn(fun() ->
+                Self ! ready,
+                af_type_actor:actor_loop('Counter', Instance, Cache)
+            end),
+            receive ready -> ok end,
+            Pid ! {cast, add, [{'Int', 10}]},
+            timer:sleep(50),
+            Ref = make_ref(),
+            Pid ! {call, get_count, [], self(), Ref},
+            receive {reply, Ref, [{'Int', Count}]} ->
+                ?assertEqual(10, Count)
+            after 2000 -> ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end,
+
+        fun(_) -> {"actor_loop/3 call with args through cache", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": add Counter Int -> Counter ; over count rot + count! swap drop .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"add\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            Cache = af_actor_worker:build_native_cache('Counter'),
+            Instance = {'Counter', #{count => {'Int', 0}}},
+            Self = self(),
+            Pid = spawn(fun() ->
+                Self ! ready,
+                af_type_actor:actor_loop('Counter', Instance, Cache)
+            end),
+            receive ready -> ok end,
+            Ref = make_ref(),
+            Pid ! {call, add, [{'Int', 7}], self(), Ref},
+            receive {reply, Ref, _} -> ok
+            after 2000 -> ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end,
+
+        fun(_) -> {"actor_loop/3 string call converted to atom", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": get_count Counter -> Counter Int ; dup count .", C1),
+            eval("\"get_count\" compile", C2),
+            Cache = af_actor_worker:build_native_cache('Counter'),
+            Instance = {'Counter', #{count => {'Int', 5}}},
+            Self = self(),
+            Pid = spawn(fun() ->
+                Self ! ready,
+                af_type_actor:actor_loop('Counter', Instance, Cache)
+            end),
+            receive ready -> ok end,
+            Ref = make_ref(),
+            Pid ! {call, "get_count", [], self(), Ref},
+            receive {reply, Ref, [{'Int', 5}]} -> ok
+            after 2000 -> ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end
+    ]}.
+
+%% --- separate_reply edge cases ---
+
+separate_reply_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"separate_reply with empty stack returns undefined", fun() ->
+            {Reply, State} = af_type_actor:separate_reply('Counter', []),
+            ?assertEqual([], Reply),
+            ?assertEqual(undefined, State)
+        end} end,
+
+        fun(_) -> {"separate_reply with no matching type returns all as reply", fun() ->
+            Stack = [{'Int', 1}, {'Int', 2}],
+            {Reply, State} = af_type_actor:separate_reply('Counter', Stack),
+            ?assertEqual([{'Int', 1}, {'Int', 2}], Reply),
+            ?assertEqual(undefined, State)
+        end} end
+    ]}.
+
+%% --- find_matching_entry / match_args edge cases ---
+
+match_args_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"dispatch picks correct overload from multiple entries", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Box value Int .", C0),
+            C2 = eval(": update Box Int -> Box ; value! .", C1),
+            C3 = eval(": get Box -> Box Int ; value .", C2),
+            C4 = eval("0 box server", C3),
+            C5 = eval("<< 42 update >>", C4),
+            C6 = eval("<< get >>", C5),
+            [{'Int', 42}, {'Actor', _}] = C6#continuation.data_stack,
+            eval("<< stop >>", C6),
+            ok
+        end} end,
+
+        fun(_) -> {"dispatch selects matching entry from multiple vocab entries", fun() ->
+            %% Two words with same name and different arg types test find_matching_entry
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": set Counter Int -> Counter ; count! .", C1),
+            C3 = eval(": set Counter Bool -> Counter ; drop 0 count! .", C2),
+            C4 = eval(": get Counter -> Counter Int ; count .", C3),
+            C5 = eval("0 counter server", C4),
+            %% Both 'set' overloads should be in vocab with different arg types
+            [{'Actor', Info}] = C5#continuation.data_stack,
+            Vocab = maps:get(vocab, Info),
+            SetEntries = maps:get("set", Vocab),
+            ?assert(length(SetEntries) >= 2),
+            %% Int arg dispatches to first overload
+            C6 = eval("<< 42 set >>", C5),
+            C7 = eval("<< get >>", C6),
+            [{'Int', 42}, {'Actor', _}] = C7#continuation.data_stack,
+            %% Bool arg dispatches to second overload (reset to 0)
+            C8 = eval("drop << true bool set >>", C7),
+            C9 = eval("<< get >>", C8),
+            [{'Int', 0}, {'Actor', _}] = C9#continuation.data_stack,
+            eval("<< stop >>", C9),
+            ok
+        end} end
+    ]}.
+
+%% --- supervised-server with compiled words (covers af_actor_worker cache hit) ---
+
+supervised_compiled_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"supervised-server cast/call through native cache", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"bump\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            C4 = eval("0 counter supervised-server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            Pid = maps:get(pid, Info),
+            %% Cast through gen_server (exercises af_actor_worker cache hit)
+            gen_server:cast(Pid, {cast, bump, []}),
+            gen_server:cast(Pid, {cast, bump, []}),
+            timer:sleep(50),
+            %% Call through gen_server
+            {ok, [{'Int', Count}]} = gen_server:call(Pid, {call, get_count, []}),
+            ?assertEqual(2, Count),
+            gen_server:cast(Pid, {cast, stop, []})
+        end} end,
+
+        fun(_) -> {"supervised-server cast with args through cache", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": add Counter Int -> Counter ; over count rot + count! swap drop .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"add\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            C4 = eval("0 counter supervised-server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            Pid = maps:get(pid, Info),
+            gen_server:cast(Pid, {cast, add, [{'Int', 10}]}),
+            timer:sleep(50),
+            {ok, [{'Int', Count}]} = gen_server:call(Pid, {call, get_count, []}),
+            ?assertEqual(10, Count),
+            gen_server:cast(Pid, {cast, stop, []})
+        end} end,
+
+        fun(_) -> {"supervised-server call with args through cache", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": add Counter Int -> Counter ; over count rot + count! swap drop .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"add\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            C4 = eval("0 counter supervised-server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            Pid = maps:get(pid, Info),
+            {ok, _} = gen_server:call(Pid, {call, add, [{'Int', 5}]}),
+            {ok, [{'Int', Count}]} = gen_server:call(Pid, {call, get_count, []}),
+            ?assertEqual(5, Count),
+            gen_server:cast(Pid, {cast, stop, []})
+        end} end
+    ]}.
+
+%% --- Atom key conversion tests ---
+
+atom_key_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"to_atom_key converts string to atom", fun() ->
+            ?assertEqual(bump, af_type_actor:to_atom_key("bump")),
+            ?assertEqual(bump, af_type_actor:to_atom_key(bump))
+        end} end,
+
+        fun(_) -> {"to_string_key converts atom to string", fun() ->
+            ?assertEqual("bump", af_type_actor:to_string_key(bump)),
+            ?assertEqual("bump", af_type_actor:to_string_key("bump"))
+        end} end,
+
+        fun(_) -> {"send_cast accepts atom keys", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"bump\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            C4 = eval("0 counter server", C3),
+            [{'Actor', ActorInfo} | _] = C4#continuation.data_stack,
+            %% Send via send_cast with atom key
+            af_type_actor:send_cast(ActorInfo, bump, []),
+            af_type_actor:send_cast(ActorInfo, bump, []),
+            timer:sleep(50),
+            [{'Int', Count}] = af_type_actor:send_call(ActorInfo, get_count, []),
+            ?assertEqual(2, Count),
+            maps:get(pid, ActorInfo) ! {cast, stop, []}
+        end} end,
+
+        fun(_) -> {"send_cast accepts string keys (backwards compat)", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            C3 = eval(": get_count Counter -> Counter Int ; dup count .", C2),
+            eval("\"bump\" compile", C3),
+            eval("\"get_count\" compile", C3),
+            C4 = eval("0 counter server", C3),
+            [{'Actor', ActorInfo} | _] = C4#continuation.data_stack,
+            %% Send via send_cast with string key
+            af_type_actor:send_cast(ActorInfo, "bump", []),
+            timer:sleep(50),
+            [{'Int', Count}] = af_type_actor:send_call(ActorInfo, "get_count", []),
+            ?assertEqual(1, Count),
+            maps:get(pid, ActorInfo) ! {cast, stop, []}
+        end} end,
+
+        fun(_) -> {"native cache uses atom keys", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": bump Counter -> Counter ; count 1 + count! .", C1),
+            eval("\"bump\" compile", C2),
+            Cache = af_actor_worker:build_native_cache('Counter'),
+            %% Key should be atom, not string
+            ?assertMatch({ok, {_, _}}, maps:find(bump, Cache)),
+            ?assertEqual(error, maps:find("bump", Cache))
+        end} end
+    ]}.

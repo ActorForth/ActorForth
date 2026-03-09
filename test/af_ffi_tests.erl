@@ -124,3 +124,29 @@ erlang_new_test_() ->
                     af_interpreter:new_continuation()))
         end} end
     ]}.
+
+%% Regression: cons prepends to front of list, so to build args in correct
+%% order for erlang:apply, cons in REVERSE order (last arg first).
+%% "nil 1 cons 5 cons" builds [5, 1] -> lists:seq(5, 1) FAILS
+%% "nil 5 cons 1 cons" builds [1, 5] -> lists:seq(1, 5) WORKS
+ffi_arg_order_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"erlang-apply passes args in list order", fun() ->
+            %% lists:seq(1, 5) should produce [1,2,3,4,5]
+            %% cons builds list head-first, so cons last arg first
+            C1 = eval("nil 5 cons 1 cons seq lists erlang-apply",
+                af_interpreter:new_continuation()),
+            [{'List', Items}] = C1#continuation.data_stack,
+            ?assertEqual(5, length(Items)),
+            ?assertEqual({'Int', 1}, hd(Items)),
+            ?assertEqual({'Int', 5}, lists:last(Items))
+        end} end,
+
+        fun(_) -> {"erlang-apply arg order matters for non-commutative ops", fun() ->
+            %% lists:nth(2, [a,b,c]) = b (not lists:nth([a,b,c], 2))
+            %% Args list should be [2, [a,b,c]] to call lists:nth(2, [a,b,c])
+            C1 = eval("nil nil 30 cons 20 cons 10 cons cons 2 cons nth lists erlang-apply",
+                af_interpreter:new_continuation()),
+            [{'Int', 20}] = C1#continuation.data_stack
+        end} end
+    ]}.

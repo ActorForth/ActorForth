@@ -52,5 +52,17 @@ load_test_() ->
             %% And square should work
             C3 = eval("5 square", C2),
             [{'Int', 25}, {'Int', 42}] = C3#continuation.data_stack
+        end} end,
+
+        %% Regression: load resolves paths relative to current file's directory.
+        %% When file A is in samples/ and loads "lib_math.a4", the path should
+        %% resolve to "samples/lib_math.a4", NOT "samples/samples/lib_math.a4".
+        fun(_) -> {"load resolves relative path from file directory", fun() ->
+            %% Simulate loading from within samples/ directory
+            %% by setting token.file to a path inside samples/
+            Tokens = af_parser:parse("\"lib_math.a4\" load", "samples/test_file.a4"),
+            C1 = af_interpreter:interpret_tokens(Tokens, af_interpreter:new_continuation()),
+            C2 = eval("5 square", C1),
+            [{'Int', 25}] = C2#continuation.data_stack
         end} end
     ]}.

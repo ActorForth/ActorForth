@@ -14,15 +14,15 @@ type Account
 
 # Helper: prepend a Transaction onto Account's ledger
 : add-tx Account Transaction -> Account ;
-    swap dup ledger rot cons ledger!.
+    over ledger rot cons ledger! swap drop.
 
 # Helper: add to Account balance
 : credit Account Int -> Account ;
-    swap dup balance rot + balance!.
+    over balance rot + balance! swap drop.
 
 # Helper: subtract from Account balance
 : debit Account Int -> Account ;
-    swap dup balance rot - balance!.
+    over balance rot - balance! swap drop.
 
 : deposit Account Int -> Account ;
     dup Deposit swap make-tx rot swap add-tx swap credit.

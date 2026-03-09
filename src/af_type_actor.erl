@@ -7,6 +7,11 @@
 
 -export([init/0]).
 -export([send_cast/3, send_call/3]).  %% Used by compiled word code
+-export([compile_actor_loop/1]).       %% Generate specialized receive loop
+-export([actor_loop/2, actor_loop/3]). %% Generic loop (exported for compiled loops)
+-export([execute_actor_word/4, execute_actor_call/4, separate_reply/2]). %% For compiled loop fallback
+-export([to_atom_key/1, to_string_key/1]). %% Key conversion helpers
+-export([actor_loop_module_name/1]). %% For testing
 
 %% Actor model:
 %%   Any type instance can become an actor via 'server'.
@@ -172,10 +177,20 @@ op_server(Cont) ->
     [{TypeName, _Value} = Instance | Rest] = Cont#continuation.data_stack,
     Vocab0 = build_vocab(TypeName),
     Vocab = Vocab0#{"stop" => [#{args => [], returns => []}]},
-    Pid = erlang:spawn_opt(fun() -> actor_loop(TypeName, Instance) end,
-                           [link, {min_heap_size, 100000}]),
+    LoopFun = get_actor_loop_fun(TypeName, Instance),
+    Pid = erlang:spawn_opt(LoopFun, [link, {min_heap_size, 100000}]),
     ActorVal = #{pid => Pid, type_name => TypeName, vocab => Vocab},
     Cont#continuation{data_stack = [{'Actor', ActorVal} | Rest]}.
+
+%% Try to use a compiled actor loop; fall back to generic loop.
+get_actor_loop_fun(TypeName, Instance) ->
+    case compile_actor_loop(TypeName) of
+        {ok, Mod} -> fun() -> Mod:loop(Instance) end;
+        error     -> fun() -> actor_loop(TypeName, Instance) end
+    end.
+
+actor_loop_module_name(TypeName) ->
+    list_to_atom("af_actor_loop_" ++ string:lowercase(atom_to_list(TypeName))).
 
 %% Build the remotely-callable vocabulary for a type.
 %% Only includes user-defined words (source =/= auto) whose sig_in includes the state type.
@@ -282,12 +297,13 @@ dispatch_actor_word(WordName, Entries, ActorInfo, LocalStack, State, Rest, Cont)
     end,
     {Args, RemainingStack} = lists:split(NumArgs, LocalStack),
     validate_actor_args(WordName, ArgsIn, Args),
+    WordAtom = to_atom_key(WordName),
     case Returns of
         [] ->
             %% Cast: async, no reply
             case IsSupervised of
-                true  -> gen_server:cast(Pid, {cast, WordName, Args});
-                false -> Pid ! {cast, WordName, Args}
+                true  -> gen_server:cast(Pid, {cast, WordAtom, Args});
+                false -> Pid ! {cast, WordAtom, Args}
             end,
             NewState = State#{local_stack => RemainingStack},
             Cont#continuation{data_stack = [{'ActorSend', NewState} | Rest]};
@@ -295,13 +311,13 @@ dispatch_actor_word(WordName, Entries, ActorInfo, LocalStack, State, Rest, Cont)
             %% Call: sync, wait for reply
             case IsSupervised of
                 true ->
-                    {ok, ReplyValues} = gen_server:call(Pid, {call, WordName, Args}, 5000),
+                    {ok, ReplyValues} = gen_server:call(Pid, {call, WordAtom, Args}, 5000),
                     NewLocalStack = ReplyValues ++ RemainingStack,
                     NewState = State#{local_stack => NewLocalStack},
                     Cont#continuation{data_stack = [{'ActorSend', NewState} | Rest]};
                 false ->
                     Ref = make_ref(),
-                    Pid ! {call, WordName, Args, self(), Ref},
+                    Pid ! {call, WordAtom, Args, self(), Ref},
                     receive
                         {reply, Ref, ReplyValues} ->
                             NewLocalStack = ReplyValues ++ RemainingStack,
@@ -351,9 +367,11 @@ actor_loop(TypeName, StateInstance) ->
 
 actor_loop(TypeName, StateInstance, Cache) ->
     receive
+        {cast, stop, _Args} ->
+            ok;
         {cast, "stop", _Args} ->
             ok;
-        {cast, WordName, Args} ->
+        {cast, WordName, Args} when is_atom(WordName) ->
             NewState = case maps:find(WordName, Cache) of
                 {ok, {Mod, Fun}} ->
                     case Args of
@@ -361,10 +379,14 @@ actor_loop(TypeName, StateInstance, Cache) ->
                         _  -> lists:last(Mod:Fun(Args ++ [StateInstance]))
                     end;
                 error ->
-                    execute_actor_word(WordName, Args, TypeName, StateInstance)
+                    execute_actor_word(to_string_key(WordName), Args, TypeName, StateInstance)
             end,
             actor_loop(TypeName, NewState, Cache);
-        {call, WordName, Args, From, Ref} ->
+        {cast, WordName, Args} when is_list(WordName) ->
+            %% Legacy string format — convert to atom and re-dispatch
+            self() ! {cast, to_atom_key(WordName), Args},
+            actor_loop(TypeName, StateInstance, Cache);
+        {call, WordName, Args, From, Ref} when is_atom(WordName) ->
             {ReplyValues, NewState} = case maps:find(WordName, Cache) of
                 {ok, {Mod, Fun}} ->
                     ResultStack = case Args of
@@ -373,24 +395,31 @@ actor_loop(TypeName, StateInstance, Cache) ->
                     end,
                     separate_reply(TypeName, ResultStack);
                 error ->
-                    execute_actor_call(WordName, Args, TypeName, StateInstance)
+                    execute_actor_call(to_string_key(WordName), Args, TypeName, StateInstance)
             end,
             From ! {reply, Ref, ReplyValues},
-            actor_loop(TypeName, NewState, Cache)
+            actor_loop(TypeName, NewState, Cache);
+        {call, WordName, Args, From, Ref} when is_list(WordName) ->
+            %% Legacy string format — convert to atom and re-dispatch
+            self() ! {call, to_atom_key(WordName), Args, From, Ref},
+            actor_loop(TypeName, StateInstance, Cache)
     end.
 
 %% Execute a word on the actor's stack (state instance + pushed args).
 %% Returns the updated state instance.
-execute_actor_word(WordName, Args, _TypeName, StateInstance) ->
+execute_actor_word(WordName, Args, TypeName, StateInstance) ->
     %% Build stack: args on top, state below (Forth convention: rightmost sig = TOS)
     Stack = Args ++ [StateInstance],
     Cont = #continuation{data_stack = Stack},
     Token = #token{value = WordName},
     ResultCont = af_interpreter:interpret_token(Token, Cont),
-    %% The state instance should be on the stack (possibly with other values)
-    %% Take the bottom-most item as the state
     ResultStack = ResultCont#continuation.data_stack,
-    lists:last(ResultStack).
+    %% Find the state instance by type name (more robust than lists:last)
+    {_ReplyValues, NewState} = separate_reply(TypeName, ResultStack),
+    case NewState of
+        undefined -> StateInstance;  %% fallback: keep original state
+        _ -> NewState
+    end.
 
 %% Execute a word that returns values (call semantics).
 %% Returns {ReplyValues, NewStateInstance}.
@@ -417,6 +446,131 @@ separate_reply(TypeName, [Item | Rest], ReplyAcc) ->
 separate_reply(_TypeName, [], ReplyAcc) ->
     %% No state found — shouldn't happen with well-behaved words
     {lists:reverse(ReplyAcc), undefined}.
+
+%%% --- Compiled actor loop generation ---
+
+%% compile_actor_loop/1: Generate a specialized BEAM module for a type's actor loop.
+%% The generated module pattern-matches word names directly in receive clauses,
+%% eliminating the maps:find lookup from the generic actor_loop.
+%% Returns {ok, ModuleName} | error.
+compile_actor_loop(TypeName) ->
+    Cache = af_actor_worker:build_native_cache(TypeName),
+    case maps:size(Cache) of
+        0 -> error;
+        _ ->
+            ModName = actor_loop_module_name(TypeName),
+            Forms = generate_loop_forms(ModName, TypeName, Cache),
+            case compile:forms(Forms, [return_errors]) of
+                {ok, ModName, Binary} ->
+                    code:load_binary(ModName, atom_to_list(ModName) ++ ".beam", Binary),
+                    {ok, ModName};
+                {ok, ModName, Binary, _Warnings} ->
+                    code:load_binary(ModName, atom_to_list(ModName) ++ ".beam", Binary),
+                    {ok, ModName};
+                _Error ->
+                    error
+            end
+    end.
+
+generate_loop_forms(ModName, TypeName, Cache) ->
+    L = 1,
+    ModAttr = {attribute, L, module, ModName},
+    ExportAttr = {attribute, L, export, [{loop, 1}]},
+
+    %% Build cast and call clauses for each compiled word
+    CastClauses = maps:fold(fun(WordName, {Mod, Fun}, Acc) ->
+        [make_cast_clause(L, WordName, Mod, Fun) | Acc]
+    end, [], Cache),
+
+    CallClauses = maps:fold(fun(WordName, {Mod, Fun}, Acc) ->
+        [make_call_clause(L, WordName, Mod, Fun, TypeName) | Acc]
+    end, [], Cache),
+
+    %% Stop clauses (atom and legacy string)
+    StopClause = {clause, L,
+        [{tuple, L, [{atom, L, cast}, {atom, L, stop}, {var, L, '_'}]}],
+        [], [{atom, L, ok}]},
+    StopStringClause = {clause, L,
+        [{tuple, L, [{atom, L, cast}, {string, L, "stop"}, {var, L, '_'}]}],
+        [], [{atom, L, ok}]},
+
+    %% Fallback cast clause (interpreter dispatch)
+    FallbackCastClause = {clause, L,
+        [{tuple, L, [{atom, L, cast}, {var, L, 'WordName'}, {var, L, 'Args'}]}],
+        [],
+        [{match, L, {var, L, 'NewState'},
+            {call, L,
+                {remote, L, {atom, L, af_type_actor}, {atom, L, execute_actor_word}},
+                [{call, L, {remote, L, {atom, L, af_type_actor}, {atom, L, to_string_key}},
+                    [{var, L, 'WordName'}]},
+                 {var, L, 'Args'}, {atom, L, TypeName}, {var, L, 'StateInstance'}]}},
+         {call, L, {atom, L, loop}, [{var, L, 'NewState'}]}]},
+
+    %% Fallback call clause
+    FallbackCallClause = {clause, L,
+        [{tuple, L, [{atom, L, call}, {var, L, 'WordName'}, {var, L, 'Args'},
+                     {var, L, 'From'}, {var, L, 'Ref'}]}],
+        [],
+        [{match, L,
+            {tuple, L, [{var, L, 'ReplyValues'}, {var, L, 'NewState'}]},
+            {call, L,
+                {remote, L, {atom, L, af_type_actor}, {atom, L, execute_actor_call}},
+                [{call, L, {remote, L, {atom, L, af_type_actor}, {atom, L, to_string_key}},
+                    [{var, L, 'WordName'}]},
+                 {var, L, 'Args'}, {atom, L, TypeName}, {var, L, 'StateInstance'}]}},
+         {op, L, '!', {var, L, 'From'},
+            {tuple, L, [{atom, L, reply}, {var, L, 'Ref'}, {var, L, 'ReplyValues'}]}},
+         {call, L, {atom, L, loop}, [{var, L, 'NewState'}]}]},
+
+    AllClauses = [StopClause, StopStringClause | CastClauses] ++ CallClauses ++
+                 [FallbackCastClause, FallbackCallClause],
+
+    LoopFun = {function, L, loop, 1,
+        [{clause, L, [{var, L, 'StateInstance'}], [],
+            [{'receive', L, AllClauses}]}]},
+
+    [ModAttr, ExportAttr, LoopFun].
+
+%% Cast clause: {cast, WordAtom, Args} -> dispatch and loop
+make_cast_clause(L, WordAtom, Mod, Fun) ->
+    {clause, L,
+        [{tuple, L, [{atom, L, cast}, {atom, L, WordAtom}, {var, L, 'Args'}]}],
+        [],
+        [{match, L, {var, L, 'NewState'},
+            {'case', L, {var, L, 'Args'},
+                [{clause, L, [{nil, L}], [],
+                    [{call, L, {atom, L, hd},
+                        [{call, L, {remote, L, {atom, L, Mod}, {atom, L, Fun}},
+                            [{cons, L, {var, L, 'StateInstance'}, {nil, L}}]}]}]},
+                 {clause, L, [{var, L, '_'}], [],
+                    [{call, L, {remote, L, {atom, L, lists}, {atom, L, last}},
+                        [{call, L, {remote, L, {atom, L, Mod}, {atom, L, Fun}},
+                            [{op, L, '++', {var, L, 'Args'},
+                                {cons, L, {var, L, 'StateInstance'}, {nil, L}}}]}]}]}]}},
+         {call, L, {atom, L, loop}, [{var, L, 'NewState'}]}]}.
+
+%% Call clause: {call, WordAtom, Args, From, Ref} -> dispatch, reply, loop
+make_call_clause(L, WordAtom, Mod, Fun, TypeName) ->
+    {clause, L,
+        [{tuple, L, [{atom, L, call}, {atom, L, WordAtom}, {var, L, 'Args'},
+                     {var, L, 'From'}, {var, L, 'Ref'}]}],
+        [],
+        [{match, L, {var, L, 'ResultStack'},
+            {'case', L, {var, L, 'Args'},
+                [{clause, L, [{nil, L}], [],
+                    [{call, L, {remote, L, {atom, L, Mod}, {atom, L, Fun}},
+                        [{cons, L, {var, L, 'StateInstance'}, {nil, L}}]}]},
+                 {clause, L, [{var, L, '_'}], [],
+                    [{call, L, {remote, L, {atom, L, Mod}, {atom, L, Fun}},
+                        [{op, L, '++', {var, L, 'Args'},
+                            {cons, L, {var, L, 'StateInstance'}, {nil, L}}}]}]}]}},
+         {match, L,
+            {tuple, L, [{var, L, 'ReplyValues'}, {var, L, 'NewState'}]},
+            {call, L, {remote, L, {atom, L, af_type_actor}, {atom, L, separate_reply}},
+                [{atom, L, TypeName}, {var, L, 'ResultStack'}]}},
+         {op, L, '!', {var, L, 'From'},
+            {tuple, L, [{atom, L, reply}, {var, L, 'Ref'}, {var, L, 'ReplyValues'}]}},
+         {call, L, {atom, L, loop}, [{var, L, 'NewState'}]}]}.
 
 %%% --- Milestone 7.3: Typed Actor Messages ---
 
@@ -509,7 +663,10 @@ op_receive_match_timeout(Cont) ->
 %% Send a cast message to an actor. Used by BEAM-compiled words
 %% that contain << word >> blocks.
 %% ActorInfo is the map from {Actor, ActorInfo}.
-send_cast(ActorInfo, WordName, Args) ->
+%% WordName can be atom (from compiled code) or string (legacy).
+send_cast(ActorInfo, WordName, Args) when is_list(WordName) ->
+    send_cast(ActorInfo, to_atom_key(WordName), Args);
+send_cast(ActorInfo, WordName, Args) when is_atom(WordName) ->
     Pid = maps:get(pid, ActorInfo),
     case maps:get(supervised, ActorInfo, false) of
         true -> gen_server:cast(Pid, {cast, WordName, Args});
@@ -519,7 +676,9 @@ send_cast(ActorInfo, WordName, Args) ->
 
 %% Send a call message to an actor and wait for reply.
 %% Returns the list of reply values.
-send_call(ActorInfo, WordName, Args) ->
+send_call(ActorInfo, WordName, Args) when is_list(WordName) ->
+    send_call(ActorInfo, to_atom_key(WordName), Args);
+send_call(ActorInfo, WordName, Args) when is_atom(WordName) ->
     Pid = maps:get(pid, ActorInfo),
     case maps:get(supervised, ActorInfo, false) of
         true ->
@@ -534,3 +693,10 @@ send_call(ActorInfo, WordName, Args) ->
                 error({actor_call_timeout, WordName})
             end
     end.
+
+%% Key conversion helpers
+to_atom_key(Key) when is_atom(Key) -> Key;
+to_atom_key(Key) when is_list(Key) -> list_to_atom(Key).
+
+to_string_key(Key) when is_list(Key) -> Key;
+to_string_key(Key) when is_atom(Key) -> atom_to_list(Key).

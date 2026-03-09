@@ -13,7 +13,7 @@
 -record(state, {
     type_name :: atom(),
     instance  :: {atom(), term()},
-    %% Cache: #{WordName::string() => fun([Stack]) -> [NewStack]}
+    %% Cache: #{WordAtom::atom() => {Mod, FunAtom}}
     native_cache :: map()
 }).
 
@@ -25,20 +25,23 @@ init({TypeName, StateInstance}) ->
     {ok, #state{type_name = TypeName, instance = StateInstance,
                 native_cache = Cache}}.
 
+handle_cast({cast, stop, _Args}, State) ->
+    {stop, normal, State};
 handle_cast({cast, "stop", _Args}, State) ->
     {stop, normal, State};
 
 handle_cast({cast, WordName, Args}, #state{instance = Instance,
                                             native_cache = Cache} = State) ->
     try
-        NewInstance = case maps:find(WordName, Cache) of
+        WordAtom = to_atom_key(WordName),
+        NewInstance = case maps:find(WordAtom, Cache) of
             {ok, {Mod, Fun}} ->
                 case Args of
                     [] -> hd(Mod:Fun([Instance]));
                     _ -> lists:last(Mod:Fun(Args ++ [Instance]))
                 end;
             error ->
-                interpret_cast(WordName, Args, Instance)
+                interpret_cast(to_string_key(WordName), Args, Instance)
         end,
         {noreply, State#state{instance = NewInstance}}
     catch _:_ ->
@@ -52,7 +55,8 @@ handle_call({call, WordName, Args}, _From,
             #state{type_name = TypeName, instance = Instance,
                    native_cache = Cache} = State) ->
     try
-        {ReplyValues, NewInstance} = case maps:find(WordName, Cache) of
+        WordAtom = to_atom_key(WordName),
+        {ReplyValues, NewInstance} = case maps:find(WordAtom, Cache) of
             {ok, {Mod, Fun}} ->
                 ResultStack = case Args of
                     [] -> Mod:Fun([Instance]);
@@ -60,7 +64,7 @@ handle_call({call, WordName, Args}, _From,
                 end,
                 separate_reply(TypeName, ResultStack);
             error ->
-                interpret_call(WordName, Args, TypeName, Instance)
+                interpret_call(to_string_key(WordName), Args, TypeName, Instance)
         end,
         {reply, {ok, ReplyValues}, State#state{instance = NewInstance}}
     catch
@@ -84,7 +88,7 @@ build_native_cache(TypeName) ->
         {ok, #af_type{ops = Ops}} ->
             maps:fold(fun(Name, OpList, Acc) ->
                 case find_native_fun(OpList) of
-                    {ok, Fun} -> maps:put(Name, Fun, Acc);
+                    {ok, Fun} -> maps:put(to_atom_key(Name), Fun, Acc);
                     not_found -> Acc
                 end
             end, #{}, Ops);
@@ -120,3 +124,9 @@ separate_reply(TypeName, [Item | Rest], ReplyAcc) ->
     separate_reply(TypeName, Rest, [Item | ReplyAcc]);
 separate_reply(_TypeName, [], ReplyAcc) ->
     {lists:reverse(ReplyAcc), undefined}.
+
+to_atom_key(Key) when is_atom(Key) -> Key;
+to_atom_key(Key) when is_list(Key) -> list_to_atom(Key).
+
+to_string_key(Key) when is_list(Key) -> Key;
+to_string_key(Key) when is_atom(Key) -> atom_to_list(Key).

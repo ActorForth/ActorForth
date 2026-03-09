@@ -236,7 +236,7 @@ generate_loop_opt(Name, BaseCases, RecSigIn, SendWord, _BodyAfterSend, L, _Ctx) 
             LoopRestVar = {var, L, '__LoopRest'},
 
             %% Generate send: Pid ! {cast, Word, []}
-            MsgExpr = {tuple, L, [{atom, L, cast}, {string, L, SendWord}, {nil, L}]},
+            MsgExpr = {tuple, L, [{atom, L, cast}, {atom, L, list_to_atom(SendWord)}, {nil, L}]},
             CastExpr = {op, L, '!', LoopPidVar, MsgExpr},
 
             %% Recursive call: loop(Pid, AT, N-1, Rest)
@@ -595,8 +595,8 @@ try_product_op(Name, [{_Expr, TosType} | _] = Stack, L, _Ctx) when is_atom(TosTy
                     FieldName = list_to_atom(BaseName),
                     FieldMapExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, element}},
                         [{integer, L, 2}, InstanceExpr]},
-                    UpdatedMap = {call, L, {remote, L, {atom, L, maps}, {atom, L, put}},
-                        [{atom, L, FieldName}, NewValExpr, FieldMapExpr]},
+                    UpdatedMap = {map, L, FieldMapExpr,
+                        [{map_field_exact, L, {atom, L, FieldName}, NewValExpr}]},
                     ResultExpr = {tuple, L, [{atom, L, InstanceType}, UpdatedMap]},
                     {ok, [{ResultExpr, InstanceType} | Rest]};
                 _ -> not_product
@@ -611,7 +611,7 @@ try_product_op(Name, [{_Expr, TosType} | _] = Stack, L, _Ctx) when is_atom(TosTy
                             FieldName = list_to_atom(Name),
                             FieldMapExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, element}},
                                 [{integer, L, 2}, InstanceExpr]},
-                            ValExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, get}},
+                            ValExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, map_get}},
                                 [{atom, L, FieldName}, FieldMapExpr]},
                             {ok, [{ValExpr, FieldType}, {InstanceExpr, TosType} | Rest]};
                         _ -> not_product
@@ -648,13 +648,13 @@ compile_send_block([#operation{name = WordName}], Stack, L, _Ctx) ->
                     %% Handles both supervised (gen_server) and raw actors
                     CastExpr = {call, L,
                         {remote, L, {atom, L, af_type_actor}, {atom, L, send_cast}},
-                        [ActorInfoExpr, {string, L, WordName}, {nil, L}]},
+                        [ActorInfoExpr, {atom, L, list_to_atom(WordName)}, {nil, L}]},
                     {ok, [{ActorExpr, 'Actor'} | RestStack], [CastExpr]};
                 false ->
                     %% Call: generate af_type_actor:send_call and push results
                     CallExpr = {call, L,
                         {remote, L, {atom, L, af_type_actor}, {atom, L, send_call}},
-                        [ActorInfoExpr, {string, L, WordName}, {nil, L}]},
+                        [ActorInfoExpr, {atom, L, list_to_atom(WordName)}, {nil, L}]},
                     %% Result is a list of tagged values — go opaque
                     ResultExpr = {op, L, '++', CallExpr,
                         {cons, L, ActorExpr, build_stack_list(RestStack, L, {nil, L})}},
@@ -682,13 +682,13 @@ compile_send_block(Ops, Stack, L, Ctx) when length(Ops) > 1 ->
                         true ->
                             CastExpr = {call, L,
                                 {remote, L, {atom, L, af_type_actor}, {atom, L, send_cast}},
-                                [ActorInfoExpr, {string, L, WordName}, ArgsListExpr]},
+                                [ActorInfoExpr, {atom, L, list_to_atom(WordName)}, ArgsListExpr]},
                             {ok, [{ActorExpr, 'Actor'} | RestStack],
                                  lists:reverse(ArgSideEffects) ++ [CastExpr]};
                         false ->
                             CallExpr = {call, L,
                                 {remote, L, {atom, L, af_type_actor}, {atom, L, send_call}},
-                                [ActorInfoExpr, {string, L, WordName}, ArgsListExpr]},
+                                [ActorInfoExpr, {atom, L, list_to_atom(WordName)}, ArgsListExpr]},
                             ResultExpr = {op, L, '++', CallExpr,
                                 {cons, L, ActorExpr, build_stack_list(RestStack, L, {nil, L})}},
                             {ok, [{ResultExpr, stack}], lists:reverse(ArgSideEffects)}
