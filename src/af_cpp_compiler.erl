@@ -124,6 +124,9 @@ generate_value_type() ->
         "    static Value make_list(const std::vector<Value>& v) { return {Type::List, v, \"\"}; }\n",
         "    static Value make_product(const std::string& name, const ProductFields& fields) {\n",
         "        return {Type::Product, fields, name};\n",
+        "    }\n",
+        "    static Value make_map(const ProductFields& entries = {}) {\n",
+        "        return {Type::Map, entries, \"\"};\n",
         "    }\n\n",
         "    // Accessors\n",
         "    int64_t as_int() const { return std::get<int64_t>(data); }\n",
@@ -535,6 +538,93 @@ translate_to_cpp("append", _) ->
         "      auto& avec = a.as_list();\n",
         "      vec.insert(vec.end(), avec.begin(), avec.end());\n",
         "      push(s, Value::make_list(vec)); }\n"
+    ];
+
+%% Map operations
+translate_to_cpp("map-new", _) ->
+    "    push(s, Value::make_map());\n";
+translate_to_cpp("map-put", _) ->
+    [
+        "    { auto key = pop(s); auto val = pop(s); auto m = pop(s);\n",
+        "      auto entries = m.as_fields();\n",
+        "      auto k = key.as_string();\n",
+        "      bool found = false;\n",
+        "      for (auto& [ek, ev] : entries) {\n",
+        "          if (ek == k) { ev = val; found = true; break; }\n",
+        "      }\n",
+        "      if (!found) entries.push_back({k, val});\n",
+        "      push(s, Value::make_map(entries)); }\n"
+    ];
+translate_to_cpp("map-get", _) ->
+    [
+        "    { auto key = pop(s); auto m = pop(s);\n",
+        "      auto k = key.as_string();\n",
+        "      bool found = false;\n",
+        "      for (auto& [ek, ev] : m.as_fields()) {\n",
+        "          if (ek == k) { push(s, ev); found = true; break; }\n",
+        "      }\n",
+        "      if (!found) throw std::runtime_error(\"map-get: key not found: \" + k); }\n"
+    ];
+translate_to_cpp("map-delete", _) ->
+    [
+        "    { auto key = pop(s); auto m = pop(s);\n",
+        "      auto entries = m.as_fields();\n",
+        "      auto k = key.as_string();\n",
+        "      entries.erase(std::remove_if(entries.begin(), entries.end(),\n",
+        "          [&k](const auto& p) { return p.first == k; }), entries.end());\n",
+        "      push(s, Value::make_map(entries)); }\n"
+    ];
+translate_to_cpp("map-has?", _) ->
+    [
+        "    { auto key = pop(s); auto& m = peek(s);\n",
+        "      auto k = key.as_string();\n",
+        "      bool found = false;\n",
+        "      for (auto& [ek, ev] : m.as_fields()) {\n",
+        "          if (ek == k) { found = true; break; }\n",
+        "      }\n",
+        "      push(s, Value::make_bool(found)); }\n"
+    ];
+translate_to_cpp("map-keys", _) ->
+    [
+        "    { auto m = pop(s);\n",
+        "      std::vector<Value> keys;\n",
+        "      for (auto& [k, v] : m.as_fields()) keys.push_back(Value::make_string(k));\n",
+        "      push(s, Value::make_list(keys)); }\n"
+    ];
+translate_to_cpp("map-values", _) ->
+    [
+        "    { auto m = pop(s);\n",
+        "      std::vector<Value> vals;\n",
+        "      for (auto& [k, v] : m.as_fields()) vals.push_back(v);\n",
+        "      push(s, Value::make_list(vals)); }\n"
+    ];
+translate_to_cpp("map-size", _) ->
+    [
+        "    { auto& m = peek(s);\n",
+        "      push(s, Value::make_int(m.as_fields().size())); }\n"
+    ];
+translate_to_cpp("map-merge", _) ->
+    [
+        "    { auto b = pop(s); auto a = pop(s);\n",
+        "      auto entries = a.as_fields();\n",
+        "      for (auto& [k, v] : b.as_fields()) {\n",
+        "          bool found = false;\n",
+        "          for (auto& [ek, ev] : entries) {\n",
+        "              if (ek == k) { ev = v; found = true; break; }\n",
+        "          }\n",
+        "          if (!found) entries.push_back({k, v});\n",
+        "      }\n",
+        "      push(s, Value::make_map(entries)); }\n"
+    ];
+translate_to_cpp("map-get-or", _) ->
+    [
+        "    { auto key = pop(s); auto def = pop(s); auto m = pop(s);\n",
+        "      auto k = key.as_string();\n",
+        "      bool found = false;\n",
+        "      for (auto& [ek, ev] : m.as_fields()) {\n",
+        "          if (ek == k) { push(s, ev); found = true; break; }\n",
+        "      }\n",
+        "      if (!found) push(s, def); }\n"
     ];
 
 %% I/O
