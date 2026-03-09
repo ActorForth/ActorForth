@@ -133,6 +133,10 @@ gen_native_body(Body, WordsMap, L) ->
 
 translate_body([], StackExpr, _L, _WordsMap, VarIdx) ->
     {StackExpr, VarIdx};
+%% Recognize select_clause pattern: {lit, {'List', Clauses}} followed by select_clause
+translate_body([{lit, {'List', Clauses}}, select_clause | Rest], StackExpr, L, WordsMap, VarIdx) ->
+    {CaseExpr, NewIdx} = translate_select_clause(Clauses, StackExpr, L, WordsMap, VarIdx),
+    translate_body(Rest, CaseExpr, L, WordsMap, NewIdx);
 translate_body([Inst | Rest], StackExpr, L, WordsMap, VarIdx) ->
     case translate_native(Inst, StackExpr, L, WordsMap, VarIdx) of
         {inline, NewStackExpr, NewIdx} ->
@@ -278,6 +282,150 @@ translate_native(or_op, StackExpr, L, _WM, Idx) ->
     ]},
     {inline, Expr, Idx+3};
 
+translate_native(nil, StackExpr, L, _WM, Idx) ->
+    {inline, {cons, L, {tuple, L, [{atom, L, 'List'}, {nil, L}]}, StackExpr}, Idx};
+
+translate_native(cons, StackExpr, L, _WM, Idx) ->
+    Elem = var(L, Idx), ListVal = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, Elem,
+                    {cons, L, {tuple, L, [{atom, L, 'List'}, ListVal]}, R}}, StackExpr},
+        {cons, L, {tuple, L, [{atom, L, 'List'}, {cons, L, Elem, ListVal}]}, R}
+    ]},
+    {inline, Expr, Idx+3};
+
+translate_native(head, StackExpr, L, _WM, Idx) ->
+    H = var(L, Idx), T = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, {tuple, L, [{atom, L, 'List'}, {cons, L, H, T}]}, R}, StackExpr},
+        {cons, L, H, R}
+    ]},
+    {inline, Expr, Idx+3};
+
+translate_native(tail, StackExpr, L, _WM, Idx) ->
+    T = var(L, Idx), R = var(L, Idx+1),
+    Expr = {block, L, [
+        {match, L, {cons, L, {tuple, L, [{atom, L, 'List'}, {cons, L, {var, L, '_'}, T}]}, R}, StackExpr},
+        {cons, L, {tuple, L, [{atom, L, 'List'}, T]}, R}
+    ]},
+    {inline, Expr, Idx+2};
+
+%% Product type operations
+translate_native({product_new, TypeName, Fields}, StackExpr, L, _WM, Idx) ->
+    %% Pop N values from stack, build #{field => value} map
+    N = length(Fields),
+    {VarList, Idx1} = make_var_list(N, L, Idx),
+    R = var(L, Idx1),
+    %% Build pattern to match N items from stack
+    MatchPat = lists:foldr(fun(V, Acc) -> {cons, L, V, Acc} end, R, VarList),
+    %% Build map from fields and vars (fields are in order, stack has them reversed)
+    RevVars = lists:reverse(VarList),
+    MapPairs = lists:zipwith(fun(Field, V) ->
+        {map_field_assoc, L, {atom, L, Field}, V}
+    end, Fields, RevVars),
+    MapExpr = {map, L, MapPairs},
+    Expr = {block, L, [
+        {match, L, MatchPat, StackExpr},
+        {cons, L, {tuple, L, [{atom, L, TypeName}, MapExpr]}, R}
+    ]},
+    {inline, Expr, Idx1 + 1};
+
+translate_native({product_get, Field}, StackExpr, L, _WM, Idx) ->
+    %% Non-destructive: peek at TOS product, push field value on top
+    MapVar = var(L, Idx), Val = var(L, Idx+1),
+    Expr = {block, L, [
+        {match, L, {cons, L, {tuple, L, [{var, L, '_'}, MapVar]}, {var, L, '_'}}, StackExpr},
+        {match, L, Val, rcall(L, maps, get, [{atom, L, Field}, MapVar])},
+        {cons, L, Val, StackExpr}
+    ]},
+    {inline, Expr, Idx+2};
+
+translate_native({product_set, Field}, StackExpr, L, _WM, Idx) ->
+    %% Pop value and product instance, update field, push updated instance
+    NewVal = var(L, Idx), TypeVar = var(L, Idx+1), MapVar = var(L, Idx+2), R = var(L, Idx+3),
+    Expr = {block, L, [
+        {match, L, {cons, L, NewVal,
+                    {cons, L, {tuple, L, [TypeVar, MapVar]}, R}}, StackExpr},
+        {cons, L, {tuple, L, [TypeVar,
+            rcall(L, maps, put, [{atom, L, Field}, NewVal, MapVar])]}, R}
+    ]},
+    {inline, Expr, Idx+4};
+
+%% Map operations
+translate_native(map_new, StackExpr, L, _WM, Idx) ->
+    {inline, {cons, L, {tuple, L, [{atom, L, 'Map'}, {map, L, []}]}, StackExpr}, Idx};
+
+translate_native(map_put, StackExpr, L, _WM, Idx) ->
+    V = var(L, Idx), K = var(L, Idx+1), M = var(L, Idx+2), R = var(L, Idx+3),
+    Expr = {block, L, [
+        {match, L, {cons, L, V,
+                    {cons, L, K,
+                    {cons, L, {tuple, L, [{atom, L, 'Map'}, M]}, R}}}, StackExpr},
+        {cons, L, {tuple, L, [{atom, L, 'Map'},
+            rcall(L, maps, put, [K, V, M])]}, R}
+    ]},
+    {inline, Expr, Idx+4};
+
+translate_native(map_get, StackExpr, L, _WM, Idx) ->
+    K = var(L, Idx), M = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, K,
+                    {cons, L, {tuple, L, [{atom, L, 'Map'}, M]}, R}}, StackExpr},
+        {cons, L, rcall(L, maps, get, [K, M]), R}
+    ]},
+    {inline, Expr, Idx+3};
+
+translate_native({apply_impl, OpName}, StackExpr, L, _WM, Idx) ->
+    %% Runtime dispatch: call af_compile:apply_impl/2
+    OpAbstract = erl_parse:abstract(OpName),
+    {inline, rcall(L, af_compile, apply_impl, [OpAbstract, StackExpr]), Idx};
+
+translate_native(print_tos, StackExpr, L, _WM, Idx) ->
+    V = var(L, Idx), R = var(L, Idx+1),
+    Expr = {block, L, [
+        {match, L, {cons, L, V, R}, StackExpr},
+        rcall(L, io, format, [{string, L, "~p~n"}, {cons, L, V, {nil, L}}]),
+        R
+    ]},
+    {inline, Expr, Idx+2};
+
+translate_native(print_stack, StackExpr, L, _WM, Idx) ->
+    SV = var(L, Idx),
+    Expr = {block, L, [
+        {match, L, SV, StackExpr},
+        rcall(L, io, format, [{string, L, "Stack: ~p~n"}, {cons, L, SV, {nil, L}}]),
+        SV
+    ]},
+    {inline, Expr, Idx+1};
+
+translate_native(assert_true, StackExpr, L, _WM, Idx) ->
+    V = var(L, Idx), R = var(L, Idx+1),
+    Expr = {block, L, [
+        {match, L, {cons, L, {tuple, L, [{atom, L, 'Bool'}, V]}, R}, StackExpr},
+        {'case', L, V, [
+            {clause, L, [{atom, L, true}], [], [R]},
+            {clause, L, [{var, L, '_'}], [],
+                [{call, L, {remote, L, {atom, L, erlang}, {atom, L, error}},
+                    [{atom, L, assertion_failed}]}]}
+        ]}
+    ]},
+    {inline, Expr, Idx+2};
+
+translate_native(assert_eq, StackExpr, L, _WM, Idx) ->
+    A = var(L, Idx), B = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, A, {cons, L, B, R}}, StackExpr},
+        {'case', L, {op, L, '=:=', A, B}, [
+            {clause, L, [{atom, L, true}], [], [R]},
+            {clause, L, [{var, L, '_'}], [],
+                [{call, L, {remote, L, {atom, L, erlang}, {atom, L, error}},
+                    [{tuple, L, [{atom, L, assert_eq_failed},
+                                 {tuple, L, [{atom, L, expected}, A]},
+                                 {tuple, L, [{atom, L, got}, B]}]}]}]}
+        ]}
+    ]},
+    {inline, Expr, Idx+3};
+
 translate_native({call, Name}, StackExpr, L, WM, Idx) ->
     case maps:is_key(Name, WM) of
         true ->
@@ -292,6 +440,56 @@ translate_native({call, Name}, StackExpr, L, WM, Idx) ->
 %% Fallback: use af_ring0:exec for anything not inlined
 translate_native(Inst, StackExpr, L, _WM, Idx) ->
     translate_fallback(Inst, StackExpr, L, Idx).
+
+%%% === Native select_clause compilation ===
+%%% Compiles pattern-matching sub-clauses to native BEAM case expressions.
+
+translate_select_clause(Clauses, StackExpr, L, WordsMap, VarIdx) ->
+    StackVar = var(L, VarIdx),
+    Idx0 = VarIdx + 1,
+    {CaseClauses, MaxIdx} = build_case_clauses(Clauses, L, WordsMap, Idx0),
+    CaseExpr = {block, L, [
+        {match, L, StackVar, StackExpr},
+        {'case', L, StackVar, CaseClauses}
+    ]},
+    {CaseExpr, MaxIdx}.
+
+build_case_clauses([], _L, _WM, Idx) -> {[], Idx};
+build_case_clauses([{SigIn, Body} | Rest], L, WM, Idx) ->
+    {Pattern, _RestVar, Idx1} = build_clause_pattern(SigIn, L, Idx),
+    %% Compile the clause body against the RestVar (stack without matched items)
+    %% But select_clause doesn't consume — it keeps matched items on stack.
+    %% Wait, looking at Ring 0: select_clause pops clauses list, then runs body
+    %% with `Rest` (stack sans clauses list). The matched items ARE on the stack.
+    %% So body runs against the full stack (sans clauses list, which was already popped).
+    %% For native compilation, the case matches against the stack, and the body
+    %% runs with the full stack (including matched items).
+    {BodyExpr, Idx2} = translate_body(Body, Pattern, L, WM, Idx1),
+    Clause = {clause, L, [Pattern], [], [BodyExpr]},
+    {RestClauses, Idx3} = build_case_clauses(Rest, L, WM, Idx2),
+    {[Clause | RestClauses], Idx3}.
+
+%% Build a pattern that matches the stack against a signature.
+%% SigIn = [Entry] where Entry is Type atom or {Type, Value} constraint.
+build_clause_pattern([], L, Idx) ->
+    RestVar = var(L, Idx),
+    {RestVar, RestVar, Idx + 1};
+build_clause_pattern([Entry | SigRest], L, Idx) ->
+    {ItemPat, Idx1} = build_sig_item_pattern(Entry, L, Idx),
+    {RestPat, RestVar, Idx2} = build_clause_pattern(SigRest, L, Idx1),
+    {{cons, L, ItemPat, RestPat}, RestVar, Idx2}.
+
+%% Build a pattern for a single signature entry.
+build_sig_item_pattern({Type, Value}, L, Idx) when is_atom(Type) ->
+    %% Value constraint: match exact {Type, Value}
+    ValAbstract = erl_parse:abstract(Value),
+    {{tuple, L, [{atom, L, Type}, ValAbstract]}, Idx};
+build_sig_item_pattern('Any', L, Idx) ->
+    %% Any type: match anything
+    {var(L, Idx), Idx + 1};
+build_sig_item_pattern(Type, L, Idx) when is_atom(Type) ->
+    %% Type match: match {Type, _}
+    {{tuple, L, [{atom, L, Type}, var(L, Idx)]}, Idx + 1}.
 
 translate_arith_op(Op, StackExpr, L, Idx) ->
     AV = var(L, Idx), BV = var(L, Idx+1), R = var(L, Idx+2),
@@ -345,6 +543,12 @@ build_head_pattern(SigIn, L) ->
 var(L, Idx) ->
     Name = list_to_atom("V" ++ integer_to_list(Idx)),
     {var, L, Name}.
+
+make_var_list(0, _L, Idx) -> {[], Idx};
+make_var_list(N, L, Idx) ->
+    V = var(L, Idx),
+    {Rest, Idx1} = make_var_list(N - 1, L, Idx + 1),
+    {[V | Rest], Idx1}.
 
 rcall(L, Mod, Fun, Args) ->
     {call, L, {remote, L, {atom, L, Mod}, {atom, L, Fun}}, Args}.
