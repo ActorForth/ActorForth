@@ -487,11 +487,15 @@ translate_op("not", [A | Rest], L, _Ctx) ->
 %% String operations
 translate_op("concat", [A, B | Rest], L, _Ctx) ->
     ValA = extract_val(A, L), ValB = extract_val(B, L),
-    ResultExpr = {op, L, '++', ValB, ValA},
+    %% Strings are binaries: <<B/binary, A/binary>>
+    ResultExpr = {bin, L, [
+        {bin_element, L, ValB, default, [binary]},
+        {bin_element, L, ValA, default, [binary]}
+    ]},
     {ok, [make_tagged('String', ResultExpr, L) | Rest]};
 translate_op("length", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
     ValA = extract_val(A, L),
-    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, length}}, [ValA]},
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, byte_size}}, [ValA]},
     {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
 translate_op("length", [{_Expr, 'List'} = A | Rest], L, _Ctx) ->
     ValA = extract_val(A, L),
@@ -641,15 +645,24 @@ translate_op("split", [{_ExprD, 'String'} = D, {_ExprS, 'String'} = S | Rest], L
     {ok, [make_tagged('List', ResultExpr, L) | Rest]};
 translate_op("trim", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
     ValA = extract_val(A, L),
-    ResultExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, trim}}, [ValA]},
+    %% Match interpreted: binary_to_list -> string:trim -> list_to_binary
+    ListExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, binary_to_list}}, [ValA]},
+    TrimExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, trim}}, [ListExpr]},
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, list_to_binary}}, [TrimExpr]},
     {ok, [make_tagged('String', ResultExpr, L) | Rest]};
 translate_op("to-upper", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
     ValA = extract_val(A, L),
-    ResultExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, uppercase}}, [ValA]},
+    %% Match interpreted: binary_to_list -> string:uppercase -> unicode:characters_to_binary
+    ListExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, binary_to_list}}, [ValA]},
+    UpperExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, uppercase}}, [ListExpr]},
+    ResultExpr = {call, L, {remote, L, {atom, L, unicode}, {atom, L, characters_to_binary}}, [UpperExpr]},
     {ok, [make_tagged('String', ResultExpr, L) | Rest]};
 translate_op("to-lower", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
     ValA = extract_val(A, L),
-    ResultExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, lowercase}}, [ValA]},
+    %% Match interpreted: binary_to_list -> string:lowercase -> unicode:characters_to_binary
+    ListExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, binary_to_list}}, [ValA]},
+    LowerExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, lowercase}}, [ListExpr]},
+    ResultExpr = {call, L, {remote, L, {atom, L, unicode}, {atom, L, characters_to_binary}}, [LowerExpr]},
     {ok, [make_tagged('String', ResultExpr, L) | Rest]};
 translate_op("starts-with", [{_ExprP, 'String'} = P, {_ExprS, 'String'} = S | Rest], L, _Ctx) ->
     ValP = extract_val(P, L), ValS = extract_val(S, L),
