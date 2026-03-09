@@ -95,8 +95,12 @@ pattern_match_test_() ->
             {ok, #af_type{ops = Ops} = Type} = af_type:get_type('Int'),
             ExistingFacts = maps:get("fact", Ops, []),
             NewOps = maps:put("fact", [BaseOp | ExistingFacts], Ops),
-            af_type:register_type(Type#af_type{ops = NewOps}),
-            Result = eval("5 int fact", C1),
+            UpdatedType = Type#af_type{ops = NewOps},
+            af_type:register_type(UpdatedType),
+            %% Sync local dictionary so the base case is visible
+            Dict = maps:put('Int', UpdatedType, C1#continuation.dictionary),
+            C2 = C1#continuation{dictionary = Dict},
+            Result = eval("5 int fact", C2),
             ?assertEqual([{'Int', 120}], Result#continuation.data_stack)
         end} end
     ]}.

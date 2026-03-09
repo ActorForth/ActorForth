@@ -390,12 +390,13 @@ register_single_word(State, Rest, Cont) ->
     ensure_type(TargetType),
     af_type:add_op(TargetType, NewOp),
 
-    %% Update the continuation's local dictionary
-    Dict = Cont#continuation.dictionary,
-    Dict1 = ensure_type_in_dict(TargetType, Dict),
-    Dict2 = af_type:dict_add_op(TargetType, NewOp, Dict1),
+    af_type_any:auto_compile_word(Name),
 
-    Cont#continuation{data_stack = Rest, dictionary = Dict2}.
+    %% Sync local dictionary from ETS (auto_compile_word may have replaced ops)
+    Dict = Cont#continuation.dictionary,
+    Dict1 = sync_type_from_ets(TargetType, Dict),
+
+    Cont#continuation{data_stack = Rest, dictionary = Dict1}.
 
 register_multi_word(State, Clauses, Rest, Cont) ->
     #{name := Name, sig_in := MasterSigIn0} = State,
@@ -424,7 +425,12 @@ register_multi_word(State, Clauses, Rest, Cont) ->
         af_type:dict_add_op(TargetType, Op, DictAcc)
     end, Dict0, Clauses),
 
-    Cont#continuation{data_stack = Rest, dictionary = Dict1}.
+    af_type_any:auto_compile_word(Name),
+
+    %% Sync local dictionary from ETS (auto_compile_word may have replaced ops)
+    Dict2 = sync_type_from_ets(TargetType, Dict1),
+
+    Cont#continuation{data_stack = Rest, dictionary = Dict2}.
 
 %% Run compile-time type check on a word body.
 %% Type mismatches are errors when inference is complete (no unknowns).
@@ -486,6 +492,14 @@ ensure_type_in_dict(TypeName, Dict) ->
     case maps:is_key(TypeName, Dict) of
         true -> Dict;
         false -> maps:put(TypeName, #af_type{name = TypeName}, Dict)
+    end.
+
+%% Re-read a type's full definition from ETS into the local dictionary.
+%% Called after auto_compile_word which may replace ops in ETS with native wrappers.
+sync_type_from_ets(TypeName, Dict) ->
+    case af_type:get_type(TypeName) of
+        {ok, Type} -> maps:put(TypeName, Type, Dict);
+        _ -> Dict
     end.
 
 %% Build an execution function from a compiled word body.

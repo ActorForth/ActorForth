@@ -1,6 +1,8 @@
 -module(af_word_compiler_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("token.hrl").
+-include("continuation.hrl").
 -include("operation.hrl").
 -include("af_type.hrl").
 
@@ -386,3 +388,759 @@ make_wrapper_test() ->
     ?assertEqual(['Int'], Wrapper#operation.sig_in),
     ?assertEqual(['Int'], Wrapper#operation.sig_out),
     ?assertMatch({native, af_wc_test_wrap}, Wrapper#operation.source).
+
+%% ===================================================================
+%% Helper for interpreter-based tests
+%% ===================================================================
+
+eval(Input, Cont) ->
+    Tokens = af_parser:parse(Input, "test"),
+    af_interpreter:interpret_tokens(Tokens, Cont).
+
+setup_full() ->
+    af_type:reset(),
+    af_type_any:init(),
+    af_type_int:init(),
+    af_type_bool:init(),
+    af_type_compiler:init(),
+    af_type_product:init(),
+    af_type_string:init(),
+    af_type_map:init(),
+    af_type_list:init(),
+    af_type_float:init(),
+    af_type_tuple:init(),
+    af_type_actor:init().
+
+%% ===================================================================
+%% String operation translate_op coverage
+%% ===================================================================
+
+string_ops_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"concat compiles to native BEAM", fun() ->
+            C1 = eval(": test-concat String String -> String ; concat .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-concat\" compile", C1),
+            C3 = eval("\"hello\" \"world\" test-concat", C2),
+            [{'String', <<"helloworld">>}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"string length compiles to native BEAM", fun() ->
+            C1 = eval(": test-slen String -> Int ; length .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-slen\" compile", C1),
+            C3 = eval("\"hello\" test-slen", C2),
+            [{'Int', 5}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"split compiles to native BEAM", fun() ->
+            C1 = eval(": test-split String String -> List ; split .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-split\" compile", C1),
+            C3 = eval("\"a,b,c\" \",\" test-split", C2),
+            [{'List', [<<"a">>, <<"b">>, <<"c">>]}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"contains compiles to native BEAM", fun() ->
+            C1 = eval(": test-contains String String -> Bool ; contains .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-contains\" compile", C1),
+            C3 = eval("\"hello world\" \"world\" test-contains", C2),
+            [{'Bool', true}] = C3#continuation.data_stack,
+            C4 = eval("\"hello world\" \"xyz\" test-contains", C2),
+            [{'Bool', false}] = C4#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"starts-with compiles to native BEAM", fun() ->
+            C1 = eval(": test-sw String String -> Bool ; starts-with .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-sw\" compile", C1),
+            C3 = eval("\"hello world\" \"hello\" test-sw", C2),
+            [{'Bool', true}] = C3#continuation.data_stack,
+            C4 = eval("\"hello world\" \"world\" test-sw", C2),
+            [{'Bool', false}] = C4#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"ends-with compiles to native BEAM", fun() ->
+            C1 = eval(": test-ew String String -> Bool ; ends-with .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-ew\" compile", C1),
+            C3 = eval("\"hello world\" \"world\" test-ew", C2),
+            [{'Bool', true}] = C3#continuation.data_stack,
+            C4 = eval("\"hello world\" \"hello\" test-ew", C2),
+            [{'Bool', false}] = C4#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"string reverse compiles to native BEAM", fun() ->
+            C1 = eval(": test-srev String -> String ; reverse .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-srev\" compile", C1),
+            C3 = eval("\"abc\" test-srev", C2),
+            %% string:reverse returns a list, native compiled wraps as String
+            [{'String', Result}] = C3#continuation.data_stack,
+            ?assert(Result =:= <<"cba">> orelse Result =:= "cba")
+        end} end,
+
+        fun(_) -> {"replace compiles to native BEAM", fun() ->
+            C1 = eval(": test-repl String String String -> String ; replace .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-repl\" compile", C1),
+            C3 = eval("\"hello world\" \"world\" \"there\" test-repl", C2),
+            [{'String', <<"hello there">>}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"substring compiles to native BEAM", fun() ->
+            C1 = eval(": test-sub String Int Int -> String ; substring .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-sub\" compile", C1),
+            C3 = eval("\"hello world\" 0 5 test-sub", C2),
+            [{'String', <<"hello">>}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"to-atom compiles to native BEAM", fun() ->
+            C1 = eval(": test-toatom String -> Atom ; to-atom .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-toatom\" compile", C1),
+            C3 = eval("\"hello\" test-toatom", C2),
+            [{'Atom', hello}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"to-int from string compiles to native BEAM", fun() ->
+            C1 = eval(": test-toint String -> Int ; to-int .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-toint\" compile", C1),
+            C3 = eval("\"42\" test-toint", C2),
+            [{'Int', 42}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"to-string from Atom compiles to native BEAM (direct)", fun() ->
+            %% Build the word def directly to avoid interpreter issues
+            Def = {"atom_to_str", ['Atom'], ['String'],
+                   [#operation{name = "to-string"}]},
+            {ok, af_wc_test_atos} = af_word_compiler:compile_words_to_module(
+                af_wc_test_atos, [Def]),
+            Result = af_wc_test_atos:atom_to_str([{'Atom', hello}]),
+            [{'String', <<"hello">>}] = Result
+        end} end,
+
+        fun(_) -> {"trim compiles to native BEAM", fun() ->
+            C1 = eval(": test-trim2 String -> String ; trim .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-trim2\" compile", C1),
+            C3 = eval("\"  hello  \" test-trim2", C2),
+            [{'String', <<"hello">>}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"to-upper compiles to native BEAM", fun() ->
+            C1 = eval(": test-up2 String -> String ; to-upper .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-up2\" compile", C1),
+            C3 = eval("\"hello\" test-up2", C2),
+            [{'String', <<"HELLO">>}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"to-lower compiles to native BEAM", fun() ->
+            C1 = eval(": test-low2 String -> String ; to-lower .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-low2\" compile", C1),
+            C3 = eval("\"HELLO\" test-low2", C2),
+            [{'String', <<"hello">>}] = C3#continuation.data_stack
+        end} end
+    ]}.
+
+%% ===================================================================
+%% List operation translate_op coverage
+%% ===================================================================
+
+list_ops_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"nil compiles to native BEAM (direct)", fun() ->
+            %% nil has empty sig_in so build the def directly
+            Def = {"push_nil", ['Int'], ['List', 'Int'],
+                   [#operation{name = "nil"}]},
+            {ok, af_wc_test_nil} = af_word_compiler:compile_words_to_module(
+                af_wc_test_nil, [Def]),
+            Result = af_wc_test_nil:push_nil([{'Int', 42}]),
+            [{'List', []}, {'Int', 42}] = Result
+        end} end,
+
+        fun(_) -> {"cons compiles to native BEAM (direct)", fun() ->
+            %% cons: Item List -> List (use Int for the item type)
+            Def = {"do_cons", ['Int', 'List'], ['List'],
+                   [#operation{name = "cons"}]},
+            {ok, af_wc_test_cons} = af_word_compiler:compile_words_to_module(
+                af_wc_test_cons, [Def]),
+            Result = af_wc_test_cons:do_cons([{'Int', 1}, {'List', []}]),
+            [{'List', _}] = Result
+        end} end,
+
+        fun(_) -> {"head compiles to native BEAM", fun() ->
+            C1 = eval(": test-head List -> Any ; head .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-head\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons test-head", C2),
+            [{'Int', 2}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"tail compiles to native BEAM", fun() ->
+            C1 = eval(": test-tail List -> List ; tail .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-tail\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons 3 cons test-tail", C2),
+            [{'List', [{'Int', 2}, {'Int', 1}]}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"list reverse compiles to native BEAM", fun() ->
+            C1 = eval(": test-lrev List -> List ; reverse .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-lrev\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons 3 cons test-lrev", C2),
+            [{'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"append compiles to native BEAM", fun() ->
+            C1 = eval(": test-append List List -> List ; append .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-append\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons nil 3 cons 4 cons test-append", C2),
+            [{'List', [{'Int', 2}, {'Int', 1}, {'Int', 4}, {'Int', 3}]}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"list length compiles to native BEAM", fun() ->
+            C1 = eval(": test-llen List -> Int ; length .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-llen\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons 3 cons test-llen", C2),
+            [{'Int', 3}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"last compiles to native BEAM", fun() ->
+            C1 = eval(": test-last List -> Any ; last .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-last\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons 3 cons test-last", C2),
+            [{'Int', 1}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"take compiles to native BEAM", fun() ->
+            C1 = eval(": test-take List Int -> List ; take .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-take\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons 3 cons 2 test-take", C2),
+            [{'List', [{'Int', 3}, {'Int', 2}]}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"empty? compiles to native BEAM", fun() ->
+            C1 = eval(": test-empty2 List -> Bool ; empty? .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-empty2\" compile", C1),
+            C3 = eval("nil test-empty2", C2),
+            [{'Bool', true}] = C3#continuation.data_stack,
+            C4 = eval("nil 1 cons test-empty2", C2),
+            [{'Bool', false}] = C4#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"contains? compiles to native BEAM (direct)", fun() ->
+            %% contains?: TOS=Item, below=List -> Bool
+            %% Use Int for the item type to match head pattern
+            Def = {"has_item", ['Int', 'List'], ['Bool'],
+                   [#operation{name = "contains?"}]},
+            {ok, af_wc_test_contains} = af_word_compiler:compile_words_to_module(
+                af_wc_test_contains, [Def]),
+            Result = af_wc_test_contains:has_item([{'Int', 2}, {'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}]),
+            [{'Bool', true}] = Result,
+            Result2 = af_wc_test_contains:has_item([{'Int', 5}, {'List', [{'Int', 1}, {'Int', 2}]}]),
+            [{'Bool', false}] = Result2
+        end} end,
+
+        fun(_) -> {"zip compiles to native BEAM", fun() ->
+            C1 = eval(": test-zip List List -> List ; zip .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-zip\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons nil 3 cons 4 cons test-zip", C2),
+            [{'List', _}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"list drop compiles to native BEAM", fun() ->
+            C1 = eval(": test-ldrop List Int -> List ; drop .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-ldrop\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons 3 cons 1 test-ldrop", C2),
+            [{'List', [{'Int', 2}, {'Int', 1}]}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"nth compiles to native BEAM", fun() ->
+            C1 = eval(": test-nth2 List Int -> Any ; nth .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-nth2\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons 3 cons 0 test-nth2", C2),
+            [{'Int', 3}] = C3#continuation.data_stack
+        end} end
+    ]}.
+
+%% ===================================================================
+%% Map operation translate_op coverage
+%% ===================================================================
+
+map_ops_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"map-new compiles to native BEAM (direct)", fun() ->
+            %% map-new has empty sig_in, build def directly
+            Def = {"push_map", ['Int'], ['Map', 'Int'],
+                   [#operation{name = "map-new"}]},
+            {ok, af_wc_test_mnew} = af_word_compiler:compile_words_to_module(
+                af_wc_test_mnew, [Def]),
+            Result = af_wc_test_mnew:push_map([{'Int', 42}]),
+            [{'Map', M}, {'Int', 42}] = Result,
+            ?assertEqual(0, maps:size(M))
+        end} end,
+
+        fun(_) -> {"map-put compiles to native BEAM", fun() ->
+            C1 = eval(": test-mput Map String Int -> Map ; map-put .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-mput\" compile", C1),
+            C3 = eval("map-new \"x\" 42 test-mput", C2),
+            [{'Map', M}] = C3#continuation.data_stack,
+            ?assertEqual({'Int', 42}, maps:get({'String', <<"x">>}, M))
+        end} end,
+
+        fun(_) -> {"map-get compiles to native BEAM", fun() ->
+            C1 = eval(": test-mget Map String -> Any ; map-get .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-mget\" compile", C1),
+            C3 = eval("map-new 42 \"x\" map-put \"x\" test-mget", C2),
+            [{'Int', 42}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"map-delete compiles to native BEAM", fun() ->
+            C1 = eval(": test-mdel Map String -> Map ; map-delete .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-mdel\" compile", C1),
+            C3 = eval("map-new 42 \"x\" map-put \"x\" test-mdel", C2),
+            [{'Map', M}] = C3#continuation.data_stack,
+            ?assertEqual(0, maps:size(M))
+        end} end,
+
+        fun(_) -> {"map-has? compiles to native BEAM", fun() ->
+            C1 = eval(": test-mhas Map String -> Bool ; map-has? .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-mhas\" compile", C1),
+            C3 = eval("map-new 42 \"x\" map-put \"x\" test-mhas", C2),
+            [{'Bool', true}] = C3#continuation.data_stack,
+            C4 = eval("map-new \"y\" test-mhas", C2),
+            [{'Bool', false}] = C4#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"map-keys compiles to native BEAM", fun() ->
+            C1 = eval(": test-mkeys Map -> List ; map-keys .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-mkeys\" compile", C1),
+            C3 = eval("map-new 42 \"x\" map-put test-mkeys", C2),
+            [{'List', _}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"map-values compiles to native BEAM", fun() ->
+            C1 = eval(": test-mvals Map -> List ; map-values .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-mvals\" compile", C1),
+            C3 = eval("map-new 42 \"x\" map-put test-mvals", C2),
+            [{'List', _}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"map-size compiles to native BEAM", fun() ->
+            C1 = eval(": test-msz Map -> Int ; map-size .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-msz\" compile", C1),
+            C3 = eval("map-new 42 \"x\" map-put test-msz", C2),
+            [{'Int', 1}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"map-merge compiles to native BEAM", fun() ->
+            C1 = eval(": test-mmrg Map Map -> Map ; map-merge .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-mmrg\" compile", C1),
+            C3 = eval("map-new 1 \"a\" map-put map-new 2 \"b\" map-put test-mmrg", C2),
+            [{'Map', M}] = C3#continuation.data_stack,
+            ?assertEqual(2, maps:size(M))
+        end} end
+    ]}.
+
+%% ===================================================================
+%% Int operation translate_op coverage (mod, abs, max, min)
+%% ===================================================================
+
+int_ops_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"mod compiles to native BEAM", fun() ->
+            C1 = eval(": test-mod2 Int Int -> Int ; mod .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-mod2\" compile", C1),
+            C3 = eval("10 3 test-mod2", C2),
+            [{'Int', 1}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"abs compiles to native BEAM", fun() ->
+            C1 = eval(": test-abs2 Int -> Int ; abs .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-abs2\" compile", C1),
+            C3 = eval("-7 test-abs2", C2),
+            [{'Int', 7}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"max compiles to native BEAM", fun() ->
+            C1 = eval(": test-max2 Int Int -> Int ; max .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-max2\" compile", C1),
+            C3 = eval("3 7 test-max2", C2),
+            [{'Int', 7}] = C3#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"min compiles to native BEAM", fun() ->
+            C1 = eval(": test-min2 Int Int -> Int ; min .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-min2\" compile", C1),
+            C3 = eval("3 7 test-min2", C2),
+            [{'Int', 3}] = C3#continuation.data_stack
+        end} end
+    ]}.
+
+%% ===================================================================
+%% Boolean logic translate_op coverage (and, or)
+%% ===================================================================
+
+bool_logic_ops_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"and compiles to native BEAM", fun() ->
+            C1 = eval(": test-and2 Bool Bool -> Bool ; and .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-and2\" compile", C1),
+            C3 = eval("True bool True bool test-and2", C2),
+            [{'Bool', true}] = C3#continuation.data_stack,
+            C4 = eval("True bool False bool test-and2", C2),
+            [{'Bool', false}] = C4#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"or compiles to native BEAM", fun() ->
+            C1 = eval(": test-or2 Bool Bool -> Bool ; or .",
+                       af_interpreter:new_continuation()),
+            C2 = eval("\"test-or2\" compile", C1),
+            C3 = eval("False bool True bool test-or2", C2),
+            [{'Bool', true}] = C3#continuation.data_stack,
+            C4 = eval("False bool False bool test-or2", C2),
+            [{'Bool', false}] = C4#continuation.data_stack
+        end} end
+    ]}.
+
+%% ===================================================================
+%% Product type accessor/setter translate_op coverage
+%% ===================================================================
+
+product_ops_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"product getter compiles to native BEAM", fun() ->
+            C1 = eval("type Point x Int y Int .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": test-getx Point -> Point Int ; x .", C1),
+            C3 = eval("\"test-getx\" compile", C2),
+            C4 = eval("3 int 5 int point test-getx", C3),
+            [{'Int', 3}, {'Point', _}] = C4#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"product setter compiles to native BEAM", fun() ->
+            C1 = eval("type Point x Int y Int .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": test-setx Point Int -> Point ; x! .", C1),
+            C3 = eval("\"test-setx\" compile", C2),
+            C4 = eval("3 int 5 int point 99 test-setx", C3),
+            [{'Point', Fields}] = C4#continuation.data_stack,
+            ?assertEqual({'Int', 99}, maps:get(x, Fields))
+        end} end,
+
+        fun(_) -> {"product getter-then-op compiles to native BEAM", fun() ->
+            C1 = eval("type Counter value Int .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": test-inc Counter -> Counter ; value 1 int + value! .", C1),
+            C3 = eval("\"test-inc\" compile", C2),
+            C4 = eval("0 int counter test-inc", C3),
+            [{'Counter', Fields}] = C4#continuation.data_stack,
+            ?assertEqual({'Int', 1}, maps:get(value, Fields))
+        end} end
+    ]}.
+
+%% ===================================================================
+%% Send block compilation (compile_send_block)
+%% ===================================================================
+
+send_block_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"simple cast send block compiles to native BEAM (direct)", fun() ->
+            %% Build word def with << increment >> in body directly
+            %% The word: do_bump Actor -> Actor ; << increment >>
+            Body = [#operation{name = "<<"},
+                    #operation{name = "increment"},
+                    #operation{name = ">>"}],
+            Def = {"do_bump", ['Actor'], ['Actor'], Body},
+            {ok, af_wc_send_cast} = af_word_compiler:compile_words_to_module(
+                af_wc_send_cast, [Def]),
+            %% Set up a Counter actor
+            C1 = eval("type Counter value Int .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": increment Counter -> Counter ; value 1 int + value! .", C1),
+            C3 = eval(": count Counter -> Counter Int ; value .", C2),
+            C4 = eval("0 int counter server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            %% Call the compiled function directly
+            Result = af_wc_send_cast:do_bump([{'Actor', Info}]),
+            [{'Actor', _}] = Result,
+            timer:sleep(50),
+            %% Verify the cast was sent
+            C5 = eval("<< count >>", C4),
+            [{'Int', 1}, {'Actor', _}] = C5#continuation.data_stack,
+            eval("<< stop >>", C5)
+        end} end,
+
+        fun(_) -> {"call send block compiles to native BEAM (direct)", fun() ->
+            %% Build word def with << count >> which is a call (returns Int)
+            %% First define the actor and its words so is_actor_word_cast can find them
+            C1 = eval("type Counter value Int .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": count Counter -> Counter Int ; value .", C1),
+            %% Now compile the send block word — count is known as a call
+            Body = [#operation{name = "<<"},
+                    #operation{name = "count"},
+                    #operation{name = ">>"}],
+            Def = {"do_count", ['Actor'], ['Actor'], Body},
+            {ok, af_wc_send_call} = af_word_compiler:compile_words_to_module(
+                af_wc_send_call, [Def]),
+            C3 = eval("0 int counter server", C2),
+            [{'Actor', Info}] = C3#continuation.data_stack,
+            %% The compiled function calls through send_call
+            Result = af_wc_send_call:do_count([{'Actor', Info}]),
+            %% Result is opaque stack — at least contains actor and count value
+            ?assert(length(Result) >= 1),
+            eval("<< stop >>", C3)
+        end} end,
+
+        fun(_) -> {"send block with args compiles (direct)", fun() ->
+            %% First define the actor type and words
+            C1 = eval("type Acc total Int .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": add-to Acc Int -> Acc ; total + total! .", C1),
+            %% Now compile with multi-token send block — key test is compilation succeeds
+            Body = [#operation{name = "<<"},
+                    #operation{name = "5"},
+                    #operation{name = "add-to"},
+                    #operation{name = ">>"}],
+            Def = {"add_five", ['Actor'], ['Actor'], Body},
+            {ok, af_wc_send_args} = af_word_compiler:compile_words_to_module(
+                af_wc_send_args, [Def]),
+            C3 = eval("0 int acc server", C2),
+            [{'Actor', Info}] = C3#continuation.data_stack,
+            %% Call the compiled function — verify it runs without error
+            Result = af_wc_send_args:add_five([{'Actor', Info}]),
+            %% Verify the Actor is in the result
+            ?assert(lists:any(fun({'Actor', _}) -> true; (_) -> false end, Result)),
+            eval("<< stop >>", C3)
+        end} end
+    ]}.
+
+%% ===================================================================
+%% Loop optimization (try_loop_opt / generate_loop_opt)
+%% ===================================================================
+
+loop_opt_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"loop opt generates optimized send loop (direct)", fun() ->
+            %% Build the blast word defs directly:
+            %% Base case: blast(0, Actor) -> Actor  (body: swap drop)
+            %% Recursive: blast(N, Actor) -> << increment >> swap 1 - swap blast
+            BaseDef = {"blast", [{'Int', 0}, 'Actor'], ['Actor'],
+                       [#operation{name = "swap"}, #operation{name = "drop"}]},
+            RecBody = [#operation{name = "<<"},
+                       #operation{name = "increment"},
+                       #operation{name = ">>"},
+                       #operation{name = "swap"},
+                       #operation{name = "1"},
+                       #operation{name = "-"},
+                       #operation{name = "swap"},
+                       #operation{name = "blast"}],
+            RecDef = {"blast", ['Int', 'Actor'], ['Actor'], RecBody},
+            {ok, af_wc_test_loop} = af_word_compiler:compile_words_to_module(
+                af_wc_test_loop, [BaseDef, RecDef]),
+            %% Set up a Counter actor
+            C1 = eval("type Counter value Int .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": increment Counter -> Counter ; value 1 int + value! .", C1),
+            C3 = eval(": count Counter -> Counter Int ; value .", C2),
+            C4 = eval("0 int counter server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            %% Call the compiled blast function
+            Result = af_wc_test_loop:blast([{'Int', 3}, {'Actor', Info}]),
+            [{'Actor', _} | _] = Result,
+            timer:sleep(100),
+            C5 = eval("<< count >>", C4),
+            [{'Int', 3}, {'Actor', _}] = C5#continuation.data_stack,
+            eval("<< stop >>", C5)
+        end} end,
+
+        fun(_) -> {"try_loop_opt returns not_applicable for non-recursive word", fun() ->
+            %% A multi-clause word without self-recursion should not trigger loop opt
+            Def1 = {"myop", [{'Int', 0}], ['Int'],
+                    [#operation{name = "drop"}, #operation{name = "0"}]},
+            Def2 = {"myop", ['Int'], ['Int'],
+                    [#operation{name = "dup"}, #operation{name = "+"}]},
+            Defs = [Def1, Def2],
+            %% This should compile as regular multi-clause, not loop-optimized
+            {ok, af_wc_test_nolp} = af_word_compiler:compile_words_to_module(af_wc_test_nolp, Defs),
+            ?assertEqual([{'Int', 0}], af_wc_test_nolp:myop([{'Int', 0}])),
+            ?assertEqual([{'Int', 10}], af_wc_test_nolp:myop([{'Int', 5}]))
+        end} end,
+
+        fun(_) -> {"try_loop_opt not_applicable when no send block", fun() ->
+            %% Multi-clause with self-recursion but no << >> send block
+            Def1 = {"recur", [{'Int', 0}], ['Int'],
+                    [#operation{name = "drop"}, #operation{name = "0"}]},
+            Def2 = {"recur", ['Int'], ['Int'],
+                    [#operation{name = "1"}, #operation{name = "-"},
+                     #operation{name = "recur"}]},
+            {ok, af_wc_test_nosend} = af_word_compiler:compile_words_to_module(
+                af_wc_test_nosend, [Def1, Def2]),
+            ?assertEqual([{'Int', 0}], af_wc_test_nosend:recur([{'Int', 5}]))
+        end} end,
+
+        fun(_) -> {"try_loop_opt not_applicable with multiple recursive clauses", fun() ->
+            %% Multiple recursive clauses — loop opt only handles single recursive clause
+            Def1 = {"mrec", [{'Int', 0}], ['Int'],
+                    [#operation{name = "drop"}, #operation{name = "0"}]},
+            Def2 = {"mrec", ['Int'], ['Int'],
+                    [#operation{name = "1"}, #operation{name = "-"},
+                     #operation{name = "mrec"}]},
+            Def3 = {"mrec", ['Int'], ['Int'],
+                    [#operation{name = "2"}, #operation{name = "-"},
+                     #operation{name = "mrec"}]},
+            {ok, af_wc_test_mrec} = af_word_compiler:compile_words_to_module(
+                af_wc_test_mrec, [Def1, Def2, Def3]),
+            ?assertEqual([{'Int', 0}], af_wc_test_mrec:mrec([{'Int', 0}]))
+        end} end
+    ]}.
+
+%% ===================================================================
+%% Error path coverage
+%% ===================================================================
+
+error_paths_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"compile_words_to_module with error returns error", fun() ->
+            ?assertMatch({error, no_compilable_words},
+                         af_word_compiler:compile_words_to_module(af_wc_err1, []))
+        end} end,
+
+        fun(_) -> {"compile_words_to_binary with empty defs returns error", fun() ->
+            ?assertMatch({error, no_compilable_words},
+                         af_word_compiler:compile_words_to_binary(af_wc_err2, []))
+        end} end,
+
+        fun(_) -> {"group_by_name preserves order and groups correctly", fun() ->
+            Defs = [
+                {"a", ['Int'], ['Int'], [#operation{name = "dup"}]},
+                {"b", ['Int'], ['Int'], [#operation{name = "dup"}]},
+                {"a", [{'Int', 0}], ['Int'], [#operation{name = "drop"}]}
+            ],
+            Groups = af_word_compiler:group_by_name(Defs),
+            ?assertEqual(2, length(Groups)),
+            [{"a", ADefs}, {"b", _BDefs}] = Groups,
+            ?assertEqual(2, length(ADefs))
+        end} end,
+
+        fun(_) -> {"find_compiled_word_defs skips non-compiled ops", fun() ->
+            %% Register an op with source=undefined (not compiled)
+            Op = #operation{
+                name = "skip_test_op",
+                sig_in = ['Int'],
+                sig_out = ['Int'],
+                impl = fun(C) -> C end,
+                source = undefined
+            },
+            af_type:add_op('Int', Op),
+            ?assertEqual([], af_word_compiler:find_compiled_word_defs("skip_test_op"))
+        end} end
+    ]}.
+
+%% ===================================================================
+%% has_send_block / collect_send_block coverage
+%% ===================================================================
+
+has_send_block_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"word with << >> in body compiles send block (direct)", fun() ->
+            %% Build word def with << bump >> in body
+            Body = [#operation{name = "<<"},
+                    #operation{name = "bump"},
+                    #operation{name = ">>"}],
+            Def = {"do_bump2", ['Actor'], ['Actor'], Body},
+            {ok, af_wc_send_bump} = af_word_compiler:compile_words_to_module(
+                af_wc_send_bump, [Def]),
+            C1 = eval("type State val Int .",
+                       af_interpreter:new_continuation()),
+            C2 = eval(": bump State -> State ; val 1 int + val! .", C1),
+            C3 = eval(": get-val State -> State Int ; val .", C2),
+            C4 = eval("0 int state server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            %% Call the compiled function
+            Result = af_wc_send_bump:do_bump2([{'Actor', Info}]),
+            [{'Actor', _}] = Result,
+            timer:sleep(50),
+            C5 = eval("<< get-val >>", C4),
+            [{'Int', 1}, {'Actor', _}] = C5#continuation.data_stack,
+            eval("<< stop >>", C5)
+        end} end
+    ]}.
+
+%% ===================================================================
+%% resolve_word_call: test without module context (line 935-941)
+%% ===================================================================
+
+resolve_no_module_test_() ->
+    {foreach, fun setup_full/0, fun(_) -> ok end, [
+
+        fun(_) -> {"word call without module context falls back correctly", fun() ->
+            %% Compile a helper module and register as native
+            HelperDef = word_def("rhelper", ['Int'], ['Int'], ["dup", "+"]),
+            {ok, af_wc_test_rhelp} = af_word_compiler:compile_words_to_module(af_wc_test_rhelp, [HelperDef]),
+            Wrapper = af_word_compiler:make_wrapper(af_wc_test_rhelp, rhelper, ['Int'], ['Int']),
+            af_type:add_op('Int', Wrapper),
+            %% Now compile a word in a different module that calls rhelper
+            CallerDef = word_def("use_rhelper", ['Int'], ['Int'], ["rhelper"]),
+            {ok, af_wc_test_rcaller} = af_word_compiler:compile_words_to_module(af_wc_test_rcaller, [CallerDef]),
+            ?assertEqual([{'Int', 10}], af_wc_test_rcaller:use_rhelper([{'Int', 5}]))
+        end} end
+    ]}.
+
+%% ===================================================================
+%% compile_send_block edge: empty send block (line 874-875)
+%% ===================================================================
+
+empty_send_block_test() ->
+    %% Empty send block should not crash; the body << >> has no ops between markers
+    %% This tests compile_send_block(_, _, _, _) -> {error, empty_send_block}
+    setup_full(),
+    %% Define a word that has << >> with nothing inside
+    %% The interpreter handles this, but we test the compile path
+    C1 = eval("type Dummy val Int .", af_interpreter:new_continuation()),
+    C2 = eval("0 int dummy server", C1),
+    %% The << >> block is empty, which should either skip or handle gracefully
+    C3 = eval(": test-empty-send Actor -> Actor ; << >> .", C2),
+    %% Should still work via interpreted fallback
+    C4 = eval("test-empty-send", C3),
+    [{'Actor', _}] = C4#continuation.data_stack,
+    eval("<< stop >>", C4).

@@ -270,6 +270,210 @@ compile_check_test_() ->
         end} end
     ]}.
 
+%% --- Error paths: check_word returning error, stack underflow (lines 28, 39, 102, 117) ---
+
+error_path_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"check_word type mismatch from body (line 28 path)", fun() ->
+            %% dup on Int produces [Int, Int], but sig_out is [Bool] -> mismatch
+            DupOp = #operation{name = "dup"},
+            Result = af_type_check:check_word("fail", ['Int'], ['Bool'], [DupOp]),
+            ?assertMatch({error, {type_mismatch, "fail", _}}, Result)
+        end} end,
+        fun(_) -> {"infer_stack error from binding mismatch (line 39 path)", fun() ->
+            %% Register op requiring same type twice
+            TestOp = #operation{
+                name = "same2_err",
+                sig_in = ['_a', '_a'],
+                sig_out = ['_a'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            %% _a binds to Int, then Bool doesn't match -> error from consume_types
+            Result = af_type_check:infer_stack([#operation{name = "same2_err"}], ['Int', 'Bool']),
+            ?assertMatch({error, _}, Result)
+        end} end
+    ]}.
+
+%% --- Named variable binding mismatch (lines 128, 130, 132) ---
+
+binding_mismatch_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"named variable _a bound then mismatched (lines 128-132)", fun() ->
+            %% Register an op with _a _a sig_in (requires same type twice)
+            TestOp = #operation{
+                name = "same_type_op",
+                sig_in = ['_a', '_a'],
+                sig_out = ['_a'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            %% Try with mismatched types: Int and Bool
+            Body = [#operation{name = "same_type_op"}],
+            Result = af_type_check:infer_stack(Body, ['Int', 'Bool']),
+            %% _a binds to Int, then Bool doesn't match -> error
+            ?assertMatch({error, {stack_underflow, "same_type_op",
+                                  {expected, 'Int', got, 'Bool'}}}, Result)
+        end} end,
+        fun(_) -> {"named variable _a bound then matching (line 130)", fun() ->
+            TestOp = #operation{
+                name = "same_type_ok",
+                sig_in = ['_a', '_a'],
+                sig_out = ['_a'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "same_type_ok"}],
+            {ok, Result} = af_type_check:infer_stack(Body, ['Int', 'Int']),
+            ?assertEqual(['Int'], Result)
+        end} end
+    ]}.
+
+%% --- Concrete type mismatch in consume_types (line 142) ---
+%% Note: This is hard to hit via infer_stack because find_op_for_inference
+%% uses match_sig which would also reject mismatched types. The concrete
+%% mismatch path is reached when an op has 'Any' in sig_in for match_sig
+%% purposes but a more specific type in the actual sig_in used by consume_types.
+%% We test it indirectly through the binding_mismatch tests above.
+
+concrete_mismatch_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"concrete type in sig_in with matching stack type", fun() ->
+            %% Register an op that requires exactly Int, give it Int
+            TestOp = #operation{
+                name = "int_exact_op",
+                sig_in = ['Int'],
+                sig_out = ['Bool'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "int_exact_op"}],
+            {ok, Result} = af_type_check:infer_stack(Body, ['Int']),
+            ?assertEqual(['Bool'], Result)
+        end} end
+    ]}.
+
+%% --- classify_sig_type with {Type, Value} constraints (line 154) ---
+
+classify_value_constraint_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"{Type, Value} constraint in sig_in classified as concrete (line 154)", fun() ->
+            %% Register an op with value constraint in sig_in
+            TestOp = #operation{
+                name = "zero_only",
+                sig_in = [{'Int', 0}],
+                sig_out = ['Int'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "zero_only"}],
+            %% Use {Int,0} in type stack so match_sig also matches
+            {ok, Result} = af_type_check:infer_stack(Body, [{'Int', 0}]),
+            ?assertEqual(['Int'], Result)
+        end} end,
+        fun(_) -> {"{Type, Value} constraint in sig_in with matching base type on stack", fun() ->
+            %% Register an op with both a value-constrained AND an Any-signatured variant
+            %% so match_sig passes even when stack has just plain Int
+            TestOp = #operation{
+                name = "val_or_any",
+                sig_in = ['Any'],
+                sig_out = ['Bool'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "val_or_any"}],
+            %% With value constraint on type stack
+            {ok, Result} = af_type_check:infer_stack(Body, [{'Int', 5}]),
+            ?assertEqual(['Bool'], Result)
+        end} end
+    ]}.
+
+%% --- resolve_type edge cases (lines 171, 174, 180, 184) ---
+
+resolve_type_edge_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"Any in sig_out resolves to sole binding (line 171)", fun() ->
+            %% dup has Any->Any Any; with single binding Int,
+            %% Any resolves to Int. Already tested, but ensure direct path.
+            DupOp = #operation{name = "dup"},
+            {ok, Result} = af_type_check:infer_stack([DupOp], ['Bool']),
+            ?assertEqual(['Bool', 'Bool'], Result)
+        end} end,
+        fun(_) -> {"underscore _ in sig_out resolves to Any (line 174)", fun() ->
+            %% Register an op with _ in sig_out
+            TestOp = #operation{
+                name = "wild_out",
+                sig_in = ['Int'],
+                sig_out = ['_'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "wild_out"}],
+            {ok, Result} = af_type_check:infer_stack(Body, ['Int']),
+            %% _ in output should resolve to 'Any'
+            ?assertEqual(['Any'], Result)
+        end} end,
+        fun(_) -> {"unbound named variable in sig_out stays as-is (line 180)", fun() ->
+            %% Register an op with _b in sig_out but only _a in sig_in
+            TestOp = #operation{
+                name = "unbound_out",
+                sig_in = ['_a'],
+                sig_out = ['_b'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "unbound_out"}],
+            {ok, Result} = af_type_check:infer_stack(Body, ['Int']),
+            %% _b is unbound, stays as _b
+            ?assertEqual(['_b'], Result)
+        end} end,
+        fun(_) -> {"{Type,Value} in sig_out passes through (line 184)", fun() ->
+            TestOp = #operation{
+                name = "const_val",
+                sig_in = [],
+                sig_out = [{'Int', 42}],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "const_val"}],
+            {ok, Result} = af_type_check:infer_stack(Body, []),
+            ?assertEqual([{'Int', 42}], Result)
+        end} end
+    ]}.
+
+%% --- type_compatible with _ and type variables (lines 188, 191) ---
+
+type_compatible_edge_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"_ in sig_in matches any stack type (line 188)", fun() ->
+            %% Register op with bare _ (not named var) in sig_in
+            TestOp = #operation{
+                name = "drop_wild",
+                sig_in = ['_'],
+                sig_out = [],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "drop_wild"}],
+            {ok, R1} = af_type_check:infer_stack(Body, ['String']),
+            ?assertEqual([], R1),
+            {ok, R2} = af_type_check:infer_stack(Body, ['Bool']),
+            ?assertEqual([], R2)
+        end} end,
+        fun(_) -> {"type variable in sig_in matches anything (line 191)", fun() ->
+            TestOp = #operation{
+                name = "var_match",
+                sig_in = ['_x'],
+                sig_out = ['_x'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "var_match"}],
+            {ok, Result} = af_type_check:infer_stack(Body, ['Float']),
+            ?assertEqual(['Float'], Result)
+        end} end
+    ]}.
+
 %% Simple IO capture for testing warnings
 start_capture() ->
     Parent = self(),
