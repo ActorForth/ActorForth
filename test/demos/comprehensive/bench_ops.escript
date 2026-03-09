@@ -57,7 +57,9 @@ main(_) ->
     %% Direct BEAM calls (no interpreter dispatch — raw compiled function performance)
     io:format("~n--- Direct BEAM (no interpreter, ~p iterations) ---~n", [?N]),
     DirArith = bench("  Arithmetic chain", fun() -> run_direct_arith(?N) end),
+    DirList  = bench("  List ops",         fun() -> run_direct_list(?N) end),
     DirStr   = bench("  String ops",       fun() -> run_direct_string(?N) end),
+    DirMap   = bench("  Map ops",          fun() -> run_direct_map(?N) end),
     DirProd  = bench("  Product type ops", fun() -> run_direct_product(?N) end),
     DirComp  = bench("  Compiled word chain", fun() -> run_direct_composed(?N) end),
 
@@ -75,13 +77,22 @@ main(_) ->
 
     io:format("~n"),
     report_speedup("  Arithmetic (interp vs direct)", IntArith, DirArith),
+    report_speedup("  List ops   (interp vs direct)", IntList,  DirList),
     report_speedup("  String ops (interp vs direct)", IntStr,   DirStr),
+    report_speedup("  Map ops    (interp vs direct)", IntMap,   DirMap),
     report_speedup("  Product    (interp vs direct)", IntProd,  DirProd),
     report_speedup("  Word chain (interp vs direct)", IntComp,  DirComp),
     report_speedup("  Arithmetic (native vs direct)", NatArith, DirArith),
+    report_speedup("  List ops   (native vs direct)", NatList,  DirList),
     report_speedup("  String ops (native vs direct)", NatStr,   DirStr),
+    report_speedup("  Map ops    (native vs direct)", NatMap,   DirMap),
     report_speedup("  Product    (native vs direct)", NatProd,  DirProd),
     report_speedup("  Word chain (native vs direct)", NatComp,  DirComp),
+    io:format("~n"),
+
+    DirTotal = DirArith + DirList + DirStr + DirMap + DirProd + DirComp,
+    report_speedup("  TOTAL      (interp vs direct)", IntTotal, DirTotal),
+    report_speedup("  TOTAL      (native vs direct)", NatTotal, DirTotal),
     io:format("~n"),
 
     %% Machine-readable summaries for cross-language comparison
@@ -89,8 +100,8 @@ main(_) ->
         [IntArith/?N, IntList/?N, IntStr/?N, IntMap/?N, IntProd/?N, IntComp/?N]),
     io:format("BENCH_DATA[native]: arith=~.3f list=~.3f string=~.3f map=~.3f product=~.3f wordchain=~.3f~n",
         [NatArith/?N, NatList/?N, NatStr/?N, NatMap/?N, NatProd/?N, NatComp/?N]),
-    io:format("BENCH_DATA[direct]: arith=~.3f list=- string=~.3f map=- product=~.3f wordchain=~.3f~n",
-        [DirArith/?N, DirStr/?N, DirProd/?N, DirComp/?N]).
+    io:format("BENCH_DATA[direct]: arith=~.3f list=~.3f string=~.3f map=~.3f product=~.3f wordchain=~.3f~n",
+        [DirArith/?N, DirList/?N, DirStr/?N, DirMap/?N, DirProd/?N, DirComp/?N]).
 
 init_types() ->
     af_type:init(),
@@ -127,15 +138,31 @@ define_words(C0) ->
     C8 = eval("type Vec3 x Int y Int z Int .", C7),
     C9 = eval(": vec-mag2 Vec3 -> Vec3 Int ; x square swap y square rot + swap z square rot + .", C8),
 
+    %% List benchmark word (wraps inline list ops into a compilable word)
+    C10 = eval(": list-bench -> Int ; nil 1 cons 2 cons 3 cons 4 cons 5 cons reverse nil 10 cons 20 cons append length .", C9),
+
+    %% Map benchmark word (wraps inline map ops into a compilable word)
+    C11 = eval(": map-bench -> Int ; map-new 1 \"a\" map-put 2 \"b\" map-put 3 \"c\" map-put map-keys length .", C10),
+
     %% Composed words
-    C10 = eval(": compose-test Int -> Int ; dup square swap cube max abs .", C9),
-    C10.
+    C12 = eval(": compose-test Int -> Int ; dup square swap cube max abs .", C11),
+    C12.
 
 compile_words(C) ->
+    %% Words with non-empty sig_in can be compiled via the A4 compile word
     Words = ["square", "cube", "arith-chain", "double", "compose-test", "str-work", "vec-mag2"],
-    lists:foldl(fun(W, Acc) ->
+    C2 = lists:foldl(fun(W, Acc) ->
         eval("\"" ++ W ++ "\" compile", Acc)
-    end, C, Words).
+    end, C, Words),
+    %% Words with empty sig_in (-> Type) must be compiled directly because
+    %% the A4 compile word uses "word-name" which the interpreter dispatches
+    %% as an op call (matching empty sig_in) instead of pushing a String literal.
+    lists:foreach(fun(W) ->
+        Defs = af_word_compiler:find_compiled_word_defs(W),
+        Mod = list_to_atom("af_native_" ++ W),
+        {ok, Mod} = af_word_compiler:compile_words_to_module(Mod, Defs)
+    end, ["list-bench", "map-bench"]),
+    C2.
 
 bench(Label, Fun) ->
     %% Warmup
@@ -204,9 +231,19 @@ run_direct_arith(N) ->
         'af_native_arith-chain':'arith-chain'([{'Int', I}])
     end, lists:seq(1, N)).
 
+run_direct_list(N) ->
+    lists:foreach(fun(_) ->
+        'af_native_list-bench':'list-bench'([])
+    end, lists:seq(1, N)).
+
 run_direct_string(N) ->
     lists:foreach(fun(_) ->
         'af_native_str-work':'str-work'([{'String', <<"  hello world  ">>}])
+    end, lists:seq(1, N)).
+
+run_direct_map(N) ->
+    lists:foreach(fun(_) ->
+        'af_native_map-bench':'map-bench'([])
     end, lists:seq(1, N)).
 
 run_direct_product(N) ->
