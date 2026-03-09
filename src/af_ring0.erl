@@ -270,6 +270,14 @@ exec({read_n, N}, #r0{input = In} = S) ->
             S#r0{ds = [{'Atom', eof} | S#r0.ds]}
     end;
 
+%%% === Runtime Dispatch ===
+%%% For operations not directly mapped to Ring 0 primitives.
+%%% Delegates to the existing A4 type system during bootstrap.
+
+exec({apply_impl, OpName}, #r0{ds = DS} = S) ->
+    NewStack = af_compile:apply_impl(OpName, DS),
+    S#r0{ds = NewStack};
+
 %%% === Word Definition ===
 
 %% def_word (stack-based): pop body and name, define word
