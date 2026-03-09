@@ -80,7 +80,9 @@ generate_header(ModName) ->
         "//\n",
         "// This file was auto-generated from ActorForth source.\n",
         "// Do not edit manually.\n\n",
+        "#include <algorithm>\n",
         "#include <cstdint>\n",
+        "#include <cmath>\n",
         "#include <string>\n",
         "#include <vector>\n",
         "#include <variant>\n",
@@ -177,11 +179,32 @@ generate_product_type({TypeName, Fields}) ->
         "    };\n",
         "    return Value::make_product(\"", NameStr, "\", fields);\n",
         "}\n\n",
+        %% Stack-based constructor (pops N values, pushes product)
+        generate_stack_constructor(NameStr, ConstructorName, Fields),
         %% Getter functions
         [generate_getter(NameStr, FName, FType) || {FName, FType} <- Fields],
         %% Setter functions
         [generate_setter(NameStr, FName, FType) || {FName, FType} <- Fields],
         "\n"
+    ].
+
+generate_stack_constructor(TypeName, ConstructorName, Fields) ->
+    %% Pop fields in reverse order (TOS = last field), construct product, push
+    RevFields = lists:reverse(Fields),
+    PopVars = [["    auto ", atom_to_list(FName), "_val = pop(s);\n"]
+               || {FName, _FType} <- RevFields],
+    FieldPairs = [["        {\"", atom_to_list(FName), "\", ", atom_to_list(FName), "_val}"]
+                  || {FName, _FType} <- Fields],
+    [
+        "// Stack-based constructor: pops ", integer_to_list(length(Fields)),
+        " values, pushes ", TypeName, "\n",
+        "inline void make_", ConstructorName, "_push(Stack& s) {\n",
+        PopVars,
+        "    ProductFields fields = {\n",
+        lists:join(",\n", FieldPairs), "\n",
+        "    };\n",
+        "    push(s, Value::make_product(\"", TypeName, "\", fields));\n",
+        "}\n\n"
     ].
 
 generate_constructor_params(Fields) ->
@@ -330,9 +353,10 @@ translate_to_cpp("swap", _) ->
         "      push(s, std::move(a)); push(s, std::move(b)); }\n"
     ];
 translate_to_cpp("rot", _) ->
+    %% a b c rot → b c a  (move 3rd-from-top to TOS)
     [
-        "    { auto a = pop(s); auto b = pop(s); auto c = pop(s);\n",
-        "      push(s, std::move(a)); push(s, std::move(c)); push(s, std::move(b)); }\n"
+        "    { auto c = pop(s); auto b = pop(s); auto a = pop(s);\n",
+        "      push(s, std::move(b)); push(s, std::move(c)); push(s, std::move(a)); }\n"
     ];
 translate_to_cpp("over", _) ->
     "    push(s, s[s.size() - 2]);\n";
@@ -435,6 +459,31 @@ translate_to_cpp("or", _) ->
     ];
 
 %% String operations
+translate_to_cpp("trim", _) ->
+    [
+        "    { auto a = pop(s);\n",
+        "      auto str = a.as_string();\n",
+        "      auto start = str.find_first_not_of(\" \\t\\n\\r\");\n",
+        "      if (start == std::string::npos) push(s, Value::make_string(\"\"));\n",
+        "      else {\n",
+        "          auto end = str.find_last_not_of(\" \\t\\n\\r\");\n",
+        "          push(s, Value::make_string(str.substr(start, end - start + 1)));\n",
+        "      } }\n"
+    ];
+translate_to_cpp("to-upper", _) ->
+    [
+        "    { auto a = pop(s);\n",
+        "      auto str = a.as_string();\n",
+        "      std::transform(str.begin(), str.end(), str.begin(), ::toupper);\n",
+        "      push(s, Value::make_string(str)); }\n"
+    ];
+translate_to_cpp("to-lower", _) ->
+    [
+        "    { auto a = pop(s);\n",
+        "      auto str = a.as_string();\n",
+        "      std::transform(str.begin(), str.end(), str.begin(), ::tolower);\n",
+        "      push(s, Value::make_string(str)); }\n"
+    ];
 translate_to_cpp("concat", _) ->
     [
         "    { auto a = pop(s); auto b = pop(s);\n",
