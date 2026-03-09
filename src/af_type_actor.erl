@@ -311,7 +311,7 @@ dispatch_actor_word(WordName, Entries, ActorInfo, LocalStack, State, Rest, Cont)
             %% Call: sync, wait for reply
             case IsSupervised of
                 true ->
-                    {ok, ReplyValues} = gen_server:call(Pid, {call, WordAtom, Args}, 5000),
+                    {ok, ReplyValues} = gen_server:call(Pid, {call, WordAtom, Args}, 37000),
                     NewLocalStack = ReplyValues ++ RemainingStack,
                     NewState = State#{local_stack => NewLocalStack},
                     Cont#continuation{data_stack = [{'ActorSend', NewState} | Rest]};
@@ -323,7 +323,7 @@ dispatch_actor_word(WordName, Entries, ActorInfo, LocalStack, State, Rest, Cont)
                             NewLocalStack = ReplyValues ++ RemainingStack,
                             NewState = State#{local_stack => NewLocalStack},
                             Cont#continuation{data_stack = [{'ActorSend', NewState} | Rest]}
-                    after 5000 ->
+                    after 37000 ->
                         error({actor_call_timeout, WordName})
                     end
             end
@@ -682,14 +682,14 @@ send_call(ActorInfo, WordName, Args) when is_atom(WordName) ->
     Pid = maps:get(pid, ActorInfo),
     case maps:get(supervised, ActorInfo, false) of
         true ->
-            {ok, ReplyValues} = gen_server:call(Pid, {call, WordName, Args}, 5000),
+            {ok, ReplyValues} = gen_server:call(Pid, {call, WordName, Args}, 37000),
             ReplyValues;
         false ->
             Ref = make_ref(),
             Pid ! {call, WordName, Args, self(), Ref},
             receive
                 {reply, Ref, ReplyValues} -> ReplyValues
-            after 5000 ->
+            after 37000 ->
                 error({actor_call_timeout, WordName})
             end
     end.

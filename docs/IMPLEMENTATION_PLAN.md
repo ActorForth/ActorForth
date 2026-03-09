@@ -578,6 +578,14 @@ Replace raw pid exposure with opaque actor references that include a validation 
 - Prevents pid-guessing attacks in distributed BEAM environments
 - Heavier mechanism, appropriate for production security hardening
 
+#### 7.8.4 Actor Timeout Policies (TODO)
+The default actor call timeout is currently 37 seconds. This needs a configurable policy mechanism:
+- Per-actor timeout configuration at `server` / `supervised-server` creation time
+- Per-call timeout override in `<<` send blocks
+- Timeout as a first-class concept: allow actors to specify their own expected response times
+- Consider adaptive timeouts based on observed response latency
+- Integration with OTP supervisor restart strategies for timeout-related crashes
+
 ---
 
 ## Phase 3: BEAM Bytecode Compilation
