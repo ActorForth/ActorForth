@@ -330,6 +330,59 @@ additional_coverage_test_() ->
         end} end
     ]}.
 
+%% --- auto-compile tests ---
+
+auto_compile_setup() ->
+    af_type:reset(),
+    af_type_any:init(),
+    af_type_int:init(),
+    af_type_bool:init(),
+    af_type_compiler:init(),
+    af_type_product:init(),
+    af_type_string:init().
+
+auto_compile_test_() ->
+    {foreach, fun auto_compile_setup/0, fun(_) ->
+        persistent_term:erase(af_auto_compile)
+    end, [
+        fun(_) -> {"auto-compile off by default", fun() ->
+            C1 = eval(": triple Int -> Int ; 3 * .", af_interpreter:new_continuation()),
+            {ok, Op} = af_type:find_op_by_name("triple", 'Int'),
+            ?assertMatch({compiled, _}, Op#operation.source)
+        end} end,
+        fun(_) -> {"auto-compile on compiles word to native on definition", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("True bool auto-compile", C0),
+            C2 = eval(": triple Int -> Int ; 3 * .", C1),
+            {ok, Op} = af_type:find_op_by_name("triple", 'Int'),
+            ?assertMatch({native, _}, Op#operation.source),
+            %% Verify it actually works
+            C3 = eval("7 int triple", C2),
+            [{'Int', 21}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"auto-compile toggle off stops auto-compiling", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("True bool auto-compile", C0),
+            C2 = eval(": dbl Int -> Int ; 2 * .", C1),
+            {ok, Op1} = af_type:find_op_by_name("dbl", 'Int'),
+            ?assertMatch({native, _}, Op1#operation.source),
+            %% Turn off
+            C3 = eval("False bool auto-compile", C2),
+            C4 = eval(": trpl Int -> Int ; 3 * .", C3),
+            {ok, Op2} = af_type:find_op_by_name("trpl", 'Int'),
+            ?assertMatch({compiled, _}, Op2#operation.source)
+        end} end,
+        fun(_) -> {"auto-compile works with multi-clause words", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("True bool auto-compile", C0),
+            C2 = eval(": myabs 0 Int -> Int ; .", C1),
+            C3 = eval(": myabs Int -> Int ; dup 0 < dup 0 swap - swap drop .", C2),
+            %% Multi-clause should be auto-compiled
+            {ok, Op} = af_type:find_op_by_name("myabs", 'Int'),
+            ?assertMatch({native, _}, Op#operation.source)
+        end} end
+    ]}.
+
 %% Expose group_by_name for testing
 group_by_name(WordDefs) ->
     af_word_compiler:group_by_name(WordDefs).

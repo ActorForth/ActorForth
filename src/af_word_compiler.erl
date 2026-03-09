@@ -606,7 +606,7 @@ try_product_op(Name, [{_Expr, TosType} | _] = Stack, L, _Ctx) when is_atom(TosTy
             case catch af_type:get_type(TosType) of
                 {ok, #af_type{ops = Ops}} ->
                     case maps:get(Name, Ops, []) of
-                        [#operation{source = auto, sig_out = [FieldType]} | _] ->
+                        [#operation{source = auto, sig_out = [FieldType, _]} | _] ->
                             [{InstanceExpr, _} | Rest] = Stack,
                             FieldName = list_to_atom(Name),
                             FieldMapExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, element}},

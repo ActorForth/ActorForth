@@ -28,22 +28,25 @@ init_types() ->
 start() ->
     load_env(),
     init_types(),
+    Cont = load_stdlib(af_interpreter:new_continuation()),
     io:format("ActorForth REPL. ^C to exit.~n"),
-    loop(af_interpreter:new_continuation()).
+    loop(Cont).
 
 %% Execute a .a4 file and return the final continuation.
 run_file(Filename) ->
     init_types(),
+    Cont0 = load_stdlib(af_interpreter:new_continuation()),
     {ok, Content} = file:read_file(Filename),
     Tokens = af_parser:parse(binary_to_list(Content), Filename),
-    af_interpreter:interpret_tokens(Tokens, af_interpreter:new_continuation()).
+    af_interpreter:interpret_tokens(Tokens, Cont0).
 
 %% Execute a .a4 file then enter the REPL with resulting state.
 run_file_repl(Filename) ->
     init_types(),
+    Cont0 = load_stdlib(af_interpreter:new_continuation()),
     {ok, Content} = file:read_file(Filename),
     Tokens = af_parser:parse(binary_to_list(Content), Filename),
-    Cont = af_interpreter:interpret_tokens(Tokens, af_interpreter:new_continuation()),
+    Cont = af_interpreter:interpret_tokens(Tokens, Cont0),
     io:format("ActorForth REPL (loaded ~s). ^C to exit.~n", [Filename]),
     loop(Cont).
 
@@ -69,6 +72,21 @@ loop(Cont) ->
 interpret_line(Line, Cont) ->
     Tokens = af_parser:parse(Line, "stdin"),
     af_interpreter:interpret_tokens(Tokens, Cont).
+
+%% Load the stdlib.a4 standard library if it exists.
+load_stdlib(Cont) ->
+    PrivDir = case code:priv_dir(actorforth) of
+        {error, _} -> "priv";
+        Dir -> Dir
+    end,
+    StdlibPath = filename:join(PrivDir, "stdlib.a4"),
+    case file:read_file(StdlibPath) of
+        {ok, Content} ->
+            Tokens = af_parser:parse(binary_to_list(Content), StdlibPath),
+            af_interpreter:interpret_tokens(Tokens, Cont);
+        {error, _} ->
+            Cont
+    end.
 
 %% Load environment variables from a .env file.
 %% Looks for .env in the current directory by default.

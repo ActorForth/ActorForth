@@ -26,6 +26,10 @@
 %% contains? — ( List Any -> Bool )     check if item is in list
 %% flatten   — ( List -> List )         flatten nested lists one level
 %% zip       — ( List List -> List )    combine two lists into list of Tuple pairs
+%% map       — ( Atom List -> List )   apply word to each element
+%% filter    — ( Atom List -> List )   keep elements where word returns Bool true
+%% reduce    — ( Atom Any List -> Any ) fold with word (Item Acc -> NewAcc)
+%% each      — ( Atom List -> )        apply word to each element for side effects
 
 init() ->
     af_type:register_type(#af_type{name = 'List'}),
@@ -120,6 +124,30 @@ init() ->
         impl = fun op_zip/1
     }),
 
+    %% map: apply word to each element -> new list
+    af_type:add_op('Atom', #operation{
+        name = "map", sig_in = ['Atom', 'List'], sig_out = ['List'],
+        impl = fun op_map/1
+    }),
+
+    %% filter: keep elements where word returns true
+    af_type:add_op('Atom', #operation{
+        name = "filter", sig_in = ['Atom', 'List'], sig_out = ['List'],
+        impl = fun op_filter/1
+    }),
+
+    %% reduce: fold list with word, starting from initial value
+    af_type:add_op('Atom', #operation{
+        name = "reduce", sig_in = ['Atom', 'Any', 'List'], sig_out = ['Any'],
+        impl = fun op_reduce/1
+    }),
+
+    %% each: apply word to each element for side effects
+    af_type:add_op('Atom', #operation{
+        name = "each", sig_in = ['Atom', 'List'], sig_out = [],
+        impl = fun op_each/1
+    }),
+
     ok.
 
 %%% Operations
@@ -205,3 +233,44 @@ op_zip(Cont) ->
     [{'List', B}, {'List', A} | Rest] = Cont#continuation.data_stack,
     Zipped = lists:zipwith(fun(X, Y) -> {'Tuple', {X, Y}} end, A, B),
     Cont#continuation{data_stack = [{'List', Zipped} | Rest]}.
+
+%% Higher-order list operations — dispatch word by name via interpreter
+
+apply_word(WordName, StackItems, Cont) ->
+    TempCont = Cont#continuation{data_stack = StackItems},
+    Token = #token{value = WordName, line = 0, column = 0, file = "list-op"},
+    af_interpreter:interpret_token(Token, TempCont).
+
+op_map(Cont) ->
+    [{'Atom', WordName}, {'List', Items} | Rest] = Cont#continuation.data_stack,
+    Mapped = lists:map(fun(Item) ->
+        Result = apply_word(WordName, [Item], Cont),
+        hd(Result#continuation.data_stack)
+    end, Items),
+    Cont#continuation{data_stack = [{'List', Mapped} | Rest]}.
+
+op_filter(Cont) ->
+    [{'Atom', WordName}, {'List', Items} | Rest] = Cont#continuation.data_stack,
+    Filtered = lists:filter(fun(Item) ->
+        Result = apply_word(WordName, [Item], Cont),
+        case hd(Result#continuation.data_stack) of
+            {'Bool', true} -> true;
+            _ -> false
+        end
+    end, Items),
+    Cont#continuation{data_stack = [{'List', Filtered} | Rest]}.
+
+op_reduce(Cont) ->
+    [{'Atom', WordName}, Acc, {'List', Items} | Rest] = Cont#continuation.data_stack,
+    FinalAcc = lists:foldl(fun(Item, CurAcc) ->
+        Result = apply_word(WordName, [Item, CurAcc], Cont),
+        hd(Result#continuation.data_stack)
+    end, Acc, Items),
+    Cont#continuation{data_stack = [FinalAcc | Rest]}.
+
+op_each(Cont) ->
+    [{'Atom', WordName}, {'List', Items} | Rest] = Cont#continuation.data_stack,
+    lists:foreach(fun(Item) ->
+        apply_word(WordName, [Item], Cont)
+    end, Items),
+    Cont#continuation{data_stack = Rest}.

@@ -138,7 +138,7 @@ register_product_type(TypeName, Fields) ->
         Getter = #operation{
             name = atom_to_list(FieldName),
             sig_in = [TypeName],
-            sig_out = [FieldType],
+            sig_out = [FieldType, TypeName],
             impl = make_getter(FieldName),
             source = auto
         },

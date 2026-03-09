@@ -13,7 +13,7 @@ type Counter
     count 1 + count! .
 
 : get_count Counter -> Counter Int ;
-    dup count .
+    count .
 
 # blast: send N bump casts to an actor via recursion
 # Base case: N=0, done

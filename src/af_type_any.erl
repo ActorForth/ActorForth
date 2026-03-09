@@ -6,7 +6,7 @@
 -include("af_type.hrl").
 -include("af_error.hrl").
 
--export([init/0]).
+-export([init/0, auto_compile_word/1]).
 
 init() ->
     %% dup : _a -> _a _a
@@ -103,6 +103,12 @@ init() ->
     af_type:add_op('Any', #operation{
         name = "compile", sig_in = ['String'], sig_out = [],
         impl = fun op_compile/1
+    }),
+
+    %% auto-compile : Bool ->  (toggle auto-compilation of words to BEAM)
+    af_type:add_op('Any', #operation{
+        name = "auto-compile", sig_in = ['Bool'], sig_out = [],
+        impl = fun op_auto_compile/1
     }),
 
     %% debug : -> Debug  (pushes Debug marker, handler intercepts on/off)
@@ -382,3 +388,34 @@ group_defs_by_type(WordDefs) ->
         maps:put(TargetType, Existing ++ [Def], Acc)
     end, #{}, WordDefs),
     maps:to_list(Groups).
+
+op_auto_compile(Cont) ->
+    [{'Bool', Flag} | Rest] = Cont#continuation.data_stack,
+    persistent_term:put(af_auto_compile, Flag),
+    Cont#continuation{data_stack = Rest}.
+
+%% Called by af_type_compiler after word registration when auto-compile is enabled.
+auto_compile_word(Name) ->
+    case persistent_term:get(af_auto_compile, false) of
+        false -> ok;
+        true ->
+            WordDefs = af_word_compiler:find_compiled_word_defs(Name),
+            case WordDefs of
+                [] -> ok;
+                _ ->
+                    ModAtom = list_to_atom("af_native_" ++ Name),
+                    case af_word_compiler:compile_words_to_module(ModAtom, WordDefs) of
+                        {ok, ModAtom} ->
+                            FunAtom = list_to_atom(Name),
+                            ByType = group_defs_by_type(WordDefs),
+                            lists:foreach(fun({TargetType, Defs}) ->
+                                BroadSigIn = broadest_sig_in(Defs),
+                                {_, _, BroadSigOut, _} = find_broadest_def(Defs),
+                                Wrapper = af_word_compiler:make_wrapper(ModAtom, FunAtom, BroadSigIn, BroadSigOut),
+                                af_type:replace_ops(TargetType, Name, [Wrapper])
+                            end, ByType);
+                        {error, _Reason} ->
+                            ok
+                    end
+            end
+    end.

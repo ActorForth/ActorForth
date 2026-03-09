@@ -390,6 +390,8 @@ register_single_word(State, Rest, Cont) ->
     ensure_type(TargetType),
     af_type:add_op(TargetType, NewOp),
 
+    af_type_any:auto_compile_word(Name),
+
     Cont#continuation{data_stack = Rest}.
 
 register_multi_word(State, Clauses, Rest, Cont) ->
@@ -416,6 +418,8 @@ register_multi_word(State, Clauses, Rest, Cont) ->
         },
         af_type:add_op(TargetType, Op)
     end, Clauses),
+
+    af_type_any:auto_compile_word(Name),
 
     Cont#continuation{data_stack = Rest}.
 

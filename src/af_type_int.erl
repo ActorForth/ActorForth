@@ -52,6 +52,22 @@ init() ->
         name = "/", sig_in = ['Int', 'Int'], sig_out = ['Int'],
         impl = fun op_divide/1
     }),
+    af_type:add_op('Int', #operation{
+        name = "mod", sig_in = ['Int', 'Int'], sig_out = ['Int'],
+        impl = fun op_mod/1
+    }),
+    af_type:add_op('Int', #operation{
+        name = "abs", sig_in = ['Int'], sig_out = ['Int'],
+        impl = fun op_abs/1
+    }),
+    af_type:add_op('Int', #operation{
+        name = "max", sig_in = ['Int', 'Int'], sig_out = ['Int'],
+        impl = fun op_max/1
+    }),
+    af_type:add_op('Int', #operation{
+        name = "min", sig_in = ['Int', 'Int'], sig_out = ['Int'],
+        impl = fun op_min/1
+    }),
     ok.
 
 %%% Operations
@@ -86,3 +102,22 @@ op_divide(Cont) ->
         0 -> af_error:raise(division_by_zero, "Division by zero", Cont);
         _ -> Cont#continuation{data_stack = [{'Int', B div A} | Rest]}
     end.
+
+op_mod(Cont) ->
+    [{'Int', A}, {'Int', B} | Rest] = Cont#continuation.data_stack,
+    case A of
+        0 -> af_error:raise(division_by_zero, "Modulo by zero", Cont);
+        _ -> Cont#continuation{data_stack = [{'Int', B rem A} | Rest]}
+    end.
+
+op_abs(Cont) ->
+    [{'Int', A} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'Int', erlang:abs(A)} | Rest]}.
+
+op_max(Cont) ->
+    [{'Int', A}, {'Int', B} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'Int', erlang:max(B, A)} | Rest]}.
+
+op_min(Cont) ->
+    [{'Int', A}, {'Int', B} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'Int', erlang:min(B, A)} | Rest]}.

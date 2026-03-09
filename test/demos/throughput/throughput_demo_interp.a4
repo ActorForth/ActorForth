@@ -10,7 +10,7 @@ type Counter
     count 1 + count! .
 
 : get_count Counter -> Counter Int ;
-    dup count .
+    count .
 
 : blast 0 Int Actor -> Actor ;
     swap drop .

@@ -1,0 +1,32 @@
+# stdlib.a4 — ActorForth standard library
+# Utility words implemented in A4 itself.
+# abs, max, min, mod are intrinsics in af_type_int.
+# and, or are intrinsics in af_type_bool.
+
+# --- Arithmetic utilities ---
+
+# negate: flip sign of Int
+: negate Int -> Int ; 0 swap - .
+
+# square: x^2
+: square Int -> Int ; dup * .
+
+# cube: x^3
+: cube Int -> Int ; dup dup * * .
+
+# double: x*2
+: double Int -> Int ; 2 * .
+
+# even?: test if Int is even
+: even? Int -> Bool ; 2 mod 0 == .
+
+# odd?: test if Int is odd
+: odd? Int -> Bool ; 2 mod 0 != .
+
+# --- Stack utilities ---
+
+# nip: remove second item ( a b -> b )
+: nip Any Any -> Any ; swap drop .
+
+# tuck: copy TOS below second ( a b -> b a b )
+: tuck Any Any -> Any Any Any ; swap over .
