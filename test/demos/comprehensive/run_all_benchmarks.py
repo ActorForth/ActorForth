@@ -125,6 +125,7 @@ def print_table(results):
     # Column order (left to right, fastest to slowest expected)
     columns = [
         ("C++ -O2", "cpp"),
+        ("A4->C++", "a4_cpp"),
         ("TS Native", "ts_native"),
         ("Elixir", "elixir"),
         ("Erlang", "erlang"),
@@ -237,6 +238,26 @@ def main():
             os.remove(cpp_binary)
         except OSError:
             pass
+
+    # 1b. A4->C++ (compile A4 words to C++ via af_cpp_compiler, then benchmark)
+    if ensure_a4_built() and shutil.which("g++"):
+        gen_script = os.path.join(SCRIPT_DIR, "gen_bench_a4cpp.escript")
+        a4cpp_binary = os.path.join(SCRIPT_DIR, "bench_a4cpp")
+        # Generate, compile, and run in one step
+        out, ok = run_cmd(
+            ["escript", gen_script],
+            "A4->C++ (af_cpp_compiler generated)"
+        )
+        if ok:
+            data = parse_bench_data(out)
+            if data:
+                results["a4_cpp"] = data
+        # Clean up binary
+        for f in [a4cpp_binary, os.path.join(SCRIPT_DIR, "bench_a4cpp.cpp")]:
+            try:
+                os.remove(f)
+            except OSError:
+                pass
 
     # 2. Python
     out, ok = run_cmd(
