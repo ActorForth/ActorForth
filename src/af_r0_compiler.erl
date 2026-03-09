@@ -39,6 +39,27 @@ process_tokens([Token | Rest], Acc) ->
             %% Start of word definition
             {WordDef, Rest1} = parse_word_def(Rest),
             process_tokens(Rest1, [WordDef | Acc]);
+        {<<"type">>, false} ->
+            %% Product type definition
+            {TypeDefs, Rest1} = parse_product_type(Rest),
+            process_tokens(Rest1, TypeDefs ++ Acc);
+        {<<"load">>, false} ->
+            %% Load and compile another file
+            case Rest of
+                [PathTok | Rest1] ->
+                    Path = maps:get(value, PathTok),
+                    case maps:get(quoted, PathTok) of
+                        true ->
+                            LoadedDefs = load_file(Path),
+                            process_tokens(Rest1, LoadedDefs ++ Acc);
+                        false ->
+                            %% Non-quoted load path (treat as filename)
+                            LoadedDefs = load_file(Path),
+                            process_tokens(Rest1, LoadedDefs ++ Acc)
+                    end;
+                [] ->
+                    {lists:reverse(Acc), []}
+            end;
         _ ->
             %% Skip non-definition tokens (bare expressions)
             process_tokens(Rest, Acc)
@@ -210,11 +231,24 @@ translate_primitive("<=")    -> {ok, [swap, lt, not_op]};
 translate_primitive(">=")    -> {ok, [lt, not_op]};
 %% Logic
 translate_primitive("not")   -> {ok, [not_op]};
+%% Logic
+translate_primitive("and")   -> {ok, [and_op]};
+translate_primitive("or")    -> {ok, [or_op]};
 %% List
 translate_primitive("nil")   -> {ok, [nil]};
 translate_primitive("cons")  -> {ok, [cons]};
 translate_primitive("head")  -> {ok, [head]};
 translate_primitive("tail")  -> {ok, [tail]};
+translate_primitive("length")    -> {ok, [generic_len]};
+translate_primitive("append")    -> {ok, [list_append]};
+translate_primitive("reverse")   -> {ok, [list_reverse]};
+translate_primitive("nth")       -> {ok, [list_nth]};
+translate_primitive("last")      -> {ok, [list_last]};
+translate_primitive("take")      -> {ok, [list_take]};
+translate_primitive("empty?")    -> {ok, [list_empty]};
+translate_primitive("contains?") -> {ok, [list_contains]};
+translate_primitive("flatten")   -> {ok, [list_flatten]};
+translate_primitive("zip")       -> {ok, [list_zip]};
 %% Map
 translate_primitive("map-new")    -> {ok, [map_new]};
 translate_primitive("map-put")    -> {ok, [map_put]};
@@ -222,6 +256,55 @@ translate_primitive("map-get")    -> {ok, [map_get]};
 translate_primitive("map-delete") -> {ok, [map_delete]};
 translate_primitive("map-keys")   -> {ok, [map_keys]};
 translate_primitive("map-has?")   -> {ok, [map_has]};
+translate_primitive("map-values") -> {ok, [map_values]};
+translate_primitive("map-size")   -> {ok, [map_size]};
+translate_primitive("map-merge")  -> {ok, [map_merge]};
+translate_primitive("map-get-or") -> {ok, [map_get_or]};
+%% String
+translate_primitive("concat")      -> {ok, [str_concat]};
+translate_primitive("split")       -> {ok, [str_split]};
+translate_primitive("contains")    -> {ok, [str_contains]};
+translate_primitive("starts-with") -> {ok, [str_starts_with]};
+translate_primitive("ends-with")   -> {ok, [str_ends_with]};
+translate_primitive("trim")        -> {ok, [str_trim]};
+translate_primitive("to-upper")    -> {ok, [str_upper]};
+translate_primitive("to-lower")    -> {ok, [str_lower]};
+translate_primitive("substring")   -> {ok, [str_substring]};
+translate_primitive("replace")     -> {ok, [str_replace]};
+%% Conversion
+translate_primitive("to-string")  -> {ok, [to_string]};
+translate_primitive("to-int")     -> {ok, [to_int]};
+translate_primitive("to-float")   -> {ok, [to_float]};
+translate_primitive("to-atom")    -> {ok, [to_atom]};
+%% Tuple
+translate_primitive("make-tuple") -> {ok, [tuple_make]};
+translate_primitive("from-tuple") -> {ok, [tuple_to_list]};
+translate_primitive("tuple-size") -> {ok, [tuple_size_op]};
+translate_primitive("ok-tuple")   -> {ok, [ok_tuple]};
+translate_primitive("error-tuple") -> {ok, [error_tuple]};
+translate_primitive("is-ok")      -> {ok, [is_ok]};
+translate_primitive("unwrap-ok")  -> {ok, [unwrap_ok]};
+%% I/O
+translate_primitive("print")      -> {ok, [print_tos]};
+translate_primitive("stack")      -> {ok, [print_stack]};
+translate_primitive("assert")     -> {ok, [assert_true]};
+translate_primitive("assert-eq")  -> {ok, [assert_eq]};
+%% File
+translate_primitive("read-file")   -> {ok, [file_read]};
+translate_primitive("write-file")  -> {ok, [file_write]};
+translate_primitive("file-exists?") -> {ok, [file_exists]};
+%% FFI - these stay as apply_impl since they need the full runtime
+translate_primitive("erlang-apply")  -> {ok, [{apply_impl, "erlang-apply"}]};
+translate_primitive("erlang-apply0") -> {ok, [{apply_impl, "erlang-apply0"}]};
+translate_primitive("erlang-call")   -> {ok, [{apply_impl, "erlang-call"}]};
+translate_primitive("erlang-call0")  -> {ok, [{apply_impl, "erlang-call0"}]};
+translate_primitive("erlang-new")    -> {ok, [{apply_impl, "erlang-new"}]};
+%% Actor primitives
+translate_primitive("spawn")   -> {ok, [spawn_actor]};
+translate_primitive("send")    -> {ok, [send_msg]};
+translate_primitive("!")       -> {ok, [send_msg]};
+translate_primitive("receive") -> {ok, [receive_msg]};
+translate_primitive("receive-timeout") -> {ok, [receive_timeout]};
 translate_primitive(_)       -> not_found.
 
 %%% === Literal Parsing ===
@@ -254,4 +337,75 @@ try_parse_int_str(Str) when is_list(Str) ->
 try_parse_float(Str) when is_list(Str) ->
     try {ok, list_to_float(Str)}
     catch _:_ -> error
+    end.
+
+%%% === File Loading ===
+
+load_file(Path) when is_binary(Path) ->
+    case file:read_file(Path) of
+        {ok, Content} ->
+            Tokens = af_r0_parser:parse(Content, Path),
+            compile_tokens(Tokens);
+        {error, _} ->
+            %% Try with .a4 extension
+            Path1 = <<Path/binary, ".a4">>,
+            case file:read_file(Path1) of
+                {ok, Content} ->
+                    Tokens = af_r0_parser:parse(Content, Path1),
+                    compile_tokens(Tokens);
+                {error, _} -> []
+            end
+    end.
+
+%%% === Product Type Compilation ===
+%%% Generates constructor, getter, and setter words for product types.
+%%% `type Point x Int y Int .` generates:
+%%%   point (constructor), x (getter), y (getter), x! (setter), y! (setter)
+
+%% Parse: type Name field1 Type1 field2 Type2 ... .
+%% Returns {[WordDef, ...], RemainingTokens}
+parse_product_type([NameTok | Rest]) ->
+    TypeName = binary_to_atom(maps:get(value, NameTok), utf8),
+    Constructor = string:lowercase(binary_to_list(maps:get(value, NameTok))),
+    {Fields, Rest1} = parse_type_fields(Rest, []),
+    FieldNames = [F || {F, _} <- Fields],
+    FieldAtoms = [list_to_atom(binary_to_list(F)) || F <- FieldNames],
+    FieldTypes = [T || {_, T} <- Fields],
+    %% Generate constructor word
+    SigIn = [binary_to_atom(T, utf8) || T <- lists:reverse(FieldTypes)],
+    ConstructorDef = {Constructor, SigIn, [TypeName],
+                      [{product_new, TypeName, FieldAtoms}]},
+    %% Generate getter words (non-destructive)
+    Getters = [begin
+        FName = binary_to_list(F),
+        FAtom = list_to_atom(FName),
+        FType = binary_to_atom(T, utf8),
+        {FName, [TypeName], [FType, TypeName],
+         [{product_get, FAtom}]}
+    end || {F, T} <- Fields],
+    %% Generate setter words (field! : NewVal Instance -> Instance)
+    Setters = [begin
+        FName = binary_to_list(F) ++ "!",
+        FAtom = list_to_atom(binary_to_list(F)),
+        FType = binary_to_atom(T, utf8),
+        {FName, [FType, TypeName], [TypeName],
+         [{product_set, FAtom}]}
+    end || {F, T} <- Fields],
+    {lists:reverse([ConstructorDef] ++ Getters ++ Setters), Rest1}.
+
+parse_type_fields([], Acc) -> {lists:reverse(Acc), []};
+parse_type_fields([Token | Rest], Acc) ->
+    Value = maps:get(value, Token),
+    case Value of
+        <<".">> ->
+            {lists:reverse(Acc), Rest};
+        _ ->
+            %% field name followed by type
+            case Rest of
+                [TypeTok | Rest1] ->
+                    TypeName = maps:get(value, TypeTok),
+                    parse_type_fields(Rest1, [{Value, TypeName} | Acc]);
+                [] ->
+                    {lists:reverse(Acc), []}
+            end
     end.

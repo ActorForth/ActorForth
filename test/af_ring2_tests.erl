@@ -258,8 +258,15 @@ translate_word_call_test() ->
                  af_ring2:translate_body([Op], ["double"])).
 
 translate_runtime_dispatch_test() ->
+    %% concat is now a Ring 0 primitive (str_concat)
     Op = #operation{name = "concat"},
-    ?assertEqual([{apply_impl, "concat"}],
+    ?assertEqual([str_concat],
+                 af_ring2:translate_body([Op], [])).
+
+translate_unknown_dispatch_test() ->
+    %% Unknown ops still go through apply_impl
+    Op = #operation{name = "some-unknown-op"},
+    ?assertEqual([{apply_impl, "some-unknown-op"}],
                  af_ring2:translate_body([Op], [])).
 
 translate_rot_test() ->
@@ -430,6 +437,40 @@ selfhosted_compile_test_() ->
                 "samples/lib_math.a4", "sh_math"),
             ?assertEqual(af_r2_sh_math, Mod),
             ?assertEqual([{'Int', 25}], Mod:square([{'Int', 5}]))
+        end},
+
+        {"selfhosted product getter", fun() ->
+            Source = "type Point\n  x Int\n  y Int\n.\n"
+                     ": get-x Point -> Int Point ; x .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_prod"),
+            Instance = {'Point', #{x => {'Int', 3}, y => {'Int', 4}}},
+            Result = Mod:'get-x'([Instance]),
+            ?assertEqual([{'Int', 3}, Instance], Result)
+        end},
+
+        {"selfhosted product setter", fun() ->
+            Source = "type Counter\n  count Int\n.\n"
+                     ": set-count Int Counter -> Counter ; count! .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_set"),
+            Instance = {'Counter', #{count => {'Int', 0}}},
+            [{'Counter', Fields}] = Mod:'set-count'([{'Int', 99}, Instance]),
+            ?assertEqual({'Int', 99}, maps:get(count, Fields))
+        end},
+
+        {"selfhosted product constructor", fun() ->
+            Source = "type Counter\n  count Int\n.\n"
+                     ": make-counter Int -> Counter ; counter .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_ctor"),
+            [{'Counter', Fields}] = Mod:'make-counter'([{'Int', 0}]),
+            ?assertEqual({'Int', 0}, maps:get(count, Fields))
+        end},
+
+        {"selfhosted load file", fun() ->
+            %% lib_math.a4 defines square, we load it and use it
+            Source = "load \"samples/lib_math.a4\"\n"
+                     ": cube Int -> Int ; dup square * .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_load"),
+            ?assertEqual([{'Int', 125}], Mod:cube([{'Int', 5}]))
         end},
 
         {"selfhosted preserves stack", fun() ->

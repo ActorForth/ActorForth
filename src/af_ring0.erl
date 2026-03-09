@@ -342,6 +342,263 @@ exec(str_find, #r0{ds = [{'String', Pat}, {'String', Bin} | Rest]} = S) ->
         nomatch -> S#r0{ds = [{'Bool', false} | Rest]}
     end;
 
+%%% === Type Conversion Primitives (5) ===
+
+exec(to_string, #r0{ds = [{Type, Val} | Rest]} = S) ->
+    Str = case Type of
+        'String' -> Val;
+        'Int' -> integer_to_binary(Val);
+        'Float' -> float_to_binary(Val, [{decimals, 10}, compact]);
+        'Bool' -> atom_to_binary(Val, utf8);
+        'Atom' -> atom_to_binary(Val, utf8);
+        _ -> list_to_binary(io_lib:format("~p", [Val]))
+    end,
+    S#r0{ds = [{'String', Str} | Rest]};
+
+exec(to_int, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Int', binary_to_integer(Bin)} | Rest]};
+exec(to_int, #r0{ds = [{'Float', F} | Rest]} = S) ->
+    S#r0{ds = [{'Int', trunc(F)} | Rest]};
+exec(to_int, #r0{ds = [{'Bool', true} | Rest]} = S) ->
+    S#r0{ds = [{'Int', 1} | Rest]};
+exec(to_int, #r0{ds = [{'Bool', false} | Rest]} = S) ->
+    S#r0{ds = [{'Int', 0} | Rest]};
+
+exec(to_float, #r0{ds = [{'Int', N} | Rest]} = S) ->
+    S#r0{ds = [{'Float', float(N)} | Rest]};
+exec(to_float, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Float', binary_to_float(Bin)} | Rest]};
+
+exec(to_atom, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Atom', binary_to_atom(Bin, utf8)} | Rest]};
+
+exec(to_bool, #r0{ds = [{'Int', 0} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', false} | Rest]};
+exec(to_bool, #r0{ds = [{'Int', _} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', true} | Rest]};
+
+%%% === Extended String Primitives (6) ===
+
+exec(str_split, #r0{ds = [{'String', Sep}, {'String', Bin} | Rest]} = S) ->
+    Parts = binary:split(Bin, Sep, [global]),
+    S#r0{ds = [{'List', [{'String', P} || P <- Parts]} | Rest]};
+
+exec(str_contains, #r0{ds = [{'String', Pat}, {'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', binary:match(Bin, Pat) =/= nomatch} | Rest]};
+
+exec(str_starts_with, #r0{ds = [{'String', Pre}, {'String', Bin} | Rest]} = S) ->
+    PreLen = byte_size(Pre),
+    Result = byte_size(Bin) >= PreLen andalso binary:part(Bin, 0, PreLen) =:= Pre,
+    S#r0{ds = [{'Bool', Result} | Rest]};
+
+exec(str_ends_with, #r0{ds = [{'String', Suf}, {'String', Bin} | Rest]} = S) ->
+    SufLen = byte_size(Suf),
+    BinLen = byte_size(Bin),
+    Result = BinLen >= SufLen andalso binary:part(Bin, BinLen - SufLen, SufLen) =:= Suf,
+    S#r0{ds = [{'Bool', Result} | Rest]};
+
+exec(str_trim, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', string:trim(Bin)} | Rest]};
+
+exec(str_replace, #r0{ds = [{'String', Rep}, {'String', Pat}, {'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', binary:replace(Bin, Pat, Rep, [global])} | Rest]};
+
+exec(str_upper, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', string:uppercase(Bin)} | Rest]};
+
+exec(str_lower, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', string:lowercase(Bin)} | Rest]};
+
+exec(str_reverse, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', list_to_binary(lists:reverse(binary_to_list(Bin)))} | Rest]};
+
+exec(str_substring, #r0{ds = [{'Int', Len}, {'Int', Start}, {'String', Bin} | Rest]} = S) ->
+    ActualLen = min(Len, max(0, byte_size(Bin) - Start)),
+    S#r0{ds = [{'String', binary:part(Bin, Start, max(0, ActualLen))} | Rest]};
+
+%%% === Extended List Primitives (10) ===
+
+exec(list_len, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'Int', length(L)} | Rest]};
+
+%% Generic length - works on both String and List
+exec(generic_len, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Int', byte_size(Bin)} | Rest]};
+exec(generic_len, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'Int', length(L)} | Rest]};
+
+exec(list_append, #r0{ds = [{'List', B}, {'List', A} | Rest]} = S) ->
+    S#r0{ds = [{'List', A ++ B} | Rest]};
+
+exec(list_reverse, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'List', lists:reverse(L)} | Rest]};
+
+exec(list_nth, #r0{ds = [{'Int', N}, {'List', L} | Rest]} = S) ->
+    S#r0{ds = [lists:nth(N + 1, L) | Rest]};  %% 0-indexed
+
+exec(list_last, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [lists:last(L) | Rest]};
+
+exec(list_take, #r0{ds = [{'Int', N}, {'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'List', lists:sublist(L, N)} | Rest]};
+
+exec(list_drop, #r0{ds = [{'Int', N}, {'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'List', lists:nthtail(min(N, length(L)), L)} | Rest]};
+
+exec(list_empty, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', L =:= []} | Rest]};
+
+exec(list_contains, #r0{ds = [Elem, {'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', lists:member(Elem, L)} | Rest]};
+
+exec(list_flatten, #r0{ds = [{'List', L} | Rest]} = S) ->
+    Flat = lists:flatmap(fun({'List', Sub}) -> Sub; (E) -> [E] end, L),
+    S#r0{ds = [{'List', Flat} | Rest]};
+
+exec(list_zip, #r0{ds = [{'List', B}, {'List', A} | Rest]} = S) ->
+    Zipped = [{'List', [X, Y]} || {X, Y} <- lists:zip(A, B)],
+    S#r0{ds = [{'List', Zipped} | Rest]};
+
+exec(list_map, #r0{ds = [{'Code', Body}, {'List', L} | Rest]} = S) ->
+    Mapped = lists:map(fun(Elem) ->
+        S1 = run(Body, S#r0{ds = [Elem]}),
+        hd(get_ds(S1))
+    end, L),
+    S#r0{ds = [{'List', Mapped} | Rest]};
+
+exec(list_filter, #r0{ds = [{'Code', Body}, {'List', L} | Rest]} = S) ->
+    Filtered = lists:filter(fun(Elem) ->
+        S1 = run(Body, S#r0{ds = [Elem]}),
+        case hd(get_ds(S1)) of
+            {'Bool', true} -> true;
+            _ -> false
+        end
+    end, L),
+    S#r0{ds = [{'List', Filtered} | Rest]};
+
+exec(list_fold, #r0{ds = [{'Code', Body}, Init, {'List', L} | Rest]} = S) ->
+    Result = lists:foldl(fun(Elem, Acc) ->
+        S1 = run(Body, S#r0{ds = [Elem, Acc]}),
+        hd(get_ds(S1))
+    end, Init, L),
+    S#r0{ds = [Result | Rest]};
+
+%%% === Extended Map Primitives (4) ===
+
+exec(map_values, #r0{ds = [{'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'List', maps:values(Map)} | Rest]};
+
+exec(map_size, #r0{ds = [{'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'Int', maps:size(Map)} | Rest]};
+
+exec(map_merge, #r0{ds = [{'Map', B}, {'Map', A} | Rest]} = S) ->
+    S#r0{ds = [{'Map', maps:merge(A, B)} | Rest]};
+
+exec(map_get_or, #r0{ds = [Default, Key, {'Map', Map} | Rest]} = S) ->
+    case maps:find(Key, Map) of
+        {ok, Value} -> S#r0{ds = [Value | Rest]};
+        error -> S#r0{ds = [Default | Rest]}
+    end;
+
+%%% === Tuple Primitives (6) ===
+
+exec(tuple_make, #r0{ds = [{'List', Items} | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', list_to_tuple([V || {_, V} <- Items])} | Rest]};
+
+exec(tuple_to_list, #r0{ds = [{'Tuple', T} | Rest]} = S) ->
+    S#r0{ds = [{'List', [auto_tag(E) || E <- tuple_to_list(T)]} | Rest]};
+
+exec(tuple_size_op, #r0{ds = [{'Tuple', T} | Rest]} = S) ->
+    S#r0{ds = [{'Int', tuple_size(T)} | Rest]};
+
+exec(ok_tuple, #r0{ds = [Val | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', {ok, Val}} | Rest]};
+
+exec(error_tuple, #r0{ds = [Val | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', {error, Val}} | Rest]};
+
+exec(is_ok, #r0{ds = [{'Tuple', {ok, _}} | _]} = S) ->
+    S#r0{ds = [{'Bool', true} | S#r0.ds]};
+exec(is_ok, #r0{} = S) ->
+    S#r0{ds = [{'Bool', false} | S#r0.ds]};
+
+exec(unwrap_ok, #r0{ds = [{'Tuple', {ok, Val}} | Rest]} = S) ->
+    S#r0{ds = [auto_tag(Val) | Rest]};
+
+exec(unwrap_error, #r0{ds = [{'Tuple', {error, Val}} | Rest]} = S) ->
+    S#r0{ds = [auto_tag(Val) | Rest]};
+
+%%% === Product Type Primitives (4) ===
+%%% Product types: {TypeName, #{field => {Type, Val}}}
+
+exec({product_new, TypeName, Fields}, #r0{ds = DS} = S) ->
+    %% Pop field values from stack in reverse order (TOS = last field)
+    {FieldVals, Rest} = take_n(length(Fields), DS),
+    FieldMap = maps:from_list(lists:zip(Fields, FieldVals)),
+    S#r0{ds = [{TypeName, FieldMap} | Rest]};
+
+exec({product_get, Field}, #r0{ds = [{_TypeName, FieldMap} | _] = DS} = S) ->
+    Val = maps:get(Field, FieldMap),
+    S#r0{ds = [Val | DS]};  %% Non-destructive: instance stays on stack
+
+exec({product_set, Field}, #r0{ds = [Val, {TypeName, FieldMap} | Rest]} = S) ->
+    S#r0{ds = [{TypeName, FieldMap#{Field => Val}} | Rest]};
+
+exec(product_fields, #r0{ds = [{_TypeName, FieldMap} | _] = DS} = S) ->
+    S#r0{ds = [{'List', maps:keys(FieldMap)} | DS]};
+
+%%% === I/O + Debug Primitives (4) ===
+
+exec(print_tos, #r0{ds = [{Type, Val} | Rest], output = Out} = S) ->
+    Str = case Type of
+        'String' -> Val;
+        'Int' -> integer_to_binary(Val);
+        'Float' -> float_to_binary(Val, [{decimals, 10}, compact]);
+        'Bool' -> atom_to_binary(Val, utf8);
+        'Atom' -> atom_to_binary(Val, utf8);
+        _ -> list_to_binary(io_lib:format("~p", [Val]))
+    end,
+    S#r0{ds = Rest, output = <<Out/binary, Str/binary, "\n">>};
+
+exec(print_stack, #r0{ds = DS, output = Out} = S) ->
+    Str = list_to_binary(io_lib:format("~p", [DS])),
+    S#r0{output = <<Out/binary, "Stack: ", Str/binary, "\n">>};
+
+exec(assert_true, #r0{ds = [{'Bool', true} | Rest]} = S) ->
+    S#r0{ds = Rest};
+exec(assert_true, #r0{ds = [Val | _]}) ->
+    error({assertion_failed, Val});
+
+exec(assert_eq, #r0{ds = [A, B | Rest]} = S) when A =:= B ->
+    S#r0{ds = Rest};
+exec(assert_eq, #r0{ds = [A, B | _]}) ->
+    error({assertion_failed, expected, B, got, A});
+
+%%% === File I/O Primitives (3) ===
+
+exec(file_read, #r0{ds = [{'String', Path} | Rest]} = S) ->
+    case file:read_file(Path) of
+        {ok, Content} -> S#r0{ds = [{'Bool', true}, {'String', Content} | Rest]};
+        {error, _} -> S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+exec(file_write, #r0{ds = [{'String', Content}, {'String', Path} | Rest]} = S) ->
+    case file:write_file(Path, Content) of
+        ok -> S#r0{ds = [{'Bool', true} | Rest]};
+        {error, _} -> S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+exec(file_exists, #r0{ds = [{'String', Path} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', filelib:is_file(Path)} | Rest]};
+
+%%% === Logic Primitives (2) ===
+
+exec(and_op, #r0{ds = [{'Bool', A}, {'Bool', B} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', A andalso B} | Rest]};
+
+exec(or_op, #r0{ds = [{'Bool', A}, {'Bool', B} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', A orelse B} | Rest]};
+
 %%% === Runtime Dispatch ===
 %%% For operations not directly mapped to Ring 0 primitives.
 %%% Delegates to the existing A4 type system during bootstrap.
@@ -384,6 +641,12 @@ auto_tag(M) when is_map(M) -> {'Map', M};
 auto_tag(T) when is_tuple(T) -> {'Tuple', T};
 auto_tag(A) when is_atom(A) -> {'Atom', A};
 auto_tag(Other) -> {'Any', Other}.
+
+%% Take N items from stack (for product type construction).
+take_n(0, Stack) -> {[], Stack};
+take_n(N, [H | Rest]) ->
+    {Items, Remaining} = take_n(N - 1, Rest),
+    {[H | Items], Remaining}.
 
 %% Check if stack matches a type signature (TOS-first).
 %% SigIn entries: atom (type match) | {Type, Value} (value constraint) | 'Any'

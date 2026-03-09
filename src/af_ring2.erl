@@ -181,11 +181,23 @@ translate_primitive("<=")    -> {ok, [swap, lt, not_op]};
 translate_primitive(">=")    -> {ok, [lt, not_op]};
 %% Logic
 translate_primitive("not")   -> {ok, [not_op]};
+translate_primitive("and")   -> {ok, [and_op]};
+translate_primitive("or")    -> {ok, [or_op]};
 %% List
 translate_primitive("nil")   -> {ok, [nil]};
 translate_primitive("cons")  -> {ok, [cons]};
 translate_primitive("head")  -> {ok, [head]};
 translate_primitive("tail")  -> {ok, [tail]};
+translate_primitive("length")    -> {ok, [generic_len]};
+translate_primitive("append")    -> {ok, [list_append]};
+translate_primitive("reverse")   -> {ok, [list_reverse]};
+translate_primitive("nth")       -> {ok, [list_nth]};
+translate_primitive("last")      -> {ok, [list_last]};
+translate_primitive("take")      -> {ok, [list_take]};
+translate_primitive("empty?")    -> {ok, [list_empty]};
+translate_primitive("contains?") -> {ok, [list_contains]};
+translate_primitive("flatten")   -> {ok, [list_flatten]};
+translate_primitive("zip")       -> {ok, [list_zip]};
 %% Map
 translate_primitive("map-new")    -> {ok, [map_new]};
 translate_primitive("map-put")    -> {ok, [map_put]};
@@ -193,6 +205,55 @@ translate_primitive("map-get")    -> {ok, [map_get]};
 translate_primitive("map-delete") -> {ok, [map_delete]};
 translate_primitive("map-keys")   -> {ok, [map_keys]};
 translate_primitive("map-has?")   -> {ok, [map_has]};
+translate_primitive("map-values") -> {ok, [map_values]};
+translate_primitive("map-size")   -> {ok, [map_size]};
+translate_primitive("map-merge")  -> {ok, [map_merge]};
+translate_primitive("map-get-or") -> {ok, [map_get_or]};
+%% String
+translate_primitive("concat")      -> {ok, [str_concat]};
+translate_primitive("split")       -> {ok, [str_split]};
+translate_primitive("contains")    -> {ok, [str_contains]};
+translate_primitive("starts-with") -> {ok, [str_starts_with]};
+translate_primitive("ends-with")   -> {ok, [str_ends_with]};
+translate_primitive("trim")        -> {ok, [str_trim]};
+translate_primitive("to-upper")    -> {ok, [str_upper]};
+translate_primitive("to-lower")    -> {ok, [str_lower]};
+translate_primitive("substring")   -> {ok, [str_substring]};
+translate_primitive("replace")     -> {ok, [str_replace]};
+%% Conversion
+translate_primitive("to-string")  -> {ok, [to_string]};
+translate_primitive("to-int")     -> {ok, [to_int]};
+translate_primitive("to-float")   -> {ok, [to_float]};
+translate_primitive("to-atom")    -> {ok, [to_atom]};
+%% Tuple
+translate_primitive("make-tuple") -> {ok, [tuple_make]};
+translate_primitive("from-tuple") -> {ok, [tuple_to_list]};
+translate_primitive("tuple-size") -> {ok, [tuple_size_op]};
+translate_primitive("ok-tuple")   -> {ok, [ok_tuple]};
+translate_primitive("error-tuple") -> {ok, [error_tuple]};
+translate_primitive("is-ok")      -> {ok, [is_ok]};
+translate_primitive("unwrap-ok")  -> {ok, [unwrap_ok]};
+%% I/O
+translate_primitive("print")      -> {ok, [print_tos]};
+translate_primitive("stack")      -> {ok, [print_stack]};
+translate_primitive("assert")     -> {ok, [assert_true]};
+translate_primitive("assert-eq")  -> {ok, [assert_eq]};
+%% File
+translate_primitive("read-file")   -> {ok, [file_read]};
+translate_primitive("write-file")  -> {ok, [file_write]};
+translate_primitive("file-exists?") -> {ok, [file_exists]};
+%% FFI
+translate_primitive("erlang-apply")  -> {ok, [{apply_impl, "erlang-apply"}]};
+translate_primitive("erlang-apply0") -> {ok, [{apply_impl, "erlang-apply0"}]};
+translate_primitive("erlang-call")   -> {ok, [{apply_impl, "erlang-call"}]};
+translate_primitive("erlang-call0")  -> {ok, [{apply_impl, "erlang-call0"}]};
+translate_primitive("erlang-new")    -> {ok, [{apply_impl, "erlang-new"}]};
+%% Actor
+translate_primitive("spawn")   -> {ok, [spawn_actor]};
+translate_primitive("send")    -> {ok, [send_msg]};
+translate_primitive("!")       -> {ok, [send_msg]};
+translate_primitive("receive") -> {ok, [receive_msg]};
+translate_primitive("receive-timeout") -> {ok, [receive_timeout]};
 translate_primitive(_)       -> not_found.
 
 %% Try to parse a token value as a literal.

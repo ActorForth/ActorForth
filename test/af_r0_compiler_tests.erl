@@ -107,9 +107,15 @@ map_ops_test() ->
 %%% === Unknown Ops ===
 
 unknown_op_becomes_apply_impl_test() ->
+    %% length is now a primitive (generic_len), use truly unknown op
+    Tokens = af_r0_parser:parse(<<": f String -> Int ; some-unknown-op .">>, <<"test">>),
+    [{_, _, _, Body}] = af_r0_compiler:compile_tokens(Tokens),
+    ?assertEqual([{apply_impl, "some-unknown-op"}], Body).
+
+length_is_primitive_test() ->
     Tokens = af_r0_parser:parse(<<": f String -> Int ; length .">>, <<"test">>),
     [{_, _, _, Body}] = af_r0_compiler:compile_tokens(Tokens),
-    ?assertEqual([{apply_impl, "length"}], Body).
+    ?assertEqual([generic_len], Body).
 
 %%% === Empty ===
 

@@ -204,6 +204,80 @@ translate_native(not_op, StackExpr, L, _WM, Idx) ->
     ]},
     {inline, Expr, Idx+2};
 
+translate_native(divop, StackExpr, L, _WM, Idx) ->
+    AV = var(L, Idx), BV = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, {tuple, L, [{var, L, '_'}, AV]},
+                    {cons, L, {tuple, L, [{var, L, '_'}, BV]}, R}}, StackExpr},
+        {cons, L, {tuple, L, [{atom, L, 'Int'}, {op, L, 'div', BV, AV}]}, R}
+    ]},
+    {inline, Expr, Idx+3};
+
+translate_native(modop, StackExpr, L, _WM, Idx) ->
+    AV = var(L, Idx), BV = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, {tuple, L, [{var, L, '_'}, AV]},
+                    {cons, L, {tuple, L, [{var, L, '_'}, BV]}, R}}, StackExpr},
+        {cons, L, {tuple, L, [{atom, L, 'Int'}, {op, L, 'rem', BV, AV}]}, R}
+    ]},
+    {inline, Expr, Idx+3};
+
+translate_native(to_r, StackExpr, L, _WM, Idx) ->
+    %% to_r falls back since native mode doesn't have a return stack
+    %% But we can optimize to_r/from_r sequences via fallback
+    translate_fallback(to_r, StackExpr, L, Idx);
+
+translate_native(from_r, StackExpr, L, _WM, Idx) ->
+    translate_fallback(from_r, StackExpr, L, Idx);
+
+translate_native(str_concat, StackExpr, L, _WM, Idx) ->
+    AV = var(L, Idx), BV = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, {tuple, L, [{atom, L, 'String'}, AV]},
+                    {cons, L, {tuple, L, [{atom, L, 'String'}, BV]}, R}}, StackExpr},
+        {cons, L,
+            {tuple, L, [{atom, L, 'String'},
+                {bin, L, [{bin_element, L, BV, default, [binary]},
+                          {bin_element, L, AV, default, [binary]}]}]},
+            R}
+    ]},
+    {inline, Expr, Idx+3};
+
+translate_native(generic_len, StackExpr, L, _WM, Idx) ->
+    V = var(L, Idx), R = var(L, Idx+1), Result = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, V, R}, StackExpr},
+        {match, L, Result,
+            {'case', L, V, [
+                {clause, L, [{tuple, L, [{atom, L, 'String'}, var(L, Idx+3)]}], [],
+                    [{tuple, L, [{atom, L, 'Int'},
+                        rcall(L, erlang, byte_size, [var(L, Idx+3)])]}]},
+                {clause, L, [{tuple, L, [{atom, L, 'List'}, var(L, Idx+4)]}], [],
+                    [{tuple, L, [{atom, L, 'Int'},
+                        rcall(L, erlang, length, [var(L, Idx+4)])]}]}
+            ]}},
+        {cons, L, Result, R}
+    ]},
+    {inline, Expr, Idx+5};
+
+translate_native(and_op, StackExpr, L, _WM, Idx) ->
+    A = var(L, Idx), B = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, {tuple, L, [{atom, L, 'Bool'}, A]},
+                    {cons, L, {tuple, L, [{atom, L, 'Bool'}, B]}, R}}, StackExpr},
+        {cons, L, {tuple, L, [{atom, L, 'Bool'}, {op, L, 'andalso', A, B}]}, R}
+    ]},
+    {inline, Expr, Idx+3};
+
+translate_native(or_op, StackExpr, L, _WM, Idx) ->
+    A = var(L, Idx), B = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, {tuple, L, [{atom, L, 'Bool'}, A]},
+                    {cons, L, {tuple, L, [{atom, L, 'Bool'}, B]}, R}}, StackExpr},
+        {cons, L, {tuple, L, [{atom, L, 'Bool'}, {op, L, 'orelse', A, B}]}, R}
+    ]},
+    {inline, Expr, Idx+3};
+
 translate_native({call, Name}, StackExpr, L, WM, Idx) ->
     case maps:is_key(Name, WM) of
         true ->

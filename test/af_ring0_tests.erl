@@ -798,3 +798,244 @@ io_roundtrip_test() ->
         {emit, <<"!">>}
     ], S0),
     ?assertEqual(<<"hello!">>, af_ring0:get_output(S1)).
+
+%%% === Type Conversion ===
+
+to_string_int_test() ->
+    S0 = af_ring0:set_ds([{'Int', 42}], af_ring0:new()),
+    S1 = af_ring0:exec(to_string, S0),
+    ?assertEqual([{'String', <<"42">>}], af_ring0:get_ds(S1)).
+
+to_string_bool_test() ->
+    S0 = af_ring0:set_ds([{'Bool', true}], af_ring0:new()),
+    S1 = af_ring0:exec(to_string, S0),
+    ?assertEqual([{'String', <<"true">>}], af_ring0:get_ds(S1)).
+
+to_int_string_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"99">>}], af_ring0:new()),
+    S1 = af_ring0:exec(to_int, S0),
+    ?assertEqual([{'Int', 99}], af_ring0:get_ds(S1)).
+
+to_int_float_test() ->
+    S0 = af_ring0:set_ds([{'Float', 3.7}], af_ring0:new()),
+    S1 = af_ring0:exec(to_int, S0),
+    ?assertEqual([{'Int', 3}], af_ring0:get_ds(S1)).
+
+to_float_int_test() ->
+    S0 = af_ring0:set_ds([{'Int', 5}], af_ring0:new()),
+    S1 = af_ring0:exec(to_float, S0),
+    ?assertEqual([{'Float', 5.0}], af_ring0:get_ds(S1)).
+
+to_atom_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(to_atom, S0),
+    ?assertEqual([{'Atom', hello}], af_ring0:get_ds(S1)).
+
+to_bool_zero_test() ->
+    S0 = af_ring0:set_ds([{'Int', 0}], af_ring0:new()),
+    S1 = af_ring0:exec(to_bool, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
+to_bool_nonzero_test() ->
+    S0 = af_ring0:set_ds([{'Int', 5}], af_ring0:new()),
+    S1 = af_ring0:exec(to_bool, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+%%% === Extended String Ops ===
+
+str_split_test() ->
+    S0 = af_ring0:set_ds([{'String', <<",">>}, {'String', <<"a,b,c">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_split, S0),
+    ?assertEqual([{'List', [{'String', <<"a">>}, {'String', <<"b">>}, {'String', <<"c">>}]}],
+                 af_ring0:get_ds(S1)).
+
+str_contains_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"ell">>}, {'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_contains, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+str_starts_with_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"he">>}, {'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_starts_with, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+str_ends_with_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"lo">>}, {'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_ends_with, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+str_trim_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"  hi  ">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_trim, S0),
+    ?assertEqual([{'String', <<"hi">>}], af_ring0:get_ds(S1)).
+
+str_replace_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"X">>}, {'String', <<"l">>}, {'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_replace, S0),
+    ?assertEqual([{'String', <<"heXXo">>}], af_ring0:get_ds(S1)).
+
+str_upper_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_upper, S0),
+    ?assertEqual([{'String', <<"HELLO">>}], af_ring0:get_ds(S1)).
+
+str_lower_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"HELLO">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_lower, S0),
+    ?assertEqual([{'String', <<"hello">>}], af_ring0:get_ds(S1)).
+
+%%% === Extended List Ops ===
+
+list_len_test() ->
+    S0 = af_ring0:set_ds([{'List', [{'Int', 1}, {'Int', 2}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_len, S0),
+    ?assertEqual([{'Int', 2}], af_ring0:get_ds(S1)).
+
+generic_len_string_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"abc">>}], af_ring0:new()),
+    S1 = af_ring0:exec(generic_len, S0),
+    ?assertEqual([{'Int', 3}], af_ring0:get_ds(S1)).
+
+generic_len_list_test() ->
+    S0 = af_ring0:set_ds([{'List', [{'Int', 1}]}], af_ring0:new()),
+    S1 = af_ring0:exec(generic_len, S0),
+    ?assertEqual([{'Int', 1}], af_ring0:get_ds(S1)).
+
+list_append_test() ->
+    S0 = af_ring0:set_ds([{'List', [{'Int', 3}]}, {'List', [{'Int', 1}, {'Int', 2}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_append, S0),
+    ?assertEqual([{'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}], af_ring0:get_ds(S1)).
+
+list_reverse_test() ->
+    S0 = af_ring0:set_ds([{'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_reverse, S0),
+    ?assertEqual([{'List', [{'Int', 3}, {'Int', 2}, {'Int', 1}]}], af_ring0:get_ds(S1)).
+
+list_nth_test() ->
+    S0 = af_ring0:set_ds([{'Int', 1}, {'List', [{'Int', 10}, {'Int', 20}, {'Int', 30}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_nth, S0),
+    ?assertEqual([{'Int', 20}], af_ring0:get_ds(S1)).
+
+list_empty_true_test() ->
+    S0 = af_ring0:set_ds([{'List', []}], af_ring0:new()),
+    S1 = af_ring0:exec(list_empty, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+list_empty_false_test() ->
+    S0 = af_ring0:set_ds([{'List', [{'Int', 1}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_empty, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
+list_contains_test() ->
+    S0 = af_ring0:set_ds([{'Int', 2}, {'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_contains, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+%%% === Map Extended Ops ===
+
+map_values_test() ->
+    M = #{ {'String', <<"a">>} => {'Int', 1} },
+    S0 = af_ring0:set_ds([{'Map', M}], af_ring0:new()),
+    S1 = af_ring0:exec(map_values, S0),
+    ?assertEqual([{'List', [{'Int', 1}]}], af_ring0:get_ds(S1)).
+
+map_size_test() ->
+    M = #{ {'String', <<"a">>} => {'Int', 1}, {'String', <<"b">>} => {'Int', 2} },
+    S0 = af_ring0:set_ds([{'Map', M}], af_ring0:new()),
+    S1 = af_ring0:exec(map_size, S0),
+    ?assertEqual([{'Int', 2}], af_ring0:get_ds(S1)).
+
+map_merge_test() ->
+    A = #{ {'String', <<"a">>} => {'Int', 1} },
+    B = #{ {'String', <<"b">>} => {'Int', 2} },
+    S0 = af_ring0:set_ds([{'Map', B}, {'Map', A}], af_ring0:new()),
+    S1 = af_ring0:exec(map_merge, S0),
+    [{'Map', R}] = af_ring0:get_ds(S1),
+    ?assertEqual(2, maps:size(R)).
+
+%%% === Tuple Ops ===
+
+ok_tuple_test() ->
+    S0 = af_ring0:set_ds([{'Int', 42}], af_ring0:new()),
+    S1 = af_ring0:exec(ok_tuple, S0),
+    ?assertEqual([{'Tuple', {ok, {'Int', 42}}}], af_ring0:get_ds(S1)).
+
+is_ok_true_test() ->
+    S0 = af_ring0:set_ds([{'Tuple', {ok, 1}}], af_ring0:new()),
+    S1 = af_ring0:exec(is_ok, S0),
+    [{'Bool', true} | _] = af_ring0:get_ds(S1).
+
+is_ok_false_test() ->
+    S0 = af_ring0:set_ds([{'Int', 42}], af_ring0:new()),
+    S1 = af_ring0:exec(is_ok, S0),
+    [{'Bool', false} | _] = af_ring0:get_ds(S1).
+
+%%% === Product Types ===
+
+product_new_test() ->
+    S0 = af_ring0:set_ds([{'Int', 10}, {'Int', 20}], af_ring0:new()),
+    S1 = af_ring0:exec({product_new, 'Point', [x, y]}, S0),
+    [{'Point', Fields}] = af_ring0:get_ds(S1),
+    ?assertEqual({'Int', 10}, maps:get(x, Fields)),
+    ?assertEqual({'Int', 20}, maps:get(y, Fields)).
+
+product_get_test() ->
+    Fields = #{x => {'Int', 10}, y => {'Int', 20}},
+    S0 = af_ring0:set_ds([{'Point', Fields}], af_ring0:new()),
+    S1 = af_ring0:exec({product_get, x}, S0),
+    %% Non-destructive: value on top, instance below
+    [{'Int', 10}, {'Point', _}] = af_ring0:get_ds(S1).
+
+product_set_test() ->
+    Fields = #{x => {'Int', 10}, y => {'Int', 20}},
+    S0 = af_ring0:set_ds([{'Int', 99}, {'Point', Fields}], af_ring0:new()),
+    S1 = af_ring0:exec({product_set, x}, S0),
+    [{'Point', NewFields}] = af_ring0:get_ds(S1),
+    ?assertEqual({'Int', 99}, maps:get(x, NewFields)).
+
+%%% === Logic Ops ===
+
+and_op_test() ->
+    S0 = af_ring0:set_ds([{'Bool', true}, {'Bool', true}], af_ring0:new()),
+    S1 = af_ring0:exec(and_op, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+and_op_false_test() ->
+    S0 = af_ring0:set_ds([{'Bool', false}, {'Bool', true}], af_ring0:new()),
+    S1 = af_ring0:exec(and_op, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
+or_op_test() ->
+    S0 = af_ring0:set_ds([{'Bool', false}, {'Bool', true}], af_ring0:new()),
+    S1 = af_ring0:exec(or_op, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+%%% === Assert / Print ===
+
+assert_true_pass_test() ->
+    S0 = af_ring0:set_ds([{'Bool', true}], af_ring0:new()),
+    S1 = af_ring0:exec(assert_true, S0),
+    ?assertEqual([], af_ring0:get_ds(S1)).
+
+assert_eq_pass_test() ->
+    S0 = af_ring0:set_ds([{'Int', 42}, {'Int', 42}], af_ring0:new()),
+    S1 = af_ring0:exec(assert_eq, S0),
+    ?assertEqual([], af_ring0:get_ds(S1)).
+
+print_tos_test() ->
+    S0 = af_ring0:set_ds([{'Int', 42}], af_ring0:new()),
+    S1 = af_ring0:exec(print_tos, S0),
+    ?assertEqual([], af_ring0:get_ds(S1)),
+    ?assertEqual(<<"42\n">>, af_ring0:get_output(S1)).
+
+%%% === File I/O ===
+
+file_exists_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"rebar.config">>}], af_ring0:new()),
+    S1 = af_ring0:exec(file_exists, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+file_exists_false_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"nonexistent_file.xyz">>}], af_ring0:new()),
+    S1 = af_ring0:exec(file_exists, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
