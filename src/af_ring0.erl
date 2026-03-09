@@ -13,7 +13,7 @@
 -export([
     new/0, run/2, exec/2,
     get_ds/1, get_rs/1, get_types/1, get_words/1,
-    get_output/1, set_input/2, set_ds/2
+    get_output/1, set_input/2, set_ds/2, set_words/2, set_types/2
 ]).
 
 -record(r0, {
@@ -36,6 +36,8 @@ get_words(#r0{words = W}) -> W.
 get_output(#r0{output = O}) -> O.
 set_input(Bin, S) -> S#r0{input = Bin}.
 set_ds(DS, S) -> S#r0{ds = DS}.
+set_words(W, S) -> S#r0{words = W}.
+set_types(T, S) -> S#r0{types = T}.
 
 %%% === Program Execution ===
 
