@@ -310,6 +310,10 @@ exec(str_len, #r0{ds = [{'String', Bin} | Rest]} = S) ->
 exec(str_nth, #r0{ds = [{'Int', N}, {'String', Bin} | Rest]} = S) ->
     S#r0{ds = [{'String', binary:part(Bin, N, 1)} | Rest]};
 
+%% str_byte_at: get integer byte value at position
+exec(str_byte_at, #r0{ds = [{'Int', N}, {'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Int', binary:at(Bin, N)} | Rest]};
+
 exec(str_slice, #r0{ds = [{'Int', Len}, {'Int', Start}, {'String', Bin} | Rest]} = S) ->
     ActualLen = min(Len, byte_size(Bin) - Start),
     S#r0{ds = [{'String', binary:part(Bin, Start, max(0, ActualLen))} | Rest]};
@@ -532,9 +536,11 @@ exec(unwrap_error, #r0{ds = [{'Tuple', {error, Val}} | Rest]} = S) ->
 %%% Product types: {TypeName, #{field => {Type, Val}}}
 
 exec({product_new, TypeName, Fields}, #r0{ds = DS} = S) ->
-    %% Pop field values from stack in reverse order (TOS = last field)
+    %% Pop field values from stack (TOS = last field in source order)
+    %% Fields is source order [src, pos, len, ...], stack has last field on top
+    %% So reverse FieldVals to align with Fields
     {FieldVals, Rest} = take_n(length(Fields), DS),
-    FieldMap = maps:from_list(lists:zip(Fields, FieldVals)),
+    FieldMap = maps:from_list(lists:zip(Fields, lists:reverse(FieldVals))),
     S#r0{ds = [{TypeName, FieldMap} | Rest]};
 
 exec({product_get, Field}, #r0{ds = [{_TypeName, FieldMap} | _] = DS} = S) ->
@@ -601,11 +607,32 @@ exec(or_op, #r0{ds = [{'Bool', A}, {'Bool', B} | Rest]} = S) ->
 
 %%% === Runtime Dispatch ===
 %%% For operations not directly mapped to Ring 0 primitives.
-%%% Delegates to the existing A4 type system during bootstrap.
+%%% Self-contained: no ETS or interpreter dependency.
 
+%% FFI operations — handle explicitly
+exec({apply_impl, "erlang-apply"}, #r0{ds = [{'List', Args}, {'Atom', Fun}, {'Atom', Mod} | Rest]} = S) ->
+    Result = apply(Mod, Fun, [af_ffi_convert(A) || A <- Args]),
+    S#r0{ds = [af_ffi_result(Result) | Rest]};
+exec({apply_impl, "erlang-apply0"}, #r0{ds = [{'Atom', Fun}, {'Atom', Mod} | Rest]} = S) ->
+    Result = apply(Mod, Fun, []),
+    S#r0{ds = [af_ffi_result(Result) | Rest]};
+exec({apply_impl, "erlang-call"}, #r0{ds = [{'Int', N} | DS]} = S) ->
+    {Args0, [{'Atom', Fun}, {'Atom', Mod} | Rest]} = lists:split(N, DS),
+    Args = [af_ffi_convert(A) || A <- lists:reverse(Args0)],
+    Result = apply(Mod, Fun, Args),
+    S#r0{ds = [af_ffi_result(Result) | Rest]};
+exec({apply_impl, "erlang-call0"}, #r0{ds = [{'Atom', Fun}, {'Atom', Mod} | Rest]} = S) ->
+    Result = apply(Mod, Fun, []),
+    S#r0{ds = [af_ffi_result(Result) | Rest]};
+
+%% Unknown operation — push as atom (same as interpreter behavior for unknown tokens)
 exec({apply_impl, OpName}, #r0{ds = DS} = S) ->
-    NewStack = af_compile:apply_impl(OpName, DS),
-    S#r0{ds = NewStack};
+    AtomName = if is_binary(OpName) -> binary_to_atom(OpName, utf8);
+                  is_list(OpName) -> list_to_atom(OpName);
+                  is_atom(OpName) -> OpName;
+                  true -> list_to_atom(lists:flatten(io_lib:format("~p", [OpName])))
+               end,
+    S#r0{ds = [{'Atom', AtomName} | DS]};
 
 %%% === Word Definition ===
 
@@ -641,6 +668,19 @@ auto_tag(M) when is_map(M) -> {'Map', M};
 auto_tag(T) when is_tuple(T) -> {'Tuple', T};
 auto_tag(A) when is_atom(A) -> {'Atom', A};
 auto_tag(Other) -> {'Any', Other}.
+
+%% FFI helpers — convert tagged stack items to/from raw Erlang terms.
+af_ffi_convert({'Int', N}) -> N;
+af_ffi_convert({'Float', F}) -> F;
+af_ffi_convert({'Bool', B}) -> B;
+af_ffi_convert({'String', S}) -> S;
+af_ffi_convert({'Atom', A}) -> A;
+af_ffi_convert({'List', L}) -> [af_ffi_convert(E) || E <- L];
+af_ffi_convert({'Map', M}) -> M;
+af_ffi_convert({'Tuple', T}) -> T;
+af_ffi_convert({_, V}) -> V.
+
+af_ffi_result(Result) -> auto_tag(Result).
 
 %% Take N items from stack (for product type construction).
 take_n(0, Stack) -> {[], Stack};

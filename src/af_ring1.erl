@@ -137,6 +137,30 @@ translate_body([], StackExpr, _L, _WordsMap, VarIdx) ->
 translate_body([{lit, {'List', Clauses}}, select_clause | Rest], StackExpr, L, WordsMap, VarIdx) ->
     {CaseExpr, NewIdx} = translate_select_clause(Clauses, StackExpr, L, WordsMap, VarIdx),
     translate_body(Rest, CaseExpr, L, WordsMap, NewIdx);
+%% Recognize rot: to_r, swap, from_r, swap → [A,B,C|R] → [C,A,B|R]
+translate_body([to_r, swap, from_r, swap | Rest], StackExpr, L, WordsMap, VarIdx) ->
+    A = var(L, VarIdx), B = var(L, VarIdx+1), C = var(L, VarIdx+2), R = var(L, VarIdx+3),
+    Expr = {block, L, [
+        {match, L, {cons, L, A, {cons, L, B, {cons, L, C, R}}}, StackExpr},
+        {cons, L, C, {cons, L, A, {cons, L, B, R}}}
+    ]},
+    translate_body(Rest, Expr, L, WordsMap, VarIdx+4);
+%% Recognize 2dup: two over patterns → [A,B|R] → [A,B,A,B|R]
+translate_body([to_r, dup, from_r, swap, to_r, dup, from_r, swap | Rest], StackExpr, L, WordsMap, VarIdx) ->
+    A = var(L, VarIdx), B = var(L, VarIdx+1), R = var(L, VarIdx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, A, {cons, L, B, R}}, StackExpr},
+        {cons, L, A, {cons, L, B, {cons, L, A, {cons, L, B, R}}}}
+    ]},
+    translate_body(Rest, Expr, L, WordsMap, VarIdx+3);
+%% Recognize over: to_r, dup, from_r, swap → [A,B|R] → [B,A,B|R]
+translate_body([to_r, dup, from_r, swap | Rest], StackExpr, L, WordsMap, VarIdx) ->
+    A = var(L, VarIdx), B = var(L, VarIdx+1), R = var(L, VarIdx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, A, {cons, L, B, R}}, StackExpr},
+        {cons, L, B, {cons, L, A, {cons, L, B, R}}}
+    ]},
+    translate_body(Rest, Expr, L, WordsMap, VarIdx+3);
 translate_body([Inst | Rest], StackExpr, L, WordsMap, VarIdx) ->
     case translate_native(Inst, StackExpr, L, WordsMap, VarIdx) of
         {inline, NewStackExpr, NewIdx} ->
@@ -227,8 +251,6 @@ translate_native(modop, StackExpr, L, _WM, Idx) ->
     {inline, Expr, Idx+3};
 
 translate_native(to_r, StackExpr, L, _WM, Idx) ->
-    %% to_r falls back since native mode doesn't have a return stack
-    %% But we can optimize to_r/from_r sequences via fallback
     translate_fallback(to_r, StackExpr, L, Idx);
 
 translate_native(from_r, StackExpr, L, _WM, Idx) ->
@@ -376,9 +398,13 @@ translate_native(map_get, StackExpr, L, _WM, Idx) ->
     {inline, Expr, Idx+3};
 
 translate_native({apply_impl, OpName}, StackExpr, L, _WM, Idx) ->
-    %% Runtime dispatch: call af_compile:apply_impl/2
-    OpAbstract = erl_parse:abstract(OpName),
-    {inline, rcall(L, af_compile, apply_impl, [OpAbstract, StackExpr]), Idx};
+    %% Push unknown operations as atoms — no ETS dependency
+    AtomName = if is_binary(OpName) -> binary_to_atom(OpName, utf8);
+                  is_list(OpName) -> list_to_atom(OpName);
+                  is_atom(OpName) -> OpName;
+                  true -> list_to_atom(lists:flatten(io_lib:format("~p", [OpName])))
+               end,
+    {inline, {cons, L, {tuple, L, [{atom, L, 'Atom'}, {atom, L, AtomName}]}, StackExpr}, Idx};
 
 translate_native(print_tos, StackExpr, L, _WM, Idx) ->
     V = var(L, Idx), R = var(L, Idx+1),

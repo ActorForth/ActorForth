@@ -450,10 +450,11 @@ selfhosted_compile_test_() ->
 
         {"selfhosted product setter", fun() ->
             Source = "type Counter\n  count Int\n.\n"
-                     ": set-count Int Counter -> Counter ; count! .",
+                     ": set-count Int Counter -> Counter ; swap count! .",
             {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_set"),
             Instance = {'Counter', #{count => {'Int', 0}}},
-            [{'Counter', Fields}] = Mod:'set-count'([{'Int', 99}, Instance]),
+            %% Rightmost in source = TOS: Counter is TOS, Int below
+            [{'Counter', Fields}] = Mod:'set-count'([Instance, {'Int', 99}]),
             ?assertEqual({'Int', 99}, maps:get(count, Fields))
         end},
 

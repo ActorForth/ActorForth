@@ -973,7 +973,8 @@ is_ok_false_test() ->
 %%% === Product Types ===
 
 product_new_test() ->
-    S0 = af_ring0:set_ds([{'Int', 10}, {'Int', 20}], af_ring0:new()),
+    %% Stack: [y_val(TOS), x_val] — last field on top, first field deepest
+    S0 = af_ring0:set_ds([{'Int', 20}, {'Int', 10}], af_ring0:new()),
     S1 = af_ring0:exec({product_new, 'Point', [x, y]}, S0),
     [{'Point', Fields}] = af_ring0:get_ds(S1),
     ?assertEqual({'Int', 10}, maps:get(x, Fields)),

@@ -76,7 +76,9 @@ parse_word_def([NameTok | Rest]) ->
     {Body, Rest3} = parse_body(Rest2, []),
     WordNames = [Name],  %% Will be enriched later by Ring 2
     R0Body = translate_body(Body, WordNames),
-    {{Name, lists:reverse(SigIn), lists:reverse(SigOut), R0Body}, Rest3}.
+    %% SigIn: keep as TOS-first (last source token accumulated first)
+    %% SigOut: reverse to source order for display
+    {{Name, SigIn, lists:reverse(SigOut), R0Body}, Rest3}.
 
 %%% === Signature Parsing ===
 
@@ -229,7 +231,8 @@ parse_one_sub_clause(Tokens) ->
     %% If we hit ; directly, there's no explicit -> output
     {SigOut, Rest2} = parse_sig_out(Rest1, []),
     {Body, Rest3} = parse_sub_body(Rest2, []),
-    {{lists:reverse(SigIn), lists:reverse(SigOut), Body}, Rest3}.
+    %% SigIn: keep as TOS-first
+    {{SigIn, lists:reverse(SigOut), Body}, Rest3}.
 
 %% Parse sub-clause body until ";" (sub-clause end) or "." (word end)
 parse_sub_body([], Acc) -> {lists:reverse(Acc), []};
@@ -357,6 +360,8 @@ translate_primitive("to-upper")    -> {ok, [str_upper]};
 translate_primitive("to-lower")    -> {ok, [str_lower]};
 translate_primitive("substring")   -> {ok, [str_substring]};
 translate_primitive("replace")     -> {ok, [str_replace]};
+translate_primitive("str-nth")     -> {ok, [str_nth]};
+translate_primitive("str-byte-at") -> {ok, [str_byte_at]};
 %% Conversion
 translate_primitive("to-string")  -> {ok, [to_string]};
 translate_primitive("to-int")     -> {ok, [to_int]};
@@ -474,6 +479,7 @@ parse_product_type([NameTok | Rest]) ->
         FName = binary_to_list(F) ++ "!",
         FAtom = list_to_atom(binary_to_list(F)),
         FType = binary_to_atom(T, utf8),
+        %% TOS-first: FType on TOS (new value), TypeName below (instance)
         {FName, [FType, TypeName], [TypeName],
          [{product_set, FAtom}]}
     end || {F, T} <- Fields],

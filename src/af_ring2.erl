@@ -49,8 +49,8 @@ compile(Source, Filename, ModName) ->
                 R0Defs = [translate_word(WD, WordNames) || WD <- WordDefs],
                 %% Phase 3.5: Merge multi-clause words into select_clause
                 MergedDefs = merge_multi_clause(R0Defs),
-                %% Phase 4: Compile via Ring 1
-                af_ring1:compile_module(ModAtom, MergedDefs)
+                %% Phase 4: Compile via Ring 1 (native mode)
+                af_ring1:compile_module(ModAtom, MergedDefs, [{mode, native}])
         end
     catch
         Class:Reason ->
@@ -90,8 +90,8 @@ compile_selfhosted(Source, Filename, ModName) ->
                 WordDefs = retranslate_bodies(WordDefs0, AllNames),
                 %% Phase 3: Merge multi-clause words
                 MergedDefs = merge_multi_clause(WordDefs),
-                %% Phase 4: Compile via Ring 1
-                af_ring1:compile_module(ModAtom, MergedDefs)
+                %% Phase 4: Compile via Ring 1 (native mode — no interpreter dependency)
+                af_ring1:compile_module(ModAtom, MergedDefs, [{mode, native}])
         end
     catch
         Class:Reason ->
@@ -121,6 +121,11 @@ retranslate_body(Body, AllNames) ->
                 true -> {call, OpName};
                 false -> {apply_impl, OpName}
             end;
+        ({lit, {'List', Clauses}}) when is_list(Clauses) ->
+            %% Recurse into select_clause bodies
+            NewClauses = [{SigIn, retranslate_body(ClauseBody, AllNames)}
+                          || {SigIn, ClauseBody} <- Clauses],
+            {lit, {'List', NewClauses}};
         (Other) -> Other
     end, Body).
 
@@ -220,6 +225,8 @@ translate_primitive("to-upper")    -> {ok, [str_upper]};
 translate_primitive("to-lower")    -> {ok, [str_lower]};
 translate_primitive("substring")   -> {ok, [str_substring]};
 translate_primitive("replace")     -> {ok, [str_replace]};
+translate_primitive("str-nth")     -> {ok, [str_nth]};
+translate_primitive("str-byte-at") -> {ok, [str_byte_at]};
 %% Conversion
 translate_primitive("to-string")  -> {ok, [to_string]};
 translate_primitive("to-int")     -> {ok, [to_int]};

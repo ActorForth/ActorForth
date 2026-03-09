@@ -87,7 +87,7 @@ compile_to_dir_selfhosted(File, OutDir) ->
                 _ ->
                     AllNames = lists:usort([N || {N, _, _, _} <- WordDefs0]),
                     WordDefs = retranslate_bodies(WordDefs0, AllNames),
-                    case af_ring1:compile_to_binary(ModAtom, WordDefs) of
+                    case af_ring1:compile_to_binary(ModAtom, WordDefs, [{mode, native}]) of
                         {ok, Binary} ->
                             ok = filelib:ensure_dir(filename:join(OutDir, "x")),
                             BeamFile = filename:join(OutDir, atom_to_list(ModAtom) ++ ".beam"),
@@ -101,14 +101,22 @@ compile_to_dir_selfhosted(File, OutDir) ->
     end.
 
 retranslate_bodies(WordDefs, AllNames) ->
-    [{Name, SI, SO, lists:map(fun
+    [{Name, SI, SO, retranslate_body(Body, AllNames)}
+     || {Name, SI, SO, Body} <- WordDefs].
+
+retranslate_body(Body, AllNames) ->
+    lists:map(fun
         ({apply_impl, OpName}) ->
             case lists:member(OpName, AllNames) of
                 true -> {call, OpName};
                 false -> {apply_impl, OpName}
             end;
+        ({lit, {'List', Clauses}}) when is_list(Clauses) ->
+            NewClauses = [{SigIn, retranslate_body(ClauseBody, AllNames)}
+                          || {SigIn, ClauseBody} <- Clauses],
+            {lit, {'List', NewClauses}};
         (Other) -> Other
-    end, Body)} || {Name, SI, SO, Body} <- WordDefs].
+    end, Body).
 
 %%% Internal
 
