@@ -178,6 +178,28 @@ stack_ops_test_() ->
         end} end
     ]}.
 
+%% Test map operations
+map_ops_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"generates map operations", fun() ->
+            %% The map ops are primitives, so we test them inline via a word
+            %% that uses map-new, map-put, map-keys, length
+            C0 = af_interpreter:new_continuation(),
+            _C1 = eval(": map-test -> Int ; map-new 42 \"x\" map-put map-keys length .", C0),
+            WordDefs = af_cpp_compiler:find_all_compiled_words(),
+            CppCode = af_cpp_compiler:generate_cpp("test_map", #{words => WordDefs, types => []}),
+            Code = binary_to_list(CppCode),
+            ?assert(string:find(Code, "make_map") =/= nomatch),
+            ?assert(string:find(Code, "as_fields") =/= nomatch),
+            %% Verify it compiles
+            TestCpp = "/tmp/test_map_ops.cpp",
+            ok = file:write_file(TestCpp, CppCode),
+            CompileResult = os:cmd("g++ -std=c++20 -fsyntax-only -DAF_NO_MAIN " ++ TestCpp ++ " 2>&1"),
+            ?assertEqual("", CompileResult),
+            file:delete(TestCpp)
+        end} end
+    ]}.
+
 %% Test cpp_function_name conversion
 function_name_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
