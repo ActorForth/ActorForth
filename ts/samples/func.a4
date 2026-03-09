@@ -1,0 +1,23 @@
+: samenum Int -> Bool ;
+    dup ==.
+
+42 samenum assert
+
+drop
+
+: double Int -> Int ;
+    dup +.
+
+42 double 84 assert-eq
+
+: combo Int -> Bool ;
+    double
+    samenum.
+
+21 combo assert
+
+: multiinput Bool Int Int Int -> Bool ;
+    + == ==.
+
+False 1 1 1 multiinput assert
+True 1 1 2 multiinput not assert

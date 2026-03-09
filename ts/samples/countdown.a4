@@ -1,0 +1,12 @@
+# countdown.a4
+# Recursive countdown using pattern matching sub-clauses.
+
+: countdown Int -> ;
+    : 0 -> ; drop
+    : Int -> ; 1 - countdown.
+
+# Run a small countdown (no print — just verify it completes)
+5 countdown
+
+# Verify stack is empty after countdown consumes its argument
+# (countdown drops the 0 at the end, leaving nothing)
