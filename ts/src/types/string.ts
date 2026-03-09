@@ -8,6 +8,15 @@ import { raise } from "../error.js";
 export function init(): void {
   Type.registerType({ name: "String", ops: new Map() });
 
+  // Constructor: string (Atom -> String)
+  Type.addOp("Any", makeOp("string", ["Atom"], ["String"], (cont) => {
+    const [item, ...rest] = cont.dataStack;
+    return withStack(cont, [["String", String(item[1])], ...rest]);
+  }));
+
+  // Constructor pass-through: string (String -> String) — no-op when already String
+  Type.addOp("Any", makeOp("string", ["String"], ["String"], (cont) => cont));
+
   // concat : String String -> String
   Type.addOp("String", makeOp("concat", ["String", "String"], ["String"], (cont) => {
     const [a, b, ...rest] = cont.dataStack;
