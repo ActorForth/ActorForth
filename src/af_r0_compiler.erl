@@ -125,50 +125,64 @@ parse_sig_entry(Value, false, Rest, _Acc) ->
     %% Try as integer literal (value constraint)
     case try_parse_int(Value) of
         {ok, N} ->
-            %% Next token should be the type name
+            %% Next token should be the type name, or -> (infer Int)
             case Rest of
                 [TypeTok | Rest1] ->
-                    TypeName = binary_to_atom(maps:get(value, TypeTok), utf8),
-                    {{TypeName, N}, Rest1};
-                [] ->
-                    %% Bare integer at end — treat as type
-                    {binary_to_atom(Value, utf8), Rest}
+                    TypeVal = maps:get(value, TypeTok),
+                    case TypeVal of
+                        <<"->">> -> {{'Int', N}, Rest};  %% Infer Int, don't consume ->
+                        <<";">> -> {{'Int', N}, Rest};    %% Infer Int, don't consume ;
+                        _ ->
+                            TypeName = binary_to_atom(TypeVal, utf8),
+                            {{TypeName, N}, Rest1}
+                    end;
+                [] -> {{'Int', N}, Rest}
             end;
         error ->
-            %% Try as boolean literal
+            %% Try as boolean literal (both A4 convention True/False and lowercase)
             case Value of
-                <<"true">> ->
-                    case Rest of
-                        [TypeTok | Rest1] ->
-                            TypeName = binary_to_atom(maps:get(value, TypeTok), utf8),
-                            {{TypeName, true}, Rest1};
-                        [] -> {'Bool', Rest}
-                    end;
-                <<"false">> ->
-                    case Rest of
-                        [TypeTok | Rest1] ->
-                            TypeName = binary_to_atom(maps:get(value, TypeTok), utf8),
-                            {{TypeName, false}, Rest1};
-                        [] -> {'Bool', Rest}
-                    end;
+                V when V =:= <<"true">>; V =:= <<"True">> ->
+                    parse_bool_constraint(true, Rest);
+                V when V =:= <<"false">>; V =:= <<"False">> ->
+                    parse_bool_constraint(false, Rest);
                 _ ->
                     %% Regular type name
                     {binary_to_atom(Value, utf8), Rest}
             end
     end;
 parse_sig_entry(Value, true, Rest, _Acc) ->
-    %% Quoted string in signature — value constraint
+    %% Quoted string in signature — value constraint (keep as binary)
     case Rest of
         [TypeTok | Rest1] ->
-            TypeName = binary_to_atom(maps:get(value, TypeTok), utf8),
-            {{TypeName, binary_to_list(Value)}, Rest1};
+            TypeVal = maps:get(value, TypeTok),
+            case TypeVal of
+                <<"->">> -> {{'String', Value}, Rest};
+                <<";">> -> {{'String', Value}, Rest};
+                _ ->
+                    TypeName = binary_to_atom(TypeVal, utf8),
+                    {{TypeName, Value}, Rest1}
+            end;
         [] ->
-            {'String', Rest}
+            {{'String', Value}, Rest}
+    end.
+
+%% Helper for Bool value constraints with lookahead for -> or ;
+parse_bool_constraint(BoolVal, Rest) ->
+    case Rest of
+        [TypeTok | Rest1] ->
+            TypeVal = maps:get(value, TypeTok),
+            case TypeVal of
+                <<"->">> -> {{'Bool', BoolVal}, Rest};
+                <<";">> -> {{'Bool', BoolVal}, Rest};
+                _ -> {{binary_to_atom(TypeVal, utf8), BoolVal}, Rest1}
+            end;
+        [] -> {{'Bool', BoolVal}, Rest}
     end.
 
 %%% === Body Parsing ===
 
 %% Parse body tokens until we hit "." (end of word)
+%% Detects sub-clause syntax: `: value -> result ;` inside body
 parse_body([], Acc) -> {lists:reverse(Acc), []};
 parse_body([Token | Rest], Acc) ->
     Value = maps:get(value, Token),
@@ -176,17 +190,89 @@ parse_body([Token | Rest], Acc) ->
     case {Value, Quoted} of
         {<<".">>, false} ->
             {lists:reverse(Acc), Rest};
+        {<<":">>, false} ->
+            %% Sub-clause detected — collect all sub-clauses
+            {SubClauses, Rest1} = parse_sub_clauses([Token | Rest]),
+            %% Return sub-clauses as a special marker
+            {lists:reverse(Acc) ++ [{sub_clauses, SubClauses}], Rest1};
         _ ->
             parse_body(Rest, [{Value, Quoted} | Acc])
+    end.
+
+%% Parse sub-clauses until we hit "." at the word level.
+%% Each sub-clause: : sig_in -> sig_out ; body
+%% The final "." ends the entire word (including all sub-clauses).
+parse_sub_clauses(Tokens) ->
+    parse_sub_clauses(Tokens, []).
+
+parse_sub_clauses([], Acc) -> {lists:reverse(Acc), []};
+parse_sub_clauses([Token | Rest], Acc) ->
+    Value = maps:get(value, Token),
+    Quoted = maps:get(quoted, Token),
+    case {Value, Quoted} of
+        {<<".">>, false} ->
+            %% End of word — return all collected sub-clauses
+            {lists:reverse(Acc), Rest};
+        {<<":">>, false} ->
+            %% Parse one sub-clause
+            {SubClause, Rest1} = parse_one_sub_clause(Rest),
+            parse_sub_clauses(Rest1, [SubClause | Acc]);
+        _ ->
+            %% Skip other tokens (shouldn't happen in well-formed source)
+            parse_sub_clauses(Rest, Acc)
+    end.
+
+%% Parse a single sub-clause: sig_in -> sig_out ; body (ends at ; or next :)
+parse_one_sub_clause(Tokens) ->
+    {SigIn, Rest1} = parse_sig_in(Tokens, []),
+    %% sig_out parsing may or may not be present
+    %% If we hit ; directly, there's no explicit -> output
+    {SigOut, Rest2} = parse_sig_out(Rest1, []),
+    {Body, Rest3} = parse_sub_body(Rest2, []),
+    {{lists:reverse(SigIn), lists:reverse(SigOut), Body}, Rest3}.
+
+%% Parse sub-clause body until ";" (sub-clause end) or "." (word end)
+parse_sub_body([], Acc) -> {lists:reverse(Acc), []};
+parse_sub_body([Token | Rest], Acc) ->
+    Value = maps:get(value, Token),
+    Quoted = maps:get(quoted, Token),
+    case {Value, Quoted} of
+        {<<".">>, false} ->
+            %% End of word — put "." back for parent parser
+            {lists:reverse(Acc), [Token | Rest]};
+        {<<":">>, false} ->
+            %% Start of next sub-clause — put ":" back for parent parser
+            {lists:reverse(Acc), [Token | Rest]};
+        _ ->
+            parse_sub_body(Rest, [{Value, Quoted} | Acc])
     end.
 
 %%% === Body Translation to Ring 0 ===
 
 %% Translate parsed body tokens to Ring 0 instructions.
 translate_body(BodyTokens, WordNames) ->
-    lists:flatmap(fun({Value, Quoted}) ->
-        translate_token(Value, Quoted, WordNames)
+    lists:flatmap(fun
+        ({sub_clauses, Clauses}) ->
+            translate_sub_clauses(Clauses, WordNames);
+        ({Value, Quoted}) ->
+            translate_token(Value, Quoted, WordNames)
     end, BodyTokens).
+
+%% Translate sub-clauses into select_clause Ring 0 instructions.
+translate_sub_clauses(Clauses, WordNames) ->
+    R0Clauses = lists:map(fun({SigIn, _SigOut, Body}) ->
+        R0Body = translate_body(Body, WordNames),
+        R0SigIn = translate_sig_to_r0(SigIn),
+        {R0SigIn, R0Body}
+    end, Clauses),
+    [{lit, {'List', R0Clauses}}, select_clause].
+
+%% Translate signature entries to Ring 0 match_sig format.
+translate_sig_to_r0(SigIn) ->
+    lists:map(fun
+        ({Type, Value}) -> {Type, Value};  %% Value constraint
+        (Type) when is_atom(Type) -> Type  %% Type match
+    end, SigIn).
 
 translate_token(Value, true, _WN) ->
     %% Quoted string literal

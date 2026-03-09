@@ -465,6 +465,27 @@ selfhosted_compile_test_() ->
             ?assertEqual({'Int', 0}, maps:get(count, Fields))
         end},
 
+        {"selfhosted sub-clause fib", fun() ->
+            Source = ": fib Int -> Int ;\n"
+                     "    : 0 -> 0 ;\n"
+                     "    : 1 -> 1 ;\n"
+                     "    : Int -> Int ;\n"
+                     "        dup 1 - fib swap 2 - fib + .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_subcl"),
+            ?assertEqual([{'Int', 0}], Mod:fib([{'Int', 0}])),
+            ?assertEqual([{'Int', 1}], Mod:fib([{'Int', 1}])),
+            ?assertEqual([{'Int', 55}], Mod:fib([{'Int', 10}]))
+        end},
+
+        {"selfhosted sub-clause countdown", fun() ->
+            Source = ": countdown Int -> Int ;\n"
+                     "    : 0 -> 0 ;\n"
+                     "    : Int -> Int ;\n"
+                     "        1 - countdown .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_cd"),
+            ?assertEqual([{'Int', 0}], Mod:countdown([{'Int', 5}]))
+        end},
+
         {"selfhosted load file", fun() ->
             %% lib_math.a4 defines square, we load it and use it
             Source = "load \"samples/lib_math.a4\"\n"
@@ -478,5 +499,43 @@ selfhosted_compile_test_() ->
                 ": inc Int -> Int ; 1 + .", "test", "sh_pres"),
             ?assertEqual([{'Int', 6}, {'String', <<"below">>}],
                          Mod:inc([{'Int', 5}, {'String', <<"below">>}]))
+        end},
+
+        {"selfhosted sub-clause bool dispatch", fun() ->
+            Source = ": to-int Bool -> Int ;\n"
+                     "    : True -> Int ; drop 1\n"
+                     "    : False -> Int ; drop 0 .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_bool"),
+            ?assertEqual([{'Int', 1}], Mod:'to-int'([{'Bool', true}])),
+            ?assertEqual([{'Int', 0}], Mod:'to-int'([{'Bool', false}]))
+        end},
+
+        {"selfhosted sub-clause string dispatch", fun() ->
+            Source = ": greet String -> String ;\n"
+                     "    : \"hello\" -> String ; drop \"Hello World!\"\n"
+                     "    : \"goodbye\" -> String ; drop \"Farewell!\"\n"
+                     "    : String -> String ; .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_str"),
+            ?assertEqual([{'String', <<"Hello World!">>}],
+                         Mod:greet([{'String', <<"hello">>}])),
+            ?assertEqual([{'String', <<"Farewell!">>}],
+                         Mod:greet([{'String', <<"goodbye">>}])),
+            ?assertEqual([{'String', <<"hey">>}],
+                         Mod:greet([{'String', <<"hey">>}]))
+        end},
+
+        {"selfhosted all sample files compile", fun() ->
+            Files = [
+                "samples/square.a4", "samples/lib_math.a4",
+                "samples/fib.a4", "samples/countdown.a4",
+                "samples/func.a4", "samples/pattern_demo.a4",
+                "samples/string_demo.a4", "samples/map_demo.a4",
+                "samples/testloop.a4", "samples/testloop2.a4"
+            ],
+            lists:foreach(fun(F) ->
+                Mod = filename:basename(F, ".a4"),
+                Result = af_ring2:compile_file_selfhosted(F, Mod),
+                ?assertMatch({ok, _}, Result)
+            end, Files)
         end}
     ]].
