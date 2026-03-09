@@ -120,7 +120,6 @@ op_type_dot(Cont) ->
 register_product_type(TypeName, Fields, Dict0) ->
     %% Register the type itself
     af_type:register_type(#af_type{name = TypeName}),
-    Dict1 = af_type:dict_register_type(#af_type{name = TypeName}, Dict0),
 
     %% Constructor: lowercase type name, registered in Any
     ConstructorName = string:lowercase(atom_to_list(TypeName)),
@@ -134,10 +133,9 @@ register_product_type(TypeName, Fields, Dict0) ->
         source = auto
     },
     af_type:add_op('Any', Constructor),
-    Dict2 = af_type:dict_add_op('Any', Constructor, Dict1),
 
     %% Getters: one per field, registered in the new type
-    Dict3 = lists:foldl(fun({FieldName, FieldType}, DAcc) ->
+    lists:foreach(fun({FieldName, FieldType}) ->
         Getter = #operation{
             name = atom_to_list(FieldName),
             sig_in = [TypeName],
@@ -145,13 +143,11 @@ register_product_type(TypeName, Fields, Dict0) ->
             impl = make_getter(FieldName),
             source = auto
         },
-        af_type:add_op(TypeName, Getter),
-        af_type:dict_add_op(TypeName, Getter, DAcc)
-    end, Dict2, Fields),
+        af_type:add_op(TypeName, Getter)
+    end, Fields),
 
     %% Setters: field name with ! suffix, takes new value + instance
-    %% Registered in Any so they're found when TOS is the new value type
-    Dict4 = lists:foldl(fun({FieldName, FieldType}, DAcc) ->
+    lists:foreach(fun({FieldName, FieldType}) ->
         SetterName = atom_to_list(FieldName) ++ "!",
         Setter = #operation{
             name = SetterName,
@@ -160,11 +156,21 @@ register_product_type(TypeName, Fields, Dict0) ->
             impl = make_setter(FieldName),
             source = auto
         },
-        af_type:add_op('Any', Setter),
-        af_type:dict_add_op('Any', Setter, DAcc)
-    end, Dict3, Fields),
+        af_type:add_op('Any', Setter)
+    end, Fields),
 
-    Dict4.
+    %% Update local dictionary if present
+    case Dict0 of
+        undefined -> undefined;
+        _ -> sync_type_from_ets(TypeName, sync_type_from_ets('Any',
+                af_type:dict_register_type(#af_type{name = TypeName}, Dict0)))
+    end.
+
+sync_type_from_ets(TypeName, Dict) ->
+    case af_type:get_type(TypeName) of
+        {ok, Type} -> maps:put(TypeName, Type, Dict);
+        _ -> Dict
+    end.
 
 %% Build constructor function
 %% Takes N values from stack (in order matching field list), creates instance

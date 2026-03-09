@@ -349,13 +349,23 @@ op_compile(Cont) ->
                     %% For multi-clause words, use the broadest (type-only) sig
                     %% for the wrapper so it matches any input of the right types.
                     ByType = group_defs_by_type(WordDefs),
-                    Dict = lists:foldl(fun({TargetType, Defs}, DAcc) ->
+                    lists:foreach(fun({TargetType, Defs}) ->
                         BroadSigIn = broadest_sig_in(Defs),
                         {_, _, BroadSigOut, _} = find_broadest_def(Defs),
                         Wrapper = af_word_compiler:make_wrapper(ModAtom, FunAtom, BroadSigIn, BroadSigOut),
-                        af_type:replace_ops(TargetType, Name, [Wrapper]),
-                        af_type:dict_replace_ops(TargetType, Name, [Wrapper], DAcc)
-                    end, Cont#continuation.dictionary, ByType),
+                        af_type:replace_ops(TargetType, Name, [Wrapper])
+                    end, ByType),
+                    %% Sync local dictionary if present
+                    Dict = case Cont#continuation.dictionary of
+                        undefined -> undefined;
+                        D ->
+                            lists:foldl(fun({TargetType, _}, DAcc) ->
+                                case af_type:get_type(TargetType) of
+                                    {ok, T} -> maps:put(TargetType, T, DAcc);
+                                    _ -> DAcc
+                                end
+                            end, D, ByType)
+                    end,
                     Cont#continuation{data_stack = Rest, dictionary = Dict};
                 {error, Reason} ->
                     Msg = lists:flatten(io_lib:format("Compile failed for '~s': ~p", [Name, Reason])),
