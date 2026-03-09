@@ -259,3 +259,89 @@ zip_test_() ->
             [{'List', []}] = C#continuation.data_stack
         end} end
     ]}.
+
+%% --- map ---
+
+map_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"map with compiled word doubles each element", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval(": double Int -> Int ; 2 * .", C0),
+            C2 = eval("nil 1 cons 2 cons 3 cons double map", C1),
+            [{'List', Items}] = C2#continuation.data_stack,
+            ?assertEqual([{'Int', 6}, {'Int', 4}, {'Int', 2}], Items)
+        end} end,
+        fun(_) -> {"map over empty list returns empty list", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval(": double Int -> Int ; 2 * .", C0),
+            C2 = eval("nil double map", C1),
+            [{'List', []}] = C2#continuation.data_stack
+        end} end,
+        fun(_) -> {"map with not word", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("nil True cons False cons True cons not map", C0),
+            [{'List', Items}] = C1#continuation.data_stack,
+            ?assertEqual([{'Bool', false}, {'Bool', true}, {'Bool', false}], Items)
+        end} end
+    ]}.
+
+%% --- filter ---
+
+filter_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"filter keeps elements where word returns true", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval(": positive? Int -> Bool ; 0 > .", C0),
+            C2 = eval("nil -2 cons 3 cons -1 cons 5 cons positive? filter", C1),
+            [{'List', Items}] = C2#continuation.data_stack,
+            ?assertEqual([{'Int', 5}, {'Int', 3}], Items)
+        end} end,
+        fun(_) -> {"filter on empty list returns empty", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval(": positive? Int -> Bool ; 0 > .", C0),
+            C2 = eval("nil positive? filter", C1),
+            [{'List', []}] = C2#continuation.data_stack
+        end} end,
+        fun(_) -> {"filter removes all when none match", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval(": positive? Int -> Bool ; 0 > .", C0),
+            C2 = eval("nil -1 cons -2 cons positive? filter", C1),
+            [{'List', []}] = C2#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- reduce ---
+
+reduce_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"reduce sums a list", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("nil 1 cons 2 cons 3 cons 0 + reduce", C0),
+            [{'Int', 6}] = C1#continuation.data_stack
+        end} end,
+        fun(_) -> {"reduce with compiled word", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval(": mul Int Int -> Int ; * .", C0),
+            C2 = eval("nil 2 cons 3 cons 4 cons 1 mul reduce", C1),
+            [{'Int', 24}] = C2#continuation.data_stack
+        end} end,
+        fun(_) -> {"reduce empty list returns initial value", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("nil 99 + reduce", C0),
+            [{'Int', 99}] = C1#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- each ---
+
+each_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"each consumes list and word name, leaves stack clean", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            %% Define a word with Int input so it won't dispatch on List TOS
+            C1 = eval(": inc Int -> Int ; 1 + .", C0),
+            C2 = eval("42 nil 1 cons 2 cons inc each", C1),
+            %% each should consume the list and word, leaving 42 below
+            [{'Int', 42}] = C2#continuation.data_stack
+        end} end
+    ]}.

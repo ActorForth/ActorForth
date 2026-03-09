@@ -40,6 +40,18 @@ init() ->
         impl = fun op_not/1
     }),
 
+    %% and: Bool Bool -> Bool (logical AND)
+    af_type:add_op('Bool', #operation{
+        name = "and", sig_in = ['Bool', 'Bool'], sig_out = ['Bool'],
+        impl = fun op_and/1
+    }),
+
+    %% or: Bool Bool -> Bool (logical OR)
+    af_type:add_op('Bool', #operation{
+        name = "or", sig_in = ['Bool', 'Bool'], sig_out = ['Bool'],
+        impl = fun op_or/1
+    }),
+
     %% Comparison operators — registered in Any so they work on any type pair
     lists:foreach(fun({Name, Fun}) ->
         af_type:add_op('Any', #operation{
@@ -85,6 +97,14 @@ op_bool_passthrough(Cont) -> Cont.
 op_not(Cont) ->
     [{'Bool', V} | Rest] = Cont#continuation.data_stack,
     Cont#continuation{data_stack = [{'Bool', not V} | Rest]}.
+
+op_and(Cont) ->
+    [{'Bool', A}, {'Bool', B} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'Bool', A andalso B} | Rest]}.
+
+op_or(Cont) ->
+    [{'Bool', A}, {'Bool', B} | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [{'Bool', A orelse B} | Rest]}.
 
 op_eq(Cont) ->
     [{_, A}, {_, B} | Rest] = Cont#continuation.data_stack,

@@ -330,6 +330,184 @@ additional_coverage_test_() ->
         end} end
     ]}.
 
+%% --- native compilation of type-specific ops ---
+
+native_ops_setup() ->
+    af_type:reset(),
+    af_type_any:init(),
+    af_type_int:init(),
+    af_type_bool:init(),
+    af_type_compiler:init(),
+    af_type_product:init(),
+    af_type_string:init(),
+    af_type_map:init(),
+    af_type_list:init(),
+    af_type_float:init(),
+    af_type_tuple:init().
+
+native_int_ops_test_() ->
+    {foreach, fun native_ops_setup/0, fun(_) -> ok end, [
+        fun(_) -> {"mod compiles to native BEAM", fun() ->
+            C1 = eval(": test-mod Int Int -> Int ; mod .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-mod\" compile", C1),
+            C3 = eval("10 3 test-mod", C2),
+            [{'Int', 1}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"abs compiles to native BEAM", fun() ->
+            C1 = eval(": test-abs Int -> Int ; abs .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-abs\" compile", C1),
+            C3 = eval("-7 test-abs", C2),
+            [{'Int', 7}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"max compiles to native BEAM", fun() ->
+            C1 = eval(": test-max Int Int -> Int ; max .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-max\" compile", C1),
+            C3 = eval("3 7 test-max", C2),
+            [{'Int', 7}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"min compiles to native BEAM", fun() ->
+            C1 = eval(": test-min Int Int -> Int ; min .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-min\" compile", C1),
+            C3 = eval("3 7 test-min", C2),
+            [{'Int', 3}] = C3#continuation.data_stack
+        end} end
+    ]}.
+
+native_bool_ops_test_() ->
+    {foreach, fun native_ops_setup/0, fun(_) -> ok end, [
+        fun(_) -> {"and compiles to native BEAM", fun() ->
+            C1 = eval(": test-and Bool Bool -> Bool ; and .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-and\" compile", C1),
+            C3 = eval("True bool False bool test-and", C2),
+            [{'Bool', false}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"or compiles to native BEAM", fun() ->
+            C1 = eval(": test-or Bool Bool -> Bool ; or .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-or\" compile", C1),
+            C3 = eval("False bool True bool test-or", C2),
+            [{'Bool', true}] = C3#continuation.data_stack
+        end} end
+    ]}.
+
+native_list_ops_test_() ->
+    {foreach, fun native_ops_setup/0, fun(_) -> ok end, [
+        fun(_) -> {"list drop compiles to native (List Int -> List)", fun() ->
+            C1 = eval(": test-drop List Int -> List ; drop .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-drop\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons 3 cons 1 test-drop", C2),
+            [{'List', [{'Int', 2}, {'Int', 1}]}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"empty? compiles to native BEAM", fun() ->
+            C1 = eval(": test-empty List -> Bool ; empty? .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-empty\" compile", C1),
+            C3 = eval("nil test-empty", C2),
+            [{'Bool', true}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"nth compiles to native BEAM", fun() ->
+            C1 = eval(": test-nth List Int -> Any ; nth .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-nth\" compile", C1),
+            C3 = eval("nil 1 cons 2 cons 3 cons 1 test-nth", C2),
+            [{'Int', 2}] = C3#continuation.data_stack
+        end} end
+    ]}.
+
+native_map_ops_test_() ->
+    {foreach, fun native_ops_setup/0, fun(_) -> ok end, [
+        fun(_) -> {"map-keys compiles to native BEAM", fun() ->
+            C1 = eval(": test-keys Map -> List ; map-keys .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-keys\" compile", C1),
+            C3 = eval("map-new 1 \"x\" map-put test-keys", C2),
+            [{'List', _}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"map-has? compiles to native BEAM", fun() ->
+            C1 = eval(": test-has Map String -> Bool ; map-has? .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-has\" compile", C1),
+            C3 = eval("map-new 1 \"x\" map-put \"x\" test-has", C2),
+            [{'Bool', true}] = C3#continuation.data_stack
+        end} end
+    ]}.
+
+native_string_ops_test_() ->
+    {foreach, fun native_ops_setup/0, fun(_) -> ok end, [
+        fun(_) -> {"trim compiles to native BEAM", fun() ->
+            C1 = eval(": test-trim String -> String ; trim .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-trim\" compile", C1),
+            C3 = eval("\"  hello  \" test-trim", C2),
+            [{'String', <<"hello">>}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"to-upper compiles to native BEAM", fun() ->
+            C1 = eval(": test-up String -> String ; to-upper .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-up\" compile", C1),
+            C3 = eval("\"hello\" test-up", C2),
+            [{'String', <<"HELLO">>}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"to-lower compiles to native BEAM", fun() ->
+            C1 = eval(": test-low String -> String ; to-lower .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-low\" compile", C1),
+            C3 = eval("\"HELLO\" test-low", C2),
+            [{'String', <<"hello">>}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"to-string from Int compiles to native BEAM", fun() ->
+            C1 = eval(": test-tos Int -> String ; to-string .", af_interpreter:new_continuation()),
+            C2 = eval("\"test-tos\" compile", C1),
+            C3 = eval("42 test-tos", C2),
+            [{'String', <<"42">>}] = C3#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- auto-compile tests ---
+
+auto_compile_setup() ->
+    af_type:reset(),
+    af_type_any:init(),
+    af_type_int:init(),
+    af_type_bool:init(),
+    af_type_compiler:init(),
+    af_type_product:init(),
+    af_type_string:init().
+
+auto_compile_test_() ->
+    {foreach, fun auto_compile_setup/0, fun(_) ->
+        persistent_term:erase(af_auto_compile)
+    end, [
+        fun(_) -> {"auto-compile off by default", fun() ->
+            C1 = eval(": triple Int -> Int ; 3 * .", af_interpreter:new_continuation()),
+            {ok, Op} = af_type:find_op_by_name("triple", 'Int'),
+            ?assertMatch({compiled, _}, Op#operation.source)
+        end} end,
+        fun(_) -> {"auto-compile on compiles word to native on definition", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("True bool auto-compile", C0),
+            C2 = eval(": triple Int -> Int ; 3 * .", C1),
+            {ok, Op} = af_type:find_op_by_name("triple", 'Int'),
+            ?assertMatch({native, _}, Op#operation.source),
+            %% Verify it actually works
+            C3 = eval("7 int triple", C2),
+            [{'Int', 21}] = C3#continuation.data_stack
+        end} end,
+        fun(_) -> {"auto-compile toggle off stops auto-compiling", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("True bool auto-compile", C0),
+            C2 = eval(": dbl Int -> Int ; 2 * .", C1),
+            {ok, Op1} = af_type:find_op_by_name("dbl", 'Int'),
+            ?assertMatch({native, _}, Op1#operation.source),
+            %% Turn off
+            C3 = eval("False bool auto-compile", C2),
+            C4 = eval(": trpl Int -> Int ; 3 * .", C3),
+            {ok, Op2} = af_type:find_op_by_name("trpl", 'Int'),
+            ?assertMatch({compiled, _}, Op2#operation.source)
+        end} end,
+        fun(_) -> {"auto-compile works with multi-clause words", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("True bool auto-compile", C0),
+            C2 = eval(": myabs 0 Int -> Int ; .", C1),
+            C3 = eval(": myabs Int -> Int ; dup 0 < dup 0 swap - swap drop .", C2),
+            %% Multi-clause should be auto-compiled
+            {ok, Op} = af_type:find_op_by_name("myabs", 'Int'),
+            ?assertMatch({native, _}, Op#operation.source)
+        end} end
+    ]}.
+
 %% Expose group_by_name for testing
 group_by_name(WordDefs) ->
     af_word_compiler:group_by_name(WordDefs).

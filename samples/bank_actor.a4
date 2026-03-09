@@ -31,13 +31,13 @@ type Account
     dup Withdrawal swap make-tx rot swap add-tx swap debit.
 
 : get-balance Account -> Account Int ;
-    dup balance.
+    balance.
 
 : get-ledger Account -> Account List ;
-    dup ledger.
+    ledger.
 
 : tx-count Account -> Account Int ;
-    dup ledger length.
+    ledger length.
 
 # Open account with $1000 and empty ledger
 1000 nil account server
