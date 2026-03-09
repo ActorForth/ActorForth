@@ -419,6 +419,13 @@ make_tagged(Type, ValExpr, L) ->
 %% Stack operations — work on tagged items directly
 translate_op("dup", [A | Rest], _L, _Ctx) ->
     {ok, [A, A | Rest]};
+translate_op("drop", [{_Expr, 'Int'} = A, {_ExprL, 'List'} = B | Rest], L, _Ctx) ->
+    %% List drop: Int on TOS, List below -> list without first N items
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    LenExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, length}}, [ValB]},
+    MinExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, min}}, [ValA, LenExpr]},
+    ResultExpr = {call, L, {remote, L, {atom, L, lists}, {atom, L, nthtail}}, [MinExpr, ValB]},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
 translate_op("drop", [_ | Rest], _L, _Ctx) ->
     {ok, Rest};
 translate_op("swap", [A, B | Rest], _L, _Ctx) ->
@@ -523,6 +530,159 @@ translate_op("map-size", [{_Expr, 'Map'} = A | Rest], L, _Ctx) ->
     ValA = extract_val(A, L),
     ResultExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, size}}, [ValA]},
     {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
+
+%% Additional Int operations
+translate_op("mod", [A, B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    ResultExpr = {op, L, 'rem', ValB, ValA},
+    {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
+translate_op("abs", [{_Expr, 'Int'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, abs}}, [ValA]},
+    {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
+translate_op("max", [A, B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, max}}, [ValB, ValA]},
+    {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
+translate_op("min", [A, B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, min}}, [ValB, ValA]},
+    {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
+
+%% Boolean logic
+translate_op("and", [A, B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    {ok, [make_tagged('Bool', {op, L, 'andalso', ValB, ValA}, L) | Rest]};
+translate_op("or", [A, B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    {ok, [make_tagged('Bool', {op, L, 'orelse', ValB, ValA}, L) | Rest]};
+
+%% Additional List operations
+translate_op("nth", [{_Expr, 'Int'} = A, {_ExprL, 'List'} = B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    %% lists:nth is 1-based, A4 nth is 0-based
+    IndexExpr = {op, L, '+', ValA, {integer, L, 1}},
+    ResultExpr = {call, L, {remote, L, {atom, L, lists}, {atom, L, nth}}, [IndexExpr, ValB]},
+    {ok, [{ResultExpr, 'Any'} | Rest]};
+translate_op("last", [{_Expr, 'List'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, lists}, {atom, L, last}}, [ValA]},
+    {ok, [{ResultExpr, 'Any'} | Rest]};
+translate_op("take", [{_Expr, 'Int'} = A, {_ExprL, 'List'} = B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, lists}, {atom, L, sublist}}, [ValB, ValA]},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
+translate_op("empty?", [{_Expr, 'List'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {op, L, '=:=', ValA, {nil, L}},
+    {ok, [make_tagged('Bool', ResultExpr, L) | Rest]};
+translate_op("contains?", [Item, {_ExprL, 'List'} = B | Rest], L, _Ctx) ->
+    {ItemExpr, _} = Item,
+    ValB = extract_val(B, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, lists}, {atom, L, member}}, [ItemExpr, ValB]},
+    {ok, [make_tagged('Bool', ResultExpr, L) | Rest]};
+translate_op("zip", [{_ExprA, 'List'} = A, {_ExprB, 'List'} = B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, lists}, {atom, L, zip}}, [ValB, ValA]},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
+
+%% Additional Map operations
+%% Note: Maps store tagged items as keys/values, so we use full tagged exprs (not extract_val)
+translate_op("map-put", [{ValExpr, _} = _V, {KeyExpr, _} = _K, {_ExprM, 'Map'} = M | Rest], L, _Ctx) ->
+    ValM = extract_val(M, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, put}}, [KeyExpr, ValExpr, ValM]},
+    {ok, [make_tagged('Map', ResultExpr, L) | Rest]};
+translate_op("map-get", [{KeyExpr, _} = _K, {_ExprM, 'Map'} = M | Rest], L, _Ctx) ->
+    ValM = extract_val(M, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, map_get}}, [KeyExpr, ValM]},
+    {ok, [{ResultExpr, 'Any'} | Rest]};
+translate_op("map-delete", [{KeyExpr, _} = _K, {_ExprM, 'Map'} = M | Rest], L, _Ctx) ->
+    ValM = extract_val(M, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, remove}}, [KeyExpr, ValM]},
+    {ok, [make_tagged('Map', ResultExpr, L) | Rest]};
+translate_op("map-has?", [{KeyExpr, _} = _K, {_ExprM, 'Map'} = M | Rest], L, _Ctx) ->
+    ValM = extract_val(M, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, is_key}}, [KeyExpr, ValM]},
+    {ok, [make_tagged('Bool', ResultExpr, L) | Rest]};
+translate_op("map-keys", [{_Expr, 'Map'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, keys}}, [ValA]},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
+translate_op("map-values", [{_Expr, 'Map'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, values}}, [ValA]},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
+translate_op("map-merge", [{_ExprA, 'Map'} = A, {_ExprB, 'Map'} = B | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L), ValB = extract_val(B, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, merge}}, [ValB, ValA]},
+    {ok, [make_tagged('Map', ResultExpr, L) | Rest]};
+
+%% Additional String operations
+translate_op("to-atom", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, binary_to_atom}}, [ValA]},
+    {ok, [make_tagged('Atom', ResultExpr, L) | Rest]};
+translate_op("to-int", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, binary_to_integer}}, [ValA]},
+    {ok, [make_tagged('Int', ResultExpr, L) | Rest]};
+translate_op("to-string", [{_Expr, 'Int'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, integer_to_binary}}, [ValA]},
+    {ok, [make_tagged('String', ResultExpr, L) | Rest]};
+translate_op("to-string", [{_Expr, 'Atom'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, atom_to_binary}}, [ValA]},
+    {ok, [make_tagged('String', ResultExpr, L) | Rest]};
+translate_op("split", [{_ExprD, 'String'} = D, {_ExprS, 'String'} = S | Rest], L, _Ctx) ->
+    ValD = extract_val(D, L), ValS = extract_val(S, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, binary}, {atom, L, split}},
+        [ValS, {cons, L, ValD, {nil, L}}, {cons, L, {atom, L, global}, {nil, L}}]},
+    {ok, [make_tagged('List', ResultExpr, L) | Rest]};
+translate_op("trim", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, trim}}, [ValA]},
+    {ok, [make_tagged('String', ResultExpr, L) | Rest]};
+translate_op("to-upper", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, uppercase}}, [ValA]},
+    {ok, [make_tagged('String', ResultExpr, L) | Rest]};
+translate_op("to-lower", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, lowercase}}, [ValA]},
+    {ok, [make_tagged('String', ResultExpr, L) | Rest]};
+translate_op("starts-with", [{_ExprP, 'String'} = P, {_ExprS, 'String'} = S | Rest], L, _Ctx) ->
+    ValP = extract_val(P, L), ValS = extract_val(S, L),
+    PLen = {call, L, {remote, L, {atom, L, erlang}, {atom, L, byte_size}}, [ValP]},
+    PrefixExpr = {call, L, {remote, L, {atom, L, binary}, {atom, L, part}}, [ValS, {integer, L, 0}, PLen]},
+    ResultExpr = {op, L, '=:=', PrefixExpr, ValP},
+    {ok, [make_tagged('Bool', ResultExpr, L) | Rest]};
+translate_op("ends-with", [{_ExprP, 'String'} = P, {_ExprS, 'String'} = S | Rest], L, _Ctx) ->
+    ValP = extract_val(P, L), ValS = extract_val(S, L),
+    PLen = {call, L, {remote, L, {atom, L, erlang}, {atom, L, byte_size}}, [ValP]},
+    SLen = {call, L, {remote, L, {atom, L, erlang}, {atom, L, byte_size}}, [ValS]},
+    StartPos = {op, L, '-', SLen, PLen},
+    SuffixExpr = {call, L, {remote, L, {atom, L, binary}, {atom, L, part}}, [ValS, StartPos, PLen]},
+    ResultExpr = {op, L, '=:=', SuffixExpr, ValP},
+    {ok, [make_tagged('Bool', ResultExpr, L) | Rest]};
+translate_op("contains", [{_ExprP, 'String'} = P, {_ExprS, 'String'} = S | Rest], L, _Ctx) ->
+    ValP = extract_val(P, L), ValS = extract_val(S, L),
+    MatchExpr = {call, L, {remote, L, {atom, L, binary}, {atom, L, match}}, [ValS, ValP]},
+    ResultExpr = {op, L, '=/=', MatchExpr, {atom, L, nomatch}},
+    {ok, [make_tagged('Bool', ResultExpr, L) | Rest]};
+translate_op("replace", [{_ExprR, 'String'} = R, {_ExprP, 'String'} = P, {_ExprS, 'String'} = S | Rest], L, _Ctx) ->
+    ValR = extract_val(R, L), ValP = extract_val(P, L), ValS = extract_val(S, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, binary}, {atom, L, replace}},
+        [ValS, ValP, ValR, {cons, L, {atom, L, global}, {nil, L}}]},
+    {ok, [make_tagged('String', ResultExpr, L) | Rest]};
+translate_op("reverse", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
+    ValA = extract_val(A, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, string}, {atom, L, reverse}}, [ValA]},
+    {ok, [make_tagged('String', ResultExpr, L) | Rest]};
+translate_op("substring", [{_ExprLen, 'Int'} = Len, {_ExprStart, 'Int'} = Start, {_ExprS, 'String'} = S | Rest], L, _Ctx) ->
+    ValLen = extract_val(Len, L), ValStart = extract_val(Start, L), ValS = extract_val(S, L),
+    ResultExpr = {call, L, {remote, L, {atom, L, binary}, {atom, L, part}}, [ValS, ValStart, ValLen]},
+    {ok, [make_tagged('String', ResultExpr, L) | Rest]};
 
 %% Product type getters: generates maps:get(FieldName, FieldMap)
 %% Product type setters: generates maps:put(FieldName, NewValue, FieldMap)
