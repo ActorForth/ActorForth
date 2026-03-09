@@ -3,5 +3,6 @@
     return_stack  = [] :: list(),
     current_token = undefined :: #token{} | undefined,
     debug         = false :: boolean(),
-    word_trace    = [] :: list()
+    word_trace    = [] :: list(),
+    dictionary    = undefined :: map() | undefined  %% TypeName => #af_type{}
 }).

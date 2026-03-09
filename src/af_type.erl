@@ -7,6 +7,9 @@
 -export([register_type/1, add_op/2, replace_ops/3]).
 -export([find_op/2, find_op_in_tos/2, find_op_in_any/2, find_op_by_name/2, match_sig/2]).
 -export([get_type/1, all_types/0]).
+-export([snapshot/0]).
+-export([dict_find_op_in_tos/3, dict_find_op_in_any/3, dict_get_type/2,
+         dict_all_types/1, dict_add_op/3, dict_register_type/2, dict_replace_ops/4]).
 
 -export_type([type_constraint/0, stack_item/0]).
 
@@ -150,4 +153,74 @@ match_first_op([Op | Rest], Stack) ->
     case match_sig(Op#operation.sig_in, Stack) of
         true -> {ok, Op};
         false -> match_first_op(Rest, Stack)
+    end.
+
+%%% ============================================================
+%%% Dictionary-local functions (operate on a map, not ETS)
+%%% ============================================================
+
+%% Snapshot the entire ETS registry into a map: #{TypeName => #af_type{}}
+-spec snapshot() -> map().
+snapshot() ->
+    lists:foldl(fun(#af_type{name = Name} = Type, Acc) ->
+        maps:put(Name, Type, Acc)
+    end, #{}, ets:tab2list(?TABLE)).
+
+%% Look up op in TOS type's dictionary (local map, no ETS)
+dict_find_op_in_tos(TokenName, [{TosType, _} | _] = Stack, Dict) ->
+    dict_find_op_in_type(TosType, TokenName, Stack, Dict);
+dict_find_op_in_tos(_TokenName, [], _Dict) ->
+    not_found.
+
+%% Look up op in Any dictionary (local map, no ETS)
+dict_find_op_in_any(TokenName, Stack, Dict) ->
+    dict_find_op_in_type('Any', TokenName, Stack, Dict).
+
+%% Get a type record from the local dictionary
+dict_get_type(Name, Dict) ->
+    case maps:find(Name, Dict) of
+        {ok, Type} -> {ok, Type};
+        error -> not_found
+    end.
+
+%% Get all types from the local dictionary
+dict_all_types(Dict) ->
+    maps:values(Dict).
+
+%% Register a type in the local dictionary (returns updated Dict)
+dict_register_type(#af_type{name = Name} = Type, Dict) ->
+    maps:put(Name, Type, Dict).
+
+%% Add an operation to a type in the local dictionary (returns updated Dict)
+dict_add_op(TypeName, #operation{} = Op, Dict) ->
+    Type = case maps:find(TypeName, Dict) of
+        {ok, T} -> T;
+        error -> #af_type{name = TypeName}
+    end,
+    #af_type{ops = Ops} = Type,
+    OpName = Op#operation.name,
+    Existing = maps:get(OpName, Ops, []),
+    NewOps = maps:put(OpName, Existing ++ [Op], Ops),
+    maps:put(TypeName, Type#af_type{ops = NewOps}, Dict).
+
+%% Replace all operations with a given name in a type (returns updated Dict)
+dict_replace_ops(TypeName, OpName, NewOps, Dict) when is_list(NewOps) ->
+    case maps:find(TypeName, Dict) of
+        {ok, #af_type{ops = Ops} = Type} ->
+            UpdatedOps = maps:put(OpName, NewOps, Ops),
+            maps:put(TypeName, Type#af_type{ops = UpdatedOps}, Dict);
+        error ->
+            Dict
+    end.
+
+%%% Internal (dictionary-local)
+
+dict_find_op_in_type(TypeName, OpName, Stack, Dict) ->
+    case maps:find(TypeName, Dict) of
+        {ok, #af_type{ops = Ops}} ->
+            case maps:get(OpName, Ops, []) of
+                [] -> not_found;
+                OpList -> match_first_op(OpList, Stack)
+            end;
+        error -> not_found
     end.

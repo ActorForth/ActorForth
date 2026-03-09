@@ -390,7 +390,12 @@ register_single_word(State, Rest, Cont) ->
     ensure_type(TargetType),
     af_type:add_op(TargetType, NewOp),
 
-    Cont#continuation{data_stack = Rest}.
+    %% Update the continuation's local dictionary
+    Dict = Cont#continuation.dictionary,
+    Dict1 = ensure_type_in_dict(TargetType, Dict),
+    Dict2 = af_type:dict_add_op(TargetType, NewOp, Dict1),
+
+    Cont#continuation{data_stack = Rest, dictionary = Dict2}.
 
 register_multi_word(State, Clauses, Rest, Cont) ->
     #{name := Name, sig_in := MasterSigIn0} = State,
@@ -401,7 +406,8 @@ register_multi_word(State, Clauses, Rest, Cont) ->
     %% Register each sub-clause as a separate operation.
     %% Value-constrained clauses come first (they were added in order),
     %% general clauses last — match_first_op tries in list order.
-    lists:foreach(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody}) ->
+    Dict0 = ensure_type_in_dict(TargetType, Cont#continuation.dictionary),
+    Dict1 = lists:foldl(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody}, DictAcc) ->
         CSigIn = lists:reverse(CSigIn0),
         CSigOut = lists:reverse(CSigOut0),
         %% Type check each clause body
@@ -414,10 +420,11 @@ register_multi_word(State, Clauses, Rest, Cont) ->
             impl = Impl,
             source = {compiled, CBody}
         },
-        af_type:add_op(TargetType, Op)
-    end, Clauses),
+        af_type:add_op(TargetType, Op),
+        af_type:dict_add_op(TargetType, Op, DictAcc)
+    end, Dict0, Clauses),
 
-    Cont#continuation{data_stack = Rest}.
+    Cont#continuation{data_stack = Rest, dictionary = Dict1}.
 
 %% Run compile-time type check on a word body.
 %% Type mismatches are errors when inference is complete (no unknowns).
@@ -473,6 +480,12 @@ ensure_type(TypeName) ->
     case af_type:get_type(TypeName) of
         not_found -> af_type:register_type(#af_type{name = TypeName});
         _ -> ok
+    end.
+
+ensure_type_in_dict(TypeName, Dict) ->
+    case maps:is_key(TypeName, Dict) of
+        true -> Dict;
+        false -> maps:put(TypeName, #af_type{name = TypeName}, Dict)
     end.
 
 %% Build an execution function from a compiled word body.

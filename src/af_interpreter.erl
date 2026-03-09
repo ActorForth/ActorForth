@@ -9,7 +9,7 @@
 
 -spec new_continuation() -> #continuation{}.
 new_continuation() ->
-    #continuation{}.
+    #continuation{dictionary = af_type:snapshot()}.
 
 -spec interpret_tokens([#token{}], #continuation{}) -> #continuation{}.
 interpret_tokens([], Cont) ->
@@ -29,6 +29,53 @@ interpret_token(#token{value = Value} = Token, Cont) ->
     Stack = Cont#continuation.data_stack,
     Debug = Cont#continuation.debug,
     Cont1 = Cont#continuation{current_token = Token},
+    case Cont#continuation.dictionary of
+        undefined ->
+            %% No local dictionary — fall back to ETS (legacy path)
+            interpret_token_ets(Value, Token, Stack, Debug, Cont1);
+        Dict ->
+            %% Fast path: use continuation-local dictionary
+            interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1)
+    end.
+
+%% Fast path: local dictionary lookup (no ETS)
+interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1) ->
+    case af_type:dict_find_op_in_tos(Value, Stack, Dict) of
+        {ok, #operation{impl = Impl} = Op} ->
+            debug_trace(Debug, Value, Stack, {tos, Op}),
+            Impl(Cont1);
+        not_found ->
+            case get_tos_handler(Stack, Dict) of
+                {ok, Handler} ->
+                    debug_trace(Debug, Value, Stack, handler),
+                    Handler(Value, Cont1);
+                none ->
+                    case af_type:dict_find_op_in_any(Value, Stack, Dict) of
+                        {ok, #operation{impl = Impl} = Op} ->
+                            debug_trace(Debug, Value, Stack, {any, Op}),
+                            Impl(Cont1);
+                        not_found ->
+                            case Token#token.quoted of
+                                true ->
+                                    StringVal = {'String', list_to_binary(Value)},
+                                    debug_trace(Debug, Value, Stack, {literal, StringVal}),
+                                    Cont1#continuation{data_stack = [StringVal | Stack]};
+                                false ->
+                                    case try_literals(Value, Dict) of
+                                        {ok, TypedValue} ->
+                                            debug_trace(Debug, Value, Stack, {literal, TypedValue}),
+                                            Cont1#continuation{data_stack = [TypedValue | Stack]};
+                                        not_found ->
+                                            debug_trace(Debug, Value, Stack, atom),
+                                            Cont1#continuation{data_stack = [{'Atom', Value} | Stack]}
+                                    end
+                            end
+                    end
+            end
+    end.
+
+%% Legacy path: ETS-based lookup (for continuations without dictionary)
+interpret_token_ets(Value, Token, Stack, Debug, Cont1) ->
     case af_type:find_op_in_tos(Value, Stack) of
         {ok, #operation{impl = Impl} = Op} ->
             debug_trace(Debug, Value, Stack, {tos, Op}),
@@ -50,7 +97,7 @@ interpret_token(#token{value = Value} = Token, Cont) ->
                                     debug_trace(Debug, Value, Stack, {literal, StringVal}),
                                     Cont1#continuation{data_stack = [StringVal | Stack]};
                                 false ->
-                                    case try_literals(Value) of
+                                    case try_literals_ets(Value) of
                                         {ok, TypedValue} ->
                                             debug_trace(Debug, Value, Stack, {literal, TypedValue}),
                                             Cont1#continuation{data_stack = [TypedValue | Stack]};
@@ -65,7 +112,11 @@ interpret_token(#token{value = Value} = Token, Cont) ->
 
 %%% Literal handlers
 
-try_literals(TokenValue) ->
+try_literals(TokenValue, Dict) ->
+    AllTypes = af_type:dict_all_types(Dict),
+    try_literal_types(TokenValue, AllTypes).
+
+try_literals_ets(TokenValue) ->
     AllTypes = af_type:all_types(),
     try_literal_types(TokenValue, AllTypes).
 
@@ -116,6 +167,14 @@ format_dispatch(atom) -> "->Atom".
 get_tos_handler([]) -> none;
 get_tos_handler([{TosType, _} | _]) ->
     case af_type:get_type(TosType) of
+        {ok, #af_type{handler = Handler}} when Handler =/= undefined ->
+            {ok, Handler};
+        _ -> none
+    end.
+
+get_tos_handler([], _Dict) -> none;
+get_tos_handler([{TosType, _} | _], Dict) ->
+    case af_type:dict_get_type(TosType, Dict) of
         {ok, #af_type{handler = Handler}} when Handler =/= undefined ->
             {ok, Handler};
         _ -> none
