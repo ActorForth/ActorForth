@@ -10,16 +10,19 @@ export function init(): void {
   // bool : Atom -> Bool
   Type.addOp("Any", makeOp("bool", ["Atom"], ["Bool"], (cont) => {
     const [item, ...rest] = cont.dataStack;
-    const val = item[1] as string;
+    const val = (item[1] as string).toLowerCase();
     if (val === "true") return withStack(cont, [["Bool", true], ...rest]);
     if (val === "false") return withStack(cont, [["Bool", false], ...rest]);
-    throw new Error(`Cannot convert '${val}' to Bool`);
+    throw new Error(`Cannot convert '${item[1]}' to Bool`);
   }));
 
-  // literal : Atom -> Bool
+  // Constructor pass-through: bool (Bool -> Bool) — no-op when already Bool
+  Type.addOp("Any", makeOp("bool", ["Bool"], ["Bool"], (cont) => cont));
+
+  // literal : Atom -> Bool  (handles True/False and true/false)
   Type.addOp("Bool", makeOp("literal", ["Atom"], ["Bool"], (cont) => {
     const [item] = cont.dataStack;
-    const val = item[1] as string;
+    const val = (item[1] as string).toLowerCase();
     if (val === "true") return withStack(cont, [["Bool", true], ...cont.dataStack.slice(1)]);
     if (val === "false") return withStack(cont, [["Bool", false], ...cont.dataStack.slice(1)]);
     throw new Error("not a boolean");

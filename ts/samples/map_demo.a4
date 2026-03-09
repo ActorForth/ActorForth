@@ -1,0 +1,42 @@
+# map_demo.a4 - Map type demonstration
+
+# Create a map and add entries
+map-new
+100 "Alice" map-put
+200 "Bob" map-put
+150 "Charlie" map-put
+
+# Check size
+dup map-size 3 assert-eq
+
+# Retrieve values
+dup "Alice" map-get 100 assert-eq
+dup "Bob" map-get 200 assert-eq
+
+# Check key existence
+dup "Charlie" map-has? assert
+dup "Dave" map-has? not assert
+
+# Delete a key
+"Bob" map-delete
+dup map-size 2 assert-eq
+
+# Keys and values are lists
+dup map-keys length 2 assert-eq
+map-values length 2 assert-eq
+
+# Map with mixed key types
+map-new
+"hello" 1 map-put
+True 2 map-put
+dup 1 map-get "hello" assert-eq
+2 map-get True assert-eq
+
+# Map inside a product type
+type Config
+    name String
+    settings Map .
+
+"myapp" map-new 8080 "port" map-put config
+dup name "myapp" assert-eq
+settings "port" map-get 8080 assert-eq

@@ -16,6 +16,9 @@ export function init(): void {
     return withStack(cont, [["Int", val], ...rest]);
   }));
 
+  // Constructor pass-through: int (Int -> Int) — no-op when already Int
+  Type.addOp("Any", makeOp("int", ["Int"], ["Int"], (cont) => cont));
+
   // literal : Atom -> Int  (auto-detect integer literals)
   Type.addOp("Int", makeOp("literal", ["Atom"], ["Int"], (cont) => {
     const [item] = cont.dataStack;

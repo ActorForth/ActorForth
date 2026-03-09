@@ -1,0 +1,6 @@
+: square Int -> Int ;
+    dup *.
+
+2 int square 4 assert-eq
+2 square 4 assert-eq
+7 square 49 assert-eq
