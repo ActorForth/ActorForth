@@ -2,9 +2,9 @@
 """
 run_all_benchmarks.py — Run all comprehensive benchmarks and produce comparison table.
 
-Executes benchmarks in C++, Python, Erlang, Elixir, and ActorForth (interpreted,
-native BEAM, direct BEAM), then parses the BENCH_DATA output lines and produces
-a formatted comparison table with us/op values.
+Executes benchmarks in C++, Python, Erlang, Elixir, TypeScript, and ActorForth
+(interpreted, native BEAM, direct BEAM), then parses the BENCH_DATA output lines
+and produces a formatted comparison table with us/op values.
 
 Usage:
     python3 run_all_benchmarks.py           # from project root
@@ -125,12 +125,14 @@ def print_table(results):
     # Column order (left to right, fastest to slowest expected)
     columns = [
         ("C++ -O2", "cpp"),
+        ("TS Native", "ts_native"),
         ("Elixir", "elixir"),
         ("Erlang", "erlang"),
         ("Python", "python"),
         ("A4 Direct", "a4_direct"),
         ("A4 Native", "a4_native"),
         ("A4 Interp", "a4_interp"),
+        ("A4/TS Interp", "ts_interp"),
     ]
 
     # Filter to only columns that have data
@@ -268,7 +270,22 @@ def main():
             if data:
                 results["elixir"] = data
 
-    # 5. ActorForth (requires rebar3 compile first)
+    # 5. TypeScript (TS Native + A4/TS Interpreted)
+    npx = shutil.which("npx")
+    ts_bench = os.path.join(SCRIPT_DIR, "bench_ops_typescript.ts")
+    if npx and os.path.exists(ts_bench):
+        out, ok = run_cmd(
+            [npx, "tsx", ts_bench],
+            "TypeScript (native + A4/TS interpreted)",
+            cwd=os.path.join(PROJECT_ROOT, "ts"),
+        )
+        if ok:
+            for tag, key in [("ts_native", "ts_native"), ("ts_interp", "ts_interp")]:
+                data = parse_bench_data(out, tag)
+                if data:
+                    results[key] = data
+
+    # 6. ActorForth (requires rebar3 compile first)
     if ensure_a4_built():
         timeout = 120 if quick else 600
         out, ok = run_cmd(
