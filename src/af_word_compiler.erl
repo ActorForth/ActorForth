@@ -198,6 +198,12 @@ simulate_body(Ops, Stack, L, Ctx) ->
 
 simulate_body([], Stack, _L, _Ctx, SideEffects) ->
     {ok, Stack, lists:reverse(SideEffects)};
+%% Quoted string literal on opaque stack: push string, keep opaque rest
+simulate_body([#operation{name = OpName, source = quoted_string} | Rest], [{StackExpr, stack}], L, Ctx, SideEffects) ->
+    BinExpr = {bin, L, [{bin_element, L, {string, L, OpName}, default, default}]},
+    StrTagged = {tuple, L, [{atom, L, 'String'}, BinExpr]},
+    NewExpr = {cons, L, StrTagged, StackExpr},
+    simulate_body(Rest, [{NewExpr, stack}], L, Ctx, SideEffects);
 %% Opaque stack: check for same-module words first, then fall back to apply_impl
 simulate_body([#operation{name = OpName} | Rest], [{StackExpr, stack}], L, Ctx, SideEffects) ->
     Words = maps:get(words, Ctx, #{}),
@@ -211,6 +217,10 @@ simulate_body([#operation{name = OpName} | Rest], [{StackExpr, stack}], L, Ctx, 
                 [{string, L, OpName}, StackExpr]}
     end,
     simulate_body(Rest, [{NewExpr, stack}], L, Ctx, SideEffects);
+%% Quoted string literals: push as tagged {String, Binary}
+simulate_body([#operation{name = OpName, source = quoted_string} | Rest], Stack, L, Ctx, SideEffects) ->
+    BinExpr = {bin, L, [{bin_element, L, {string, L, OpName}, default, default}]},
+    simulate_body(Rest, [make_tagged('String', BinExpr, L) | Stack], L, Ctx, SideEffects);
 simulate_body([#operation{name = OpName} | Rest], Stack, L, Ctx, SideEffects) ->
     case translate_op(OpName, Stack, L, Ctx) of
         {ok, NewStack} ->
@@ -297,7 +307,11 @@ translate_op("not", [A | Rest], L, _Ctx) ->
 %% String operations
 translate_op("concat", [A, B | Rest], L, _Ctx) ->
     ValA = extract_val(A, L), ValB = extract_val(B, L),
-    ResultExpr = {op, L, '++', ValB, ValA},
+    %% Strings are binaries: <<B/binary, A/binary>>
+    ResultExpr = {bin, L, [
+        {bin_element, L, ValB, default, [binary]},
+        {bin_element, L, ValA, default, [binary]}
+    ]},
     {ok, [make_tagged('String', ResultExpr, L) | Rest]};
 translate_op("length", [{_Expr, 'String'} = A | Rest], L, _Ctx) ->
     ValA = extract_val(A, L),

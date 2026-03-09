@@ -297,10 +297,15 @@ resolve_compile_token(TokenValue, OrigToken) ->
         #token{quoted = Q} -> Q;
         _ -> false
     end,
+    Source = case IsQuoted of
+        true -> quoted_string;
+        false -> undefined
+    end,
     #operation{
         name = TokenValue,
         sig_in = [],
         sig_out = [],
+        source = Source,
         impl = fun(Cont) ->
             Token = #token{value = TokenValue, quoted = IsQuoted},
             af_interpreter:interpret_token(Token, Cont)
