@@ -1,12 +1,14 @@
 %% af_ring2.erl -- Ring 2: A4 Compiler targeting Ring 0/Ring 1
 %%
-%% Compiles A4 source into Ring 0 instruction sequences, then uses
-%% Ring 1 to generate BEAM modules. During bootstrap, delegates
-%% parsing and word definition to the existing Erlang infrastructure,
-%% then translates compiled word bodies to Ring 0 instructions.
+%% Two compilation modes:
+%%   parasitic (default) - delegates to Erlang parser/interpreter, then
+%%                         translates compiled word bodies to Ring 0
+%%   selfhosted          - uses af_r0_parser + af_r0_compiler directly,
+%%                         no dependency on af_parser/af_interpreter
 %%
 %% Usage:
 %%   {ok, Mod} = af_ring2:compile(": double Int -> Int ; dup + .", "test", "my_mod").
+%%   {ok, Mod} = af_ring2:compile_selfhosted(": double Int -> Int ; dup + .", "test", "my_mod").
 %%   Mod:double([{'Int', 21}]).  %% => [{'Int', 42}]
 
 -module(af_ring2).
@@ -18,8 +20,11 @@
 
 -export([
     compile/3,
+    compile_selfhosted/3,
     compile_file/2,
     compile_file/3,
+    compile_file_selfhosted/2,
+    compile_file_selfhosted/3,
     translate_word/2,
     translate_body/2
 ]).
@@ -63,6 +68,61 @@ compile_file(FilePath, ModName, _Opts) ->
         {error, Reason} ->
             {error, {file_error, Reason}}
     end.
+
+%%% === Self-Hosted Compilation ===
+%%% Uses af_r0_parser + af_r0_compiler instead of af_parser + af_interpreter.
+%%% No dependency on the Erlang interpreter infrastructure.
+
+compile_selfhosted(Source, Filename, ModName) ->
+    ModAtom = list_to_atom("af_r2_" ++ to_str(ModName)),
+    try
+        SourceBin = to_bin(Source),
+        FileBin = to_bin(Filename),
+        %% Phase 1: Parse with self-hosted parser
+        Tokens = af_r0_parser:parse(SourceBin, FileBin),
+        %% Phase 2: Compile tokens to Ring 0 word definitions
+        WordDefs0 = af_r0_compiler:compile_tokens(Tokens),
+        case WordDefs0 of
+            [] -> {error, no_words_defined};
+            _ ->
+                %% Phase 2.5: Enrich word names for inter-word calls
+                AllNames = lists:usort([N || {N, _, _, _} <- WordDefs0]),
+                WordDefs = retranslate_bodies(WordDefs0, AllNames),
+                %% Phase 3: Merge multi-clause words
+                MergedDefs = merge_multi_clause(WordDefs),
+                %% Phase 4: Compile via Ring 1
+                af_ring1:compile_module(ModAtom, MergedDefs)
+        end
+    catch
+        Class:Reason ->
+            {error, {Class, Reason}}
+    end.
+
+compile_file_selfhosted(FilePath, ModName) ->
+    compile_file_selfhosted(FilePath, ModName, []).
+
+compile_file_selfhosted(FilePath, ModName, _Opts) ->
+    case file:read_file(FilePath) of
+        {ok, Content} ->
+            compile_selfhosted(Content, FilePath, ModName);
+        {error, Reason} ->
+            {error, {file_error, Reason}}
+    end.
+
+%% Re-translate bodies with full word name list for correct call resolution.
+retranslate_bodies(WordDefs, AllNames) ->
+    [{Name, SigIn, SigOut, retranslate_body(Body, AllNames)}
+     || {Name, SigIn, SigOut, Body} <- WordDefs].
+
+retranslate_body(Body, AllNames) ->
+    lists:map(fun
+        ({apply_impl, OpName}) ->
+            case lists:member(OpName, AllNames) of
+                true -> {call, OpName};
+                false -> {apply_impl, OpName}
+            end;
+        (Other) -> Other
+    end, Body).
 
 %%% === Word Translation ===
 
@@ -126,6 +186,13 @@ translate_primitive("nil")   -> {ok, [nil]};
 translate_primitive("cons")  -> {ok, [cons]};
 translate_primitive("head")  -> {ok, [head]};
 translate_primitive("tail")  -> {ok, [tail]};
+%% Map
+translate_primitive("map-new")    -> {ok, [map_new]};
+translate_primitive("map-put")    -> {ok, [map_put]};
+translate_primitive("map-get")    -> {ok, [map_get]};
+translate_primitive("map-delete") -> {ok, [map_delete]};
+translate_primitive("map-keys")   -> {ok, [map_keys]};
+translate_primitive("map-has?")   -> {ok, [map_has]};
 translate_primitive(_)       -> not_found.
 
 %% Try to parse a token value as a literal.
@@ -192,3 +259,7 @@ group_by_name(WordDefs) ->
 to_str(B) when is_binary(B) -> binary_to_list(B);
 to_str(L) when is_list(L) -> L;
 to_str(A) when is_atom(A) -> atom_to_list(A).
+
+to_bin(B) when is_binary(B) -> B;
+to_bin(L) when is_list(L) -> list_to_binary(L);
+to_bin(A) when is_atom(A) -> atom_to_binary(A, utf8).

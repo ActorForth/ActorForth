@@ -511,6 +511,150 @@ read_n_eof_test() ->
     S1 = af_ring0:exec({read_n, 5}, S0),
     ?assertEqual([{'Atom', eof}], af_ring0:get_ds(S1)).
 
+%%% === BIF Call ===
+
+bif_add_test() ->
+    S0 = af_ring0:set_ds([{'Int', 2}, {'Int', 3}], af_ring0:new()),
+    S1 = af_ring0:exec({bif, erlang, '+', 2}, S0),
+    ?assertEqual([{'Int', 5}], af_ring0:get_ds(S1)).
+
+bif_atom_to_list_test() ->
+    S0 = af_ring0:set_ds([{'Atom', hello}], af_ring0:new()),
+    S1 = af_ring0:exec({bif, erlang, atom_to_list, 1}, S0),
+    %% atom_to_list returns a string (list), auto_tag wraps as List
+    [{'List', _}] = af_ring0:get_ds(S1).
+
+bif_byte_size_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec({bif, erlang, byte_size, 1}, S0),
+    ?assertEqual([{'Int', 5}], af_ring0:get_ds(S1)).
+
+bif_is_integer_test() ->
+    S0 = af_ring0:set_ds([{'Int', 42}], af_ring0:new()),
+    S1 = af_ring0:exec({bif, erlang, is_integer, 1}, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+%%% === Map Primitives ===
+
+map_new_test() ->
+    S0 = af_ring0:exec(map_new, af_ring0:new()),
+    ?assertEqual([{'Map', #{}}], af_ring0:get_ds(S0)).
+
+map_put_test() ->
+    S0 = af_ring0:set_ds([{'Int', 42}, {'String', <<"key">>}, {'Map', #{}}], af_ring0:new()),
+    S1 = af_ring0:exec(map_put, S0),
+    [{'Map', M}] = af_ring0:get_ds(S1),
+    ?assertEqual(#{ {'String', <<"key">>} => {'Int', 42} }, M).
+
+map_get_found_test() ->
+    M = #{ {'String', <<"x">>} => {'Int', 10} },
+    S0 = af_ring0:set_ds([{'String', <<"x">>}, {'Map', M}], af_ring0:new()),
+    S1 = af_ring0:exec(map_get, S0),
+    ?assertEqual([{'Int', 10}], af_ring0:get_ds(S1)).
+
+map_get_not_found_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"nope">>}, {'Map', #{}}], af_ring0:new()),
+    S1 = af_ring0:exec(map_get, S0),
+    ?assertEqual([{'Atom', not_found}], af_ring0:get_ds(S1)).
+
+map_delete_test() ->
+    M = #{ {'String', <<"a">>} => {'Int', 1} },
+    S0 = af_ring0:set_ds([{'String', <<"a">>}, {'Map', M}], af_ring0:new()),
+    S1 = af_ring0:exec(map_delete, S0),
+    ?assertEqual([{'Map', #{}}], af_ring0:get_ds(S1)).
+
+map_keys_test() ->
+    M = #{ {'String', <<"a">>} => {'Int', 1} },
+    S0 = af_ring0:set_ds([{'Map', M}], af_ring0:new()),
+    S1 = af_ring0:exec(map_keys, S0),
+    ?assertEqual([{'List', [{'String', <<"a">>}]}], af_ring0:get_ds(S1)).
+
+map_has_true_test() ->
+    M = #{ {'String', <<"x">>} => {'Int', 1} },
+    S0 = af_ring0:set_ds([{'String', <<"x">>}, {'Map', M}], af_ring0:new()),
+    S1 = af_ring0:exec(map_has, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+map_has_false_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"y">>}, {'Map', #{}}], af_ring0:new()),
+    S1 = af_ring0:exec(map_has, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
+map_roundtrip_test() ->
+    %% Build map with put, then get
+    %% map_put wants: Value Key Map (TOS first)
+    S0 = af_ring0:run([
+        map_new,                            %% DS: [Map]
+        {lit, {'String', <<"name">>}},      %% DS: ["name", Map]
+        {lit, {'String', <<"Alice">>}},      %% DS: ["Alice", "name", Map]
+        map_put,                             %% DS: [Map']
+        {lit, {'String', <<"name">>}},       %% DS: ["name", Map']
+        map_get                              %% DS: ["Alice"]
+    ], af_ring0:new()),
+    ?assertEqual([{'String', <<"Alice">>}], af_ring0:get_ds(S0)).
+
+%%% === String Primitives ===
+
+str_len_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_len, S0),
+    ?assertEqual([{'Int', 5}], af_ring0:get_ds(S1)).
+
+str_nth_test() ->
+    S0 = af_ring0:set_ds([{'Int', 1}, {'String', <<"abc">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_nth, S0),
+    ?assertEqual([{'String', <<"b">>}], af_ring0:get_ds(S1)).
+
+str_slice_test() ->
+    S0 = af_ring0:set_ds([{'Int', 3}, {'Int', 1}, {'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_slice, S0),
+    ?assertEqual([{'String', <<"ell">>}], af_ring0:get_ds(S1)).
+
+str_concat_test() ->
+    S0 = af_ring0:set_ds([{'String', <<" world">>}, {'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_concat, S0),
+    ?assertEqual([{'String', <<"hello world">>}], af_ring0:get_ds(S1)).
+
+str_eq_true_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"a">>}, {'String', <<"a">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_eq, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)).
+
+str_eq_false_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"b">>}, {'String', <<"a">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_eq, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
+str_to_int_success_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"42">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_to_int, S0),
+    ?assertEqual([{'Bool', true}, {'Int', 42}], af_ring0:get_ds(S1)).
+
+str_to_int_fail_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"abc">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_to_int, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
+str_to_float_success_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"3.14">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_to_float, S0),
+    ?assertEqual([{'Bool', true}, {'Float', 3.14}], af_ring0:get_ds(S1)).
+
+str_to_float_fail_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"abc">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_to_float, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
+str_find_found_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"ll">>}, {'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_find, S0),
+    ?assertEqual([{'Bool', true}, {'Int', 2}], af_ring0:get_ds(S1)).
+
+str_find_not_found_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"xyz">>}, {'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_find, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
 %%% === Word Definition ===
 
 def_word_instruction_test() ->

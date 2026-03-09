@@ -1,0 +1,33 @@
+# ast.a4 -- Product types for the self-hosted A4 compiler
+#
+# These types represent the compiler's intermediate data structures.
+# Word definitions, type signatures, and compilation units.
+
+# A signature entry: a type name with optional value constraint.
+# For "0 Int" the type is "Int" and constraint is "0".
+# For just "Int" the constraint is "".
+type SigEntry
+    type_name String
+    constraint String .
+
+# A word definition: name, input/output signatures, body tokens.
+type WordDef
+    name String
+    sig_in List
+    sig_out List
+    body List .
+
+# A compilation unit: module name + all word definitions.
+type CompileUnit
+    mod_name String
+    words List
+    types List .
+
+# Core Erlang expression wrapper (opaque Tuple from cerl module)
+type CoreExpr
+    expr Tuple .
+
+# Virtual stack entry used during compilation: a Core Erlang expression + its type.
+type StackEntry
+    core_expr Tuple
+    type_name String .

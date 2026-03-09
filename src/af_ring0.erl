@@ -270,6 +270,78 @@ exec({read_n, N}, #r0{input = In} = S) ->
             S#r0{ds = [{'Atom', eof} | S#r0.ds]}
     end;
 
+%%% === BIF Call (1) ===
+%%% Call any Erlang BIF/function with args from the stack.
+
+exec({bif, Mod, Fun, Arity}, #r0{ds = DS} = S) ->
+    {Args, Rest} = take_values(Arity, DS),
+    Result = erlang:apply(Mod, Fun, Args),
+    S#r0{ds = [auto_tag(Result) | Rest]};
+
+%%% === Map Primitives (5) ===
+
+exec(map_new, #r0{ds = DS} = S) ->
+    S#r0{ds = [{'Map', #{}} | DS]};
+
+exec(map_put, #r0{ds = [Value, Key, {'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'Map', Map#{Key => Value}} | Rest]};
+
+exec(map_get, #r0{ds = [Key, {'Map', Map} | Rest]} = S) ->
+    case maps:find(Key, Map) of
+        {ok, Value} -> S#r0{ds = [Value | Rest]};
+        error -> S#r0{ds = [{'Atom', not_found} | Rest]}
+    end;
+
+exec(map_delete, #r0{ds = [Key, {'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'Map', maps:remove(Key, Map)} | Rest]};
+
+exec(map_keys, #r0{ds = [{'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'List', maps:keys(Map)} | Rest]};
+
+exec(map_has, #r0{ds = [Key, {'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', maps:is_key(Key, Map)} | Rest]};
+
+%%% === String Primitives (6) ===
+%%% Needed for self-hosted parser.
+
+exec(str_len, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Int', byte_size(Bin)} | Rest]};
+
+exec(str_nth, #r0{ds = [{'Int', N}, {'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', binary:part(Bin, N, 1)} | Rest]};
+
+exec(str_slice, #r0{ds = [{'Int', Len}, {'Int', Start}, {'String', Bin} | Rest]} = S) ->
+    ActualLen = min(Len, byte_size(Bin) - Start),
+    S#r0{ds = [{'String', binary:part(Bin, Start, max(0, ActualLen))} | Rest]};
+
+exec(str_concat, #r0{ds = [{'String', B}, {'String', A} | Rest]} = S) ->
+    S#r0{ds = [{'String', <<A/binary, B/binary>>} | Rest]};
+
+exec(str_eq, #r0{ds = [{'String', B}, {'String', A} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', A =:= B} | Rest]};
+
+exec(str_to_int, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    try
+        N = binary_to_integer(Bin),
+        S#r0{ds = [{'Bool', true}, {'Int', N} | Rest]}
+    catch _:_ ->
+        S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+exec(str_to_float, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    try
+        F = binary_to_float(Bin),
+        S#r0{ds = [{'Bool', true}, {'Float', F} | Rest]}
+    catch _:_ ->
+        S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+exec(str_find, #r0{ds = [{'String', Pat}, {'String', Bin} | Rest]} = S) ->
+    case binary:match(Bin, Pat) of
+        {Pos, _} -> S#r0{ds = [{'Bool', true}, {'Int', Pos} | Rest]};
+        nomatch -> S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
 %%% === Runtime Dispatch ===
 %%% For operations not directly mapped to Ring 0 primitives.
 %%% Delegates to the existing A4 type system during bootstrap.
@@ -294,6 +366,24 @@ exec({def_word, Name, Body}, #r0{words = Words} = S) ->
 
 tag_number(N) when is_float(N) -> {'Float', N};
 tag_number(N) -> {'Int', N}.
+
+%% Extract raw values from tagged stack items for BIF calls.
+take_values(0, Stack) -> {[], Stack};
+take_values(N, [{_, V} | Rest]) ->
+    {Vs, Remaining} = take_values(N - 1, Rest),
+    {[V | Vs], Remaining}.
+
+%% Auto-tag an Erlang term as a stack value.
+auto_tag(N) when is_integer(N) -> {'Int', N};
+auto_tag(F) when is_float(F) -> {'Float', F};
+auto_tag(true) -> {'Bool', true};
+auto_tag(false) -> {'Bool', false};
+auto_tag(B) when is_binary(B) -> {'String', B};
+auto_tag(L) when is_list(L) -> {'List', [auto_tag(E) || E <- L]};
+auto_tag(M) when is_map(M) -> {'Map', M};
+auto_tag(T) when is_tuple(T) -> {'Tuple', T};
+auto_tag(A) when is_atom(A) -> {'Atom', A};
+auto_tag(Other) -> {'Any', Other}.
 
 %% Check if stack matches a type signature (TOS-first).
 %% SigIn entries: atom (type match) | {Type, Value} (value constraint) | 'Any'

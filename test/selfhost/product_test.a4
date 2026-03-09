@@ -1,0 +1,2 @@
+type Counter count Int .
+: bump Counter -> Counter ; count 1 + count! .

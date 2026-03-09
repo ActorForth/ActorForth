@@ -301,3 +301,141 @@ preserves_stack_test() ->
         ": inc Int -> Int ; 1 + .", "test", "pres"),
     ?assertEqual([{'Int', 6}, {'String', <<"below">>}],
                  Mod:inc([{'Int', 5}, {'String', <<"below">>}])).
+
+%%% === Self-Hosted Parser Tests ===
+
+selfhosted_parse_simple_test() ->
+    Tokens = af_r0_parser:parse(<<"dup + 42">>, <<"test">>),
+    Values = [maps:get(value, T) || T <- Tokens],
+    ?assertEqual([<<"dup">>, <<"+">>, <<"42">>], Values).
+
+selfhosted_parse_word_def_test() ->
+    Tokens = af_r0_parser:parse(<<": double Int -> Int ; dup + .">>, <<"test">>),
+    Values = [maps:get(value, T) || T <- Tokens],
+    ?assertEqual([<<":">>, <<"double">>, <<"Int">>, <<"->">>,
+                  <<"Int">>, <<";">>, <<"dup">>, <<"+">>, <<".">>], Values).
+
+selfhosted_parse_quoted_string_test() ->
+    Tokens = af_r0_parser:parse(<<"\"hello world\"">>, <<"test">>),
+    ?assertEqual(1, length(Tokens)),
+    T = hd(Tokens),
+    ?assertEqual(<<"hello world">>, maps:get(value, T)),
+    ?assertEqual(true, maps:get(quoted, T)).
+
+selfhosted_parse_comment_test() ->
+    Tokens = af_r0_parser:parse(<<"a # comment\nb">>, <<"test">>),
+    Values = [maps:get(value, T) || T <- Tokens],
+    ?assertEqual([<<"a">>, <<"b">>], Values).
+
+selfhosted_parse_float_test() ->
+    Tokens = af_r0_parser:parse(<<"3.14">>, <<"test">>),
+    ?assertEqual(1, length(Tokens)),
+    ?assertEqual(<<"3.14">>, maps:get(value, hd(Tokens))).
+
+selfhosted_parse_dot_delim_test() ->
+    Tokens = af_r0_parser:parse(<<"foo .">>, <<"test">>),
+    Values = [maps:get(value, T) || T <- Tokens],
+    ?assertEqual([<<"foo">>, <<".">>], Values).
+
+selfhosted_parse_lines_test() ->
+    Tokens = af_r0_parser:parse(<<"a\nb\nc">>, <<"test">>),
+    Lines = [maps:get(line, T) || T <- Tokens],
+    ?assertEqual([1, 2, 3], Lines).
+
+selfhosted_parse_empty_test() ->
+    Tokens = af_r0_parser:parse(<<>>, <<"test">>),
+    ?assertEqual([], Tokens).
+
+%%% === Self-Hosted Compilation Tests ===
+
+selfhosted_compile_test_() ->
+    [{Description, fun() -> Body() end} || {Description, Body} <- [
+        {"selfhosted double", fun() ->
+            {ok, Mod} = af_ring2:compile_selfhosted(
+                ": double Int -> Int ; dup + .", "test", "sh_double"),
+            ?assertEqual(af_r2_sh_double, Mod),
+            ?assertEqual([{'Int', 42}], Mod:double([{'Int', 21}]))
+        end},
+
+        {"selfhosted square", fun() ->
+            {ok, Mod} = af_ring2:compile_selfhosted(
+                ": square Int -> Int ; dup * .", "test", "sh_square"),
+            ?assertEqual([{'Int', 49}], Mod:square([{'Int', 7}]))
+        end},
+
+        {"selfhosted subtraction", fun() ->
+            {ok, Mod} = af_ring2:compile_selfhosted(
+                ": dec Int -> Int ; 1 - .", "test", "sh_dec"),
+            ?assertEqual([{'Int', 4}], Mod:dec([{'Int', 5}]))
+        end},
+
+        {"selfhosted comparison", fun() ->
+            {ok, Mod} = af_ring2:compile_selfhosted(
+                ": is_five Int -> Bool ; 5 == .", "test", "sh_eq"),
+            ?assertEqual([{'Bool', true}], Mod:is_five([{'Int', 5}])),
+            ?assertEqual([{'Bool', false}], Mod:is_five([{'Int', 3}]))
+        end},
+
+        {"selfhosted string literal", fun() ->
+            {ok, Mod} = af_ring2:compile_selfhosted(
+                ": greeting Any -> String ; drop \"Hello\" .", "test", "sh_greet"),
+            ?assertEqual([{'String', <<"Hello">>}],
+                         Mod:greeting([{'Int', 0}]))
+        end},
+
+        {"selfhosted inter-word calls", fun() ->
+            Source = ": double Int -> Int ; dup + .\n"
+                     ": quadruple Int -> Int ; double double .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_multi"),
+            ?assertEqual([{'Int', 40}], Mod:quadruple([{'Int', 10}]))
+        end},
+
+        {"selfhosted bool literal", fun() ->
+            {ok, Mod} = af_ring2:compile_selfhosted(
+                ": yes Any -> Bool ; drop true .", "test", "sh_yes"),
+            ?assertEqual([{'Bool', true}], Mod:yes([{'Int', 0}]))
+        end},
+
+        {"selfhosted float literal", fun() ->
+            {ok, Mod} = af_ring2:compile_selfhosted(
+                ": pi Any -> Float ; drop 3.14 .", "test", "sh_pi"),
+            ?assertEqual([{'Float', 3.14}], Mod:pi([{'Int', 0}]))
+        end},
+
+        {"selfhosted pattern matching factorial", fun() ->
+            Source = ": factorial 0 Int -> Int ; drop 1 .\n"
+                     ": factorial Int -> Int ; dup 1 - factorial * .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_fact"),
+            ?assertEqual([{'Int', 1}], Mod:factorial([{'Int', 0}])),
+            ?assertEqual([{'Int', 120}], Mod:factorial([{'Int', 5}]))
+        end},
+
+        {"selfhosted fibonacci", fun() ->
+            Source = ": fib 0 Int -> Int ; drop 0 .\n"
+                     ": fib 1 Int -> Int ; drop 1 .\n"
+                     ": fib Int -> Int ; dup 1 - fib swap 2 - fib + .",
+            {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_fib"),
+            ?assertEqual([{'Int', 0}], Mod:fib([{'Int', 0}])),
+            ?assertEqual([{'Int', 1}], Mod:fib([{'Int', 1}])),
+            ?assertEqual([{'Int', 55}], Mod:fib([{'Int', 10}]))
+        end},
+
+        {"selfhosted no words", fun() ->
+            Result = af_ring2:compile_selfhosted("1 2 +", "test", "sh_empty"),
+            ?assertEqual({error, no_words_defined}, Result)
+        end},
+
+        {"selfhosted file compilation", fun() ->
+            {ok, Mod} = af_ring2:compile_file_selfhosted(
+                "samples/lib_math.a4", "sh_math"),
+            ?assertEqual(af_r2_sh_math, Mod),
+            ?assertEqual([{'Int', 25}], Mod:square([{'Int', 5}]))
+        end},
+
+        {"selfhosted preserves stack", fun() ->
+            {ok, Mod} = af_ring2:compile_selfhosted(
+                ": inc Int -> Int ; 1 + .", "test", "sh_pres"),
+            ?assertEqual([{'Int', 6}, {'String', <<"below">>}],
+                         Mod:inc([{'Int', 5}, {'String', <<"below">>}]))
+        end}
+    ]].

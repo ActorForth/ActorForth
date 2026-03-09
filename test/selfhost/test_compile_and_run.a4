@@ -1,0 +1,12 @@
+# Minimal greet test
+
+"test/selfhost/greet.a4" read-file
+"test/selfhost/greet.a4"
+"greet_mod"
+af_core_compiler eval_and_compile 3 erlang-call
+drop
+
+"World" "af_native_greet_mod" "greet" 1 call-compiled
+print
+
+"Done." print

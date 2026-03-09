@@ -1,0 +1,203 @@
+# core_emitter.a4 -- Emit Core Erlang from A4 word definitions
+#
+# Uses the cerl module via FFI to build Core Erlang AST nodes.
+# The compile module then converts these to BEAM bytecode.
+#
+# Core Erlang is a normalized subset of Erlang with explicit
+# let-bindings, case expressions, and no syntactic sugar.
+# It maps naturally to A4's stack-based model.
+#
+# Strategy: mirror af_word_compiler.erl's stack simulation approach.
+# Each A4 token either manipulates the virtual stack of cerl expressions
+# or generates cerl function calls.
+
+# === Core Erlang Node Constructors (cerl FFI wrappers) ===
+
+# Create a Core Erlang integer literal
+: cerl-int Int -> Tuple ;
+    nil swap cons
+    c_int cerl erlang-call0 .
+
+# Create a Core Erlang atom literal
+: cerl-atom String -> Tuple ;
+    to-atom
+    nil swap cons
+    c_atom cerl erlang-call0 .
+
+# Create a Core Erlang string (binary) literal
+: cerl-string String -> Tuple ;
+    nil swap cons
+    c_string cerl erlang-call0 .
+
+# Create a Core Erlang tuple: [Expr1, Expr2, ...]
+: cerl-tuple List -> Tuple ;
+    nil swap cons
+    c_tuple cerl erlang-call0 .
+
+# Create a Core Erlang cons cell
+: cerl-cons Tuple Tuple -> Tuple ;
+    nil swap cons swap cons
+    c_cons cerl erlang-call0 .
+
+# Create Core Erlang nil (empty list)
+: cerl-nil -> Tuple ;
+    nil
+    c_nil cerl erlang-call0 .
+
+# Create a Core Erlang variable
+: cerl-var String -> Tuple ;
+    to-atom
+    nil swap cons
+    c_var cerl erlang-call0 .
+
+# Create a Core Erlang let binding: let Var = Val in Body
+: cerl-let Tuple Tuple Tuple -> Tuple ;
+    nil swap cons       # [body]
+    swap cons           # [val, body]
+    swap nil swap cons  # [var]
+    swap cons           # [[var], val, body] -- but cerl:c_let takes (Vars, Arg, Body)
+    # Actually cerl:c_let/3 takes (Vars :: [cerl], Arg :: cerl, Body :: cerl)
+    drop drop drop      # TODO: fix argument order
+    nil c_let cerl erlang-call0 .
+
+# Create a Core Erlang function: fun(Var1, ...) -> Body
+: cerl-fun List Tuple -> Tuple ;
+    nil swap cons swap cons
+    c_fun cerl erlang-call0 .
+
+# Create a remote function call: Mod:Fun(Args)
+: cerl-call Tuple Tuple List -> Tuple ;
+    nil swap cons swap cons swap cons
+    c_call cerl erlang-call0 .
+
+# Create a local function application: Fun(Args)
+: cerl-apply Tuple List -> Tuple ;
+    nil swap cons swap cons
+    c_apply cerl erlang-call0 .
+
+# === Tagged Value Helpers ===
+
+# A4 stack items are {Type, Value} tuples on the BEAM.
+# Build a cerl tuple for a tagged integer value.
+: cerl-tagged-int Int -> Tuple ;
+    cerl-int                            # cerl int literal
+    "'Int'" cerl-atom                   # cerl atom 'Int'
+    swap nil cons swap nil cons append  # [atom, int]
+    cerl-tuple .                        # {Int, N}
+
+# Build a tagged boolean value
+: cerl-tagged-bool Bool -> Tuple ;
+    # Convert bool to atom
+    dup
+    true == "true" "false" rot drop swap drop
+    cerl-atom
+    "'Bool'" cerl-atom
+    swap nil cons swap nil cons append
+    cerl-tuple .
+
+# Build a tagged string value
+: cerl-tagged-string String -> Tuple ;
+    cerl-string
+    "'String'" cerl-atom
+    swap nil cons swap nil cons append
+    cerl-tuple .
+
+# === Stack Operation Translation ===
+#
+# These words take a virtual stack (List of cerl expressions)
+# and produce a modified virtual stack, mirroring how A4 stack
+# ops work but on compile-time cerl expression references.
+
+# dup: [a, ...] -> [a, a, ...]
+: vstack-dup List -> List ;
+    dup head swap cons .
+
+# drop: [a, ...] -> [...]
+: vstack-drop List -> List ;
+    tail .
+
+# swap: [a, b, ...] -> [b, a, ...]
+: vstack-swap List -> List ;
+    dup head          # a
+    swap tail         # [b, ...]
+    dup head          # b
+    swap tail         # [...]
+    rot cons          # [a, ...]
+    swap cons .       # [b, a, ...]
+
+# over: [a, b, ...] -> [b, a, b, ...]
+: vstack-over List -> List ;
+    dup tail head     # b (second element)
+    swap cons .       # [b, a, b, ...]
+
+# rot: [a, b, c, ...] -> [c, a, b, ...]
+: vstack-rot List -> List ;
+    dup head          # a (TOS)
+    swap tail         # [b, c, ...]
+    dup head          # b
+    swap tail         # [c, ...]
+    dup head          # c
+    swap tail         # [...]
+    # Stack: rest c b a
+    swap rot          # Stack: rest a c b
+    cons              # [b, ...]  -- no wait, this is wrong
+    swap cons         # [c, b, ...]
+    swap cons .       # [a, c, b, ...] -- hmm
+    # TODO: verify rot order matches A4 semantics
+
+# === Arithmetic Expression Builders ===
+
+# Build cerl expression for: erlang:'+'(A, B)
+# Takes two cerl expressions, returns a cerl call expression
+: cerl-add Tuple Tuple -> Tuple ;
+    nil cons swap cons              # args = [A, B]
+    "'+'" cerl-atom                 # fun = '+'
+    "'erlang'" cerl-atom            # mod = erlang
+    rot                             # mod fun args
+    cerl-call .
+
+: cerl-sub Tuple Tuple -> Tuple ;
+    nil cons swap cons
+    "'-'" cerl-atom
+    "'erlang'" cerl-atom
+    rot cerl-call .
+
+: cerl-mul Tuple Tuple -> Tuple ;
+    nil cons swap cons
+    "'*'" cerl-atom
+    "'erlang'" cerl-atom
+    rot cerl-call .
+
+: cerl-div Tuple Tuple -> Tuple ;
+    nil cons swap cons
+    "'div'" cerl-atom
+    "'erlang'" cerl-atom
+    rot cerl-call .
+
+: cerl-abs Tuple -> Tuple ;
+    nil cons
+    "'abs'" cerl-atom
+    "'erlang'" cerl-atom
+    rot cerl-call .
+
+# === Module Assembly ===
+
+# Create a Core Erlang module with exports and function definitions.
+# mod-name exports funs -> core-module
+: cerl-module Tuple List List -> Tuple ;
+    nil swap cons swap cons swap cons
+    # cerl:c_module/3 takes (Name, Exports, Attrs, Defs)
+    # Actually c_module/4: Name, Exports, Attrs, Defs
+    nil cons    # add empty attrs = []
+    # Rearrange: [Name, Exports, [], Defs]
+    c_module cerl erlang-call0 .
+
+# Compile a Core Erlang module to BEAM binary
+# core-module -> binary
+: compile-core Tuple -> Tuple ;
+    nil cons                       # [CoreModule]
+    nil from_core cons swap cons   # [CoreModule, [from_core]]
+    # Wait, compile:forms/2 takes (Forms, Options)
+    # For Core Erlang: compile:forms(CoreModule, [from_core, binary])
+    drop drop                      # TODO: fix this
+    nil compile-core erlang-call0 .

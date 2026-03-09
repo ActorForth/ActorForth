@@ -105,6 +105,42 @@ init() ->
         impl = fun op_compile/1
     }),
 
+    %% read-file : String -> String  (read entire file as string)
+    af_type:add_op('Any', #operation{
+        name = "read-file", sig_in = ['String'], sig_out = ['String'],
+        impl = fun op_read_file/1
+    }),
+
+    %% write-file : String String ->  (content path --)
+    af_type:add_op('Any', #operation{
+        name = "write-file", sig_in = ['String', 'String'], sig_out = [],
+        impl = fun op_write_file/1
+    }),
+
+    %% file-exists? : String -> Bool
+    af_type:add_op('Any', #operation{
+        name = "file-exists?", sig_in = ['String'], sig_out = ['Bool'],
+        impl = fun op_file_exists/1
+    }),
+
+    %% get-word-defs : String -> List  (get compiled word definitions)
+    af_type:add_op('Any', #operation{
+        name = "get-word-defs", sig_in = ['String'], sig_out = ['List'],
+        impl = fun op_get_word_defs/1
+    }),
+
+    %% get-all-words : -> List  (get all user-defined word names)
+    af_type:add_op('Any', #operation{
+        name = "get-all-words", sig_in = [], sig_out = ['List'],
+        impl = fun op_get_all_words/1
+    }),
+
+    %% tokenize : String String -> List  (source filename -> tokens)
+    af_type:add_op('Any', #operation{
+        name = "tokenize", sig_in = ['String', 'String'], sig_out = ['List'],
+        impl = fun op_tokenize/1
+    }),
+
     %% debug : -> Debug  (pushes Debug marker, handler intercepts on/off)
     af_type:register_type(#af_type{name = 'Debug'}),
     af_type:add_op('Any', #operation{
@@ -308,6 +344,92 @@ op_import(Cont) ->
             Msg = lists:flatten(io_lib:format("import failed for ~s: ~p", [ResolvedPath, Reason])),
             af_error:raise(import_error, Msg, Cont)
     end.
+
+%%% File I/O
+
+op_read_file(Cont) ->
+    [{'String', PathBin} | Rest] = Cont#continuation.data_stack,
+    Path = binary_to_list(PathBin),
+    case file:read_file(Path) of
+        {ok, Content} ->
+            Cont#continuation{data_stack = [{'String', Content} | Rest]};
+        {error, Reason} ->
+            Msg = lists:flatten(io_lib:format("Cannot read file ~s: ~p", [Path, Reason])),
+            af_error:raise(file_error, Msg, Cont)
+    end.
+
+op_write_file(Cont) ->
+    [{'String', PathBin}, {'String', Content} | Rest] = Cont#continuation.data_stack,
+    Path = binary_to_list(PathBin),
+    case file:write_file(Path, Content) of
+        ok ->
+            Cont#continuation{data_stack = Rest};
+        {error, Reason} ->
+            Msg = lists:flatten(io_lib:format("Cannot write file ~s: ~p", [Path, Reason])),
+            af_error:raise(file_error, Msg, Cont)
+    end.
+
+op_file_exists(Cont) ->
+    [{'String', PathBin} | Rest] = Cont#continuation.data_stack,
+    Path = binary_to_list(PathBin),
+    Exists = filelib:is_regular(Path),
+    Cont#continuation{data_stack = [{'Bool', Exists} | Rest]}.
+
+%%% Reflection / Introspection
+
+op_get_word_defs(Cont) ->
+    [{'String', NameBin} | Rest] = Cont#continuation.data_stack,
+    Name = binary_to_list(NameBin),
+    WordDefs = af_word_compiler:find_compiled_word_defs(Name),
+    %% Convert to list of maps for A4 consumption
+    DefList = lists:map(fun({WName, SigIn, SigOut, Body}) ->
+        {'Map', #{
+            {'String', <<"name">>} => {'String', list_to_binary(WName)},
+            {'String', <<"sig_in">>} => {'List', [sig_item_to_stack(S) || S <- SigIn]},
+            {'String', <<"sig_out">>} => {'List', [sig_item_to_stack(S) || S <- SigOut]},
+            {'String', <<"body">>} => {'List', body_to_stack(Body)}
+        }}
+    end, WordDefs),
+    Cont#continuation{data_stack = [{'List', DefList} | Rest]}.
+
+op_get_all_words(Cont) ->
+    AllTypes = af_type:all_types(),
+    AllNames = lists:usort(lists:flatmap(fun(#af_type{ops = Ops}) ->
+        [{'String', list_to_binary(K)} || K <- maps:keys(Ops),
+         lists:any(fun(#operation{source = S}) ->
+             S =/= undefined andalso S =/= auto
+         end, maps:get(K, Ops, []))]
+    end, AllTypes)),
+    Cont#continuation{data_stack = [{'List', AllNames} | Cont#continuation.data_stack]}.
+
+op_tokenize(Cont) ->
+    [{'String', FilenameBin}, {'String', SourceBin} | Rest] = Cont#continuation.data_stack,
+    Source = binary_to_list(SourceBin),
+    Filename = binary_to_list(FilenameBin),
+    Tokens = af_parser:parse(Source, Filename),
+    %% Convert #token{} records to A4 maps
+    TokenList = lists:map(fun(#token{value = V, line = L, column = C, file = F, quoted = Q}) ->
+        {'Map', #{
+            {'String', <<"value">>} => {'String', list_to_binary(V)},
+            {'String', <<"line">>} => {'Int', L},
+            {'String', <<"col">>} => {'Int', C},
+            {'String', <<"file">>} => {'String', list_to_binary(F)},
+            {'String', <<"quoted">>} => {'Bool', Q =:= true}
+        }}
+    end, Tokens),
+    Cont#continuation{data_stack = [{'List', TokenList} | Rest]}.
+
+sig_item_to_stack({Type, Value}) when is_atom(Type) ->
+    {'Map', #{
+        {'String', <<"type">>} => {'String', atom_to_binary(Type, utf8)},
+        {'String', <<"value">>} => af_term:to_stack_item(Value)
+    }};
+sig_item_to_stack(Type) when is_atom(Type) ->
+    {'String', atom_to_binary(Type, utf8)}.
+
+body_to_stack(Body) when is_list(Body) ->
+    [{'String', list_to_binary(Op#operation.name)} || Op <- Body];
+body_to_stack(_) -> [].
 
 %%% Debug
 

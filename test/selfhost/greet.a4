@@ -1,0 +1,1 @@
+: greet String -> String ; "Hello, " swap concat "!" concat .

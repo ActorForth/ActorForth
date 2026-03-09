@@ -1,0 +1,70 @@
+# compiler.a4 -- Self-hosted ActorForth compiler (bootstrap version)
+#
+# Compiles .a4 source files to BEAM modules.
+#
+# Bootstrap strategy: uses af_core_compiler (Erlang bridge) for the heavy
+# lifting initially. Each stage will be progressively replaced with pure
+# A4 code until the compiler is fully self-hosted.
+#
+# Usage:
+#   "samples/lib_math.a4" "math" a4-compile
+#   # Produces af_native_math.beam with compiled words
+
+# Load the AST types
+load "lib/compiler/ast.a4"
+
+# === Stage 1: Read source file ===
+
+# read-source : String -> String String
+# Read an A4 source file, return content and filename
+: read-source String -> String String ;
+    dup read-file swap .
+
+# === Stage 2: Tokenize ===
+
+# a4-tokenize : String String -> List
+# Tokenize A4 source. Returns list of token maps.
+: a4-tokenize String String -> List ;
+    tokenize .
+
+# === Stage 3: Parse and compile via bootstrap bridge ===
+
+# a4-compile : String String -> String
+# Compile an A4 source file to a BEAM module.
+# Takes: source-file-path module-name
+# Returns: module atom name as string
+: a4-compile String String -> String ;
+    # Stack: filepath modname
+    swap                          # modname filepath
+    dup read-file                 # modname filepath content
+    swap                          # modname content filepath
+    rot                           # content filepath modname
+    # Call af_core_compiler:eval_and_compile(Source, Filename, ModName)
+    3 eval_and_compile af_core_compiler erlang-call
+    # Returns {ok, ModAtom} or {error, Reason}
+    # For now just leave the result on the stack
+    .
+
+# === Stage 4: Save module to disk ===
+
+# a4-save : String String ->
+# Save a compiled module's .beam file to disk.
+# Takes: module-atom-name output-path
+: a4-save String String -> ;
+    swap
+    2 save_module af_core_compiler erlang-call
+    drop .
+
+# === Top-level: compile a file to .beam ===
+
+# a4-compile-file : String String String ->
+# Compile an A4 source file and save the .beam to disk.
+# Takes: source-path module-name output-path
+: a4-compile-file String String String -> ;
+    # Stack: source-path mod-name output-path
+    rot rot                       # output-path source-path mod-name
+    a4-compile                    # output-path result
+    # result is {ok, ModAtom} tuple - extract atom name
+    # For now, just save using the module name
+    swap
+    a4-save .
