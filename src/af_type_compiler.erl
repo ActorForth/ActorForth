@@ -393,8 +393,7 @@ register_single_word(State, Rest, Cont) ->
     af_type_any:auto_compile_word(Name),
 
     %% Sync local dictionary from ETS (auto_compile_word may have replaced ops)
-    Dict = Cont#continuation.dictionary,
-    Dict1 = sync_type_from_ets(TargetType, Dict),
+    Dict1 = sync_type_from_ets(TargetType, Cont#continuation.dictionary),
 
     Cont#continuation{data_stack = Rest, dictionary = Dict1}.
 
@@ -407,11 +406,9 @@ register_multi_word(State, Clauses, Rest, Cont) ->
     %% Register each sub-clause as a separate operation.
     %% Value-constrained clauses come first (they were added in order),
     %% general clauses last — match_first_op tries in list order.
-    Dict0 = ensure_type_in_dict(TargetType, Cont#continuation.dictionary),
-    Dict1 = lists:foldl(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody}, DictAcc) ->
+    lists:foreach(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody}) ->
         CSigIn = lists:reverse(CSigIn0),
         CSigOut = lists:reverse(CSigOut0),
-        %% Type check each clause body
         type_check_body(Name, CSigIn, CSigOut, CBody),
         Impl = make_word_impl(CBody, Name),
         Op = #operation{
@@ -421,16 +418,15 @@ register_multi_word(State, Clauses, Rest, Cont) ->
             impl = Impl,
             source = {compiled, CBody}
         },
-        af_type:add_op(TargetType, Op),
-        af_type:dict_add_op(TargetType, Op, DictAcc)
-    end, Dict0, Clauses),
+        af_type:add_op(TargetType, Op)
+    end, Clauses),
 
     af_type_any:auto_compile_word(Name),
 
-    %% Sync local dictionary from ETS (auto_compile_word may have replaced ops)
-    Dict2 = sync_type_from_ets(TargetType, Dict1),
+    %% Sync local dictionary from ETS
+    Dict1 = sync_type_from_ets(TargetType, Cont#continuation.dictionary),
 
-    Cont#continuation{data_stack = Rest, dictionary = Dict2}.
+    Cont#continuation{data_stack = Rest, dictionary = Dict1}.
 
 %% Run compile-time type check on a word body.
 %% Type mismatches are errors when inference is complete (no unknowns).
@@ -488,14 +484,9 @@ ensure_type(TypeName) ->
         _ -> ok
     end.
 
-ensure_type_in_dict(TypeName, Dict) ->
-    case maps:is_key(TypeName, Dict) of
-        true -> Dict;
-        false -> maps:put(TypeName, #af_type{name = TypeName}, Dict)
-    end.
-
 %% Re-read a type's full definition from ETS into the local dictionary.
 %% Called after auto_compile_word which may replace ops in ETS with native wrappers.
+sync_type_from_ets(_TypeName, undefined) -> undefined;
 sync_type_from_ets(TypeName, Dict) ->
     case af_type:get_type(TypeName) of
         {ok, Type} -> maps:put(TypeName, Type, Dict);
