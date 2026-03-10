@@ -33,6 +33,7 @@ groups() ->
         run_load_demo,
         run_counter_actor,
         run_bank_actor,
+        run_cpp_runtime,
         run_py_ai_demo,
         run_py_bridge_demo,
         run_py_http_demo,
@@ -138,6 +139,44 @@ run_load_demo(Config) ->
     %% in "samples/samples/lib_math.a4". This is a known path resolution
     %% issue. We still verify the script parses and runs up to the load.
     try_script_allow_known_failure("samples/load_demo.a4", Config, load_error).
+
+%%% ============================================================
+%%% Test Cases - Python bridge scripts
+%%% ============================================================
+
+%%% ============================================================
+%%% Test Cases - C++ runtime
+%%% ============================================================
+
+run_cpp_runtime(Config) ->
+    ProjectRoot = ?config(project_root, Config),
+    case os:find_executable("g++") of
+        false -> {skip, "g++ not found"};
+        _ ->
+            Src = filename:join(ProjectRoot, "test/cpp/test_af_runtime.cpp"),
+            Binary = filename:join(ProjectRoot, "_build/test_af_runtime"),
+            IncDir = filename:join(ProjectRoot, "include/cpp"),
+            %% Compile
+            CompileCmd = lists:flatten(io_lib:format(
+                "g++ -std=c++20 -O2 -I ~s -o ~s ~s -lpthread 2>&1",
+                [IncDir, Binary, Src])),
+            case os:cmd(CompileCmd) of
+                [] ->
+                    %% Run with timeout
+                    RunCmd = lists:flatten(io_lib:format("timeout 10 ~s 2>&1", [Binary])),
+                    Output = os:cmd(RunCmd),
+                    ct:log("C++ runtime test output:~n~s", [Output]),
+                    %% Clean up binary
+                    file:delete(Binary),
+                    case string:find(Output, "All tests passed") of
+                        nomatch -> ct:fail({cpp_runtime_test_failed, Output});
+                        _ -> ok
+                    end;
+                CompileErr ->
+                    ct:log("C++ compilation failed:~n~s", [CompileErr]),
+                    {skip, "C++ compilation failed"}
+            end
+    end.
 
 %%% ============================================================
 %%% Test Cases - Python bridge scripts

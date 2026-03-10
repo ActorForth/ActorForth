@@ -24,7 +24,8 @@ init_types() ->
     af_type_beam:init(),
     af_type_otp:init(),
     af_type_python:init(),
-    af_core_compiler:init().
+    af_core_compiler:init(),
+    af_cpp_compiler:init().
 
 start() ->
     load_env(),
