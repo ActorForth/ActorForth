@@ -9,18 +9,7 @@ eval(Input, Cont) ->
     af_interpreter:interpret_tokens(Tokens, Cont).
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_compiler:init(),
-    af_type_product:init(),
-    af_type_string:init(),
-    af_type_map:init(),
-    af_type_list:init(),
-    af_type_tuple:init(),
-    af_type_actor:init(),
-    af_type_ffi:init().
+    af_type:reset().
 
 %% --- nil ---
 
@@ -343,5 +332,90 @@ each_test_() ->
             C2 = eval("42 nil 1 cons 2 cons inc each", C1),
             %% each should consume the list and word, leaving 42 below
             [{'Int', 42}] = C2#continuation.data_stack
+        end} end,
+        fun(_) -> {"each on empty list is a no-op", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval(": inc Int -> Int ; 1 + .", C0),
+            C2 = eval("42 nil inc each", C1),
+            [{'Int', 42}] = C2#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- error cases ---
+
+error_cases_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"head on empty list raises error", fun() ->
+            ?assertError(_, eval("nil head", af_interpreter:new_continuation()))
+        end} end,
+        fun(_) -> {"tail on empty list raises error", fun() ->
+            ?assertError(_, eval("nil tail", af_interpreter:new_continuation()))
+        end} end,
+        fun(_) -> {"last on empty list raises error", fun() ->
+            ?assertError(_, eval("nil last", af_interpreter:new_continuation()))
+        end} end,
+        fun(_) -> {"nth with negative index raises error", fun() ->
+            ?assertError(_, eval("nil 1 cons -1 nth", af_interpreter:new_continuation()))
+        end} end,
+        fun(_) -> {"nth with index past end raises error", fun() ->
+            ?assertError(_, eval("nil 1 cons 5 nth", af_interpreter:new_continuation()))
+        end} end
+    ]}.
+
+%% --- drop edge cases ---
+
+drop_edge_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"drop more than length gives empty list", fun() ->
+            C = eval("nil 1 cons 2 cons 10 drop", af_interpreter:new_continuation()),
+            [{'List', []}] = C#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- contains? with different types ---
+
+contains_mixed_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"contains? with bool in int list", fun() ->
+            C = eval("nil 1 cons 2 cons True contains?", af_interpreter:new_continuation()),
+            [{'Bool', false}] = C#continuation.data_stack
+        end} end,
+        fun(_) -> {"contains? finds string in mixed list", fun() ->
+            C = eval("nil 1 cons \"hello\" cons \"hello\" contains?", af_interpreter:new_continuation()),
+            [{'Bool', true}] = C#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- flatten edge cases ---
+
+flatten_edge_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"flatten list with only non-list items unchanged", fun() ->
+            C = eval("nil 1 cons 2 cons 3 cons flatten", af_interpreter:new_continuation()),
+            [{'List', [{'Int', 3}, {'Int', 2}, {'Int', 1}]}] = C#continuation.data_stack
+        end} end
+    ]}.
+
+%% --- map/filter/reduce edge cases ---
+
+higher_order_edge_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"map with single element", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval(": double Int -> Int ; 2 * .", C0),
+            C2 = eval("nil 5 cons double map", C1),
+            [{'List', [{'Int', 10}]}] = C2#continuation.data_stack
+        end} end,
+        fun(_) -> {"filter keeps all when all match", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval(": positive? Int -> Bool ; 0 > .", C0),
+            C2 = eval("nil 1 cons 2 cons 3 cons positive? filter", C1),
+            [{'List', Items}] = C2#continuation.data_stack,
+            ?assertEqual(3, length(Items))
+        end} end,
+        fun(_) -> {"reduce with single element", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("nil 42 cons 0 + reduce", C0),
+            [{'Int', 42}] = C1#continuation.data_stack
         end} end
     ]}.

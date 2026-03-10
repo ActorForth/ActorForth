@@ -5,12 +5,7 @@
 -include("continuation.hrl").
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_compiler:init(),
-    af_type_float:init().
+    af_type:reset().
 
 eval(Input, Cont) ->
     Tokens = af_parser:parse(Input, "test"),

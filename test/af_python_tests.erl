@@ -11,7 +11,6 @@ eval(Input, Cont) ->
 
 setup() ->
     af_type:reset(),
-    af_repl:init_types(),
     af_type_python:ensure_started().
 
 %% --- Basic Python operations ---

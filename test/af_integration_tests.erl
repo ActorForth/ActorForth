@@ -16,10 +16,7 @@ eval(Input, Cont) ->
     af_interpreter:interpret_tokens(Tokens, Cont).
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init().
+    af_type:reset().
 
 %% --- Integer operations ---
 
@@ -174,8 +171,7 @@ session_test_() ->
 %% --- see word ---
 
 setup_with_compiler() ->
-    setup(),
-    af_type_compiler:init().
+    setup().
 
 see_test_() ->
     {foreach, fun setup_with_compiler/0, fun(_) -> ok end, [

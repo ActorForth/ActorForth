@@ -40,27 +40,36 @@ interpret_token(#token{value = Value} = Token, Cont) ->
 
 %% Fast path: local dictionary lookup (no ETS)
 interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1) ->
-    case af_type:dict_find_op_in_tos(Value, Stack, Dict) of
-        {ok, #operation{impl = Impl} = Op} ->
-            debug_trace(Debug, Value, Stack, {tos, Op}),
-            Impl(Cont1);
-        not_found ->
+    case Token#token.quoted of
+        true ->
+            %% Quoted strings skip dictionary lookups (steps 1 & 3)
+            %% but still go through handlers (step 2) so compiler can
+            %% compile them into word bodies as string literal pushes.
             case get_tos_handler(Stack, Dict) of
                 {ok, Handler} ->
                     debug_trace(Debug, Value, Stack, handler),
                     Handler(Value, Cont1);
                 none ->
-                    case af_type:dict_find_op_in_any(Value, Stack, Dict) of
-                        {ok, #operation{impl = Impl} = Op} ->
-                            debug_trace(Debug, Value, Stack, {any, Op}),
-                            Impl(Cont1);
-                        not_found ->
-                            case Token#token.quoted of
-                                true ->
-                                    StringVal = {'String', list_to_binary(Value)},
-                                    debug_trace(Debug, Value, Stack, {literal, StringVal}),
-                                    Cont1#continuation{data_stack = [StringVal | Stack]};
-                                false ->
+                    StringVal = {'String', list_to_binary(Value)},
+                    debug_trace(Debug, Value, Stack, {literal, StringVal}),
+                    Cont1#continuation{data_stack = [StringVal | Stack]}
+            end;
+        false ->
+            case af_type:dict_find_op_in_tos(Value, Stack, Dict) of
+                {ok, #operation{impl = Impl} = Op} ->
+                    debug_trace(Debug, Value, Stack, {tos, Op}),
+                    Impl(Cont1);
+                not_found ->
+                    case get_tos_handler(Stack, Dict) of
+                        {ok, Handler} ->
+                            debug_trace(Debug, Value, Stack, handler),
+                            Handler(Value, Cont1);
+                        none ->
+                            case af_type:dict_find_op_in_any(Value, Stack, Dict) of
+                                {ok, #operation{impl = Impl} = Op} ->
+                                    debug_trace(Debug, Value, Stack, {any, Op}),
+                                    Impl(Cont1);
+                                not_found ->
                                     case try_literals(Value, Dict) of
                                         {ok, TypedValue} ->
                                             debug_trace(Debug, Value, Stack, {literal, TypedValue}),
@@ -76,6 +85,25 @@ interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1) ->
 
 %% Legacy path: ETS-based lookup (for continuations without dictionary)
 interpret_token_ets(Value, Token, Stack, Debug, Cont1) ->
+    case Token#token.quoted of
+        true ->
+            %% Quoted strings skip dictionary lookups (steps 1 & 3)
+            %% but still go through handlers (step 2) so compiler can
+            %% compile them into word bodies as string literal pushes.
+            case get_tos_handler(Stack) of
+                {ok, Handler} ->
+                    debug_trace(Debug, Value, Stack, handler),
+                    Handler(Value, Cont1);
+                none ->
+                    StringVal = {'String', list_to_binary(Value)},
+                    debug_trace(Debug, Value, Stack, {literal, StringVal}),
+                    Cont1#continuation{data_stack = [StringVal | Stack]}
+            end;
+        false ->
+            interpret_unquoted(Value, Stack, Debug, Cont1)
+    end.
+
+interpret_unquoted(Value, Stack, Debug, Cont1) ->
     case af_type:find_op_in_tos(Value, Stack) of
         {ok, #operation{impl = Impl} = Op} ->
             debug_trace(Debug, Value, Stack, {tos, Op}),
@@ -91,20 +119,13 @@ interpret_token_ets(Value, Token, Stack, Debug, Cont1) ->
                             debug_trace(Debug, Value, Stack, {any, Op}),
                             Impl(Cont1);
                         not_found ->
-                            case Token#token.quoted of
-                                true ->
-                                    StringVal = {'String', list_to_binary(Value)},
-                                    debug_trace(Debug, Value, Stack, {literal, StringVal}),
-                                    Cont1#continuation{data_stack = [StringVal | Stack]};
-                                false ->
-                                    case try_literals_ets(Value) of
-                                        {ok, TypedValue} ->
-                                            debug_trace(Debug, Value, Stack, {literal, TypedValue}),
-                                            Cont1#continuation{data_stack = [TypedValue | Stack]};
-                                        not_found ->
-                                            debug_trace(Debug, Value, Stack, atom),
-                                            Cont1#continuation{data_stack = [{'Atom', Value} | Stack]}
-                                    end
+                            case try_literals_ets(Value) of
+                                {ok, TypedValue} ->
+                                    debug_trace(Debug, Value, Stack, {literal, TypedValue}),
+                                    Cont1#continuation{data_stack = [TypedValue | Stack]};
+                                not_found ->
+                                    debug_trace(Debug, Value, Stack, atom),
+                                    Cont1#continuation{data_stack = [{'Atom', Value} | Stack]}
                             end
                     end
             end

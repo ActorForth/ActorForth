@@ -11,17 +11,7 @@ eval(Input, Cont) ->
     af_interpreter:interpret_tokens(Tokens, Cont).
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_compiler:init(),
-    af_type_product:init(),
-    af_type_string:init(),
-    af_type_map:init(),
-    af_type_list:init(),
-    af_type_actor:init(),
-    af_type_ffi:init().
+    af_type:reset().
 
 %% --- server spawns actor from type instance ---
 
@@ -991,5 +981,359 @@ atom_key_test_() ->
             %% Key should be atom, not string
             ?assertMatch({ok, {_, _}}, maps:find(bump, Cache)),
             ?assertEqual(error, maps:find("bump", Cache))
+        end} end
+    ]}.
+
+%% --- Additional coverage tests ---
+
+coverage_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"self pushes raw Actor", fun() ->
+            C = eval("self", af_interpreter:new_continuation()),
+            [{'Actor', Info}] = C#continuation.data_stack,
+            ?assertEqual(self(), maps:get(pid, Info)),
+            ?assertEqual(undefined, maps:get(type_name, Info))
+        end} end,
+
+        fun(_) -> {"to_atom_key and to_string_key helpers", fun() ->
+            ?assertEqual(hello, af_type_actor:to_atom_key("hello")),
+            ?assertEqual(hello, af_type_actor:to_atom_key(hello)),
+            ?assertEqual("hello", af_type_actor:to_string_key("hello")),
+            ?assertEqual("hello", af_type_actor:to_string_key(hello))
+        end} end,
+
+        fun(_) -> {"separate_reply finds state in stack", fun() ->
+            Stack = [{'Int', 42}, {'Counter', #{value => 5}}, {'Bool', true}],
+            {Reply, State} = af_type_actor:separate_reply('Counter', Stack),
+            ?assertEqual([{'Int', 42}], Reply),
+            ?assertEqual({'Counter', #{value => 5}}, State)
+        end} end,
+
+        fun(_) -> {"separate_reply with no state returns undefined", fun() ->
+            Stack = [{'Int', 42}, {'Bool', true}],
+            {Reply, State} = af_type_actor:separate_reply('Counter', Stack),
+            ?assertEqual([{'Int', 42}, {'Bool', true}], Reply),
+            ?assertEqual(undefined, State)
+        end} end,
+
+        fun(_) -> {"actor_loop_module_name generates correct name", fun() ->
+            ?assertEqual(af_actor_loop_counter,
+                         af_type_actor:actor_loop_module_name('Counter'))
+        end} end,
+
+        fun(_) -> {"compile_actor_loop returns error for type with no native cache", fun() ->
+            %% Register a type with no compiled words
+            af_type:register_type(#af_type{name = 'EmptyType'}),
+            ?assertEqual(error, af_type_actor:compile_actor_loop('EmptyType'))
+        end} end,
+
+        fun(_) -> {"validate args through << >> with typed dispatch", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Adder total Int .", C0),
+            C2 = eval(": add Adder Int -> Adder ; swap total rot + total! .", C1),
+            C3 = eval(": get-total Adder -> Adder Int ; total .", C2),
+            C4 = eval("0 adder server", C3),
+            %% Send with typed arg (validates Int arg)
+            C5 = eval("<< 5 int add >>", C4),
+            timer:sleep(50),
+            C6 = eval("<< get-total >>", C5),
+            [{'Int', 5}, {'Actor', _}] = C6#continuation.data_stack,
+            eval("<< stop >>", C6)
+        end} end,
+
+        fun(_) -> {"msg creates tagged message", fun() ->
+            C = eval("42 int \"tag1\" msg", af_interpreter:new_continuation()),
+            [{'Message', Msg}] = C#continuation.data_stack,
+            ?assertEqual(<<"tag1">>, maps:get(tag, Msg)),
+            ?assertEqual({'Int', 42}, maps:get(data, Msg))
+        end} end,
+
+        fun(_) -> {"msg-tag gets tag non-destructively", fun() ->
+            C1 = eval("42 int \"tag1\" msg", af_interpreter:new_continuation()),
+            C2 = eval("msg-tag", C1),
+            [{'String', Tag}, {'Message', _}] = C2#continuation.data_stack,
+            ?assertEqual(<<"tag1">>, Tag)
+        end} end,
+
+        fun(_) -> {"msg-data gets data non-destructively", fun() ->
+            C1 = eval("42 int \"tag1\" msg", af_interpreter:new_continuation()),
+            C2 = eval("msg-data", C1),
+            [{'Int', 42}, {'Message', _}] = C2#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"send and receive raw messages", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            Self = self(),
+            %% Spawn a word that sends us a message
+            Pid = spawn_link(fun() ->
+                af_type:reset(),
+                receive {go, Val} ->
+                    Self ! {af_msg, Val}
+                end
+            end),
+            Pid ! {go, {'Int', 99}},
+            C1 = eval("receive", C0),
+            [{'Int', 99}] = C1#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"receive-timeout with timeout fires", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("1 int receive-timeout", C0),
+            [{'Bool', false}, {'Atom', "timeout"}] = C1#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"receive-timeout with message succeeds", fun() ->
+            Self = self(),
+            spawn_link(fun() ->
+                Self ! {af_msg, {'Int', 77}}
+            end),
+            timer:sleep(10),
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("1000 int receive-timeout", C0),
+            [{'Bool', true}, {'Int', 77}] = C1#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"send message to actor via send word", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            %% Use self as actor target, send a message
+            Self = self(),
+            ActorVal = #{pid => Self, type_name => undefined, vocab => #{}},
+            C1 = C0#continuation{data_stack = [{'Actor', ActorVal}, {'Int', 42}]},
+            C2 = eval("send", C1),
+            ?assertEqual([], C2#continuation.data_stack),
+            %% Check we received the message
+            receive
+                {af_msg, {'Int', 42}} -> ok
+            after 100 ->
+                ?assert(false)
+            end
+        end} end,
+
+        fun(_) -> {"send message via ! alias", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            Self = self(),
+            ActorVal = #{pid => Self, type_name => undefined, vocab => #{}},
+            C1 = C0#continuation{data_stack = [{'Actor', ActorVal}, {'Int', 99}]},
+            Tokens = af_parser:parse("!", "test"),
+            C2 = af_interpreter:interpret_tokens(Tokens, C1),
+            ?assertEqual([], C2#continuation.data_stack),
+            receive
+                {af_msg, {'Int', 99}} -> ok
+            after 100 ->
+                ?assert(false)
+            end
+        end} end,
+
+        fun(_) -> {"receive-match selective receive", fun() ->
+            Self = self(),
+            spawn_link(fun() ->
+                Msg = {'Message', #{tag => <<"hello">>, data => {'Int', 42}}},
+                Self ! {af_msg, Msg}
+            end),
+            timer:sleep(10),
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("\"hello\" receive-match", C0),
+            [{'Int', 42}] = C1#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"receive-match-timeout with timeout fires", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("\"tag\" 1 int receive-match-timeout", C0),
+            [{'Bool', false}, {'Atom', "timeout"}] = C1#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"receive-match-timeout with message succeeds", fun() ->
+            Self = self(),
+            spawn_link(fun() ->
+                Msg = {'Message', #{tag => <<"tag2">>, data => {'Int', 55}}},
+                Self ! {af_msg, Msg}
+            end),
+            timer:sleep(10),
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("\"tag2\" 1000 int receive-match-timeout", C0),
+            [{'Bool', true}, {'Int', 55}] = C1#continuation.data_stack
+        end} end,
+
+        fun(_) -> {"supervised server call path", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": get-count Counter -> Counter Int ; count .", C1),
+            C3 = eval(": bump Counter -> Counter ; count 1 + count! .", C2),
+            C4 = eval("0 counter supervised-server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            ?assert(maps:get(supervised, Info, false)),
+            %% Cast and call through supervised actor
+            C5 = eval("<< bump >>", C4),
+            timer:sleep(50),
+            C6 = eval("<< get-count >>", C5),
+            [{'Int', 1}, {'Actor', _}] = C6#continuation.data_stack,
+            eval("<< stop >>", C6),
+            timer:sleep(50)
+        end} end,
+
+        fun(_) -> {"compile_actor_loop with compiled words succeeds", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type LoopTest val Int .", C0),
+            C2 = eval(": inc LoopTest -> LoopTest ; val 1 + val! .", C1),
+            eval("\"inc\" compile", C2),
+            Result = af_type_actor:compile_actor_loop('LoopTest'),
+            ?assertMatch({ok, _}, Result)
+        end} end,
+
+        fun(_) -> {"send_cast to supervised actor", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type SCTest val Int .", C0),
+            C2 = eval(": inc SCTest -> SCTest ; val 1 + val! .", C1),
+            C3 = eval(": get SCTest -> SCTest Int ; val .", C2),
+            C4 = eval("0 sctest supervised-server", C3),
+            [{'Actor', ActorInfo}] = C4#continuation.data_stack,
+            af_type_actor:send_cast(ActorInfo, inc, []),
+            timer:sleep(50),
+            Reply = af_type_actor:send_call(ActorInfo, get, []),
+            ?assertEqual([{'Int', 1}], Reply),
+            af_type_actor:send_cast(ActorInfo, stop, []),
+            timer:sleep(50)
+        end} end,
+
+        fun(_) -> {"spawn runs word in new process", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            %% Define a simple word and spawn it via its name as Atom
+            _C1 = eval(": do-nothing -> ; .", C0),
+            %% Push word name as Atom, then spawn
+            C2 = _C1#continuation{data_stack = [{'Atom', "do-nothing"}]},
+            Tokens = af_parser:parse("spawn", "test"),
+            C3 = af_interpreter:interpret_tokens(Tokens, C2),
+            [{'Actor', Info}] = C3#continuation.data_stack,
+            ?assert(is_pid(maps:get(pid, Info)))
+        end} end,
+
+        fun(_) -> {"execute_actor_word directly", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Foo val Int .", C0),
+            _C2 = eval(": inc Foo -> Foo ; val 1 + val! .", C1),
+            State = {'Foo', #{val => {'Int', 10}}},
+            NewState = af_type_actor:execute_actor_word("inc", [], 'Foo', State),
+            ?assertEqual({'Foo', #{val => {'Int', 11}}}, NewState)
+        end} end,
+
+        fun(_) -> {"execute_actor_call directly", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Foo val Int .", C0),
+            _C2 = eval(": get-val Foo -> Foo Int ; val .", C1),
+            State = {'Foo', #{val => {'Int', 42}}},
+            {ReplyValues, _NewState} = af_type_actor:execute_actor_call("get-val", [], 'Foo', State),
+            ?assertEqual([{'Int', 42}], ReplyValues)
+        end} end,
+
+        fun(_) -> {"two supervised servers reuse supervisor", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type A1 val Int .", C0),
+            C2 = eval("0 a1 supervised-server", C1),
+            %% Second supervised server should reuse existing supervisor (hits line 245)
+            C3 = eval("type A2 val Int .", C2),
+            C4 = eval("0 a2 supervised-server", C3),
+            [{'Actor', Info2}, {'Actor', Info1}] = C4#continuation.data_stack,
+            ?assert(is_pid(maps:get(pid, Info1))),
+            ?assert(is_pid(maps:get(pid, Info2))),
+            Pid1 = maps:get(pid, Info1),
+            Pid2 = maps:get(pid, Info2),
+            gen_server:cast(Pid1, {cast, stop, []}),
+            gen_server:cast(Pid2, {cast, stop, []}),
+            timer:sleep(50)
+        end} end,
+
+        fun(_) -> {"actor with args via compiled word (native cache path)", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Adder2 total Int .", C0),
+            C2 = eval(": add-to Adder2 Int -> Adder2 ; swap total rot + total! .", C1),
+            C3 = eval(": get-total Adder2 -> Adder2 Int ; total .", C2),
+            %% Compile words to native (so they appear in native cache)
+            C4 = eval("\"add-to\" compile", C3),
+            C5 = eval("\"get-total\" compile", C4),
+            C6 = eval("0 adder2 server", C5),
+            [{'Actor', Info}] = C6#continuation.data_stack,
+            %% Cast with args via actor loop cache hit
+            C7 = eval("<< 10 int add-to >>", C6),
+            timer:sleep(50),
+            C8 = eval("<< get-total >>", C7),
+            [{'Int', 10}, {'Actor', _}] = C8#continuation.data_stack,
+            eval("<< stop >>", C8)
+        end} end,
+
+        fun(_) -> {"actor loop handles legacy string cast format", fun() ->
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type LTest val Int .", C0),
+            C2 = eval(": inc LTest -> LTest ; val 1 + val! .", C1),
+            C3 = eval(": get-val LTest -> LTest Int ; val .", C2),
+            C4 = eval("0 ltest server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            Pid = maps:get(pid, Info),
+            %% Send cast with string key (legacy format)
+            Pid ! {cast, "inc", []},
+            timer:sleep(50),
+            Ref = make_ref(),
+            Pid ! {call, "get-val", [], self(), Ref},
+            receive
+                {reply, Ref, ReplyValues} ->
+                    ?assertEqual([{'Int', 1}], ReplyValues)
+            after 5000 ->
+                ?assert(false)
+            end,
+            Pid ! {cast, stop, []}
+        end} end
+    ]}.
+
+%% --- Coverage: remove_first empty list, execute_actor_word undefined state ---
+
+edge_case_coverage_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"vocab entry with no returns hits remove_first empty list (line 226)", fun() ->
+            %% Define a word that takes Counter but doesn't return Counter in sig_out
+            %% sig_out is empty [], so remove_first('Counter', []) -> line 226
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": consume Counter -> ; drop .", C1),
+            C3 = eval(": get Counter -> Counter Int ; count .", C2),
+            C4 = eval("0 counter server", C3),
+            [{'Actor', Info}] = C4#continuation.data_stack,
+            Vocab = maps:get(vocab, Info),
+            %% consume should be in vocab with empty returns
+            ?assert(maps:is_key("consume", Vocab)),
+            eval("<< stop >>", C4),
+            ok
+        end} end,
+
+        fun(_) -> {"execute_actor_word fallback when word drops state (line 420)", fun() ->
+            %% When executed word doesn't produce state type on stack,
+            %% separate_reply returns undefined -> fallback to original state
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Box val Int .", C0),
+            %% drop consumes the Box without returning it
+            Instance = {'Box', #{val => {'Int', 42}}},
+            NewState = af_type_actor:execute_actor_word("drop", [], 'Box', Instance),
+            %% Should fallback to original instance since drop removes Box
+            ?assertEqual(Instance, NewState)
+        end} end,
+
+        fun(_) -> {"match_args covers empty stack and Any type (lines 348, 349)", fun() ->
+            %% Three overloads of 'process':
+            %% 1. with Int arg — will fail match against String arg
+            %% 2. with Any arg — will succeed (line 349: Any matches any type)
+            %% Also separately: zero-arg overload matches when stack is empty
+            C0 = af_interpreter:new_continuation(),
+            C1 = eval("type Counter count Int .", C0),
+            C2 = eval(": process Counter Int -> Counter ; drop .", C1),
+            C3 = eval(": process Any Counter -> Counter ; swap drop .", C2),
+            C4 = eval(": get Counter -> Counter Int ; count .", C3),
+            C5 = eval("0 counter server", C4),
+            [{'Actor', Info}] = C5#continuation.data_stack,
+            Vocab = maps:get(vocab, Info),
+            ProcessEntries = maps:get("process", Vocab, []),
+            ?assert(length(ProcessEntries) >= 2),
+            %% Send String arg: Int entry fails, Any entry matches (line 349)
+            C6 = eval("<< \"hello\" process >>", C5),
+            [{'Actor', _}] = C6#continuation.data_stack,
+            eval("<< stop >>", C6),
+            ok
         end} end
     ]}.

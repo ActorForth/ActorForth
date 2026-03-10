@@ -1,0 +1,48 @@
+# lsp_types.a4 — Product types for LSP protocol objects
+#
+# Core data structures used by the LSP server.
+# All position/range objects stored as Maps for easy JSON conversion.
+
+# === Document State ===
+# Held by each document actor. Tracks text, tokens, and stack snapshots.
+
+type DocState
+  uri String
+  version Int
+  text String
+  tokens List
+  stack-snaps List
+  diagnostics List .
+
+# === Stack Snapshot ===
+# Records the stack picture at a specific token position.
+
+type StackSnap
+  token-idx Int
+  line Int
+  col Int
+  stack List .
+
+# === Stack Effect ===
+# Describes a word's stack transformation.
+
+type StackEffect
+  name String
+  pops Int
+  pushes List .
+
+# === Diagnostic ===
+
+type LspDiag
+  line Int
+  col Int
+  end-col Int
+  severity Int
+  message String .
+
+# === Completion Item ===
+
+type CompItem
+  label String
+  detail String
+  kind Int .

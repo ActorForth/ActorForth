@@ -12,13 +12,6 @@ eval(Input, Cont) ->
 
 setup() ->
     af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_compiler:init(),
-    af_type_product:init(),
-    af_type_actor:init(),
-    af_type_ffi:init(),
     %% Define a Counter type for testing
     C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
     %% increment: Counter -> Counter

@@ -11,7 +11,7 @@
 %%% ============================================================
 
 all() ->
-    [{group, script_tests}].
+    [{group, script_tests}, {group, selfhosted_tests}].
 
 groups() ->
     %% Discover .a4 files at suite compile time is not feasible,
@@ -38,6 +38,18 @@ groups() ->
         run_py_http_demo,
         run_py_llm_demo,
         run_py_text_demo
+    ]},
+    {selfhosted_tests, [], [
+        sh_compile_square,
+        sh_compile_fib,
+        sh_compile_func,
+        sh_compile_countdown,
+        sh_compile_pattern_demo,
+        sh_compile_lib_math,
+        sh_compile_string_demo,
+        sh_compile_map_demo,
+        sh_compile_testloop,
+        sh_compile_testloop2
     ]}].
 
 init_per_suite(Config) ->
@@ -52,7 +64,6 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_TestCase, Config) ->
     af_type:reset(),
-    af_repl:init_types(),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->
@@ -163,6 +174,55 @@ run_py_text_demo(Config) ->
     run_python_script("samples/py_text_demo.a4", Config).
 
 %%% ============================================================
+%%% Test Cases - Self-hosted compilation (no interpreter dependency)
+%%% ============================================================
+
+sh_compile_square(Config) ->
+    {ok, Mod} = sh_compile("samples/square.a4", "sh_sq", Config),
+    ?assertEqual([{'Int', 49}], Mod:square([{'Int', 7}])).
+
+sh_compile_fib(Config) ->
+    {ok, Mod} = sh_compile("samples/fib.a4", "sh_fib", Config),
+    ?assertEqual([{'Int', 0}], Mod:fib([{'Int', 0}])),
+    ?assertEqual([{'Int', 1}], Mod:fib([{'Int', 1}])),
+    ?assertEqual([{'Int', 55}], Mod:fib([{'Int', 10}])).
+
+sh_compile_func(Config) ->
+    {ok, Mod} = sh_compile("samples/func.a4", "sh_func", Config),
+    ?assertEqual([{'Int', 42}], Mod:double([{'Int', 21}])),
+    ?assertEqual([{'Bool', true}], Mod:samenum([{'Int', 42}])).
+
+sh_compile_countdown(Config) ->
+    {ok, Mod} = sh_compile("samples/countdown.a4", "sh_cd", Config),
+    ?assertEqual([], Mod:countdown([{'Int', 5}])).
+
+sh_compile_pattern_demo(Config) ->
+    {ok, Mod} = sh_compile("samples/pattern_demo.a4", "sh_pat", Config),
+    ?assertEqual([{'Int', 8}], Mod:fib([{'Int', 6}])),
+    ?assertEqual([{'String', <<"Hello World!">>}],
+                 Mod:greet([{'String', <<"hello">>}])),
+    ?assertEqual([{'String', <<"hey">>}],
+                 Mod:greet([{'String', <<"hey">>}])).
+
+sh_compile_lib_math(Config) ->
+    {ok, Mod} = sh_compile("samples/lib_math.a4", "sh_math", Config),
+    ?assertEqual([{'Int', 25}], Mod:square([{'Int', 5}])),
+    ?assertEqual([{'Int', 14}], Mod:double([{'Int', 7}])),
+    ?assertEqual([{'Int', 27}], Mod:cube([{'Int', 3}])).
+
+sh_compile_string_demo(Config) ->
+    {ok, _Mod} = sh_compile("samples/string_demo.a4", "sh_str", Config).
+
+sh_compile_map_demo(Config) ->
+    {ok, _Mod} = sh_compile("samples/map_demo.a4", "sh_map", Config).
+
+sh_compile_testloop(Config) ->
+    {ok, _Mod} = sh_compile("samples/testloop.a4", "sh_tl", Config).
+
+sh_compile_testloop2(Config) ->
+    {ok, _Mod} = sh_compile("samples/testloop2.a4", "sh_tl2", Config).
+
+%%% ============================================================
 %%% Helpers
 %%% ============================================================
 
@@ -247,6 +307,11 @@ run_python_script(RelPath, Config) ->
     after
         file:set_cwd(OrigCwd)
     end.
+
+sh_compile(RelPath, ModName, Config) ->
+    ProjectRoot = ?config(project_root, Config),
+    FullPath = filename:join(ProjectRoot, RelPath),
+    af_ring2:compile_file_selfhosted(FullPath, ModName).
 
 find_project_root(Dir) ->
     %% Look for rebar.config to identify project root

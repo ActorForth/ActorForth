@@ -9,11 +9,7 @@ eval(Input, Cont) ->
     af_interpreter:interpret_tokens(Tokens, Cont).
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_compiler:init().
+    af_type:reset().
 
 arithmetic_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
@@ -62,21 +58,56 @@ arithmetic_test_() ->
         end} end,
 
         fun(_) -> {"int constructor from numeric string atom (op_int path)", fun() ->
-            %% Push a non-numeric atom so literal handler doesn't fire,
-            %% then manually test the int constructor
-            %% Use "int" on a string that IS numeric but pushed as Atom via quoting
-            %% Actually, numeric tokens get converted by literal handler.
-            %% op_int is only called when: Atom on TOS + "int" word invoked.
-            %% Numeric tokens auto-convert, so we need a non-auto-convertible path.
-            %% Let's push a number as a string that "int" can convert.
-            %% Actually "42" auto-converts. The int constructor (op_int) is for
-            %% cases like: already Atom "42" on stack -> int -> Int 42.
-            %% But literal handler catches "42" first. So op_int only fires
-            %% if someone pushes an Atom string and then says "int".
-            %% Force it by building the stack manually.
             Cont = #continuation{data_stack = [{'Atom', "99"}]},
             Tokens = af_parser:parse("int", "test"),
             C = af_interpreter:interpret_tokens(Tokens, Cont),
             ?assertEqual([{'Int', 99}], C#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"modulo operation", fun() ->
+            C = eval("10 3 mod", af_interpreter:new_continuation()),
+            ?assertEqual([{'Int', 1}], C#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"modulo by zero raises error", fun() ->
+            ?assertError(_, eval("10 0 mod", af_interpreter:new_continuation()))
+        end} end,
+
+        fun(_) -> {"abs operation", fun() ->
+            C = eval("-5 abs", af_interpreter:new_continuation()),
+            ?assertEqual([{'Int', 5}], C#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"abs of positive", fun() ->
+            C = eval("5 abs", af_interpreter:new_continuation()),
+            ?assertEqual([{'Int', 5}], C#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"max operation", fun() ->
+            C = eval("3 7 max", af_interpreter:new_continuation()),
+            ?assertEqual([{'Int', 7}], C#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"max with equal values", fun() ->
+            C = eval("5 5 max", af_interpreter:new_continuation()),
+            ?assertEqual([{'Int', 5}], C#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"min operation", fun() ->
+            C = eval("3 7 min", af_interpreter:new_continuation()),
+            ?assertEqual([{'Int', 3}], C#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"min with equal values", fun() ->
+            C = eval("5 5 min", af_interpreter:new_continuation()),
+            ?assertEqual([{'Int', 5}], C#continuation.data_stack)
+        end} end,
+
+        fun(_) -> {"int passthrough on already-Int value directly", fun() ->
+            %% Build stack with Int already on it, call int
+            Cont = #continuation{data_stack = [{'Int', 42}]},
+            Tokens = af_parser:parse("int", "test"),
+            C = af_interpreter:interpret_tokens(Tokens, Cont),
+            ?assertEqual([{'Int', 42}], C#continuation.data_stack)
         end} end
     ]}.
