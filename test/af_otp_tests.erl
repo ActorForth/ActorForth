@@ -9,19 +9,7 @@ eval(Input, Cont) ->
     af_interpreter:interpret_tokens(Tokens, Cont).
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_string:init(),
-    af_type_list:init(),
-    af_type_float:init(),
-    af_type_tuple:init(),
-    af_type_ffi:init(),
-    af_type_compiler:init(),
-    af_type_product:init(),
-    af_type_beam:init(),
-    af_type_otp:init().
+    af_type:reset().
 
 %% --- gen-server-module ---
 
@@ -78,5 +66,71 @@ dispatch_test_() ->
             State = {'Box', #{value => {'Int', 0}}},
             {'Box', NewFields} = af_otp_dispatch:cast_word("set-42", [], State),
             ?assertEqual({'Int', 42}, maps:get(value, NewFields))
+        end} end
+    ]}.
+
+%% --- Error paths ---
+
+error_path_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"compile_gen_server unknown type returns error", fun() ->
+            Cont = af_interpreter:new_continuation(),
+            Result = af_type_otp:compile_gen_server(af_gs_nonexistent, 'Nonexistent', Cont),
+            ?assertEqual({error, {unknown_type, 'Nonexistent'}}, Result)
+        end} end,
+
+        fun(_) -> {"compile_gen_server type with no compiled words returns error", fun() ->
+            C1 = eval("type Empty value Int .", af_interpreter:new_continuation()),
+            Result = af_type_otp:compile_gen_server(af_gs_empty, 'Empty', C1),
+            ?assertEqual({error, {no_words_for_type, 'Empty'}}, Result)
+        end} end,
+
+        fun(_) -> {"gen_server with cast-only words (no return values)", fun() ->
+            C1 = eval("type Acc value Int .", af_interpreter:new_continuation()),
+            _C2 = eval(": reset Acc -> Acc ; 0 value! .", C1),
+            C3 = eval("af_gs_acc Acc gen-server-module", _C2),
+            [{'Atom', "af_gs_acc"}] = C3#continuation.data_stack,
+            InitState = {'Acc', #{value => {'Int', 10}}},
+            {ok, Pid} = gen_server:start_link(af_gs_acc, InitState, []),
+            ok = gen_server:cast(Pid, reset),
+            timer:sleep(50),
+            %% Unknown call should return error
+            ?assertEqual({error, unknown_call}, gen_server:call(Pid, get_value)),
+            gen_server:stop(Pid)
+        end} end,
+
+        fun(_) -> {"gen_server with multi-return call", fun() ->
+            C1 = eval("type Pair a Int b Int .", af_interpreter:new_continuation()),
+            _C2 = eval(": get-both Pair -> Pair Int Int ; a swap b swap .", C1),
+            C3 = eval("af_gs_pair Pair gen-server-module", _C2),
+            [{'Atom', "af_gs_pair"}] = C3#continuation.data_stack,
+            InitState = {'Pair', #{a => {'Int', 1}, b => {'Int', 2}}},
+            {ok, Pid} = gen_server:start_link(af_gs_pair, InitState, []),
+            {ok, Result} = gen_server:call(Pid, 'get-both'),
+            %% Multi-return: result is list of raw values
+            ?assert(is_list(Result)),
+            gen_server:stop(Pid)
+        end} end,
+
+        fun(_) -> {"compile_gen_server directly", fun() ->
+            C1 = eval("type Calc total Int .", af_interpreter:new_continuation()),
+            _C2 = eval(": get-total Calc -> Calc Int ; total .", C1),
+            Cont = af_interpreter:new_continuation(),
+            Result = af_type_otp:compile_gen_server(af_gs_calc, 'Calc', Cont),
+            ?assertMatch({ok, af_gs_calc}, Result)
+        end} end,
+
+        fun(_) -> {"gen_server with native compiled words", fun() ->
+            C1 = eval("type NCounter val Int .", af_interpreter:new_continuation()),
+            C2 = eval(": get-val NCounter -> NCounter Int ; val .", C1),
+            %% Compile to native BEAM first
+            C3 = eval("\"get-val\" compile", C2),
+            C4 = eval("af_gs_ncounter NCounter gen-server-module", C3),
+            [{'Atom', "af_gs_ncounter"}] = C4#continuation.data_stack,
+            InitState = {'NCounter', #{val => {'Int', 77}}},
+            {ok, Pid} = gen_server:start_link(af_gs_ncounter, InitState, []),
+            {ok, Val} = gen_server:call(Pid, 'get-val'),
+            ?assertEqual(77, Val),
+            gen_server:stop(Pid)
         end} end
     ]}.

@@ -1,0 +1,82 @@
+# lsp_server.a4 — LSP protocol dispatch written in ActorForth
+#
+# Handles JSON-RPC method routing and response building.
+# Works with the Erlang transport layer (af_lsp.erl) which handles
+# stdio framing, JSON encoding/decoding, and passes decoded Maps.
+
+# === Response Builders ===
+
+: lsp-response Map Map -> Map ;
+    map-new
+    "2.0" "jsonrpc" swap map-put
+    rot "id" swap map-put
+    swap "result" swap map-put .
+
+: lsp-error Map Int String -> Map ;
+    map-new
+    swap "message" swap map-put
+    swap "code" swap map-put
+    map-new swap "error" swap map-put
+    rot "id" swap map-put
+    "2.0" "jsonrpc" swap map-put .
+
+# === Capability Declaration ===
+
+: server-capabilities -> Map ;
+    map-new
+    1 "textDocumentSync" swap map-put
+    true "hoverProvider" swap map-put
+    true "definitionProvider" swap map-put
+    map-new
+    true "resolveProvider" swap map-put
+    "completionProvider" swap map-put .
+
+# === Method Dispatch ===
+
+: dispatch-method String -> String ;
+    : "initialize" -> String ; drop "init"
+    : "initialized" -> String ; drop "noop"
+    : "shutdown" -> String ; drop "shutdown"
+    : "exit" -> String ; drop "exit"
+    : "textDocument/didOpen" -> String ; drop "didOpen"
+    : "textDocument/didChange" -> String ; drop "didChange"
+    : "textDocument/didClose" -> String ; drop "didClose"
+    : "textDocument/hover" -> String ; drop "hover"
+    : "textDocument/completion" -> String ; drop "completion"
+    : "textDocument/definition" -> String ; drop "definition"
+    : String -> String ; drop "unknown" .
+
+# === Stack Picture Formatting ===
+
+: format-stack-item String -> String ;
+    dup "Int" ==
+    : True -> String ; drop
+    : False -> String ; drop format-stack-other .
+
+: format-stack-other String -> String ;
+    dup "Bool" ==
+    : True -> String ; drop
+    : False -> String ; drop format-stack-any .
+
+: format-stack-any String -> String ;
+    dup "String" ==
+    : True -> String ; drop
+    : False -> String ; drop .
+
+# Format a stack as a string: "( Type1 Type2 -- TOS )"
+: format-stack List -> String ;
+    dup empty?
+    : True -> String ; drop drop "( empty )"
+    : False -> String ; drop format-stack-items .
+
+: format-stack-items List -> String ;
+    reverse "( " format-stack-join " -- TOS )" concat .
+
+: format-stack-join List String -> String ;
+    over empty?
+    : True -> String ; drop swap drop
+    : False -> String ; drop format-join-step .
+
+: format-join-step List String -> String ;
+    over head concat " " concat
+    swap tail swap format-stack-join .

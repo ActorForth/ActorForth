@@ -1,0 +1,63 @@
+# driver.a4 — Self-hosted compilation driver (Stage 4 bootstrap)
+#
+# Orchestrates the full A4 compilation pipeline:
+#   1. Read source file
+#   2. Parse with parser.a4 via xcall -> token list
+#   3. Compile with compiler.a4 via xcall -> word definition maps
+#   4. Generate BEAM with codegen.a4 via xcall -> loaded module
+#
+# Entry point: compile-file String String -> Bool
+#   FileName ModName -> reads file, compiles, loads module
+#
+# 100% self-hosted: parser, compiler, codegen all in A4.
+# Only runtime dependencies: af_ring0.erl (VM), compile:forms (BEAM compiler).
+
+# === File Reading ===
+
+: read-source String -> String ;
+    read-file drop .
+
+# === Full Pipeline ===
+
+# compile-file: read, parse, compile, and load an .a4 file
+: compile-file String String -> Bool ;
+    # Stack: [ModName, FileName]
+    swap read-source
+    # Stack: [Source, ModName]
+    swap compile-source .
+
+# compile-source: compile source string to a BEAM module
+: compile-source String String -> Bool ;
+    # Stack: [ModName, Source]
+    swap "driver" parse-with-parser
+    # Stack: [Tokens(List), ModName]
+
+    compile-with-compiler
+    # Stack: [DefMaps(List), ModName]
+
+    # Prepend "af_r2_" to module name for naming convention
+    swap dup "af_r2_" swap concat swap drop
+    swap
+    # Stack: [DefMaps, "af_r2_" ++ ModName]
+
+    compile-with-codegen
+    .
+
+# Parse source using the A4-compiled parser via xcall
+: parse-with-parser String String -> List ;
+    # Input: [Filename, Source]
+    swap
+    # [Source, Filename] — parser expects Source=TOS
+    "af_r2_parser" to-atom "parse" to-atom xcall
+    .
+
+# Compile tokens using the A4-compiled compiler via xcall
+: compile-with-compiler List -> List ;
+    "af_r2_compiler" to-atom "compile-tokens" to-atom xcall
+    .
+
+# Generate BEAM using the A4-compiled codegen via xcall
+: compile-with-codegen String List -> Bool ;
+    # Stack: [DefMaps(List=TOS), ModName(String)]
+    "af_r2_codegen" to-atom "codegen-module" to-atom xcall
+    .

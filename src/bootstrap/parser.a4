@@ -1,0 +1,222 @@
+# parser.a4 — A4 tokenizer written in A4 (Stage 1 bootstrap)
+#
+# Tokenizes A4 source into a list of token maps.
+# Each token: Map with "value" (String) and "quoted" (Bool).
+#
+# Entry point: parse String String -> List
+
+# === Parser State ===
+type PState
+  src String
+  pos Int
+  len Int
+  line Int
+  col Int .
+
+# === Destructive Field Extractors ===
+# Consume PState, return just the field value.
+: ps-src PState -> String ; src swap drop .
+: ps-pos PState -> Int ; pos swap drop .
+: ps-len PState -> Int ; len swap drop .
+: ps-line PState -> Int ; line swap drop .
+: ps-col PState -> Int ; col swap drop .
+
+# === Non-Destructive Queries ===
+
+# ps-at-end? : PState -> PState Bool
+# Preserves PState, pushes Bool on top.
+: ps-at-end? PState -> PState Bool ;
+    dup ps-pos over ps-len >= .
+
+# ps-cur-byte : PState -> PState Int
+# Get byte value at current position. Non-destructive.
+: ps-cur-byte PState -> PState Int ;
+    dup dup ps-pos swap ps-src swap str-byte-at .
+
+# ps-cur-byte! : PState -> Int
+# Get byte value at current position. Destructive (consumes PState).
+: ps-cur-byte! PState -> Int ;
+    dup ps-pos swap ps-src swap str-byte-at .
+
+# ps-cur-char : PState -> PState String
+# Get 1-byte string at current position. Non-destructive.
+: ps-cur-char PState -> PState String ;
+    dup dup ps-pos swap ps-src swap str-nth .
+
+# === State Mutators ===
+
+# Advance position by 1, increment column.
+: ps-advance PState -> PState ;
+    dup ps-pos 1 + pos!
+    dup ps-col 1 + col! .
+
+# Increment line counter, reset col to 1.
+: ps-newline PState -> PState ;
+    dup ps-line 1 + line!
+    1 col! .
+
+# Advance past whitespace char (newline updates line counter).
+: ps-advance-ws PState -> PState ;
+    ps-cur-byte 10 ==
+    : True -> PState ; drop ps-advance ps-newline
+    : False -> PState ; drop ps-advance .
+
+# === Byte Classification ===
+
+: is-ws? Int -> Bool ;
+    : 32 -> Bool ; drop true
+    : 9 -> Bool ; drop true
+    : 10 -> Bool ; drop true
+    : 13 -> Bool ; drop true
+    : Int -> Bool ; drop false .
+
+: is-digit? Int -> Bool ;
+    dup 48 >= swap 57 <= and .
+
+: is-delim? Int -> Bool ;
+    : 58 -> Bool ; drop true
+    : 59 -> Bool ; drop true
+    : 46 -> Bool ; drop true
+    : Int -> Bool ; drop false .
+
+: is-word-end? Int -> Bool ;
+    dup is-ws? over is-delim? or swap 34 == or .
+
+# === Whitespace / Comment Skipping ===
+
+: skip-ws PState -> PState ;
+    ps-at-end?
+    : True -> PState ; drop
+    : False -> PState ; drop skip-ws-step .
+
+: skip-ws-step PState -> PState ;
+    ps-cur-byte is-ws?
+    : True -> PState ; drop ps-advance-ws skip-ws
+    : False -> PState ; drop .
+
+: skip-comment PState -> PState ;
+    ps-at-end?
+    : True -> PState ; drop
+    : False -> PState ; drop skip-comment-step .
+
+: skip-comment-step PState -> PState ;
+    ps-cur-byte 10 ==
+    : True -> PState ; drop ps-advance ps-newline
+    : False -> PState ; drop ps-advance skip-comment .
+
+: skip-all PState -> PState ;
+    skip-ws
+    ps-at-end?
+    : True -> PState ; drop
+    : False -> PState ; drop skip-all-step .
+
+: skip-all-step PState -> PState ;
+    ps-cur-byte 35 ==
+    : True -> PState ; drop skip-comment skip-all
+    : False -> PState ; drop .
+
+# === Token Construction ===
+
+: make-token String Bool -> Map ;
+    map-new
+    swap "quoted" swap map-put
+    swap "value" swap map-put .
+
+# === String Literal Reading ===
+# Reads chars until closing quote (byte 34).
+# Expects opening quote already consumed.
+# Takes: PState String(accumulator)
+# Returns: PState String(completed)
+
+: read-str PState String -> PState String ;
+    over ps-at-end?
+    : True -> PState String ; drop drop
+    : False -> PState String ; drop drop read-str-step .
+
+: read-str-step PState String -> PState String ;
+    over ps-cur-byte! 34 ==
+    : True -> PState String ; drop swap ps-advance swap
+    : False -> PState String ; drop read-str-accum .
+
+: read-str-accum PState String -> PState String ;
+    over ps-cur-char swap drop concat
+    swap ps-advance swap
+    read-str .
+
+# === Word Reading ===
+# Reads chars until whitespace, delimiter, or EOF.
+# Takes: PState String(accumulator)
+# Returns: PState String(completed)
+
+: read-word PState String -> PState String ;
+    over ps-at-end?
+    : True -> PState String ; drop drop
+    : False -> PState String ; drop drop read-word-step .
+
+: read-word-step PState String -> PState String ;
+    over ps-cur-byte! is-word-end?
+    : True -> PState String ; drop
+    : False -> PState String ; drop read-word-accum .
+
+: read-word-accum PState String -> PState String ;
+    over ps-cur-char swap drop concat
+    swap ps-advance swap
+    read-word .
+
+# === Main Tokenizer Loop ===
+# Carries PState and token List. Tokens are prepended (reversed at end).
+
+: tokenize PState List -> PState List ;
+    over ps-at-end?
+    : True -> PState List ; drop drop
+    : False -> PState List ; drop drop tokenize-step .
+
+: tokenize-step PState List -> PState List ;
+    swap skip-all swap
+    over ps-at-end?
+    : True -> PState List ; drop drop
+    : False -> PState List ; drop drop one-token tokenize .
+
+# Read one token and cons it onto the list.
+: one-token PState List -> PState List ;
+    over ps-cur-byte swap drop dispatch-byte .
+
+# Dispatch based on first byte of next token.
+: dispatch-byte PState List Int -> PState List ;
+    : 34 -> PState List ; drop do-string
+    : 58 -> PState List ; drop do-colon
+    : 59 -> PState List ; drop do-semi
+    : 46 -> PState List ; drop do-dot
+    : Int -> PState List ; drop do-word .
+
+: do-colon PState List -> PState List ;
+    swap ps-advance swap
+    ":" false make-token cons .
+
+: do-semi PState List -> PState List ;
+    swap ps-advance swap
+    ";" false make-token cons .
+
+: do-dot PState List -> PState List ;
+    swap ps-advance swap
+    "." false make-token cons .
+
+: do-string PState List -> PState List ;
+    swap ps-advance "" read-str
+    true make-token
+    rot swap cons .
+
+: do-word PState List -> PState List ;
+    swap "" read-word
+    false make-token
+    rot swap cons .
+
+# === Entry Point ===
+
+: parse String String -> List ;
+    swap drop
+    dup length
+    0 swap 1 1 pstate
+    nil tokenize
+    swap drop
+    reverse .

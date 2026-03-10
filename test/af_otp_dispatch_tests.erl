@@ -9,19 +9,7 @@ eval(Input, Cont) ->
     af_interpreter:interpret_tokens(Tokens, Cont).
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_string:init(),
-    af_type_list:init(),
-    af_type_float:init(),
-    af_type_tuple:init(),
-    af_type_ffi:init(),
-    af_type_compiler:init(),
-    af_type_product:init(),
-    af_type_beam:init(),
-    af_type_otp:init().
+    af_type:reset().
 
 %% Test the empty result stack case (line 24)
 empty_result_test_() ->
@@ -40,12 +28,10 @@ empty_result_test_() ->
 %% Test ensure_types when registry is undefined (line 42)
 ensure_types_test_() ->
     [
-        {"ensure_types initializes when registry undefined", fun() ->
-            %% Destroy the registry to trigger the undefined branch
+        {"ensure_types initializes when registry not initialized", fun() ->
+            %% Clear the registry to trigger the uninitialized branch
             catch ets:delete(af_type_registry),
             %% call_word should trigger ensure_types which inits the registry
-            %% We just need any valid call - use a simple word
-            %% After ensure_types, Int type should be available
             State = {'Int', 5},
             {_Ret, _NewState} = af_otp_dispatch:call_word("dup", [], State),
             %% If we got here without error, ensure_types worked

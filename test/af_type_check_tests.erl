@@ -11,11 +11,7 @@ eval(Input, Cont) ->
     af_interpreter:interpret_tokens(Tokens, Cont).
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_compiler:init().
+    af_type:reset().
 
 %% --- Direct af_type_check API tests ---
 
@@ -471,6 +467,122 @@ type_compatible_edge_test_() ->
             Body = [#operation{name = "var_match"}],
             {ok, Result} = af_type_check:infer_stack(Body, ['Float']),
             ?assertEqual(['Float'], Result)
+        end} end
+    ]}.
+
+%% --- check_word propagates infer_stack error (line 28) ---
+
+infer_error_propagation_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"check_word returns error when infer_stack fails (stack underflow)", fun() ->
+            %% Register an op that requires 2 args
+            TestOp = #operation{
+                name = "needs_two",
+                sig_in = ['Int', 'Int'],
+                sig_out = ['Int'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            %% Call check_word with only 1 item in sig_in (stack has 1 item)
+            %% Body tries to consume 2 items from a 1-item stack -> underflow
+            Body = [#operation{name = "needs_two"}],
+            Result = af_type_check:check_word("fail_infer", ['Int'], ['Int'], Body),
+            ?assertMatch({error, _}, Result)
+        end} end,
+
+
+        fun(_) -> {"type_compatible with concrete type mismatch in consume_types (line 131)", fun() ->
+            %% Register op requiring exactly Bool
+            TestOp = #operation{
+                name = "bool_only",
+                sig_in = ['Bool'],
+                sig_out = ['Int'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Bool', TestOp),
+            %% Try with Bool on stack (should work)
+            Body = [#operation{name = "bool_only"}],
+            {ok, R} = af_type_check:infer_stack(Body, ['Bool']),
+            ?assertEqual(['Int'], R)
+        end} end,
+
+        fun(_) -> {"resolve_type Any with multiple bindings stays Any", fun() ->
+            %% Register op with _a _b -> Any
+            TestOp = #operation{
+                name = "multi_bind",
+                sig_in = ['_a', '_b'],
+                sig_out = ['Any'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "multi_bind"}],
+            {ok, R} = af_type_check:infer_stack(Body, ['Int', 'Bool']),
+            %% With 2 bindings, Any stays as Any (not resolved)
+            ?assertEqual(['Any'], R)
+        end} end,
+
+        fun(_) -> {"is_type_variable with non-atom returns false", fun() ->
+            ?assertNot(af_type_check:is_type_variable({tuple, value})),
+            ?assertNot(af_type_check:is_type_variable("string"))
+        end} end,
+
+        fun(_) -> {"resolve_type Any with exactly one binding resolves (line 171)", fun() ->
+            %% Register op with Any in sig_out and _a in sig_in
+            %% When there's exactly 1 binding, Any resolves to it
+            TestOp = #operation{
+                name = "any_out_single",
+                sig_in = ['_a'],
+                sig_out = ['Any'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "any_out_single"}],
+            {ok, R} = af_type_check:infer_stack(Body, ['Int']),
+            ?assertEqual(['Int'], R)
+        end} end,
+
+        fun(_) -> {"type_compatible with underscore wildcard (line 188)", fun() ->
+            %% Register op with _ in sig_in (not named var, just bare _)
+            TestOp = #operation{
+                name = "underscore_in",
+                sig_in = ['_'],
+                sig_out = ['Bool'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "underscore_in"}],
+            %% _ should match any type
+            {ok, R1} = af_type_check:infer_stack(Body, ['Float']),
+            ?assertEqual(['Bool'], R1)
+        end} end,
+
+        fun(_) -> {"type_compatible type_variable in concrete sig (line 191)", fun() ->
+            TestOp = #operation{
+                name = "tvar_compat",
+                sig_in = ['_x'],
+                sig_out = ['_x'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            Body = [#operation{name = "tvar_compat"}],
+            {ok, R} = af_type_check:infer_stack(Body, ['String']),
+            ?assertEqual(['String'], R)
+        end} end,
+
+        fun(_) -> {"check_word propagates infer_stack binding error (line 28)", fun() ->
+            %% Register an op with _a _a sig (requires same type twice)
+            TestOp = #operation{
+                name = "pair_check",
+                sig_in = ['_a', '_a'],
+                sig_out = ['_a'],
+                impl = fun(Cont) -> Cont end
+            },
+            af_type:add_op('Any', TestOp),
+            %% check_word: input stack [Int, Bool], body calls pair_check
+            %% _a binds to Int (TOS), then Bool doesn't match -> error
+            Body = [#operation{name = "pair_check"}],
+            Result = af_type_check:check_word("bad_pair", ['Int', 'Bool'], ['Int'], Body),
+            ?assertMatch({error, _}, Result)
         end} end
     ]}.
 

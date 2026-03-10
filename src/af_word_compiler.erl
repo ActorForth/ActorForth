@@ -11,7 +11,8 @@
 -export([find_compiled_word_defs/1]).
 -export([group_by_name/1]).
 
--define(BINARY_TABLE, af_module_binaries).
+%% Binary storage key prefix for process dictionary
+-define(BIN_KEY(Mod), {af_module_binary, Mod}).
 
 %% Compile a list of ActorForth word definitions into a BEAM module.
 %% Generated functions operate on tagged stacks: [{Type, Value}, ...].
@@ -40,10 +41,9 @@ compile_words_to_module(ModuleName, WordDefs) when is_atom(ModuleName) ->
 
 %% Retrieve a stored module binary. Returns {ok, Binary} | not_found.
 get_module_binary(ModuleName) ->
-    ensure_binary_table(),
-    case ets:lookup(?BINARY_TABLE, ModuleName) of
-        [{ModuleName, Binary}] -> {ok, Binary};
-        [] -> not_found
+    case get(?BIN_KEY(ModuleName)) of
+        undefined -> not_found;
+        Binary -> {ok, Binary}
     end.
 
 %% Compile word definitions to a BEAM binary without loading.
@@ -381,6 +381,12 @@ simulate_body([#operation{name = "<<"} | Rest], Stack, L, Ctx, SideEffects) ->
             %% Can't compile send block — fall through to runtime
             simulate_body(Rest, Stack, L, Ctx, SideEffects)
     end;
+%% Quoted string literal on opaque stack: push string, keep opaque rest
+simulate_body([#operation{name = OpName, source = quoted_string} | Rest], [{StackExpr, stack}], L, Ctx, SideEffects) ->
+    BinExpr = {bin, L, [{bin_element, L, {string, L, OpName}, default, default}]},
+    StrTagged = {tuple, L, [{atom, L, 'String'}, BinExpr]},
+    NewExpr = {cons, L, StrTagged, StackExpr},
+    simulate_body(Rest, [{NewExpr, stack}], L, Ctx, SideEffects);
 %% Opaque stack: check for same-module words first, then fall back to apply_impl
 simulate_body([#operation{name = OpName} | Rest], [{StackExpr, stack}], L, Ctx, SideEffects) ->
     Words = maps:get(words, Ctx, #{}),
@@ -394,6 +400,10 @@ simulate_body([#operation{name = OpName} | Rest], [{StackExpr, stack}], L, Ctx, 
                 [{string, L, OpName}, StackExpr]}
     end,
     simulate_body(Rest, [{NewExpr, stack}], L, Ctx, SideEffects);
+%% Quoted string literals: push as tagged {String, Binary}
+simulate_body([#operation{name = OpName, source = quoted_string} | Rest], Stack, L, Ctx, SideEffects) ->
+    BinExpr = {bin, L, [{bin_element, L, {string, L, OpName}, default, default}]},
+    simulate_body(Rest, [make_tagged('String', BinExpr, L) | Stack], L, Ctx, SideEffects);
 simulate_body([#operation{name = OpName} | Rest], Stack, L, Ctx, SideEffects) ->
     case translate_op(OpName, Stack, L, Ctx) of
         {ok, NewStack} ->
@@ -982,15 +992,9 @@ build_word_index(WordDefs) ->
 
 %%% Internal
 
-ensure_binary_table() ->
-    case ets:info(?BINARY_TABLE) of
-        undefined -> ets:new(?BINARY_TABLE, [named_table, set, public]);
-        _ -> ok
-    end.
-
 store_binary(ModuleName, Binary) ->
-    ensure_binary_table(),
-    ets:insert(?BINARY_TABLE, {ModuleName, Binary}).
+    put(?BIN_KEY(ModuleName), Binary),
+    ok.
 
 %% Public version for other modules that compile BEAM modules.
 store_module_binary(ModuleName, Binary) ->

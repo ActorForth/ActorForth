@@ -1,0 +1,574 @@
+# compiler.a4 — A4 compiler written in A4 (Stage 2 bootstrap)
+#
+# Compiles A4 token streams into word definitions (Ring 0 IR).
+# Input: list of token maps from parser.a4 (keys: "value", "quoted")
+# Output: list of word definition maps
+#
+# Entry point: compile-tokens List -> List
+#
+# IMPORTANT: A4 sub-clauses cannot be nested. Each sub-clause body
+# that needs further dispatching must call a separate helper word.
+
+# === Compiler State ===
+type CState
+  tokens List
+  defs List
+  wname String
+  sig-in List
+  sig-out List
+  wbody List .
+
+# === Token Accessors ===
+
+: tok-val Map -> String ;
+    "value" map-get .
+
+: tok-quoted Map -> Bool ;
+    "quoted" map-get .
+
+# === CState Helpers ===
+
+: cs-peek CState -> CState String ;
+    tokens head tok-val .
+
+: cs-peek-quoted CState -> CState Bool ;
+    tokens head tok-quoted .
+
+: cs-advance CState -> CState ;
+    tokens tail tokens! .
+
+: cs-at-end? CState -> CState Bool ;
+    tokens empty? .
+
+: cs-add-def CState Map -> CState ;
+    swap defs rot cons defs! .
+
+: cs-add-defs CState List -> CState ;
+    dup empty?
+    : True -> CState ; drop drop
+    : False -> CState ; drop cs-add-defs-step .
+
+: cs-add-defs-step CState List -> CState ;
+    dup head rot swap cs-add-def swap
+    tail cs-add-defs .
+
+: cs-reset-word CState -> CState ;
+    "" wname! nil sig-in! nil sig-out! nil wbody! .
+
+: cs-append-body CState List -> CState ;
+    swap wbody rot append wbody! .
+
+# === Instruction Builders ===
+
+: make-inst String -> Map ;
+    map-new swap "op" swap map-put .
+
+: make-lit-inst Map -> Map ;
+    map-new swap "val" swap map-put "lit" "op" swap map-put .
+
+: make-str-lit String -> Map ;
+    map-new swap "value" swap map-put "String" "type" swap map-put make-lit-inst .
+
+: make-int-lit Int -> Map ;
+    map-new swap "value" swap map-put "Int" "type" swap map-put make-lit-inst .
+
+: make-bool-lit Bool -> Map ;
+    map-new swap "value" swap map-put "Bool" "type" swap map-put make-lit-inst .
+
+: make-apply-inst String -> Map ;
+    map-new swap "name" swap map-put "apply_impl" "op" swap map-put .
+
+: make-select-clause-inst List -> Map ;
+    map-new swap "clauses" swap map-put "select_clause" "op" swap map-put .
+
+: make-word-def String List List List -> Map ;
+    map-new
+    swap "body" swap map-put
+    swap "sig_out" swap map-put
+    swap "sig_in" swap map-put
+    swap "name" swap map-put .
+
+# === Primitive Translation ===
+: translate-prim String -> List ;
+    : "dup" -> List ; drop nil "dup" cons
+    : "drop" -> List ; drop nil "drop" cons
+    : "swap" -> List ; drop nil "swap" cons
+    : "rot" -> List ; drop nil "swap" cons "from_r" cons "swap" cons "to_r" cons
+    : "over" -> List ; drop nil "swap" cons "from_r" cons "dup" cons "to_r" cons
+    : "2dup" -> List ; drop nil "swap" cons "from_r" cons "dup" cons "to_r" cons
+                        "swap" cons "from_r" cons "dup" cons "to_r" cons
+    : "+" -> List ; drop nil "add" cons
+    : "-" -> List ; drop nil "sub" cons
+    : "*" -> List ; drop nil "mul" cons
+    : "/" -> List ; drop nil "divop" cons
+    : "mod" -> List ; drop nil "modop" cons
+    : "==" -> List ; drop nil "eq" cons
+    : "!=" -> List ; drop nil "not_op" cons "eq" cons
+    : "<" -> List ; drop nil "lt" cons
+    : ">" -> List ; drop nil "lt" cons "swap" cons
+    : "<=" -> List ; drop nil "not_op" cons "lt" cons "swap" cons
+    : ">=" -> List ; drop nil "not_op" cons "lt" cons
+    : "not" -> List ; drop nil "not_op" cons
+    : "and" -> List ; drop nil "and_op" cons
+    : "or" -> List ; drop nil "or_op" cons
+    : "nil" -> List ; drop nil "nil" cons
+    : "cons" -> List ; drop nil "cons" cons
+    : "head" -> List ; drop nil "head" cons
+    : "tail" -> List ; drop nil "tail" cons
+    : "length" -> List ; drop nil "generic_len" cons
+    : "append" -> List ; drop nil "list_append" cons
+    : "reverse" -> List ; drop nil "list_reverse" cons
+    : "nth" -> List ; drop nil "list_nth" cons
+    : "last" -> List ; drop nil "list_last" cons
+    : "take" -> List ; drop nil "list_take" cons
+    : "empty?" -> List ; drop nil "list_empty" cons
+    : "contains?" -> List ; drop nil "list_contains" cons
+    : "flatten" -> List ; drop nil "list_flatten" cons
+    : "zip" -> List ; drop nil "list_zip" cons
+    : "map-new" -> List ; drop nil "map_new" cons
+    : "map-put" -> List ; drop nil "map_put" cons
+    : "map-get" -> List ; drop nil "map_get" cons
+    : "map-delete" -> List ; drop nil "map_delete" cons
+    : "map-keys" -> List ; drop nil "map_keys" cons
+    : "map-has?" -> List ; drop nil "map_has" cons
+    : "map-values" -> List ; drop nil "map_values" cons
+    : "map-size" -> List ; drop nil "map_size" cons
+    : "map-merge" -> List ; drop nil "map_merge" cons
+    : "map-get-or" -> List ; drop nil "map_get_or" cons
+    : "concat" -> List ; drop nil "str_concat" cons
+    : "split" -> List ; drop nil "str_split" cons
+    : "contains" -> List ; drop nil "str_contains" cons
+    : "starts-with" -> List ; drop nil "str_starts_with" cons
+    : "ends-with" -> List ; drop nil "str_ends_with" cons
+    : "trim" -> List ; drop nil "str_trim" cons
+    : "to-upper" -> List ; drop nil "str_upper" cons
+    : "to-lower" -> List ; drop nil "str_lower" cons
+    : "substring" -> List ; drop nil "str_substring" cons
+    : "replace" -> List ; drop nil "str_replace" cons
+    : "str-nth" -> List ; drop nil "str_nth" cons
+    : "str-byte-at" -> List ; drop nil "str_byte_at" cons
+    : "to-string" -> List ; drop nil "to_string" cons
+    : "to-int" -> List ; drop nil "to_int" cons
+    : "to-float" -> List ; drop nil "to_float" cons
+    : "to-atom" -> List ; drop nil "to_atom" cons
+    : "print" -> List ; drop nil "print_tos" cons
+    : "stack" -> List ; drop nil "print_stack" cons
+    : "assert" -> List ; drop nil "assert_true" cons
+    : "assert-eq" -> List ; drop nil "assert_eq" cons
+    : "read-file" -> List ; drop nil "file_read" cons
+    : "write-file" -> List ; drop nil "file_write" cons
+    : "file-exists?" -> List ; drop nil "file_exists" cons
+    : "make-tuple" -> List ; drop nil "tuple_make" cons
+    : "from-tuple" -> List ; drop nil "tuple_to_list" cons
+    : "tuple-size" -> List ; drop nil "tuple_size_op" cons
+    : "ok-tuple" -> List ; drop nil "ok_tuple" cons
+    : "error-tuple" -> List ; drop nil "error_tuple" cons
+    : "is-ok" -> List ; drop nil "is_ok" cons
+    : "unwrap-ok" -> List ; drop nil "unwrap_ok" cons
+    : "spawn" -> List ; drop nil "spawn_actor" cons
+    : "send" -> List ; drop nil "send_msg" cons
+    : "!" -> List ; drop nil "send_msg" cons
+    : "receive" -> List ; drop nil "receive_msg" cons
+    : "receive-timeout" -> List ; drop nil "receive_timeout" cons
+    : "erlang-apply" -> List ; drop nil "erlang-apply" cons
+    : "erlang-apply0" -> List ; drop nil "erlang-apply0" cons
+    : "erlang-call" -> List ; drop nil "erlang-call" cons
+    : "erlang-call0" -> List ; drop nil "erlang-call0" cons
+    : "erlang-new" -> List ; drop nil "erlang-new" cons
+    : String -> List ; drop nil .
+
+: prim-names-to-insts List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop prim-names-to-insts-step .
+
+: prim-names-to-insts-step List -> List ;
+    dup head make-inst
+    swap tail prim-names-to-insts
+    swap cons .
+
+# === Integer Detection ===
+
+: is-digit-byte? Int -> Bool ;
+    dup 48 >= swap 57 <= and .
+
+: str-all-digits? String -> Bool ;
+    dup length 0 ==
+    : True -> Bool ; drop drop false
+    : False -> Bool ; drop str-all-digits-loop .
+
+: str-all-digits-loop String -> Bool ;
+    dup length 0 ==
+    : True -> Bool ; drop drop true
+    : False -> Bool ; drop str-all-digits-check .
+
+: str-all-digits-check String -> Bool ;
+    dup 0 str-byte-at is-digit-byte?
+    : True -> Bool ; drop 1 over length 1 - substring str-all-digits-loop
+    : False -> Bool ; drop drop false .
+
+: is-integer-str? String -> Bool ;
+    dup length 0 ==
+    : True -> Bool ; drop drop false
+    : False -> Bool ; drop is-integer-str-check .
+
+: is-integer-str-check String -> Bool ;
+    dup 0 str-byte-at 45 ==
+    : True -> Bool ; drop is-integer-str-minus
+    : False -> Bool ; drop str-all-digits? .
+
+: is-integer-str-minus String -> Bool ;
+    dup length 1 >
+    : True -> Bool ; drop 1 over length 1 - substring str-all-digits?
+    : False -> Bool ; drop drop false .
+
+# === Body Token Translation ===
+
+: translate-body-token String Bool -> List ;
+    : True -> List ; drop make-str-lit nil swap cons
+    : False -> List ; drop translate-unquoted .
+
+: translate-unquoted String -> List ;
+    dup translate-prim dup empty?
+    : True -> List ; drop drop translate-non-prim
+    : False -> List ; drop swap drop prim-names-to-insts .
+
+: translate-non-prim String -> List ;
+    dup is-integer-str?
+    : True -> List ; drop translate-int-literal
+    : False -> List ; drop translate-non-int .
+
+: translate-int-literal String -> List ;
+    to-int make-int-lit nil swap cons .
+
+: translate-non-int String -> List ;
+    dup "true" ==
+    : True -> List ; drop drop true make-bool-lit nil swap cons
+    : False -> List ; drop translate-non-true .
+
+: translate-non-true String -> List ;
+    dup "false" ==
+    : True -> List ; drop drop false make-bool-lit nil swap cons
+    : False -> List ; drop make-apply-inst nil swap cons .
+
+# === Signature Parsing ===
+
+: parse-sig-in-tokens CState -> CState ;
+    cs-at-end?
+    : True -> CState ; drop
+    : False -> CState ; drop parse-sig-in-step .
+
+: parse-sig-in-step CState -> CState ;
+    cs-peek
+    dup "->" ==
+    : True -> CState ; drop drop cs-advance
+    : False -> CState ; drop parse-sig-in-check-semi .
+
+: parse-sig-in-check-semi CState String -> CState ;
+    dup ";" ==
+    : True -> CState ; drop drop
+    : False -> CState ; drop swap sig-in rot cons sig-in! cs-advance parse-sig-in-tokens .
+
+: parse-sig-out-tokens CState -> CState ;
+    cs-at-end?
+    : True -> CState ; drop
+    : False -> CState ; drop parse-sig-out-step .
+
+: parse-sig-out-step CState -> CState ;
+    cs-peek
+    dup ";" ==
+    : True -> CState ; drop drop cs-advance
+    : False -> CState ; drop swap sig-out rot cons sig-out! cs-advance parse-sig-out-tokens .
+
+# === Body Parsing ===
+
+: parse-body-tokens CState -> CState ;
+    cs-at-end?
+    : True -> CState ; drop
+    : False -> CState ; drop parse-body-step .
+
+: parse-body-step CState -> CState ;
+    cs-peek-quoted
+    : True -> CState ; drop parse-one-body-token parse-body-tokens
+    : False -> CState ; drop parse-body-check-delim .
+
+: parse-body-check-delim CState -> CState ;
+    cs-peek
+    dup "." ==
+    : True -> CState ; drop drop cs-advance
+    : False -> CState ; drop parse-body-check-colon .
+
+: parse-body-check-colon CState String -> CState ;
+    dup ":" ==
+    : True -> CState ; drop drop parse-sub-clauses
+    : False -> CState ; drop drop parse-one-body-token parse-body-tokens .
+
+: parse-one-body-token CState -> CState ;
+    cs-peek
+    swap cs-peek-quoted
+    rot swap translate-body-token
+    cs-append-body cs-advance .
+
+# === Sub-clause Parsing ===
+
+: parse-sub-clauses CState -> CState ;
+    nil parse-sub-clauses-loop
+    reverse make-select-clause-inst
+    nil swap cons cs-append-body .
+
+: parse-sub-clauses-loop CState List -> CState List ;
+    over cs-at-end? swap drop
+    : True -> CState List ; drop
+    : False -> CState List ; drop parse-sub-clauses-dispatch .
+
+: parse-sub-clauses-dispatch CState List -> CState List ;
+    over cs-peek-quoted swap drop
+    : True -> CState List ; drop swap cs-advance swap parse-sub-clauses-loop
+    : False -> CState List ; drop parse-sub-clauses-dispatch-unq .
+
+: parse-sub-clauses-dispatch-unq CState List -> CState List ;
+    over cs-peek swap drop
+    dup "." ==
+    : True -> CState List ; drop drop swap cs-advance swap
+    : False -> CState List ; drop drop parse-sub-clauses-check-colon .
+
+: parse-sub-clauses-check-colon CState List -> CState List ;
+    over cs-peek swap drop
+    dup ":" ==
+    : True -> CState List ; drop drop swap cs-advance swap parse-one-sub-clause parse-sub-clauses-loop
+    : False -> CState List ; drop drop swap cs-advance swap parse-sub-clauses-loop .
+
+: parse-one-sub-clause CState List -> CState List ;
+    swap nil parse-sub-sig-in
+    swap nil parse-sub-sig-out-tokens
+    swap nil parse-sub-body-loop
+    map-new
+    swap "body" swap map-put
+    swap rot reverse rot
+    swap "sig_out" swap map-put
+    swap rot rot
+    swap "sig_in" swap map-put
+    rot swap cons .
+
+: parse-sub-sig-in CState List -> CState List ;
+    over cs-at-end? swap drop
+    : True -> CState List ; drop
+    : False -> CState List ; drop parse-sub-sig-in-step .
+
+: parse-sub-sig-in-step CState List -> CState List ;
+    over cs-peek swap drop
+    dup "->" ==
+    : True -> CState List ; drop drop swap cs-advance swap
+    : False -> CState List ; drop drop parse-sub-sig-in-check-semi .
+
+: parse-sub-sig-in-check-semi CState List -> CState List ;
+    over cs-peek swap drop
+    dup ";" ==
+    : True -> CState List ; drop drop
+    : False -> CState List ; drop cons swap cs-advance swap parse-sub-sig-in .
+
+: parse-sub-sig-out-tokens CState List -> CState List ;
+    over cs-at-end? swap drop
+    : True -> CState List ; drop
+    : False -> CState List ; drop parse-sub-sig-out-step .
+
+: parse-sub-sig-out-step CState List -> CState List ;
+    over cs-peek swap drop
+    dup ";" ==
+    : True -> CState List ; drop drop swap cs-advance swap
+    : False -> CState List ; drop cons swap cs-advance swap parse-sub-sig-out-tokens .
+
+: parse-sub-body-loop CState List -> CState List ;
+    over cs-at-end? swap drop
+    : True -> CState List ; drop
+    : False -> CState List ; drop parse-sub-body-step .
+
+: parse-sub-body-step CState List -> CState List ;
+    over cs-peek-quoted swap drop
+    : True -> CState List ; drop parse-sub-body-compile-token
+    : False -> CState List ; drop parse-sub-body-check-delim .
+
+: parse-sub-body-check-delim CState List -> CState List ;
+    over cs-peek swap drop
+    dup "." ==
+    : True -> CState List ; drop drop
+    : False -> CState List ; drop drop parse-sub-body-check-colon .
+
+: parse-sub-body-check-colon CState List -> CState List ;
+    over cs-peek swap drop
+    dup ":" ==
+    : True -> CState List ; drop drop
+    : False -> CState List ; drop drop parse-sub-body-compile-token .
+
+: parse-sub-body-compile-token CState List -> CState List ;
+    swap tokens head
+    dup tok-val swap tok-quoted
+    translate-body-token
+    rot swap append
+    swap cs-advance swap
+    parse-sub-body-loop .
+
+# === Word Definition Parsing ===
+
+: parse-word-def CState -> CState ;
+    cs-reset-word
+    cs-peek wname! cs-advance
+    parse-sig-in-tokens
+    parse-sig-out-tokens
+    parse-body-tokens
+    finalize-current-word .
+
+: check-for-sub-clauses CState -> CState ;
+    cs-at-end?
+    : True -> CState ; drop
+    : False -> CState ; drop check-sub-clause-start .
+
+: check-sub-clause-start CState -> CState ;
+    cs-peek ":" ==
+    : True -> CState ; drop parse-sub-clauses
+    : False -> CState ; drop .
+
+: finalize-current-word CState -> CState ;
+    map-new
+    swap wname rot swap "name" swap map-put
+    swap sig-in rot swap "sig_in" swap map-put
+    swap sig-out reverse rot swap "sig_out" swap map-put
+    swap wbody rot swap "body" swap map-put
+    cs-add-def .
+
+# === Product Type Compilation ===
+
+: parse-type-fields CState List -> CState List ;
+    over cs-at-end? swap drop
+    : True -> CState List ; drop
+    : False -> CState List ; drop parse-type-field-step .
+
+: parse-type-field-step CState List -> CState List ;
+    over cs-peek swap drop "." ==
+    : True -> CState List ; drop swap cs-advance swap
+    : False -> CState List ; drop parse-one-type-field .
+
+: parse-one-type-field CState List -> CState List ;
+    swap
+    cs-peek swap cs-advance swap
+    swap cs-peek swap cs-advance swap
+    nil swap cons
+    rot cons
+    rot swap cons
+    parse-type-fields .
+
+# === Product Type Helper Functions ===
+
+: extract-field-types List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop dup head tail head swap tail extract-field-types swap cons .
+
+: extract-field-names List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop dup head head swap tail extract-field-names swap cons .
+
+: make-product-new-inst String List -> Map ;
+    map-new
+    swap "fields" swap map-put
+    swap "type_name" swap map-put
+    "product_new" "op" swap map-put .
+
+: make-prod-get-body String -> List ;
+    map-new swap "field" swap map-put "product_get" "op" swap map-put
+    nil swap cons .
+
+: make-prod-set-body String -> List ;
+    map-new swap "field" swap map-put "product_set" "op" swap map-put
+    nil swap cons .
+
+# gen-prod-constructor builds map field-by-field keeping map accessible via rot
+: gen-prod-constructor String List -> Map ;
+    over to-lower map-new swap "name" swap map-put
+    rot dup nil swap cons rot swap "sig_out" swap map-put
+    rot dup extract-field-types reverse rot swap "sig_in" swap map-put
+    swap extract-field-names rot swap make-product-new-inst nil swap cons
+    "body" swap map-put .
+
+: gen-prod-getters String List -> List ;
+    dup empty?
+    : True -> List ; drop drop drop nil
+    : False -> List ; drop gen-prod-getters-step .
+
+: gen-prod-getters-step String List -> List ;
+    swap dup rot
+    dup head swap tail
+    rot rot gen-one-prod-getter
+    swap rot swap gen-prod-getters swap cons .
+
+: gen-one-prod-getter String List -> Map ;
+    dup head swap tail head
+    swap dup rot
+    swap make-prod-get-body
+    map-new swap "body" swap map-put
+    rot "name" swap map-put
+    rot dup nil swap cons rot swap "sig_in" swap map-put
+    swap rot swap nil swap cons swap cons "sig_out" swap map-put .
+
+: gen-prod-setters String List -> List ;
+    dup empty?
+    : True -> List ; drop drop drop nil
+    : False -> List ; drop gen-prod-setters-step .
+
+: gen-prod-setters-step String List -> List ;
+    swap dup rot
+    dup head swap tail
+    rot rot gen-one-prod-setter
+    swap rot swap gen-prod-setters swap cons .
+
+: gen-one-prod-setter String List -> Map ;
+    dup head swap tail head
+    swap dup rot
+    swap make-prod-set-body
+    map-new swap "body" swap map-put
+    rot "!" concat "name" swap map-put
+    rot dup nil swap cons rot swap "sig_out" swap map-put
+    swap rot swap nil swap cons swap cons "sig_in" swap map-put .
+
+: gen-all-prod-defs String List -> List ;
+    over over gen-prod-constructor
+    rot rot
+    over over gen-prod-getters
+    rot rot gen-prod-setters
+    append swap nil swap cons swap append .
+
+: compile-product-type CState -> CState ;
+    cs-peek swap cs-advance
+    nil parse-type-fields
+    reverse
+    rot swap
+    gen-all-prod-defs
+    cs-add-defs .
+
+# === Main Compiler Loop ===
+
+: compile-loop CState -> CState ;
+    cs-at-end?
+    : True -> CState ; drop
+    : False -> CState ; drop dispatch-top-level .
+
+: dispatch-top-level CState -> CState ;
+    cs-peek
+    dup ":" ==
+    : True -> CState ; drop drop cs-advance parse-word-def compile-loop
+    : False -> CState ; drop dispatch-check-type .
+
+: dispatch-check-type CState String -> CState ;
+    dup "type" ==
+    : True -> CState ; drop drop cs-advance compile-product-type compile-loop
+    : False -> CState ; drop drop cs-advance compile-loop .
+
+# === Entry Point ===
+
+: compile-tokens List -> List ;
+    nil "" nil nil nil cstate
+    compile-loop
+    defs
+    swap drop
+    reverse .

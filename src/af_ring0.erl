@@ -1,0 +1,897 @@
+%% af_ring0.erl -- Ring 0: Minimal primitive instruction set for ActorForth
+%%
+%% ~35 primitives that define A4's core semantics.
+%% Every target environment (BEAM, FPGA, etc.) must implement these.
+%% This is the BEAM target implementation.
+%%
+%% Stack values are tagged: {Type :: atom(), Value :: term()}
+%% The type registry is a map of maps, fully inspectable from A4.
+%% Types, pattern matching, and actors are first-class primitives.
+
+-module(af_ring0).
+
+-export([
+    new/0, run/2, exec/2,
+    get_ds/1, get_rs/1, get_types/1, get_words/1,
+    get_output/1, set_input/2, set_ds/2, set_words/2, set_types/2,
+    compile_interp_module/1  %% xcall-able: compile defs to interpreted BEAM
+]).
+
+-record(r0, {
+    ds     = [] :: list(),       %% data stack (tagged values)
+    rs     = [] :: list(),       %% return stack
+    types  = #{} :: map(),       %% type registry: #{Name => #{ops, handler}}
+    words  = #{} :: map(),       %% word table: #{Name => [Instruction]}
+    output = <<>> :: binary(),   %% output buffer
+    input  = <<>> :: binary()    %% input buffer
+}).
+
+%%% === State Management ===
+
+new() -> #r0{}.
+
+get_ds(#r0{ds = DS}) -> DS.
+get_rs(#r0{rs = RS}) -> RS.
+get_types(#r0{types = T}) -> T.
+get_words(#r0{words = W}) -> W.
+get_output(#r0{output = O}) -> O.
+set_input(Bin, S) -> S#r0{input = Bin}.
+set_ds(DS, S) -> S#r0{ds = DS}.
+set_words(W, S) -> S#r0{words = W}.
+set_types(T, S) -> S#r0{types = T}.
+
+%%% === Program Execution ===
+
+run(Program, State) ->
+    Arr = list_to_tuple(Program),
+    run_loop(Arr, 1, State).
+
+run_loop(Arr, IP, State) when IP > tuple_size(Arr) -> State;
+run_loop(Arr, IP, State) ->
+    Inst = element(IP, Arr),
+    case exec(Inst, State) of
+        {branch, Target, S1} -> run_loop(Arr, Target, S1);
+        {stop, S1} -> S1;
+        S1 -> run_loop(Arr, IP + 1, S1)
+    end.
+
+%%% === Stack Primitives (5) ===
+
+exec(dup, #r0{ds = [A | Rest]} = S) ->
+    S#r0{ds = [A, A | Rest]};
+
+exec(drop, #r0{ds = [_ | Rest]} = S) ->
+    S#r0{ds = Rest};
+
+exec(swap, #r0{ds = [A, B | Rest]} = S) ->
+    S#r0{ds = [B, A | Rest]};
+
+exec(to_r, #r0{ds = [A | DRest], rs = RS} = S) ->
+    S#r0{ds = DRest, rs = [A | RS]};
+
+exec(from_r, #r0{ds = DS, rs = [A | RRest]} = S) ->
+    S#r0{ds = [A | DS], rs = RRest};
+
+%%% === Data Primitives (4) ===
+
+exec({lit, Value}, #r0{ds = DS} = S) ->
+    S#r0{ds = [Value | DS]};
+
+exec({tuple_new, N}, #r0{ds = DS} = S) ->
+    {Items, Rest} = lists:split(N, DS),
+    S#r0{ds = [list_to_tuple(lists:reverse(Items)) | Rest]};
+
+exec({tuple_get, I}, #r0{ds = [Tuple | Rest]} = S) when is_tuple(Tuple) ->
+    S#r0{ds = [element(I, Tuple) | Rest]};
+
+exec({tuple_put, I}, #r0{ds = [Val, Tuple | Rest]} = S) when is_tuple(Tuple) ->
+    S#r0{ds = [setelement(I, Tuple, Val) | Rest]};
+
+%%% === List Primitives (4) ===
+
+exec(nil, #r0{ds = DS} = S) ->
+    S#r0{ds = [{'List', []} | DS]};
+
+exec(cons, #r0{ds = [Elem, {'List', Tail} | Rest]} = S) ->
+    S#r0{ds = [{'List', [Elem | Tail]} | Rest]};
+
+exec(head, #r0{ds = [{'List', [H | _]} | Rest]} = S) ->
+    S#r0{ds = [H | Rest]};
+
+exec(tail, #r0{ds = [{'List', [_ | T]} | Rest]} = S) ->
+    S#r0{ds = [{'List', T} | Rest]};
+
+%%% === Arithmetic Primitives (5) ===
+
+exec(add, #r0{ds = [{_, A}, {_, B} | Rest]} = S) ->
+    S#r0{ds = [tag_number(B + A) | Rest]};
+
+exec(sub, #r0{ds = [{_, A}, {_, B} | Rest]} = S) ->
+    S#r0{ds = [tag_number(B - A) | Rest]};
+
+exec(mul, #r0{ds = [{_, A}, {_, B} | Rest]} = S) ->
+    S#r0{ds = [tag_number(B * A) | Rest]};
+
+exec(divop, #r0{ds = [{_, A}, {_, B} | Rest]} = S) ->
+    case is_float(A) orelse is_float(B) of
+        true  -> S#r0{ds = [{'Float', B / A} | Rest]};
+        false -> S#r0{ds = [{'Int', B div A} | Rest]}
+    end;
+
+exec(modop, #r0{ds = [{_, A}, {_, B} | Rest]} = S) ->
+    S#r0{ds = [{'Int', B rem A} | Rest]};
+
+%%% === Comparison + Logic (3) ===
+
+exec(eq, #r0{ds = [A, B | Rest]} = S) ->
+    S#r0{ds = [{'Bool', B =:= A} | Rest]};
+
+exec(lt, #r0{ds = [{_, A}, {_, B} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', B < A} | Rest]};
+
+exec(not_op, #r0{ds = [{'Bool', V} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', not V} | Rest]};
+
+%%% === Control Flow (4) ===
+
+exec({call, WordName}, #r0{words = Words} = S) ->
+    Body = maps:get(WordName, Words),
+    run(Body, S);
+
+exec({branch_if, Target}, #r0{ds = [{'Bool', true} | Rest]} = S) ->
+    {branch, Target, S#r0{ds = Rest}};
+exec({branch_if, _Target}, #r0{ds = [{'Bool', false} | Rest]} = S) ->
+    S#r0{ds = Rest};
+
+exec({branch, Target}, S) ->
+    {branch, Target, S};
+
+exec(return, S) ->
+    {stop, S};
+
+%%% === Type System Primitives (5) ===
+%%% Types are first-class. The registry is inspectable data.
+
+%% type_new: pop {'Atom', Name}, create empty type
+exec(type_new, #r0{ds = [{'Atom', Name} | Rest], types = Types} = S) ->
+    NewType = #{ops => #{}, handler => undefined},
+    S#r0{ds = Rest, types = Types#{Name => NewType}};
+
+%% type_add_op: pop body, sig_out, sig_in, op_name, type_name
+exec(type_add_op, #r0{ds = [Body, {'List', SigOut}, {'List', SigIn},
+                             {'String', OpName}, {'Atom', TypeName} | Rest],
+                      types = Types} = S) ->
+    Type = maps:get(TypeName, Types, #{ops => #{}, handler => undefined}),
+    Ops = maps:get(ops, Type),
+    OpDef = #{sig_in => SigIn, sig_out => SigOut, body => Body},
+    ExistingDefs = maps:get(OpName, Ops, []),
+    NewOps = Ops#{OpName => ExistingDefs ++ [OpDef]},
+    NewType = Type#{ops => NewOps},
+    S#r0{ds = Rest, types = Types#{TypeName => NewType}};
+
+%% type_get_op: pop op_name, type_name; push op list or not_found
+exec(type_get_op, #r0{ds = [{'String', OpName}, {'Atom', TypeName} | Rest],
+                      types = Types} = S) ->
+    Result = case maps:get(TypeName, Types, undefined) of
+        undefined -> {'Atom', not_found};
+        Type ->
+            Ops = maps:get(ops, Type),
+            case maps:get(OpName, Ops, undefined) of
+                undefined -> {'Atom', not_found};
+                OpList -> {'List', OpList}
+            end
+    end,
+    S#r0{ds = [Result | Rest]};
+
+%% type_get: pop type_name, push full type map (inspectable)
+exec(type_get, #r0{ds = [{'Atom', TypeName} | Rest], types = Types} = S) ->
+    Result = case maps:get(TypeName, Types, undefined) of
+        undefined -> {'Atom', not_found};
+        TypeDef -> {'Map', TypeDef}
+    end,
+    S#r0{ds = [Result | Rest]};
+
+%% type_set: pop type_def, type_name; replace entire type definition
+exec(type_set, #r0{ds = [{'Map', TypeDef}, {'Atom', TypeName} | Rest],
+                   types = Types} = S) ->
+    S#r0{ds = Rest, types = Types#{TypeName => TypeDef}};
+
+%%% === Pattern Matching Primitives (3) ===
+%%% Pattern matching is first-class, not derived.
+
+%% match_sig: pop {'List', SigIn}, check remaining stack, push Bool
+%% Non-destructive: matched stack items remain
+exec(match_sig, #r0{ds = [{'List', SigIn} | Rest]} = S) ->
+    Result = match_sig_check(SigIn, Rest),
+    S#r0{ds = [{'Bool', Result} | Rest]};
+
+%% match_value: check TOS against expected value, push Bool
+%% Non-destructive: TOS remains on stack
+exec({match_value, Expected}, #r0{ds = [Actual | _]} = S) ->
+    S#r0{ds = [{'Bool', Actual =:= Expected} | S#r0.ds]};
+
+%% select_clause: pop {'List', Clauses}, find first match, execute body
+%% Each clause is {SigIn, Body} where Body is a list of instructions
+exec(select_clause, #r0{ds = [{'List', Clauses} | Rest]} = S) ->
+    case find_matching_clause(Clauses, Rest) of
+        {ok, Body} -> run(Body, S#r0{ds = Rest});
+        not_found -> error({no_matching_clause, Rest})
+    end;
+
+%%% === Actor Primitives (3) ===
+%%% Actors are first-class primitives, not library features.
+
+%% spawn_actor: pop {'Code', Body}, spawn process, push {'Actor', Pid}
+exec(spawn_actor, #r0{ds = [{'Code', Body} | Rest],
+                       words = Words, types = Types} = S) ->
+    InitState = #r0{words = Words, types = Types},
+    Pid = erlang:spawn(fun() ->
+        try run(Body, InitState)
+        catch _:_ -> ok
+        end
+    end),
+    S#r0{ds = [{'Actor', Pid} | Rest]};
+
+%% send_msg: pop value, pop actor, send message
+exec(send_msg, #r0{ds = [Value, {'Actor', Pid} | Rest]} = S) ->
+    Pid ! {r0_msg, Value},
+    S#r0{ds = Rest};
+
+%% receive_msg: block until message, push it
+exec(receive_msg, #r0{} = S) ->
+    receive
+        {r0_msg, Value} -> S#r0{ds = [Value | S#r0.ds]}
+    end;
+
+%% receive_timeout: pop timeout ms, receive or timeout
+exec(receive_timeout, #r0{ds = [{'Int', Ms} | Rest]} = S) ->
+    receive
+        {r0_msg, Value} ->
+            S#r0{ds = [{'Bool', true}, Value | Rest]}
+    after Ms ->
+        S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+%%% === I/O Primitives (3) ===
+
+%% emit: append bytes to output buffer
+exec({emit, Bytes}, #r0{output = Out} = S) when is_binary(Bytes) ->
+    S#r0{output = <<Out/binary, Bytes/binary>>};
+
+%% emit_tos: pop string from stack, append to output
+exec(emit_tos, #r0{ds = [{'String', Bytes} | Rest], output = Out} = S) ->
+    S#r0{ds = Rest, output = <<Out/binary, Bytes/binary>>};
+
+%% read_n: read N bytes from input buffer, push as String
+exec({read_n, N}, #r0{input = In} = S) ->
+    case In of
+        <<Bytes:N/binary, Rest/binary>> ->
+            S#r0{ds = [{'String', Bytes} | S#r0.ds], input = Rest};
+        _ ->
+            S#r0{ds = [{'Atom', eof} | S#r0.ds]}
+    end;
+
+%%% === BIF Call (1) ===
+%%% Call any Erlang BIF/function with args from the stack.
+
+exec({bif, Mod, Fun, Arity}, #r0{ds = DS} = S) ->
+    {Args, Rest} = take_values(Arity, DS),
+    Result = erlang:apply(Mod, Fun, Args),
+    S#r0{ds = [auto_tag(Result) | Rest]};
+
+%%% === Map Primitives (5) ===
+
+exec(map_new, #r0{ds = DS} = S) ->
+    S#r0{ds = [{'Map', #{}} | DS]};
+
+exec(map_put, #r0{ds = [Value, Key, {'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'Map', Map#{Key => Value}} | Rest]};
+
+exec(map_get, #r0{ds = [Key, {'Map', Map} | Rest]} = S) ->
+    case maps:find(Key, Map) of
+        {ok, Value} -> S#r0{ds = [Value | Rest]};
+        error -> S#r0{ds = [{'Atom', not_found} | Rest]}
+    end;
+
+exec(map_delete, #r0{ds = [Key, {'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'Map', maps:remove(Key, Map)} | Rest]};
+
+exec(map_keys, #r0{ds = [{'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'List', maps:keys(Map)} | Rest]};
+
+exec(map_has, #r0{ds = [Key, {'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', maps:is_key(Key, Map)} | Rest]};
+
+%%% === String Primitives (6) ===
+%%% Needed for self-hosted parser.
+
+exec(str_len, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Int', byte_size(Bin)} | Rest]};
+
+exec(str_nth, #r0{ds = [{'Int', N}, {'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', binary:part(Bin, N, 1)} | Rest]};
+
+%% str_byte_at: get integer byte value at position
+exec(str_byte_at, #r0{ds = [{'Int', N}, {'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Int', binary:at(Bin, N)} | Rest]};
+
+exec(str_slice, #r0{ds = [{'Int', Len}, {'Int', Start}, {'String', Bin} | Rest]} = S) ->
+    ActualLen = min(Len, byte_size(Bin) - Start),
+    S#r0{ds = [{'String', binary:part(Bin, Start, max(0, ActualLen))} | Rest]};
+
+exec(str_concat, #r0{ds = [{'String', B}, {'String', A} | Rest]} = S) ->
+    S#r0{ds = [{'String', <<A/binary, B/binary>>} | Rest]};
+
+exec(str_eq, #r0{ds = [{'String', B}, {'String', A} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', A =:= B} | Rest]};
+
+exec(str_to_int, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    try
+        N = binary_to_integer(Bin),
+        S#r0{ds = [{'Bool', true}, {'Int', N} | Rest]}
+    catch _:_ ->
+        S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+exec(str_to_float, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    try
+        F = binary_to_float(Bin),
+        S#r0{ds = [{'Bool', true}, {'Float', F} | Rest]}
+    catch _:_ ->
+        S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+exec(str_find, #r0{ds = [{'String', Pat}, {'String', Bin} | Rest]} = S) ->
+    case binary:match(Bin, Pat) of
+        {Pos, _} -> S#r0{ds = [{'Bool', true}, {'Int', Pos} | Rest]};
+        nomatch -> S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+%%% === Type Conversion Primitives (5) ===
+
+exec(to_string, #r0{ds = [{Type, Val} | Rest]} = S) ->
+    Str = case Type of
+        'String' -> Val;
+        'Int' -> integer_to_binary(Val);
+        'Float' -> float_to_binary(Val, [{decimals, 10}, compact]);
+        'Bool' -> atom_to_binary(Val, utf8);
+        'Atom' -> atom_to_binary(Val, utf8);
+        _ -> list_to_binary(io_lib:format("~p", [Val]))
+    end,
+    S#r0{ds = [{'String', Str} | Rest]};
+
+exec(to_int, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Int', binary_to_integer(Bin)} | Rest]};
+exec(to_int, #r0{ds = [{'Float', F} | Rest]} = S) ->
+    S#r0{ds = [{'Int', trunc(F)} | Rest]};
+exec(to_int, #r0{ds = [{'Bool', true} | Rest]} = S) ->
+    S#r0{ds = [{'Int', 1} | Rest]};
+exec(to_int, #r0{ds = [{'Bool', false} | Rest]} = S) ->
+    S#r0{ds = [{'Int', 0} | Rest]};
+
+exec(to_float, #r0{ds = [{'Int', N} | Rest]} = S) ->
+    S#r0{ds = [{'Float', float(N)} | Rest]};
+exec(to_float, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Float', binary_to_float(Bin)} | Rest]};
+
+exec(to_atom, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Atom', binary_to_atom(Bin, utf8)} | Rest]};
+
+exec(to_bool, #r0{ds = [{'Int', 0} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', false} | Rest]};
+exec(to_bool, #r0{ds = [{'Int', _} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', true} | Rest]};
+
+%%% === Extended String Primitives (6) ===
+
+exec(str_split, #r0{ds = [{'String', Sep}, {'String', Bin} | Rest]} = S) ->
+    Parts = binary:split(Bin, Sep, [global]),
+    S#r0{ds = [{'List', [{'String', P} || P <- Parts]} | Rest]};
+
+exec(str_contains, #r0{ds = [{'String', Pat}, {'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', binary:match(Bin, Pat) =/= nomatch} | Rest]};
+
+exec(str_starts_with, #r0{ds = [{'String', Pre}, {'String', Bin} | Rest]} = S) ->
+    PreLen = byte_size(Pre),
+    Result = byte_size(Bin) >= PreLen andalso binary:part(Bin, 0, PreLen) =:= Pre,
+    S#r0{ds = [{'Bool', Result} | Rest]};
+
+exec(str_ends_with, #r0{ds = [{'String', Suf}, {'String', Bin} | Rest]} = S) ->
+    SufLen = byte_size(Suf),
+    BinLen = byte_size(Bin),
+    Result = BinLen >= SufLen andalso binary:part(Bin, BinLen - SufLen, SufLen) =:= Suf,
+    S#r0{ds = [{'Bool', Result} | Rest]};
+
+exec(str_trim, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', string:trim(Bin)} | Rest]};
+
+exec(str_replace, #r0{ds = [{'String', Rep}, {'String', Pat}, {'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', binary:replace(Bin, Pat, Rep, [global])} | Rest]};
+
+exec(str_upper, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', string:uppercase(Bin)} | Rest]};
+
+exec(str_lower, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', string:lowercase(Bin)} | Rest]};
+
+exec(str_reverse, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'String', list_to_binary(lists:reverse(binary_to_list(Bin)))} | Rest]};
+
+exec(str_substring, #r0{ds = [{'Int', Len}, {'Int', Start}, {'String', Bin} | Rest]} = S) ->
+    ActualLen = min(Len, max(0, byte_size(Bin) - Start)),
+    S#r0{ds = [{'String', binary:part(Bin, Start, max(0, ActualLen))} | Rest]};
+
+%%% === Extended List Primitives (10) ===
+
+exec(list_len, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'Int', length(L)} | Rest]};
+
+%% Generic length - works on both String and List
+exec(generic_len, #r0{ds = [{'String', Bin} | Rest]} = S) ->
+    S#r0{ds = [{'Int', byte_size(Bin)} | Rest]};
+exec(generic_len, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'Int', length(L)} | Rest]};
+
+exec(list_append, #r0{ds = [{'List', B}, {'List', A} | Rest]} = S) ->
+    S#r0{ds = [{'List', A ++ B} | Rest]};
+
+exec(list_reverse, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'List', lists:reverse(L)} | Rest]};
+
+exec(list_nth, #r0{ds = [{'Int', N}, {'List', L} | Rest]} = S) ->
+    S#r0{ds = [lists:nth(N + 1, L) | Rest]};  %% 0-indexed
+
+exec(list_last, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [lists:last(L) | Rest]};
+
+exec(list_take, #r0{ds = [{'Int', N}, {'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'List', lists:sublist(L, N)} | Rest]};
+
+exec(list_drop, #r0{ds = [{'Int', N}, {'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'List', lists:nthtail(min(N, length(L)), L)} | Rest]};
+
+exec(list_empty, #r0{ds = [{'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', L =:= []} | Rest]};
+
+exec(list_contains, #r0{ds = [Elem, {'List', L} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', lists:member(Elem, L)} | Rest]};
+
+exec(list_flatten, #r0{ds = [{'List', L} | Rest]} = S) ->
+    Flat = lists:flatmap(fun({'List', Sub}) -> Sub; (E) -> [E] end, L),
+    S#r0{ds = [{'List', Flat} | Rest]};
+
+exec(list_zip, #r0{ds = [{'List', B}, {'List', A} | Rest]} = S) ->
+    Zipped = [{'List', [X, Y]} || {X, Y} <- lists:zip(A, B)],
+    S#r0{ds = [{'List', Zipped} | Rest]};
+
+exec(list_map, #r0{ds = [{'Code', Body}, {'List', L} | Rest]} = S) ->
+    Mapped = lists:map(fun(Elem) ->
+        S1 = run(Body, S#r0{ds = [Elem]}),
+        hd(get_ds(S1))
+    end, L),
+    S#r0{ds = [{'List', Mapped} | Rest]};
+
+exec(list_filter, #r0{ds = [{'Code', Body}, {'List', L} | Rest]} = S) ->
+    Filtered = lists:filter(fun(Elem) ->
+        S1 = run(Body, S#r0{ds = [Elem]}),
+        case hd(get_ds(S1)) of
+            {'Bool', true} -> true;
+            _ -> false
+        end
+    end, L),
+    S#r0{ds = [{'List', Filtered} | Rest]};
+
+exec(list_fold, #r0{ds = [{'Code', Body}, Init, {'List', L} | Rest]} = S) ->
+    Result = lists:foldl(fun(Elem, Acc) ->
+        S1 = run(Body, S#r0{ds = [Elem, Acc]}),
+        hd(get_ds(S1))
+    end, Init, L),
+    S#r0{ds = [Result | Rest]};
+
+%%% === Extended Map Primitives (4) ===
+
+exec(map_values, #r0{ds = [{'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'List', maps:values(Map)} | Rest]};
+
+exec(map_size, #r0{ds = [{'Map', Map} | Rest]} = S) ->
+    S#r0{ds = [{'Int', maps:size(Map)} | Rest]};
+
+exec(map_merge, #r0{ds = [{'Map', B}, {'Map', A} | Rest]} = S) ->
+    S#r0{ds = [{'Map', maps:merge(A, B)} | Rest]};
+
+exec(map_get_or, #r0{ds = [Default, Key, {'Map', Map} | Rest]} = S) ->
+    case maps:find(Key, Map) of
+        {ok, Value} -> S#r0{ds = [Value | Rest]};
+        error -> S#r0{ds = [Default | Rest]}
+    end;
+
+%%% === Tuple Primitives (6) ===
+
+exec(tuple_make, #r0{ds = [{'List', Items} | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', list_to_tuple([V || {_, V} <- Items])} | Rest]};
+
+%% list-to-raw: strip one level of type tags from list elements, wrap as Tuple
+%% {List, [{Tag1,V1}, {Tag2,V2}]} -> {Tuple, [V1, V2]}
+exec(list_to_raw, #r0{ds = [{'List', Items} | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', [V || {_, V} <- Items]} | Rest]};
+
+%% deep-to-raw: recursively strip all type tags, wrap as Tuple
+%% Used for building abstract forms where nested structures must be raw
+exec(deep_to_raw, #r0{ds = [Item | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', deep_strip(Item)} | Rest]};
+
+exec(tuple_to_list, #r0{ds = [{'Tuple', T} | Rest]} = S) ->
+    S#r0{ds = [{'List', [auto_tag(E) || E <- tuple_to_list(T)]} | Rest]};
+
+exec(tuple_size_op, #r0{ds = [{'Tuple', T} | Rest]} = S) ->
+    S#r0{ds = [{'Int', tuple_size(T)} | Rest]};
+
+exec(ok_tuple, #r0{ds = [Val | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', {ok, Val}} | Rest]};
+
+exec(error_tuple, #r0{ds = [Val | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', {error, Val}} | Rest]};
+
+exec(is_ok, #r0{ds = [{'Tuple', {ok, _}} | _]} = S) ->
+    S#r0{ds = [{'Bool', true} | S#r0.ds]};
+exec(is_ok, #r0{} = S) ->
+    S#r0{ds = [{'Bool', false} | S#r0.ds]};
+
+exec(unwrap_ok, #r0{ds = [{'Tuple', {ok, Val}} | Rest]} = S) ->
+    S#r0{ds = [auto_tag(Val) | Rest]};
+
+exec(unwrap_error, #r0{ds = [{'Tuple', {error, Val}} | Rest]} = S) ->
+    S#r0{ds = [auto_tag(Val) | Rest]};
+
+%%% === Product Type Primitives (4) ===
+%%% Product types: {TypeName, #{field => {Type, Val}}}
+
+exec({product_new, TypeName, Fields}, #r0{ds = DS} = S) ->
+    %% Pop field values from stack (TOS = last field in source order)
+    %% Fields is source order [src, pos, len, ...], stack has last field on top
+    %% So reverse FieldVals to align with Fields
+    {FieldVals, Rest} = take_n(length(Fields), DS),
+    FieldMap = maps:from_list(lists:zip(Fields, lists:reverse(FieldVals))),
+    S#r0{ds = [{TypeName, FieldMap} | Rest]};
+
+exec({product_get, Field}, #r0{ds = [{_TypeName, FieldMap} | _] = DS} = S) ->
+    Val = maps:get(Field, FieldMap),
+    S#r0{ds = [Val | DS]};  %% Non-destructive: instance stays on stack
+
+exec({product_set, Field}, #r0{ds = [Val, {TypeName, FieldMap} | Rest]} = S) ->
+    S#r0{ds = [{TypeName, FieldMap#{Field => Val}} | Rest]};
+
+exec(product_fields, #r0{ds = [{_TypeName, FieldMap} | _] = DS} = S) ->
+    S#r0{ds = [{'List', maps:keys(FieldMap)} | DS]};
+
+%%% === I/O + Debug Primitives (4) ===
+
+exec(print_tos, #r0{ds = [{Type, Val} | Rest], output = Out} = S) ->
+    Str = case Type of
+        'String' -> Val;
+        'Int' -> integer_to_binary(Val);
+        'Float' -> float_to_binary(Val, [{decimals, 10}, compact]);
+        'Bool' -> atom_to_binary(Val, utf8);
+        'Atom' -> atom_to_binary(Val, utf8);
+        _ -> list_to_binary(io_lib:format("~p", [Val]))
+    end,
+    S#r0{ds = Rest, output = <<Out/binary, Str/binary, "\n">>};
+
+exec(print_stack, #r0{ds = DS, output = Out} = S) ->
+    Str = list_to_binary(io_lib:format("~p", [DS])),
+    S#r0{output = <<Out/binary, "Stack: ", Str/binary, "\n">>};
+
+exec(assert_true, #r0{ds = [{'Bool', true} | Rest]} = S) ->
+    S#r0{ds = Rest};
+exec(assert_true, #r0{ds = [Val | _]}) ->
+    error({assertion_failed, Val});
+
+exec(assert_eq, #r0{ds = [A, B | Rest]} = S) when A =:= B ->
+    S#r0{ds = Rest};
+exec(assert_eq, #r0{ds = [A, B | _]}) ->
+    error({assertion_failed, expected, B, got, A});
+
+%%% === File I/O Primitives (3) ===
+
+exec(file_read, #r0{ds = [{'String', Path} | Rest]} = S) ->
+    case file:read_file(Path) of
+        {ok, Content} -> S#r0{ds = [{'Bool', true}, {'String', Content} | Rest]};
+        {error, _} -> S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+exec(file_write, #r0{ds = [{'String', Content}, {'String', Path} | Rest]} = S) ->
+    case file:write_file(Path, Content) of
+        ok -> S#r0{ds = [{'Bool', true} | Rest]};
+        {error, _} -> S#r0{ds = [{'Bool', false} | Rest]}
+    end;
+
+exec(file_exists, #r0{ds = [{'String', Path} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', filelib:is_file(Path)} | Rest]};
+
+%%% === Logic Primitives (2) ===
+
+exec(and_op, #r0{ds = [{'Bool', A}, {'Bool', B} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', A andalso B} | Rest]};
+
+exec(or_op, #r0{ds = [{'Bool', A}, {'Bool', B} | Rest]} = S) ->
+    S#r0{ds = [{'Bool', A orelse B} | Rest]};
+
+%%% === Runtime Dispatch ===
+%%% For operations not directly mapped to Ring 0 primitives.
+%%% Self-contained: no ETS or interpreter dependency.
+
+%% FFI operations — handle explicitly
+exec({apply_impl, "erlang-apply"}, #r0{ds = [{'List', Args}, {'Atom', Fun}, {'Atom', Mod} | Rest]} = S) ->
+    Result = apply(Mod, Fun, [af_ffi_convert(A) || A <- Args]),
+    S#r0{ds = [af_ffi_result(Result) | Rest]};
+exec({apply_impl, "erlang-apply0"}, #r0{ds = [{'Atom', Fun}, {'Atom', Mod} | Rest]} = S) ->
+    Result = apply(Mod, Fun, []),
+    S#r0{ds = [af_ffi_result(Result) | Rest]};
+exec({apply_impl, "erlang-call"}, #r0{ds = [{'Int', N} | DS]} = S) ->
+    {Args0, [{'Atom', Fun}, {'Atom', Mod} | Rest]} = lists:split(N, DS),
+    Args = [af_ffi_convert(A) || A <- lists:reverse(Args0)],
+    Result = apply(Mod, Fun, Args),
+    S#r0{ds = [af_ffi_result(Result) | Rest]};
+exec({apply_impl, "erlang-call0"}, #r0{ds = [{'Atom', Fun}, {'Atom', Mod} | Rest]} = S) ->
+    Result = apply(Mod, Fun, []),
+    S#r0{ds = [af_ffi_result(Result) | Rest]};
+
+%% xcall: cross-module call for compiled A4 functions.
+%% Calls Mod:Fun(Stack) directly — no FFI conversion.
+%% Stack: [Fun, Mod | StackArgs...] → result replaces stack
+exec({apply_impl, "xcall"}, #r0{ds = [{'Atom', Fun}, {'Atom', Mod} | Rest]} = S) ->
+    Result = apply(Mod, Fun, [Rest]),
+    S#r0{ds = Result};
+
+%% Unknown operation — push as atom (same as interpreter behavior for unknown tokens)
+exec({apply_impl, OpName}, #r0{ds = DS} = S) ->
+    AtomName = if is_binary(OpName) -> binary_to_atom(OpName, utf8);
+                  is_list(OpName) -> list_to_atom(OpName);
+                  is_atom(OpName) -> OpName;
+                  true -> list_to_atom(lists:flatten(io_lib:format("~p", [OpName])))
+               end,
+    S#r0{ds = [{'Atom', AtomName} | DS]};
+
+%%% === Word Definition ===
+
+%% def_word (stack-based): pop body and name, define word
+exec(def_word, #r0{ds = [{'Code', Body}, {'String', Name} | Rest],
+                   words = Words} = S) ->
+    Key = if is_binary(Name) -> binary_to_list(Name); true -> Name end,
+    S#r0{ds = Rest, words = Words#{Key => Body}};
+
+%% def_word (instruction-parameter): define word with name and body
+exec({def_word, Name, Body}, #r0{words = Words} = S) ->
+    S#r0{words = Words#{Name => Body}}.
+
+%%% === Helper Functions ===
+
+tag_number(N) when is_float(N) -> {'Float', N};
+tag_number(N) -> {'Int', N}.
+
+%% Extract raw values from tagged stack items for BIF calls.
+take_values(0, Stack) -> {[], Stack};
+take_values(N, [{_, V} | Rest]) ->
+    {Vs, Remaining} = take_values(N - 1, Rest),
+    {[V | Vs], Remaining}.
+
+%% Auto-tag an Erlang term as a stack value.
+auto_tag(N) when is_integer(N) -> {'Int', N};
+auto_tag(F) when is_float(F) -> {'Float', F};
+auto_tag(true) -> {'Bool', true};
+auto_tag(false) -> {'Bool', false};
+auto_tag(B) when is_binary(B) -> {'String', B};
+auto_tag(L) when is_list(L) -> {'List', [auto_tag(E) || E <- L]};
+auto_tag(M) when is_map(M) -> {'Map', M};
+auto_tag(T) when is_tuple(T) -> {'Tuple', T};
+auto_tag(A) when is_atom(A) -> {'Atom', A};
+auto_tag(Other) -> {'Any', Other}.
+
+%% FFI helpers — convert tagged stack items to/from raw Erlang terms.
+af_ffi_convert({'Int', N}) -> N;
+af_ffi_convert({'Float', F}) -> F;
+af_ffi_convert({'Bool', B}) -> B;
+af_ffi_convert({'String', S}) -> S;
+af_ffi_convert({'Atom', A}) -> A;
+af_ffi_convert({'List', L}) -> [af_ffi_convert(E) || E <- L];
+af_ffi_convert({'Map', M}) -> M;
+af_ffi_convert({'Tuple', T}) -> T;
+af_ffi_convert({_, V}) -> V.
+
+af_ffi_result(Result) -> auto_tag(Result).
+
+%% Deep strip: recursively remove all A4 type tags from a value.
+%% Used by deep_to_raw for building raw Erlang terms from A4 stack items.
+deep_strip({'Int', N}) -> N;
+deep_strip({'Float', F}) -> F;
+deep_strip({'Bool', B}) -> B;
+deep_strip({'String', S}) -> S;
+deep_strip({'Atom', A}) -> A;
+deep_strip({'List', Items}) -> [deep_strip(I) || I <- Items];
+deep_strip({'Tuple', T}) -> T;  %% Tuple values are already raw
+deep_strip({'Map', M}) ->
+    maps:from_list([{deep_strip(K), deep_strip(V)} || {K, V} <- maps:to_list(M)]);
+deep_strip({Tag, V}) when is_atom(Tag) -> V;  %% Unknown tagged value
+deep_strip(Other) -> Other.  %% Already raw
+
+%% Take N items from stack (for product type construction).
+take_n(0, Stack) -> {[], Stack};
+take_n(N, [H | Rest]) ->
+    {Items, Remaining} = take_n(N - 1, Rest),
+    {[H | Items], Remaining}.
+
+%% Check if stack matches a type signature (TOS-first).
+%% SigIn entries: atom (type match) | {Type, Value} (value constraint) | 'Any'
+match_sig_check([], _Stack) -> true;
+match_sig_check(_, []) -> false;
+match_sig_check(['Any' | SigRest], [_ | StackRest]) ->
+    match_sig_check(SigRest, StackRest);
+match_sig_check([{Type, Value} | SigRest], [{Type, Value} | StackRest]) ->
+    match_sig_check(SigRest, StackRest);
+match_sig_check([Type | SigRest], [{Type, _} | StackRest]) when is_atom(Type) ->
+    match_sig_check(SigRest, StackRest);
+match_sig_check(_, _) -> false.
+
+find_matching_clause([], _Stack) -> not_found;
+find_matching_clause([{SigIn, Body} | Rest], Stack) ->
+    case match_sig_check(SigIn, Stack) of
+        true -> {ok, Body};
+        false -> find_matching_clause(Rest, Stack)
+    end.
+
+%%% === Compile Interpreted Module ===
+%%% Runtime backend: generates interpreted-mode BEAM from word definitions.
+%%% Callable via xcall from compiled A4 code.
+%%% Takes stack: [{List, Defs}, {String, ModName} | Rest]
+%%% Defs are [{Tuple, {Name, SigIn, SigOut, Body}}, ...]
+
+compile_interp_module([{'List', Defs}, {'String', ModName} | Rest]) ->
+    ModAtom = binary_to_atom(ModName, utf8),
+    TupleDefs = [extract_xcall_def(D) || D <- Defs],
+    case TupleDefs of
+        [] -> [{'Bool', false} | Rest];
+        _ ->
+            %% Retranslate apply_impl -> call for inter-word references
+            AllNames = lists:usort([N || {N, _, _, _} <- TupleDefs]),
+            Retranslated = af_ring2:retranslate_bodies(TupleDefs, AllNames),
+            %% Merge multi-clause words into select_clause bodies
+            Merged = af_ring2:merge_multi_clause(Retranslated),
+            case af_ring1:compile_module(ModAtom, Merged, [{mode, interpreted}]) of
+                {ok, _} -> [{'Bool', true} | Rest];
+                {error, Err} ->
+                    io:format("[compile_interp] ERROR: ~p~n", [Err]),
+                    [{'Bool', false} | Rest]
+            end
+    end.
+
+extract_xcall_def({'Tuple', Def}) ->
+    [RawName, RawSigIn, RawSigOut, RawBody] = tuple_to_list(Def),
+    {ensure_name_string(RawName),
+     strip_sig_list(RawSigIn),
+     strip_sig_list(RawSigOut),
+     strip_body_list(RawBody)}.
+
+ensure_name_string(B) when is_binary(B) -> binary_to_list(B);
+ensure_name_string(A) when is_atom(A) -> atom_to_list(A);
+ensure_name_string(L) when is_list(L) -> L.
+
+%% Strip A4 type tags from sig_in/sig_out lists and combine value constraints.
+%% Input may be raw list, {List, L}, or {Tuple, L} from make-tuple.
+%% Compiler.a4 stores sig_in TOS-first: ["Int", "String", "hello"] where
+%% "hello" is a value constraint for the preceding "String" type.
+%% combine_sig processes left-to-right: type followed by value = constraint.
+strip_sig_list(L) when is_list(L) -> combine_sig(L);
+strip_sig_list({'List', L}) -> combine_sig(L);
+strip_sig_list({'Tuple', L}) when is_list(L) -> combine_sig(L).
+
+combine_sig([]) -> [];
+combine_sig([{'Atom', V} | Rest]) -> [V | combine_sig(Rest)];
+combine_sig([V | Rest]) when is_atom(V) -> [V | combine_sig(Rest)];
+combine_sig([{'String', TypeBin} | Rest]) ->
+    case classify_sig_elem(TypeBin) of
+        {type, Atom} ->
+            %% Check if next element is a value constraint for this type
+            case Rest of
+                [{'String', ValBin} | Rest2] ->
+                    case classify_sig_elem(ValBin) of
+                        {type, _} -> [Atom | combine_sig(Rest)];
+                        {int_value, N} -> [{Atom, N} | combine_sig(Rest2)];
+                        {bool_value, B} -> [{Atom, B} | combine_sig(Rest2)];
+                        {string_value, S} -> [{Atom, S} | combine_sig(Rest2)]
+                    end;
+                _ -> [Atom | combine_sig(Rest)]
+            end;
+        {int_value, N} -> [{'Int', N} | combine_sig(Rest)];
+        {bool_value, B} -> [{'Bool', B} | combine_sig(Rest)];
+        {string_value, S} -> [{'String', S} | combine_sig(Rest)]
+    end.
+
+classify_sig_elem(<<"True">>) -> {bool_value, true};
+classify_sig_elem(<<"true">>) -> {bool_value, true};
+classify_sig_elem(<<"False">>) -> {bool_value, false};
+classify_sig_elem(<<"false">>) -> {bool_value, false};
+classify_sig_elem(Bin) when is_binary(Bin) ->
+    case try_parse_int_bin(Bin) of
+        {ok, N} -> {int_value, N};
+        error ->
+            case Bin of
+                <<C, _/binary>> when C >= $A, C =< $Z ->
+                    {type, binary_to_atom(Bin, utf8)};
+                _ -> {string_value, Bin}
+            end
+    end.
+
+try_parse_int_bin(Bin) ->
+    try {ok, binary_to_integer(Bin)}
+    catch _:_ -> error
+    end.
+
+%% Strip A4 type tags from body instruction lists
+%% Converts [{Atom, dup}, {Tuple, {lit, ...}}, ...] -> [dup, {lit, ...}, ...]
+%% Also: codegen.a4 produces select_clause as a single {lit,{List,Clauses}} without
+%% the separate select_clause atom. We insert it automatically.
+strip_body_list(L) when is_list(L) -> expand_select_clauses([strip_body_inst(X) || X <- L]);
+strip_body_list({'List', L}) -> strip_body_list(L);
+strip_body_list({'Tuple', L}) when is_list(L) -> strip_body_list(L).
+
+expand_select_clauses([]) -> [];
+expand_select_clauses([{lit, {'List', Clauses}} = Inst | Rest])
+  when is_list(Clauses), Clauses =/= [] ->
+    %% Check if clauses look like select_clause pairs {SigIn, Body}
+    case hd(Clauses) of
+        {_, _} -> [Inst, select_clause | expand_select_clauses(Rest)];
+        _ -> [Inst | expand_select_clauses(Rest)]
+    end;
+expand_select_clauses([Inst | Rest]) -> [Inst | expand_select_clauses(Rest)].
+
+strip_body_inst({'Atom', V}) -> V;
+strip_body_inst({'Tuple', T}) -> fix_tuple_inst(T);
+strip_body_inst(V) when is_atom(V) -> V;
+strip_body_inst(V) when is_tuple(V) -> fix_tuple_inst(V);
+strip_body_inst(V) -> V.
+
+fix_tuple_inst({apply_impl, Name}) ->
+    {apply_impl, ensure_name_string(Name)};
+fix_tuple_inst({call, Name}) ->
+    {call, ensure_name_string(Name)};
+fix_tuple_inst({lit, Val}) ->
+    {lit, fix_lit_val(Val)};
+fix_tuple_inst({product_new, TypeName, Fields}) ->
+    {product_new, strip_atom_tag(TypeName), strip_sig_list(Fields)};
+fix_tuple_inst({product_get, Field}) ->
+    {product_get, strip_atom_tag(Field)};
+fix_tuple_inst({product_set, Field}) ->
+    {product_set, strip_atom_tag(Field)};
+fix_tuple_inst(select_clause) -> select_clause;
+fix_tuple_inst(Other) -> Other.
+
+strip_atom_tag({'Atom', V}) -> V;
+strip_atom_tag({'String', V}) -> binary_to_atom(V, utf8);
+strip_atom_tag(V) when is_atom(V) -> V;
+strip_atom_tag(V) -> V.
+
+fix_lit_val({'Int', V}) -> {'Int', V};
+fix_lit_val({'Bool', V}) -> {'Bool', V};
+fix_lit_val({'String', V}) -> {'String', V};
+fix_lit_val({'Float', V}) -> {'Float', V};
+fix_lit_val({'Atom', V}) -> {'Atom', V};
+fix_lit_val({'List', Clauses}) when is_list(Clauses) ->
+    {'List', [fix_clause(C) || C <- Clauses]};
+fix_lit_val({'Tuple', V}) -> fix_lit_val(V);
+fix_lit_val(V) when is_tuple(V) ->
+    %% Could be an inner tuple like {'Int', 42} from make-tuple
+    case tuple_to_list(V) of
+        [Tag, Val] when Tag =:= 'Int'; Tag =:= 'Bool';
+                        Tag =:= 'String'; Tag =:= 'Float';
+                        Tag =:= 'Atom' -> {Tag, Val};
+        _ -> V
+    end;
+fix_lit_val(V) -> V.
+
+fix_clause({'Tuple', T}) -> fix_clause(T);
+fix_clause(T) when is_tuple(T) ->
+    case tuple_to_list(T) of
+        [SigIn, Body] -> {strip_sig_list(SigIn), strip_body_list(Body)};
+        _ -> T
+    end;
+fix_clause(V) -> V.

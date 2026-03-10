@@ -1,0 +1,31 @@
+# test_bootstrap.a4 -- Test the self-hosted compiler bootstrap
+#
+# Verifies that af_core_compiler can compile A4 source to BEAM modules
+# and that the compiled modules produce correct results.
+
+# Test 1: Compile a simple word via FFI to af_core_compiler
+# eval_and_compile(Source, Filename, ModName) -> {ok, ModAtom}
+# erlang-call: arg3 arg2 arg1 mod fun arity erlang-call
+# args pushed deepest-first (arg1 deepest, arg3 on top before mod/fun/arity)
+": square Int -> Int ; dup * ."
+"test"
+"test_square"
+af_core_compiler eval_and_compile 3 erlang-call
+"Test 1 - compile simple word:" print
+print
+
+# Test 2: Tokenize
+": hello Int -> Int ; dup + ." "test" tokenize
+"Test 2 - tokenize (token count):" print
+length print
+
+# Test 3: File I/O
+"Test 3 - file I/O:" print
+"samples/square.a4" file-exists? "  square.a4 exists:" print print
+"samples/square.a4" read-file length "  square.a4 size:" print print
+
+# Test 4: get-all-words
+"Test 4 - reflection:" print
+get-all-words length "  user-defined word count:" print print
+
+"Bootstrap tests complete." print

@@ -6,6 +6,8 @@
 -include("af_type.hrl").
 
 -export([compile/1, compile/2, compile_to_dir/2]).
+-export([compile_selfhosted/1, compile_selfhosted/2,
+         compile_to_dir_selfhosted/2]).
 
 %% Compile an .a4 file to a BEAM module.
 %% Module name defaults to the file basename (without .a4).
@@ -58,6 +60,63 @@ compile_to_dir(File, OutDir) ->
         {error, Reason} ->
             {error, {read_error, File, Reason}}
     end.
+
+%%% === Self-Hosted Compilation ===
+%%% Uses af_r0_parser + af_r0_compiler, no interpreter dependency.
+
+-spec compile_selfhosted(string()) -> {ok, atom()} | {error, term()}.
+compile_selfhosted(File) ->
+    BaseName = filename:basename(File, ".a4"),
+    compile_selfhosted(File, BaseName).
+
+-spec compile_selfhosted(string(), string()) -> {ok, atom()} | {error, term()}.
+compile_selfhosted(File, ModName) ->
+    af_ring2:compile_file_selfhosted(File, ModName).
+
+-spec compile_to_dir_selfhosted(string(), string()) -> {ok, atom()} | {error, term()}.
+compile_to_dir_selfhosted(File, OutDir) ->
+    BaseName = filename:basename(File, ".a4"),
+    ModName = "af_r2_" ++ BaseName,
+    ModAtom = list_to_atom(ModName),
+    case file:read_file(File) of
+        {ok, Content} ->
+            Tokens = af_r0_parser:parse(Content, list_to_binary(File)),
+            WordDefs0 = af_r0_compiler:compile_tokens(Tokens),
+            case WordDefs0 of
+                [] -> {error, {no_compilable_words, File}};
+                _ ->
+                    AllNames = lists:usort([N || {N, _, _, _} <- WordDefs0]),
+                    WordDefs = retranslate_bodies(WordDefs0, AllNames),
+                    case af_ring1:compile_to_binary(ModAtom, WordDefs, [{mode, native}]) of
+                        {ok, Binary} ->
+                            ok = filelib:ensure_dir(filename:join(OutDir, "x")),
+                            BeamFile = filename:join(OutDir, atom_to_list(ModAtom) ++ ".beam"),
+                            ok = file:write_file(BeamFile, Binary),
+                            {ok, ModAtom};
+                        error -> {error, {compilation_failed, File}}
+                    end
+            end;
+        {error, Reason} ->
+            {error, {read_error, File, Reason}}
+    end.
+
+retranslate_bodies(WordDefs, AllNames) ->
+    [{Name, SI, SO, retranslate_body(Body, AllNames)}
+     || {Name, SI, SO, Body} <- WordDefs].
+
+retranslate_body(Body, AllNames) ->
+    lists:map(fun
+        ({apply_impl, OpName}) ->
+            case lists:member(OpName, AllNames) of
+                true -> {call, OpName};
+                false -> {apply_impl, OpName}
+            end;
+        ({lit, {'List', Clauses}}) when is_list(Clauses) ->
+            NewClauses = [{SigIn, retranslate_body(ClauseBody, AllNames)}
+                          || {SigIn, ClauseBody} <- Clauses],
+            {lit, {'List', NewClauses}};
+        (Other) -> Other
+    end, Body).
 
 %%% Internal
 

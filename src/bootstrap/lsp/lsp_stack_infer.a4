@@ -1,0 +1,208 @@
+# lsp_stack_infer.a4 — Stack inference engine for ActorForth LSP
+#
+# Walks a token list and simulates stack effects at each position.
+# Returns a list of stack snapshot maps.
+#
+# Each snapshot: Map with keys "idx", "line", "col", "token", "stack"
+#   where "stack" is a List of type name Strings.
+#
+# This is the killer feature: hover over any token and see the
+# exact stack picture at that point.
+
+# === Primitive Stack Effect Table ===
+# Returns [PopCount, PushTypes...] or nil if unknown.
+# PopCount is an Int, PushTypes is a list of type name strings.
+
+: prim-effect String -> List ;
+    : "dup" -> List ; drop nil "dup" cons
+    : "drop" -> List ; drop nil "drop" cons
+    : "swap" -> List ; drop nil "swap" cons
+    : "rot" -> List ; drop nil "rot" cons
+    : "over" -> List ; drop nil "over" cons
+    : "2dup" -> List ; drop nil "2dup" cons
+    : "+" -> List ; drop nil "Int" cons 2 cons
+    : "-" -> List ; drop nil "Int" cons 2 cons
+    : "*" -> List ; drop nil "Int" cons 2 cons
+    : "/" -> List ; drop nil "Int" cons 2 cons
+    : "mod" -> List ; drop nil "Int" cons 2 cons
+    : "==" -> List ; drop nil "Bool" cons 2 cons
+    : "!=" -> List ; drop nil "Bool" cons 2 cons
+    : "<" -> List ; drop nil "Bool" cons 2 cons
+    : ">" -> List ; drop nil "Bool" cons 2 cons
+    : "<=" -> List ; drop nil "Bool" cons 2 cons
+    : ">=" -> List ; drop nil "Bool" cons 2 cons
+    : "not" -> List ; drop nil "Bool" cons 1 cons
+    : "and" -> List ; drop nil "Bool" cons 2 cons
+    : "or" -> List ; drop nil "Bool" cons 2 cons
+    : "nil" -> List ; drop nil "List" cons 0 cons
+    : "cons" -> List ; drop nil "List" cons 2 cons
+    : "head" -> List ; drop nil "Any" cons 1 cons
+    : "tail" -> List ; drop nil "List" cons 1 cons
+    : "length" -> List ; drop nil "Int" cons 1 cons
+    : "empty?" -> List ; drop nil "Bool" cons 1 cons
+    : "append" -> List ; drop nil "List" cons 2 cons
+    : "reverse" -> List ; drop nil "List" cons 1 cons
+    : "map-new" -> List ; drop nil "Map" cons 0 cons
+    : "map-put" -> List ; drop nil "Map" cons 3 cons
+    : "map-get" -> List ; drop nil "Any" cons 2 cons
+    : "map-delete" -> List ; drop nil "Map" cons 2 cons
+    : "map-has?" -> List ; drop nil "Bool" cons 2 cons
+    : "map-keys" -> List ; drop nil "List" cons 1 cons
+    : "map-values" -> List ; drop nil "List" cons 1 cons
+    : "map-size" -> List ; drop nil "Int" cons 1 cons
+    : "concat" -> List ; drop nil "String" cons 2 cons
+    : "to-string" -> List ; drop nil "String" cons 1 cons
+    : "to-int" -> List ; drop nil "Int" cons 1 cons
+    : "to-float" -> List ; drop nil "Float" cons 1 cons
+    : "print" -> List ; drop nil 1 cons
+    : "stack" -> List ; drop nil 0 cons
+    : "assert" -> List ; drop nil 1 cons
+    : "assert-eq" -> List ; drop nil 2 cons
+    : String -> List ; drop nil .
+
+# === Stack effect application ===
+
+# apply-effect: given a stack and an effect descriptor, compute new stack
+# Effect format: [PopCount, PushType1, PushType2, ...]
+# Special effects for dup/drop/swap/rot/over/2dup handled separately.
+: apply-effect List String List -> List ;
+    dup head
+    # Check for special stack ops
+    dup "dup" ==
+    : True -> List ; drop drop drop swap drop apply-dup
+    : False -> List ; drop apply-effect-check-drop .
+
+: apply-effect-check-drop List String List String -> List ;
+    dup "drop" ==
+    : True -> List ; drop drop drop swap drop apply-drop-effect
+    : False -> List ; drop apply-effect-check-swap .
+
+: apply-effect-check-swap List String List String -> List ;
+    dup "swap" ==
+    : True -> List ; drop drop drop swap drop apply-swap-effect
+    : False -> List ; drop apply-effect-check-rot .
+
+: apply-effect-check-rot List String List String -> List ;
+    dup "rot" ==
+    : True -> List ; drop drop drop swap drop apply-rot-effect
+    : False -> List ; drop apply-effect-check-over .
+
+: apply-effect-check-over List String List String -> List ;
+    dup "over" ==
+    : True -> List ; drop drop drop swap drop apply-over-effect
+    : False -> List ; drop apply-effect-check-2dup .
+
+: apply-effect-check-2dup List String List String -> List ;
+    dup "2dup" ==
+    : True -> List ; drop drop drop swap drop apply-2dup-effect
+    : False -> List ; drop apply-numeric-effect .
+
+# Numeric effect: pop N items, push types
+: apply-numeric-effect List String List String -> List ;
+    drop drop        # drop tag and token
+    # Stack: [Effect, Stack]
+    dup head         # PopCount
+    swap tail        # PushTypes
+    # Stack: [PushTypes, PopCount, Stack]
+    rot swap         # [PopCount, Stack, PushTypes]
+    pop-n            # [ReducedStack, PushTypes]
+    swap push-types  .  # push types onto stack
+
+# pop-n: remove N items from front of list
+: pop-n Int List -> List ;
+    over 0 ==
+    : True -> List ; drop swap drop
+    : False -> List ; drop pop-n-step .
+
+: pop-n-step Int List -> List ;
+    dup empty?
+    : True -> List ; drop swap drop
+    : False -> List ; drop swap 1 - swap tail pop-n .
+
+# push-types: push a list of types onto the stack (in order)
+: push-types List List -> List ;
+    over empty?
+    : True -> List ; drop swap drop
+    : False -> List ; drop push-one-type .
+
+: push-one-type List List -> List ;
+    over head rot tail rot swap cons swap push-types .
+
+# Special stack operations
+: apply-dup List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop dup head swap cons .
+
+: apply-drop-effect List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop tail .
+
+: apply-swap-effect List -> List ;
+    dup length 2 <
+    : True -> List ; drop
+    : False -> List ; drop dup head swap tail dup head swap tail rot swap cons swap cons .
+
+: apply-rot-effect List -> List ;
+    dup length 3 <
+    : True -> List ; drop
+    : False -> List ; drop
+        dup tail tail head    # 3rd element
+        swap dup head         # 1st
+        swap tail dup head    # 2nd
+        swap tail tail        # rest
+        rot cons swap cons swap cons .
+
+: apply-over-effect List -> List ;
+    dup length 2 <
+    : True -> List ; drop
+    : False -> List ; drop dup tail head swap cons .
+
+: apply-2dup-effect List -> List ;
+    dup length 2 <
+    : True -> List ; drop
+    : False -> List ; drop dup head over tail head
+        rot rot cons swap cons .
+
+# === Token classification ===
+
+: is-int-token? String -> Bool ;
+    dup length 0 ==
+    : True -> Bool ; drop drop false
+    : False -> Bool ; drop
+        dup 0 str-byte-at 45 ==
+        : True -> Bool ; drop is-int-after-minus
+        : False -> Bool ; drop is-all-digits .
+
+: is-int-after-minus String -> Bool ;
+    dup length 1 ==
+    : True -> Bool ; drop drop false
+    : False -> Bool ; drop 1 over length 1 - substring is-all-digits .
+
+: is-all-digits String -> Bool ;
+    dup length 0 ==
+    : True -> Bool ; drop drop true
+    : False -> Bool ; drop dup 0 str-byte-at
+        dup 48 >= swap 57 <= and
+        : True -> Bool ; drop 1 over length 1 - substring is-all-digits
+        : False -> Bool ; drop drop false .
+
+# === Main inference ===
+
+# make-snap: create a stack snapshot map
+: make-snap Int Int Int String List -> Map ;
+    map-new
+    swap "stack" swap map-put
+    swap "token" swap map-put
+    swap "col" swap map-put
+    swap "line" swap map-put
+    swap "idx" swap map-put .
+
+# infer-token: given current stack and a token map, return new stack + snapshot
+: infer-token List Map Int -> List Map ;
+    # Stack: [Idx, TokenMap, CurrentStack]
+    swap dup "value" map-get swap "quoted" map-get
+    # Stack: [Quoted, Value, Idx, CurrentStack]
+    # TODO: full inference with quoted strings, int detection, etc.
+    drop drop drop drop nil map-new .

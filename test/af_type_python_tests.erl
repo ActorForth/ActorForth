@@ -11,16 +11,6 @@ eval(Input, Cont) ->
 
 setup() ->
     af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_float:init(),
-    af_type_string:init(),
-    af_type_list:init(),
-    af_type_atom:init(),
-    af_type_tuple:init(),
-    af_type_compiler:init(),
-    af_type_python:init(),
     application:ensure_all_started(erlang_python),
     ok.
 

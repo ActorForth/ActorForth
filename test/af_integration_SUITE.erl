@@ -30,19 +30,6 @@ groups() ->
 
 init_per_testcase(_TestCase, Config) ->
     af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_float:init(),
-    af_type_string:init(),
-    af_type_atom:init(),
-    af_type_list:init(),
-    af_type_map:init(),
-    af_type_tuple:init(),
-    af_type_compiler:init(),
-    af_type_product:init(),
-    af_type_ffi:init(),
-    af_type_actor:init(),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->

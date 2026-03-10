@@ -14,16 +14,7 @@ eval(Input, Cont) ->
     af_interpreter:interpret_tokens(Tokens, Cont).
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_string:init(),
-    af_type_list:init(),
-    af_type_float:init(),
-    af_type_tuple:init(),
-    af_type_ffi:init(),
-    af_type_compiler:init().
+    af_type:reset().
 
 %% --- Float type ---
 

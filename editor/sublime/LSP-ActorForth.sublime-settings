@@ -1,0 +1,17 @@
+{
+    "clients": {
+        "actorforth": {
+            "enabled": true,
+            "command": ["rebar3", "shell", "--eval", "af_lsp:start()."],
+            "selector": "source.actorforth",
+            "languages": [
+                {
+                    "languageId": "actorforth",
+                    "scopes": ["source.actorforth"],
+                    "syntaxes": ["Packages/User/ActorForth.sublime-syntax"]
+                }
+            ],
+            "initializationOptions": {}
+        }
+    }
+}

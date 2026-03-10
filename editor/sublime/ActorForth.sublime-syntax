@@ -1,0 +1,140 @@
+%YAML 1.2
+---
+name: ActorForth
+file_extensions: [a4]
+scope: source.actorforth
+first_line_match: '^#.*ActorForth|^:.*->'
+
+contexts:
+  main:
+    # Comments
+    - match: '#.*$'
+      scope: comment.line.actorforth
+
+    # String literals
+    - match: '"'
+      scope: punctuation.definition.string.begin.actorforth
+      push: string
+
+    # Word definition start
+    - match: '(?<=^|[\s])(:)(?=\s)'
+      captures:
+        1: keyword.control.definition.actorforth
+      push: word_name
+
+    # Type definition
+    - match: '\b(type)\b'
+      scope: keyword.declaration.type.actorforth
+      push: type_name
+
+    # Arrow (signature separator)
+    - match: '\->'
+      scope: keyword.operator.arrow.actorforth
+
+    # Semicolon (body start)
+    - match: '(?<=\s)(;)(?=\s|$)'
+      captures:
+        1: keyword.control.semicolon.actorforth
+
+    # Dot (definition end)
+    - match: '(?<=\s)(\.)(?=\s|$)'
+      captures:
+        1: keyword.control.dot.actorforth
+
+    # Known type names
+    - match: '\b(Int|Bool|String|Float|List|Map|Tuple|Atom|Any|Actor|Message)\b'
+      scope: storage.type.actorforth
+
+    # Boolean literals
+    - match: '\b(true|false)\b'
+      scope: constant.language.boolean.actorforth
+
+    # Nil
+    - match: '\b(nil)\b'
+      scope: constant.language.nil.actorforth
+
+    # Integer literals (including negative)
+    - match: '(?<=^|[\s])-?[0-9]+(?=[\s;.\)]|$)'
+      scope: constant.numeric.integer.actorforth
+
+    # Float literals
+    - match: '(?<=^|[\s])-?[0-9]+\.[0-9]+(?=[\s;.\)]|$)'
+      scope: constant.numeric.float.actorforth
+
+    # Stack operations
+    - match: '\b(dup|drop|swap|rot|over|2dup)\b'
+      scope: support.function.stack.actorforth
+
+    # Arithmetic
+    - match: '(?<=\s)(\+|\-|\*|/)(?=\s|$)'
+      scope: keyword.operator.arithmetic.actorforth
+
+    # Comparison
+    - match: '(?<=\s)(==|!=|<|>|<=|>=)(?=\s|$)'
+      scope: keyword.operator.comparison.actorforth
+
+    # Logic
+    - match: '\b(not|and|or)\b'
+      scope: keyword.operator.logical.actorforth
+
+    # IO / debug
+    - match: '\b(print|stack|debug|assert|assert-eq)\b'
+      scope: support.function.io.actorforth
+
+    # Actor words
+    - match: '\b(server|supervised-server|spawn|send|receive|receive-timeout)\b'
+      scope: keyword.control.actor.actorforth
+
+    # Send protocol brackets
+    - match: '<<|>>'
+      scope: keyword.operator.send.actorforth
+
+    # List operations
+    - match: '\b(cons|head|tail|append|reverse|nth|last|take|empty\?|contains\?|flatten|zip)\b'
+      scope: support.function.list.actorforth
+
+    # Map operations
+    - match: '\b(map-new|map-put|map-get|map-delete|map-has\?|map-keys|map-values|map-size|map-merge|map-get-or)\b'
+      scope: support.function.map.actorforth
+
+    # String operations
+    - match: '\b(concat|split|contains|starts-with|ends-with|trim|to-upper|to-lower|substring|replace|to-string|to-int|to-float|to-atom|length)\b'
+      scope: support.function.string.actorforth
+
+    # FFI
+    - match: '\b(erlang-apply|erlang-apply0|erlang-call|erlang-call0|erlang-new)\b'
+      scope: support.function.ffi.actorforth
+
+    # File operations
+    - match: '\b(load|read-file|write-file|file-exists\?)\b'
+      scope: support.function.file.actorforth
+
+    # Tuple operations
+    - match: '\b(make-tuple|from-tuple|tuple-size|ok-tuple|error-tuple|is-ok|unwrap-ok)\b'
+      scope: support.function.tuple.actorforth
+
+    # Product type operations (setter pattern)
+    - match: '\b[a-z][a-z0-9\-]*!(?=\s|$)'
+      scope: entity.name.function.setter.actorforth
+
+  string:
+    - meta_scope: string.quoted.double.actorforth
+    - match: '\\.'
+      scope: constant.character.escape.actorforth
+    - match: '"'
+      scope: punctuation.definition.string.end.actorforth
+      pop: true
+
+  word_name:
+    - match: '\s+'
+      scope: meta.whitespace.actorforth
+    - match: '\S+'
+      scope: entity.name.function.actorforth
+      pop: true
+
+  type_name:
+    - match: '\s+'
+      scope: meta.whitespace.actorforth
+    - match: '\S+'
+      scope: entity.name.type.actorforth
+      pop: true
