@@ -1,0 +1,27 @@
+# pattern_demo.a4 - Pattern matching on different types
+
+# Bool pattern matching — if/else via patterns
+: to-int Bool -> Int ;
+    : True  -> Int ; 1
+    : False -> Int ; 0 .
+
+True to-int print
+False to-int print
+
+# Int pattern matching — fibonacci
+: fib Int -> Int ;
+    : 0 -> 0 ;
+    : 1 -> 1 ;
+    : Int -> Int ; dup 1 - fib swap 2 - fib + .
+
+10 fib print
+
+# String pattern matching — dispatch by name
+: greet String -> String ;
+    : "hello"   -> String ; drop "Hello World!"
+    : "goodbye" -> String ; drop "Farewell!"
+    : String    -> String ; .
+
+"hello" greet print
+"goodbye" greet print
+"hey" greet print

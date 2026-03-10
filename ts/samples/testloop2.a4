@@ -1,0 +1,15 @@
+# Original version using loop primitives (not implemented):
+# : start -> ; Starting print.
+# : end -> ; Ending print.
+# : testloop2 -> ; start 5 int countdown lcount print loop end.
+
+: count_loop Int -> ;
+    : 0 -> ; drop
+    : Int -> ; dup print 1 - count_loop.
+
+: testloop2 -> ;
+    Starting print
+    5 count_loop
+    Ending print.
+
+testloop2

@@ -1,0 +1,7 @@
+# load_demo.a4 - Demonstrates loading a library file
+
+"lib_math.a4" load
+
+5 square 25 assert-eq
+3 double 6 assert-eq
+2 cube 8 assert-eq

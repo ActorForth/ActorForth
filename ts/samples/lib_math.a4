@@ -1,0 +1,5 @@
+# lib_math.a4 - A library of math utilities
+
+: square Int -> Int ; dup * .
+: double Int -> Int ; 2 * .
+: cube Int -> Int ; dup dup * * .
