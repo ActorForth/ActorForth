@@ -9,9 +9,9 @@
 - Related project: `/home/scherrey/projects/elearning` — Erlang/Elixir elearning app, target for af_server bridge integration
 
 ## Branch Structure (as of 2026-03-10)
-- `master` — stable, all tests passing
-- `a4_version3` — merged self-hosted into master, massive coverage push (target >95%)
-- `self-hosted` — Ring architecture + 100% self-hosted bootstrap (merged into a4_version3)
+- `master` — stable, 1937 tests passing, 95% coverage, includes self-hosted bootstrap + LSP
+- `a4_version3` — same as master (fast-forward merged)
+- `self-hosted` — Ring architecture + 100% self-hosted bootstrap (merged into master)
 - `a4_version2.4` through `a4_version2.6` — older feature branches
 
 ## Key Architecture Decisions
@@ -82,13 +82,13 @@
 - NOTE: Python paths are machine-specific — pixies may differ from current machine
 
 ## Test Infrastructure
-- ~1900+ EUnit tests after coverage push, 43 CT tests
+- 1937 EUnit tests, 43 CT tests, 95% total coverage (all passing on master)
+- 15 modules at 100% coverage, all modules at 92%+, lowest af_lsp at 75% (stdio ceiling)
 - Test setups: just call `af_type:reset()` — it calls `af_repl:init_types()` internally
 - PropEr property tests: `test/prop_parser_tests.erl`, `test/prop_type_tests.erl`
 - CT suites: `af_script_SUITE` (runs .a4 samples including Python demos), `af_integration_SUITE` (actor/multi-word scenarios), `stack_SUITE`
 - Python CT tests need CWD set to project root (py-import uses relative paths)
 - LLM demo test loads .env and pushes API key into Python's os.environ
-- Coverage target: >95% total across all modules
 
 ## Ring Architecture — SELF-HOSTED COMPILATION COMPLETE
 - **Ring 0** (`af_ring0.erl`): ~80 primitive instructions — stack, data, list, map, string, arithmetic, comparison, logic, control flow, types, pattern matching, actors, I/O, file, tuple, product types, FFI, conversion
@@ -131,20 +131,10 @@
 - TODO: Diagnostics (stack underflow detection), incremental inference, multi-file support
 
 ## Recent Session Work (2026-03-10)
-- Merged `self-hosted` branch into new `a4_version3` branch (off master)
-- Resolved 4 merge conflicts (af_interpreter, af_type_any, af_word_compiler, af_word_compiler_tests)
-- Massive coverage push: 6 parallel agents boosted coverage from 83% toward >95%
-  - af_lsp: 41% → 75% (stdio transport is ceiling for unit tests)
-  - af_type_any: 71% → 97%
-  - af_word_compiler: 74% → 95.6%
-  - af_ring0: 80% → 97%
-  - af_type: 80% → 100%
-  - af_actor_worker: 68% → 100%
-  - af_type_list: 77% → 100%
-  - af_type_actor, af_type_compiler, af_type_check, af_type_otp, af_r0_compiler, af_r0_parser, af_type_int: all pushed toward 95%+
-- All 1544+ tests passing before coverage push (1900+ after)
-- Wrote `editor/EDITOR_SUPPORT_PLAN.md` documenting current LSP features and future plans
-- Pre-existing test failure: `af_compiler_tests:sub_clause_test_` — needs investigation
+- Created `a4_version3` from master, merged `self-hosted`, then fast-forward merged to master
+- Coverage push from 83% → 95%: 1937 tests all passing
+- `editor/EDITOR_SUPPORT_PLAN.md` — comprehensive plan for LSP improvements and editor plugins
+- `.claude/memory/MEMORY.md` — checked into repo for cross-machine memory transfer
 
 ## Roadmap
 - DONE: String/List/Map ops, native BEAM compilation, PropEr/CT tests, language docs
@@ -164,7 +154,7 @@
 - Stale beam files: `rebar3 clean && rebar3 compile` if edits don't take effect
 - Type registry (ETS) is global — shared across all af_server instances
 - `.venv` in project root is broken (built for Python 3.12 but libpython3.12.so not in linker path)
-- Pre-existing `af_compiler_tests:sub_clause_test_` failure on a4_version3 — needs investigation
+
 
 ## User Preferences
 - Prefers minimalistic, simple design
