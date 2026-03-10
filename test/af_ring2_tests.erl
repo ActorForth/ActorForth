@@ -4,8 +4,7 @@
 -include("operation.hrl").
 
 setup() ->
-    af_type:reset(),
-    af_repl:init_types().
+    af_type:reset().
 
 %%% === Compilation Tests ===
 
@@ -296,7 +295,6 @@ translate_all_comparisons_test() ->
 
 no_words_test() ->
     af_type:reset(),
-    af_repl:init_types(),
     Result = af_ring2:compile("1 2 +", "test", "empty"),
     ?assertEqual({error, no_words_defined}, Result).
 
@@ -540,3 +538,197 @@ selfhosted_compile_test_() ->
             end, Files)
         end}
     ]].
+
+%%% === Translate Primitive: Logic Ops ===
+
+translate_logic_ops_test() ->
+    Ops = [#operation{name = "and"}, #operation{name = "or"}],
+    ?assertEqual([and_op, or_op], af_ring2:translate_body(Ops, [])).
+
+%%% === Translate Primitive: Extended List Ops ===
+
+translate_extended_list_ops_test() ->
+    Ops = [#operation{name = "length"}, #operation{name = "append"},
+           #operation{name = "reverse"}, #operation{name = "nth"},
+           #operation{name = "last"}, #operation{name = "take"},
+           #operation{name = "empty?"}, #operation{name = "contains?"},
+           #operation{name = "flatten"}, #operation{name = "zip"}],
+    ?assertEqual([generic_len, list_append, list_reverse, list_nth,
+                  list_last, list_take, list_empty, list_contains,
+                  list_flatten, list_zip],
+                 af_ring2:translate_body(Ops, [])).
+
+%%% === Translate Primitive: Map Ops ===
+
+translate_map_ops_test() ->
+    Ops = [#operation{name = "map-new"}, #operation{name = "map-put"},
+           #operation{name = "map-get"}, #operation{name = "map-delete"},
+           #operation{name = "map-keys"}, #operation{name = "map-has?"},
+           #operation{name = "map-values"}, #operation{name = "map-size"},
+           #operation{name = "map-merge"}, #operation{name = "map-get-or"}],
+    ?assertEqual([map_new, map_put, map_get, map_delete,
+                  map_keys, map_has, map_values, map_size,
+                  map_merge, map_get_or],
+                 af_ring2:translate_body(Ops, [])).
+
+%%% === Translate Primitive: String Ops ===
+
+translate_string_ops_test() ->
+    Ops = [#operation{name = "split"}, #operation{name = "contains"},
+           #operation{name = "starts-with"}, #operation{name = "ends-with"},
+           #operation{name = "trim"}, #operation{name = "to-upper"},
+           #operation{name = "to-lower"}, #operation{name = "substring"},
+           #operation{name = "replace"}, #operation{name = "str-byte-at"}],
+    ?assertEqual([str_split, str_contains, str_starts_with, str_ends_with,
+                  str_trim, str_upper, str_lower, str_substring,
+                  str_replace, str_byte_at],
+                 af_ring2:translate_body(Ops, [])).
+
+translate_str_nth_test() ->
+    Op = #operation{name = "str-nth"},
+    ?assertEqual([str_nth], af_ring2:translate_body([Op], [])).
+
+%%% === Translate Primitive: Conversion Ops ===
+
+translate_conversion_ops_test() ->
+    Ops = [#operation{name = "to-string"}, #operation{name = "to-int"},
+           #operation{name = "to-float"}, #operation{name = "to-atom"}],
+    ?assertEqual([to_string, to_int, to_float, to_atom],
+                 af_ring2:translate_body(Ops, [])).
+
+%%% === Translate Primitive: Tuple Ops ===
+
+translate_tuple_ops_test() ->
+    Ops = [#operation{name = "make-tuple"}, #operation{name = "from-tuple"},
+           #operation{name = "tuple-size"}, #operation{name = "ok-tuple"},
+           #operation{name = "error-tuple"}, #operation{name = "is-ok"},
+           #operation{name = "unwrap-ok"}],
+    ?assertEqual([tuple_make, tuple_to_list, tuple_size_op,
+                  ok_tuple, error_tuple, is_ok, unwrap_ok],
+                 af_ring2:translate_body(Ops, [])).
+
+%%% === Translate Primitive: I/O Ops ===
+
+translate_io_ops_test() ->
+    Ops = [#operation{name = "print"}, #operation{name = "stack"},
+           #operation{name = "assert"}, #operation{name = "assert-eq"}],
+    ?assertEqual([print_tos, print_stack, assert_true, assert_eq],
+                 af_ring2:translate_body(Ops, [])).
+
+%%% === Translate Primitive: File Ops ===
+
+translate_file_ops_test() ->
+    Ops = [#operation{name = "read-file"}, #operation{name = "write-file"},
+           #operation{name = "file-exists?"}],
+    ?assertEqual([file_read, file_write, file_exists],
+                 af_ring2:translate_body(Ops, [])).
+
+%%% === Translate Primitive: FFI Ops ===
+
+translate_ffi_ops_test() ->
+    Ops = [#operation{name = "erlang-apply"}, #operation{name = "erlang-apply0"},
+           #operation{name = "erlang-call"}, #operation{name = "erlang-call0"},
+           #operation{name = "erlang-new"}],
+    ?assertEqual([{apply_impl, "erlang-apply"}, {apply_impl, "erlang-apply0"},
+                  {apply_impl, "erlang-call"}, {apply_impl, "erlang-call0"},
+                  {apply_impl, "erlang-new"}],
+                 af_ring2:translate_body(Ops, [])).
+
+%%% === Translate Primitive: Actor Ops ===
+
+translate_actor_ops_test() ->
+    Ops = [#operation{name = "spawn"}, #operation{name = "send"},
+           #operation{name = "!"}, #operation{name = "receive"},
+           #operation{name = "receive-timeout"}],
+    ?assertEqual([spawn_actor, send_msg, send_msg, receive_msg, receive_timeout],
+                 af_ring2:translate_body(Ops, [])).
+
+%%% === try_literal: false case ===
+
+translate_false_literal_test() ->
+    Op = #operation{name = "false"},
+    ?assertEqual([{lit, {'Bool', false}}], af_ring2:translate_body([Op], [])).
+
+%%% === to_str/to_bin with atom inputs ===
+
+to_str_atom_test() ->
+    %% to_str is exercised indirectly through compile with atom module name
+    %% Verify atom module name works in compile
+    af_type:reset(),
+    {ok, Mod} = af_ring2:compile(
+        ": double Int -> Int ; dup + .", test, atom_mod),
+    ?assertEqual(af_r2_atom_mod, Mod),
+    ?assertEqual([{'Int', 10}], Mod:double([{'Int', 5}])).
+
+to_bin_atom_test() ->
+    %% to_bin is exercised indirectly through compile_selfhosted with atom args
+    {ok, Mod} = af_ring2:compile_selfhosted(
+        ": triple Int -> Int ; dup dup + + .", test, sh_atom_mod),
+    ?assertEqual(af_r2_sh_atom_mod, Mod),
+    ?assertEqual([{'Int', 15}], Mod:triple([{'Int', 5}])).
+
+%%% === End-to-End Selfhosted: Logic Ops ===
+
+selfhosted_logic_ops_test_() ->
+    [{"selfhosted and/or ops", fun() ->
+        Source = ": both-true Bool Bool -> Bool ; and .\n"
+                 ": either-true Bool Bool -> Bool ; or .",
+        {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_logic"),
+        ?assertEqual([{'Bool', true}], Mod:'both-true'([{'Bool', true}, {'Bool', true}])),
+        ?assertEqual([{'Bool', false}], Mod:'both-true'([{'Bool', false}, {'Bool', true}])),
+        ?assertEqual([{'Bool', true}], Mod:'either-true'([{'Bool', true}, {'Bool', false}])),
+        ?assertEqual([{'Bool', false}], Mod:'either-true'([{'Bool', false}, {'Bool', false}]))
+    end}].
+
+%%% === End-to-End Selfhosted: Map Ops ===
+
+selfhosted_map_ops_test_() ->
+    [{"selfhosted map operations", fun() ->
+        Source = ": make-map Any -> Map ; drop map-new .\n"
+                 ": map-count Map -> Int Map ; dup map-size .",
+        {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_map"),
+        [{'Map', M}] = Mod:'make-map'([{'Int', 0}]),
+        ?assertEqual(#{}, M),
+        Result = Mod:'map-count'([{'Map', #{}}]),
+        ?assertEqual([{'Int', 0}, {'Map', #{}}], Result)
+    end}].
+
+%%% === End-to-End Selfhosted: List Ops ===
+
+selfhosted_list_ops_test_() ->
+    [{"selfhosted list operations", fun() ->
+        Source = ": make-empty Any -> List ; drop nil .\n"
+                 ": prepend Any List -> List ; swap cons .",
+        {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_list"),
+        [{'List', L1}] = Mod:'make-empty'([{'Int', 0}]),
+        ?assertEqual([], L1),
+        [{'List', L2}] = Mod:prepend([{'List', []}, {'Int', 42}]),
+        ?assertEqual([{'Int', 42}], L2)
+    end}].
+
+%%% === End-to-End Selfhosted: String Ops ===
+
+selfhosted_string_ops_test_() ->
+    [{"selfhosted string operations", fun() ->
+        Source = ": shout String -> String ; to-upper .\n"
+                 ": whisper String -> String ; to-lower .\n"
+                 ": clean String -> String ; trim .",
+        {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_strop"),
+        ?assertEqual([{'String', <<"HELLO">>}],
+                     Mod:shout([{'String', <<"hello">>}])),
+        ?assertEqual([{'String', <<"hello">>}],
+                     Mod:whisper([{'String', <<"HELLO">>}])),
+        ?assertEqual([{'String', <<"hello">>}],
+                     Mod:clean([{'String', <<"  hello  ">>}]))
+    end}].
+
+%%% === merge_multi_clause direct test ===
+
+merge_multi_clause_single_test() ->
+    %% Single clause should pass through unchanged
+    Defs = [{"foo", [{'Int'}], [{'Int'}], [add]}],
+    %% Use compile_selfhosted which calls merge_multi_clause internally
+    %% Instead, test via translate_body + compile round-trip
+    Source = ": single Int -> Int ; 1 + .",
+    {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_single_mc"),
+    ?assertEqual([{'Int', 6}], Mod:single([{'Int', 5}])).

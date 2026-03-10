@@ -28,7 +28,7 @@ init() ->
 
 reset() ->
     catch ets:delete(?TABLE),
-    init().
+    af_repl:init_types().
 
 register_type(#af_type{} = Type) ->
     ets:insert(?TABLE, Type),

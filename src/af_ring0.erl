@@ -13,7 +13,8 @@
 -export([
     new/0, run/2, exec/2,
     get_ds/1, get_rs/1, get_types/1, get_words/1,
-    get_output/1, set_input/2, set_ds/2, set_words/2, set_types/2
+    get_output/1, set_input/2, set_ds/2, set_words/2, set_types/2,
+    compile_interp_module/1  %% xcall-able: compile defs to interpreted BEAM
 ]).
 
 -record(r0, {
@@ -509,6 +510,16 @@ exec(map_get_or, #r0{ds = [Default, Key, {'Map', Map} | Rest]} = S) ->
 exec(tuple_make, #r0{ds = [{'List', Items} | Rest]} = S) ->
     S#r0{ds = [{'Tuple', list_to_tuple([V || {_, V} <- Items])} | Rest]};
 
+%% list-to-raw: strip one level of type tags from list elements, wrap as Tuple
+%% {List, [{Tag1,V1}, {Tag2,V2}]} -> {Tuple, [V1, V2]}
+exec(list_to_raw, #r0{ds = [{'List', Items} | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', [V || {_, V} <- Items]} | Rest]};
+
+%% deep-to-raw: recursively strip all type tags, wrap as Tuple
+%% Used for building abstract forms where nested structures must be raw
+exec(deep_to_raw, #r0{ds = [Item | Rest]} = S) ->
+    S#r0{ds = [{'Tuple', deep_strip(Item)} | Rest]};
+
 exec(tuple_to_list, #r0{ds = [{'Tuple', T} | Rest]} = S) ->
     S#r0{ds = [{'List', [auto_tag(E) || E <- tuple_to_list(T)]} | Rest]};
 
@@ -625,6 +636,13 @@ exec({apply_impl, "erlang-call0"}, #r0{ds = [{'Atom', Fun}, {'Atom', Mod} | Rest
     Result = apply(Mod, Fun, []),
     S#r0{ds = [af_ffi_result(Result) | Rest]};
 
+%% xcall: cross-module call for compiled A4 functions.
+%% Calls Mod:Fun(Stack) directly — no FFI conversion.
+%% Stack: [Fun, Mod | StackArgs...] → result replaces stack
+exec({apply_impl, "xcall"}, #r0{ds = [{'Atom', Fun}, {'Atom', Mod} | Rest]} = S) ->
+    Result = apply(Mod, Fun, [Rest]),
+    S#r0{ds = Result};
+
 %% Unknown operation — push as atom (same as interpreter behavior for unknown tokens)
 exec({apply_impl, OpName}, #r0{ds = DS} = S) ->
     AtomName = if is_binary(OpName) -> binary_to_atom(OpName, utf8);
@@ -682,6 +700,20 @@ af_ffi_convert({_, V}) -> V.
 
 af_ffi_result(Result) -> auto_tag(Result).
 
+%% Deep strip: recursively remove all A4 type tags from a value.
+%% Used by deep_to_raw for building raw Erlang terms from A4 stack items.
+deep_strip({'Int', N}) -> N;
+deep_strip({'Float', F}) -> F;
+deep_strip({'Bool', B}) -> B;
+deep_strip({'String', S}) -> S;
+deep_strip({'Atom', A}) -> A;
+deep_strip({'List', Items}) -> [deep_strip(I) || I <- Items];
+deep_strip({'Tuple', T}) -> T;  %% Tuple values are already raw
+deep_strip({'Map', M}) ->
+    maps:from_list([{deep_strip(K), deep_strip(V)} || {K, V} <- maps:to_list(M)]);
+deep_strip({Tag, V}) when is_atom(Tag) -> V;  %% Unknown tagged value
+deep_strip(Other) -> Other.  %% Already raw
+
 %% Take N items from stack (for product type construction).
 take_n(0, Stack) -> {[], Stack};
 take_n(N, [H | Rest]) ->
@@ -706,3 +738,160 @@ find_matching_clause([{SigIn, Body} | Rest], Stack) ->
         true -> {ok, Body};
         false -> find_matching_clause(Rest, Stack)
     end.
+
+%%% === Compile Interpreted Module ===
+%%% Runtime backend: generates interpreted-mode BEAM from word definitions.
+%%% Callable via xcall from compiled A4 code.
+%%% Takes stack: [{List, Defs}, {String, ModName} | Rest]
+%%% Defs are [{Tuple, {Name, SigIn, SigOut, Body}}, ...]
+
+compile_interp_module([{'List', Defs}, {'String', ModName} | Rest]) ->
+    ModAtom = binary_to_atom(ModName, utf8),
+    TupleDefs = [extract_xcall_def(D) || D <- Defs],
+    case TupleDefs of
+        [] -> [{'Bool', false} | Rest];
+        _ ->
+            %% Retranslate apply_impl -> call for inter-word references
+            AllNames = lists:usort([N || {N, _, _, _} <- TupleDefs]),
+            Retranslated = af_ring2:retranslate_bodies(TupleDefs, AllNames),
+            %% Merge multi-clause words into select_clause bodies
+            Merged = af_ring2:merge_multi_clause(Retranslated),
+            case af_ring1:compile_module(ModAtom, Merged, [{mode, interpreted}]) of
+                {ok, _} -> [{'Bool', true} | Rest];
+                {error, Err} ->
+                    io:format("[compile_interp] ERROR: ~p~n", [Err]),
+                    [{'Bool', false} | Rest]
+            end
+    end.
+
+extract_xcall_def({'Tuple', Def}) ->
+    [RawName, RawSigIn, RawSigOut, RawBody] = tuple_to_list(Def),
+    {ensure_name_string(RawName),
+     strip_sig_list(RawSigIn),
+     strip_sig_list(RawSigOut),
+     strip_body_list(RawBody)}.
+
+ensure_name_string(B) when is_binary(B) -> binary_to_list(B);
+ensure_name_string(A) when is_atom(A) -> atom_to_list(A);
+ensure_name_string(L) when is_list(L) -> L.
+
+%% Strip A4 type tags from sig_in/sig_out lists and combine value constraints.
+%% Input may be raw list, {List, L}, or {Tuple, L} from make-tuple.
+%% Compiler.a4 stores sig_in TOS-first: ["Int", "String", "hello"] where
+%% "hello" is a value constraint for the preceding "String" type.
+%% combine_sig processes left-to-right: type followed by value = constraint.
+strip_sig_list(L) when is_list(L) -> combine_sig(L);
+strip_sig_list({'List', L}) -> combine_sig(L);
+strip_sig_list({'Tuple', L}) when is_list(L) -> combine_sig(L).
+
+combine_sig([]) -> [];
+combine_sig([{'Atom', V} | Rest]) -> [V | combine_sig(Rest)];
+combine_sig([V | Rest]) when is_atom(V) -> [V | combine_sig(Rest)];
+combine_sig([{'String', TypeBin} | Rest]) ->
+    case classify_sig_elem(TypeBin) of
+        {type, Atom} ->
+            %% Check if next element is a value constraint for this type
+            case Rest of
+                [{'String', ValBin} | Rest2] ->
+                    case classify_sig_elem(ValBin) of
+                        {type, _} -> [Atom | combine_sig(Rest)];
+                        {int_value, N} -> [{Atom, N} | combine_sig(Rest2)];
+                        {bool_value, B} -> [{Atom, B} | combine_sig(Rest2)];
+                        {string_value, S} -> [{Atom, S} | combine_sig(Rest2)]
+                    end;
+                _ -> [Atom | combine_sig(Rest)]
+            end;
+        {int_value, N} -> [{'Int', N} | combine_sig(Rest)];
+        {bool_value, B} -> [{'Bool', B} | combine_sig(Rest)];
+        {string_value, S} -> [{'String', S} | combine_sig(Rest)]
+    end.
+
+classify_sig_elem(<<"True">>) -> {bool_value, true};
+classify_sig_elem(<<"true">>) -> {bool_value, true};
+classify_sig_elem(<<"False">>) -> {bool_value, false};
+classify_sig_elem(<<"false">>) -> {bool_value, false};
+classify_sig_elem(Bin) when is_binary(Bin) ->
+    case try_parse_int_bin(Bin) of
+        {ok, N} -> {int_value, N};
+        error ->
+            case Bin of
+                <<C, _/binary>> when C >= $A, C =< $Z ->
+                    {type, binary_to_atom(Bin, utf8)};
+                _ -> {string_value, Bin}
+            end
+    end.
+
+try_parse_int_bin(Bin) ->
+    try {ok, binary_to_integer(Bin)}
+    catch _:_ -> error
+    end.
+
+%% Strip A4 type tags from body instruction lists
+%% Converts [{Atom, dup}, {Tuple, {lit, ...}}, ...] -> [dup, {lit, ...}, ...]
+%% Also: codegen.a4 produces select_clause as a single {lit,{List,Clauses}} without
+%% the separate select_clause atom. We insert it automatically.
+strip_body_list(L) when is_list(L) -> expand_select_clauses([strip_body_inst(X) || X <- L]);
+strip_body_list({'List', L}) -> strip_body_list(L);
+strip_body_list({'Tuple', L}) when is_list(L) -> strip_body_list(L).
+
+expand_select_clauses([]) -> [];
+expand_select_clauses([{lit, {'List', Clauses}} = Inst | Rest])
+  when is_list(Clauses), Clauses =/= [] ->
+    %% Check if clauses look like select_clause pairs {SigIn, Body}
+    case hd(Clauses) of
+        {_, _} -> [Inst, select_clause | expand_select_clauses(Rest)];
+        _ -> [Inst | expand_select_clauses(Rest)]
+    end;
+expand_select_clauses([Inst | Rest]) -> [Inst | expand_select_clauses(Rest)].
+
+strip_body_inst({'Atom', V}) -> V;
+strip_body_inst({'Tuple', T}) -> fix_tuple_inst(T);
+strip_body_inst(V) when is_atom(V) -> V;
+strip_body_inst(V) when is_tuple(V) -> fix_tuple_inst(V);
+strip_body_inst(V) -> V.
+
+fix_tuple_inst({apply_impl, Name}) ->
+    {apply_impl, ensure_name_string(Name)};
+fix_tuple_inst({call, Name}) ->
+    {call, ensure_name_string(Name)};
+fix_tuple_inst({lit, Val}) ->
+    {lit, fix_lit_val(Val)};
+fix_tuple_inst({product_new, TypeName, Fields}) ->
+    {product_new, strip_atom_tag(TypeName), strip_sig_list(Fields)};
+fix_tuple_inst({product_get, Field}) ->
+    {product_get, strip_atom_tag(Field)};
+fix_tuple_inst({product_set, Field}) ->
+    {product_set, strip_atom_tag(Field)};
+fix_tuple_inst(select_clause) -> select_clause;
+fix_tuple_inst(Other) -> Other.
+
+strip_atom_tag({'Atom', V}) -> V;
+strip_atom_tag({'String', V}) -> binary_to_atom(V, utf8);
+strip_atom_tag(V) when is_atom(V) -> V;
+strip_atom_tag(V) -> V.
+
+fix_lit_val({'Int', V}) -> {'Int', V};
+fix_lit_val({'Bool', V}) -> {'Bool', V};
+fix_lit_val({'String', V}) -> {'String', V};
+fix_lit_val({'Float', V}) -> {'Float', V};
+fix_lit_val({'Atom', V}) -> {'Atom', V};
+fix_lit_val({'List', Clauses}) when is_list(Clauses) ->
+    {'List', [fix_clause(C) || C <- Clauses]};
+fix_lit_val({'Tuple', V}) -> fix_lit_val(V);
+fix_lit_val(V) when is_tuple(V) ->
+    %% Could be an inner tuple like {'Int', 42} from make-tuple
+    case tuple_to_list(V) of
+        [Tag, Val] when Tag =:= 'Int'; Tag =:= 'Bool';
+                        Tag =:= 'String'; Tag =:= 'Float';
+                        Tag =:= 'Atom' -> {Tag, Val};
+        _ -> V
+    end;
+fix_lit_val(V) -> V.
+
+fix_clause({'Tuple', T}) -> fix_clause(T);
+fix_clause(T) when is_tuple(T) ->
+    case tuple_to_list(T) of
+        [SigIn, Body] -> {strip_sig_list(SigIn), strip_body_list(Body)};
+        _ -> T
+    end;
+fix_clause(V) -> V.

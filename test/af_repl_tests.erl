@@ -5,17 +5,7 @@
 -include("continuation.hrl").
 
 setup() ->
-    af_type:reset(),
-    af_type_any:init(),
-    af_type_int:init(),
-    af_type_bool:init(),
-    af_type_compiler:init(),
-    af_type_product:init(),
-    af_type_string:init(),
-    af_type_map:init(),
-    af_type_list:init(),
-    af_type_actor:init(),
-    af_type_ffi:init().
+    af_type:reset().
 
 repl_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [

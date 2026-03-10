@@ -64,7 +64,6 @@ end_per_suite(_Config) ->
 
 init_per_testcase(_TestCase, Config) ->
     af_type:reset(),
-    af_repl:init_types(),
     Config.
 
 end_per_testcase(_TestCase, _Config) ->

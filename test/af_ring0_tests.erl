@@ -1040,3 +1040,300 @@ file_exists_false_test() ->
     S0 = af_ring0:set_ds([{'String', <<"nonexistent_file.xyz">>}], af_ring0:new()),
     S1 = af_ring0:exec(file_exists, S0),
     ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
+%%% === Additional Coverage Tests ===
+
+%% set_types/2
+set_types_test() ->
+    S0 = af_ring0:new(),
+    Types = #{my_type => #{ops => #{}}},
+    S1 = af_ring0:set_types(Types, S0),
+    ?assertEqual(Types, af_ring0:get_types(S1)).
+
+%% to_string for Float
+to_string_float_test() ->
+    S0 = af_ring0:set_ds([{'Float', 3.14}], af_ring0:new()),
+    S1 = af_ring0:exec(to_string, S0),
+    [{'String', Result}] = af_ring0:get_ds(S1),
+    ?assert(is_binary(Result)),
+    %% Should contain "3.14"
+    ?assertNotEqual(nomatch, binary:match(Result, <<"3.14">>)).
+
+%% to_string for Atom
+to_string_atom_test() ->
+    S0 = af_ring0:set_ds([{'Atom', hello}], af_ring0:new()),
+    S1 = af_ring0:exec(to_string, S0),
+    ?assertEqual([{'String', <<"hello">>}], af_ring0:get_ds(S1)).
+
+%% to_string for unknown type
+to_string_unknown_type_test() ->
+    S0 = af_ring0:set_ds([{'Tuple', {1, 2, 3}}], af_ring0:new()),
+    S1 = af_ring0:exec(to_string, S0),
+    [{'String', Result}] = af_ring0:get_ds(S1),
+    ?assert(is_binary(Result)).
+
+%% to_int for Bool false
+to_int_bool_false_test() ->
+    S0 = af_ring0:set_ds([{'Bool', false}], af_ring0:new()),
+    S1 = af_ring0:exec(to_int, S0),
+    ?assertEqual([{'Int', 0}], af_ring0:get_ds(S1)).
+
+%% to_float from String
+to_float_from_string_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"3.14">>}], af_ring0:new()),
+    S1 = af_ring0:exec(to_float, S0),
+    [{'Float', F}] = af_ring0:get_ds(S1),
+    ?assert(abs(F - 3.14) < 0.001).
+
+%% str_substring
+str_substring_test() ->
+    S0 = af_ring0:set_ds([{'Int', 5}, {'Int', 0}, {'String', <<"hello world">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_substring, S0),
+    ?assertEqual([{'String', <<"hello">>}], af_ring0:get_ds(S1)).
+
+str_substring_middle_test() ->
+    S0 = af_ring0:set_ds([{'Int', 5}, {'Int', 6}, {'String', <<"hello world">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_substring, S0),
+    ?assertEqual([{'String', <<"world">>}], af_ring0:get_ds(S1)).
+
+str_substring_clamp_test() ->
+    S0 = af_ring0:set_ds([{'Int', 100}, {'Int', 6}, {'String', <<"hello world">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_substring, S0),
+    ?assertEqual([{'String', <<"world">>}], af_ring0:get_ds(S1)).
+
+%% str_reverse
+str_reverse_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"hello">>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_reverse, S0),
+    ?assertEqual([{'String', <<"olleh">>}], af_ring0:get_ds(S1)).
+
+str_reverse_empty_test() ->
+    S0 = af_ring0:set_ds([{'String', <<>>}], af_ring0:new()),
+    S1 = af_ring0:exec(str_reverse, S0),
+    ?assertEqual([{'String', <<>>}], af_ring0:get_ds(S1)).
+
+%% list_last
+list_last_test() ->
+    S0 = af_ring0:set_ds([{'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_last, S0),
+    ?assertEqual([{'Int', 3}], af_ring0:get_ds(S1)).
+
+%% list_drop
+list_drop_test() ->
+    S0 = af_ring0:set_ds([{'Int', 2}, {'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_drop, S0),
+    ?assertEqual([{'List', [{'Int', 3}]}], af_ring0:get_ds(S1)).
+
+list_drop_more_than_length_test() ->
+    S0 = af_ring0:set_ds([{'Int', 10}, {'List', [{'Int', 1}, {'Int', 2}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_drop, S0),
+    ?assertEqual([{'List', []}], af_ring0:get_ds(S1)).
+
+%% list_flatten
+list_flatten_test() ->
+    Inner1 = {'List', [{'Int', 1}, {'Int', 2}]},
+    Inner2 = {'List', [{'Int', 3}]},
+    S0 = af_ring0:set_ds([{'List', [Inner1, Inner2]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_flatten, S0),
+    ?assertEqual([{'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}], af_ring0:get_ds(S1)).
+
+list_flatten_mixed_test() ->
+    Inner = {'List', [{'Int', 1}]},
+    Plain = {'Int', 42},
+    S0 = af_ring0:set_ds([{'List', [Inner, Plain]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_flatten, S0),
+    ?assertEqual([{'List', [{'Int', 1}, {'Int', 42}]}], af_ring0:get_ds(S1)).
+
+%% list_zip
+list_zip_test() ->
+    A = [{'Int', 1}, {'Int', 2}],
+    B = [{'String', <<"a">>}, {'String', <<"b">>}],
+    S0 = af_ring0:set_ds([{'List', B}, {'List', A}], af_ring0:new()),
+    S1 = af_ring0:exec(list_zip, S0),
+    Expected = [{'List', [{'Int', 1}, {'String', <<"a">>}]},
+                {'List', [{'Int', 2}, {'String', <<"b">>}]}],
+    ?assertEqual([{'List', Expected}], af_ring0:get_ds(S1)).
+
+%% list_map
+list_map_test() ->
+    %% Double each element: dup +
+    Body = [dup, add],
+    S0 = af_ring0:set_ds([{'Code', Body}, {'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_map, S0),
+    ?assertEqual([{'List', [{'Int', 2}, {'Int', 4}, {'Int', 6}]}], af_ring0:get_ds(S1)).
+
+%% list_filter
+list_filter_test() ->
+    %% Keep only items < 3: lit 3, then lt (checks elem < 3)
+    Body = [{lit, {'Int', 3}}, lt],
+    S0 = af_ring0:set_ds([{'Code', Body}, {'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}, {'Int', 4}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_filter, S0),
+    ?assertEqual([{'List', [{'Int', 1}, {'Int', 2}]}], af_ring0:get_ds(S1)).
+
+%% list_fold
+list_fold_test() ->
+    %% Sum: acc elem -> acc+elem
+    Body = [add],
+    S0 = af_ring0:set_ds([{'Code', Body}, {'Int', 0}, {'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}], af_ring0:new()),
+    S1 = af_ring0:exec(list_fold, S0),
+    ?assertEqual([{'Int', 6}], af_ring0:get_ds(S1)).
+
+%% map_get_or found
+map_get_or_found_test() ->
+    Map = #{ {'String', <<"key">>} => {'Int', 42} },
+    S0 = af_ring0:set_ds([{'Int', 0}, {'String', <<"key">>}, {'Map', Map}], af_ring0:new()),
+    S1 = af_ring0:exec(map_get_or, S0),
+    ?assertEqual([{'Int', 42}], af_ring0:get_ds(S1)).
+
+%% map_get_or not found
+map_get_or_not_found_test() ->
+    Map = #{ {'String', <<"key">>} => {'Int', 42} },
+    S0 = af_ring0:set_ds([{'Int', 0}, {'String', <<"missing">>}, {'Map', Map}], af_ring0:new()),
+    S1 = af_ring0:exec(map_get_or, S0),
+    ?assertEqual([{'Int', 0}], af_ring0:get_ds(S1)).
+
+%% product_fields
+product_fields_test() ->
+    FieldMap = #{x => {'Int', 10}, y => {'Int', 20}},
+    S0 = af_ring0:set_ds([{'Point', FieldMap}], af_ring0:new()),
+    S1 = af_ring0:exec(product_fields, S0),
+    [{'List', Fields}, {'Point', _}] = af_ring0:get_ds(S1),
+    ?assertEqual(lists:sort([x, y]), lists:sort(Fields)).
+
+%% print_stack
+print_stack_test() ->
+    S0 = af_ring0:set_ds([{'Int', 1}, {'Int', 2}], af_ring0:new()),
+    S1 = af_ring0:exec(print_stack, S0),
+    %% Stack should remain unchanged
+    ?assertEqual([{'Int', 1}, {'Int', 2}], af_ring0:get_ds(S1)),
+    Output = af_ring0:get_output(S1),
+    ?assertNotEqual(nomatch, binary:match(Output, <<"Stack:">>)).
+
+%% assert_true failure
+assert_true_fail_test() ->
+    S0 = af_ring0:set_ds([{'Bool', false}], af_ring0:new()),
+    ?assertError({assertion_failed, {'Bool', false}}, af_ring0:exec(assert_true, S0)).
+
+%% assert_eq failure
+assert_eq_fail_test() ->
+    S0 = af_ring0:set_ds([{'Int', 1}, {'Int', 2}], af_ring0:new()),
+    ?assertError({assertion_failed, expected, {'Int', 2}, got, {'Int', 1}}, af_ring0:exec(assert_eq, S0)).
+
+%% file_read success
+file_read_success_test() ->
+    Path = <<"/tmp/af_ring0_test_read.txt">>,
+    Content = <<"hello from test">>,
+    ok = file:write_file(Path, Content),
+    S0 = af_ring0:set_ds([{'String', Path}], af_ring0:new()),
+    S1 = af_ring0:exec(file_read, S0),
+    ?assertEqual([{'Bool', true}, {'String', Content}], af_ring0:get_ds(S1)),
+    file:delete(Path).
+
+%% file_read error
+file_read_error_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"/tmp/af_ring0_nonexistent_file_xyz.txt">>}], af_ring0:new()),
+    S1 = af_ring0:exec(file_read, S0),
+    ?assertEqual([{'Bool', false}], af_ring0:get_ds(S1)).
+
+%% file_write success
+file_write_success_test() ->
+    Path = <<"/tmp/af_ring0_test_write.txt">>,
+    Content = <<"written by test">>,
+    S0 = af_ring0:set_ds([{'String', Content}, {'String', Path}], af_ring0:new()),
+    S1 = af_ring0:exec(file_write, S0),
+    ?assertEqual([{'Bool', true}], af_ring0:get_ds(S1)),
+    {ok, Read} = file:read_file(Path),
+    ?assertEqual(Content, Read),
+    file:delete(Path).
+
+%% FFI: erlang-apply
+ffi_erlang_apply_test() ->
+    %% erlang:abs(-5) -> 5
+    S0 = af_ring0:set_ds([{'List', [{'Int', -5}]}, {'Atom', abs}, {'Atom', erlang}], af_ring0:new()),
+    S1 = af_ring0:exec({apply_impl, "erlang-apply"}, S0),
+    ?assertEqual([{'Int', 5}], af_ring0:get_ds(S1)).
+
+%% FFI: erlang-apply0
+ffi_erlang_apply0_test() ->
+    %% erlang:node() -> atom
+    S0 = af_ring0:set_ds([{'Atom', node}, {'Atom', erlang}], af_ring0:new()),
+    S1 = af_ring0:exec({apply_impl, "erlang-apply0"}, S0),
+    [{'Atom', Node}] = af_ring0:get_ds(S1),
+    ?assert(is_atom(Node)).
+
+%% FFI: erlang-call
+ffi_erlang_call_test() ->
+    %% lists:reverse([1,2,3]) with N=1 arg
+    S0 = af_ring0:set_ds([{'Int', 1}, {'List', [{'Int', 1}, {'Int', 2}, {'Int', 3}]}, {'Atom', reverse}, {'Atom', lists}], af_ring0:new()),
+    S1 = af_ring0:exec({apply_impl, "erlang-call"}, S0),
+    [{'List', Result}] = af_ring0:get_ds(S1),
+    ?assertEqual([{'Int', 3}, {'Int', 2}, {'Int', 1}], Result).
+
+%% FFI: erlang-call0
+ffi_erlang_call0_test() ->
+    %% erlang:node() -> atom
+    S0 = af_ring0:set_ds([{'Atom', node}, {'Atom', erlang}], af_ring0:new()),
+    S1 = af_ring0:exec({apply_impl, "erlang-call0"}, S0),
+    [{'Atom', Node}] = af_ring0:get_ds(S1),
+    ?assert(is_atom(Node)).
+
+%% Unknown apply_impl with binary name
+apply_impl_unknown_binary_test() ->
+    S0 = af_ring0:set_ds([], af_ring0:new()),
+    S1 = af_ring0:exec({apply_impl, <<"unknown_op">>}, S0),
+    ?assertEqual([{'Atom', unknown_op}], af_ring0:get_ds(S1)).
+
+%% Unknown apply_impl with list (string) name
+apply_impl_unknown_list_test() ->
+    S0 = af_ring0:set_ds([], af_ring0:new()),
+    S1 = af_ring0:exec({apply_impl, "some_op"}, S0),
+    ?assertEqual([{'Atom', some_op}], af_ring0:get_ds(S1)).
+
+%% Unknown apply_impl with atom name
+apply_impl_unknown_atom_test() ->
+    S0 = af_ring0:set_ds([], af_ring0:new()),
+    S1 = af_ring0:exec({apply_impl, my_atom_op}, S0),
+    ?assertEqual([{'Atom', my_atom_op}], af_ring0:get_ds(S1)).
+
+%% Unknown apply_impl with other type (integer)
+apply_impl_unknown_other_test() ->
+    S0 = af_ring0:set_ds([], af_ring0:new()),
+    S1 = af_ring0:exec({apply_impl, 12345}, S0),
+    [{'Atom', Name}] = af_ring0:get_ds(S1),
+    ?assert(is_atom(Name)).
+
+%% error_tuple
+error_tuple_test() ->
+    S0 = af_ring0:set_ds([{'String', <<"bad">>}], af_ring0:new()),
+    S1 = af_ring0:exec(error_tuple, S0),
+    ?assertEqual([{'Tuple', {error, {'String', <<"bad">>}}}], af_ring0:get_ds(S1)).
+
+%% unwrap_ok
+unwrap_ok_test() ->
+    S0 = af_ring0:set_ds([{'Tuple', {ok, 42}}], af_ring0:new()),
+    S1 = af_ring0:exec(unwrap_ok, S0),
+    ?assertEqual([{'Int', 42}], af_ring0:get_ds(S1)).
+
+%% unwrap_error
+unwrap_error_test() ->
+    S0 = af_ring0:set_ds([{'Tuple', {error, <<"oops">>}}], af_ring0:new()),
+    S1 = af_ring0:exec(unwrap_error, S0),
+    ?assertEqual([{'String', <<"oops">>}], af_ring0:get_ds(S1)).
+
+%% tuple_make
+tuple_make_test() ->
+    S0 = af_ring0:set_ds([{'List', [{'Int', 1}, {'String', <<"a">>}]}], af_ring0:new()),
+    S1 = af_ring0:exec(tuple_make, S0),
+    ?assertEqual([{'Tuple', {1, <<"a">>}}], af_ring0:get_ds(S1)).
+
+%% tuple_to_list
+tuple_to_list_test() ->
+    S0 = af_ring0:set_ds([{'Tuple', {1, <<"hello">>, true}}], af_ring0:new()),
+    S1 = af_ring0:exec(tuple_to_list, S0),
+    ?assertEqual([{'List', [{'Int', 1}, {'String', <<"hello">>}, {'Bool', true}]}], af_ring0:get_ds(S1)).
+
+%% tuple_size_op
+tuple_size_op_test() ->
+    S0 = af_ring0:set_ds([{'Tuple', {1, 2, 3}}], af_ring0:new()),
+    S1 = af_ring0:exec(tuple_size_op, S0),
+    ?assertEqual([{'Int', 3}], af_ring0:get_ds(S1)).

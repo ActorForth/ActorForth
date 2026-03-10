@@ -1,0 +1,377 @@
+# codegen.a4 — Self-hosted BEAM code generator
+#
+# Takes word definitions from compiler.a4 (map format) and produces
+# loaded BEAM modules. All compilation logic is in A4:
+#   1. Convert map defs to {Name, SigIn, SigOut, Body} tuples
+#   2. Retranslate bodies (apply_impl -> call for inter-word calls)
+#   3. Merge multi-clause words into select_clause bodies
+#   4. Call runtime backend (af_ring0:compile_interp_module) for BEAM generation
+#
+# Entry point: codegen-module String List -> Bool
+
+# === Step 1: Convert def maps to tuple format ===
+
+: convert-all-defs List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop dup head convert-one-def swap tail convert-all-defs swap cons .
+
+: convert-one-def Map -> Tuple ;
+    dup "name" map-get
+    over "sig_in" map-get
+    rot dup "sig_out" map-get
+    swap "body" map-get convert-body
+    nil swap cons swap cons swap cons swap cons make-tuple .
+
+: convert-sig List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop dup head to-atom swap tail convert-sig swap cons .
+
+: convert-body List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop dup head convert-one-inst swap tail convert-body swap cons .
+
+: convert-one-inst Map -> Any ;
+    dup "op" map-get convert-inst-by-op .
+
+: convert-inst-by-op Map String -> Any ;
+    : "dup" -> Any ; drop drop "dup" to-atom
+    : "drop" -> Any ; drop drop "drop" to-atom
+    : "swap" -> Any ; drop drop "swap" to-atom
+    : "add" -> Any ; drop drop "add" to-atom
+    : "sub" -> Any ; drop drop "sub" to-atom
+    : "mul" -> Any ; drop drop "mul" to-atom
+    : "divop" -> Any ; drop drop "divop" to-atom
+    : "modop" -> Any ; drop drop "modop" to-atom
+    : "eq" -> Any ; drop drop "eq" to-atom
+    : "lt" -> Any ; drop drop "lt" to-atom
+    : "not_op" -> Any ; drop drop "not_op" to-atom
+    : "and_op" -> Any ; drop drop "and_op" to-atom
+    : "or_op" -> Any ; drop drop "or_op" to-atom
+    : "nil" -> Any ; drop drop "nil" to-atom
+    : "cons" -> Any ; drop drop "cons" to-atom
+    : "head" -> Any ; drop drop "head" to-atom
+    : "tail" -> Any ; drop drop "tail" to-atom
+    : "to_atom" -> Any ; drop drop "to_atom" to-atom
+    : "to_string" -> Any ; drop drop "to_string" to-atom
+    : "to_int" -> Any ; drop drop "to_int" to-atom
+    : "to_float" -> Any ; drop drop "to_float" to-atom
+    : "to_bool" -> Any ; drop drop "to_bool" to-atom
+    : "str_concat" -> Any ; drop drop "str_concat" to-atom
+    : "generic_len" -> Any ; drop drop "generic_len" to-atom
+    : "map_new" -> Any ; drop drop "map_new" to-atom
+    : "map_put" -> Any ; drop drop "map_put" to-atom
+    : "map_get" -> Any ; drop drop "map_get" to-atom
+    : "map_delete" -> Any ; drop drop "map_delete" to-atom
+    : "map_has" -> Any ; drop drop "map_has" to-atom
+    : "map_keys" -> Any ; drop drop "map_keys" to-atom
+    : "map_values" -> Any ; drop drop "map_values" to-atom
+    : "map_size" -> Any ; drop drop "map_size" to-atom
+    : "print_tos" -> Any ; drop drop "print_tos" to-atom
+    : "print_stack" -> Any ; drop drop "print_stack" to-atom
+    : "assert_true" -> Any ; drop drop "assert_true" to-atom
+    : "assert_eq" -> Any ; drop drop "assert_eq" to-atom
+    : "file_read" -> Any ; drop drop "file_read" to-atom
+    : "file_write" -> Any ; drop drop "file_write" to-atom
+    : "file_exists" -> Any ; drop drop "file_exists" to-atom
+    : "to_r" -> Any ; drop drop "to_r" to-atom
+    : "from_r" -> Any ; drop drop "from_r" to-atom
+    : "tuple_make" -> Any ; drop drop "tuple_make" to-atom
+    : "tuple_to_list" -> Any ; drop drop "tuple_to_list" to-atom
+    : "tuple_size_op" -> Any ; drop drop "tuple_size_op" to-atom
+    : "ok_tuple" -> Any ; drop drop "ok_tuple" to-atom
+    : "error_tuple" -> Any ; drop drop "error_tuple" to-atom
+    : "is_ok" -> Any ; drop drop "is_ok" to-atom
+    : "unwrap_ok" -> Any ; drop drop "unwrap_ok" to-atom
+    : "list_to_raw" -> Any ; drop drop "list_to_raw" to-atom
+    : "deep_to_raw" -> Any ; drop drop "deep_to_raw" to-atom
+    : "lit" -> Any ; drop convert-lit-inst
+    : "apply_impl" -> Any ; drop convert-apply-impl-inst
+    : "call" -> Any ; drop convert-call-inst
+    : "select_clause" -> Any ; drop convert-select-clause-inst
+    : "product_new" -> Any ; drop convert-product-new-inst
+    : "product_get" -> Any ; drop convert-product-get-inst
+    : "product_set" -> Any ; drop convert-product-set-inst
+    : String -> Any ; swap drop to-atom .
+
+: convert-lit-inst Map -> Tuple ;
+    "val" map-get convert-lit-val .
+
+: convert-lit-val Map -> Tuple ;
+    dup "type" map-get convert-lit-typed .
+
+: convert-lit-typed Map String -> Tuple ;
+    : "Int" -> Tuple ; drop "value" map-get
+        nil swap cons "Int" to-atom cons make-tuple
+        nil swap cons "lit" to-atom cons make-tuple
+    : "Bool" -> Tuple ; drop "value" map-get
+        nil swap cons "Bool" to-atom cons make-tuple
+        nil swap cons "lit" to-atom cons make-tuple
+    : "String" -> Tuple ; drop "value" map-get
+        nil swap cons "String" to-atom cons make-tuple
+        nil swap cons "lit" to-atom cons make-tuple
+    : "Float" -> Tuple ; drop "value" map-get
+        nil swap cons "Float" to-atom cons make-tuple
+        nil swap cons "lit" to-atom cons make-tuple
+    : String -> Tuple ; drop drop
+        nil nil cons "Atom" to-atom cons make-tuple
+        nil swap cons "lit" to-atom cons make-tuple .
+
+: convert-apply-impl-inst Map -> Tuple ;
+    "name" map-get
+    nil swap cons "apply_impl" to-atom cons make-tuple .
+
+: convert-call-inst Map -> Tuple ;
+    "name" map-get
+    nil swap cons "call" to-atom cons make-tuple .
+
+: convert-select-clause-inst Map -> Tuple ;
+    "clauses" map-get convert-clauses-list
+    nil swap cons "List" to-atom cons make-tuple
+    nil swap cons "lit" to-atom cons make-tuple .
+
+: convert-clauses-list List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop dup head convert-one-clause swap tail convert-clauses-list swap cons .
+
+: convert-one-clause Map -> Tuple ;
+    dup "sig_in" map-get
+    swap "body" map-get convert-body
+    nil swap cons swap cons make-tuple .
+
+: convert-product-new-inst Map -> Tuple ;
+    dup "type_name" map-get to-atom
+    swap "fields" map-get convert-field-atoms
+    nil swap cons swap cons "product_new" to-atom cons make-tuple .
+
+: convert-field-atoms List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop dup head to-atom swap tail convert-field-atoms swap cons .
+
+: convert-product-get-inst Map -> Tuple ;
+    "field" map-get to-atom
+    nil swap cons "product_get" to-atom cons make-tuple .
+
+: convert-product-set-inst Map -> Tuple ;
+    "field" map-get to-atom
+    nil swap cons "product_set" to-atom cons make-tuple .
+
+# === Step 2: Retranslate bodies ===
+# Convert {apply_impl, Name} -> {call, Name} for words defined in the module
+
+: collect-word-names List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop
+        dup head get-def-name
+        swap tail collect-word-names swap cons .
+
+: get-def-name Tuple -> String ;
+    from-tuple head deep-to-raw to-string .
+
+: retranslate-all List List -> List ;
+    swap dup empty?
+    : True -> List ; drop drop
+    : False -> List ; drop
+        dup head rot over retranslate-one-def
+        swap tail rot retranslate-all swap cons .
+
+: retranslate-one-def Tuple List -> Tuple ;
+    # Def Names -> Def with body retranslated
+    # Tuple is {Name, SigIn, SigOut, Body}
+    # Need to extract body (4th element), retranslate, rebuild
+    over get-def-name
+    over get-def-sigin
+    rot dup get-def-sigout
+    swap get-def-body
+    # Stack: [Body, SigOut, SigIn, Name, Names]
+    rot over swap retranslate-body-insts swap drop
+    # Stack: [RetranslatedBody, SigOut, SigIn, Name]
+    nil swap cons rot cons rot cons rot cons make-tuple .
+
+: get-def-sigin Tuple -> List ;
+    from-tuple tail head deep-to-raw .
+
+: get-def-sigout Tuple -> List ;
+    from-tuple tail tail head deep-to-raw .
+
+: get-def-body Tuple -> List ;
+    from-tuple tail tail tail head deep-to-raw .
+
+: retranslate-body-insts List List -> List ;
+    swap dup empty?
+    : True -> List ; drop drop
+    : False -> List ; drop
+        dup head rot over retranslate-one-inst
+        swap tail rot retranslate-body-insts swap cons .
+
+: retranslate-one-inst Any List -> Any ;
+    swap deep-to-raw dup check-is-apply-impl .
+
+: check-is-apply-impl Any Any List -> Any ;
+    # RawInst TaggedInst Names
+    rot dup "erlang" to-atom "is_tuple" to-atom rot rot
+    swap 1 erlang-call
+    deep-to-raw
+    : True -> Any ; drop check-apply-impl-name
+    : False -> Any ; drop drop drop .
+
+: check-apply-impl-name Any List -> Any ;
+    # RawInst Names -> rewritten inst
+    swap dup "erlang" to-atom "element" to-atom
+    rot rot 1 swap 2 erlang-call
+    deep-to-raw "apply_impl" to-atom ==
+    : True -> Any ; drop
+        # It IS apply_impl. Get the op name (element 2)
+        swap dup "erlang" to-atom "element" to-atom
+        rot rot 2 swap 2 erlang-call
+        deep-to-raw to-string
+        # Stack: [OpName, Names]
+        over swap list-contains-str
+        : True -> Any ; drop
+            # Replace with {call, Name}
+            nil swap cons "call" to-atom cons make-tuple swap drop
+        : False -> Any ; drop swap drop
+    : False -> Any ; drop swap drop .
+
+: list-contains-str List String -> Bool ;
+    swap dup empty?
+    : True -> Bool ; drop drop false
+    : False -> Bool ; drop
+        dup head deep-to-raw to-string rot
+        over ==
+        : True -> Bool ; drop drop drop true
+        : False -> Bool ; drop swap tail swap list-contains-str .
+
+# === Step 3: Merge multi-clause words ===
+
+: merge-multi-clause List -> List ;
+    # Group by name, then merge groups
+    group-by-name merge-groups .
+
+: group-by-name List -> List ;
+    # Returns list of {Name, [Def, ...]} groups (preserving order)
+    nil swap group-loop reverse-list .
+
+: group-loop List List -> List ;
+    # Groups Defs -> Groups
+    swap dup empty?
+    : True -> List ; drop drop
+    : False -> List ; drop
+        dup head swap tail
+        # Stack: [RestDefs, Def, Groups]
+        rot swap rot over get-def-name group-add
+        swap group-loop .
+
+: group-add List String Tuple -> List ;
+    # Groups Name Def -> UpdatedGroups
+    rot dup rot group-find
+    : True -> List ; drop
+        # Found existing group — append def to it
+        swap group-append-to
+    : False -> List ; drop
+        # New group — add {Name, [Def]}
+        drop swap nil swap cons
+        nil swap cons swap cons make-tuple swap cons .
+
+: group-find List String -> Bool ;
+    # Groups Name -> found?
+    swap dup empty?
+    : True -> Bool ; drop drop false
+    : False -> Bool ; drop
+        dup head from-tuple head deep-to-raw to-string
+        rot over ==
+        : True -> Bool ; drop drop drop true
+        : False -> Bool ; drop swap tail swap group-find .
+
+: group-append-to List Tuple String -> List ;
+    # Groups Def Name -> UpdatedGroups
+    rot dup empty?
+    : True -> List ; drop drop drop nil
+    : False -> List ; drop
+        dup head from-tuple head deep-to-raw to-string
+        rot over ==
+        : True -> List ; drop
+            drop dup from-tuple tail head
+            rot cons
+            swap from-tuple head
+            nil rot cons swap cons make-tuple
+            swap cons
+        : False -> List ; drop
+            drop dup head swap tail rot swap group-append-to swap cons .
+
+: merge-groups List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop
+        dup head merge-one-group swap tail merge-groups concat .
+
+: merge-one-group Tuple -> List ;
+    # {Name, [Def, ...]} -> [MergedDef] or [Def]
+    from-tuple tail head
+    # DefList
+    dup length 1 ==
+    : True -> List ; drop
+        # Single def — return as-is
+        nil swap cons
+    : False -> List ; drop
+        # Multiple defs — merge into select_clause
+        dup merge-build-clauses
+        swap head
+        # Stack: [Clauses, FirstDef]
+        # Build merged body: [{lit, {List, Clauses}}, select_clause]
+        nil swap cons "List" to-atom cons make-tuple
+        nil swap cons "lit" to-atom cons make-tuple
+        "select_clause" to-atom
+        nil swap cons swap cons
+        # Stack: [MergedBody, FirstDef]
+        # Build merged def: {Name, [], SigOut, MergedBody}
+        swap dup get-def-name
+        swap get-def-sigout
+        # Stack: [SigOut, Name, MergedBody]
+        swap nil
+        # Stack: [EmptySigIn, Name, SigOut, MergedBody]
+        rot rot
+        nil swap cons rot cons rot cons rot cons make-tuple
+        nil swap cons .
+
+: merge-build-clauses List -> List ;
+    dup empty?
+    : True -> List ; drop
+    : False -> List ; drop
+        dup head dup get-def-sigin swap get-def-body
+        nil swap cons swap cons make-tuple
+        swap tail merge-build-clauses swap cons .
+
+: reverse-list List -> List ;
+    nil swap reverse-loop .
+
+: reverse-loop List List -> List ;
+    swap dup empty?
+    : True -> List ; drop drop
+    : False -> List ; drop
+        dup head rot swap cons
+        swap tail swap reverse-loop .
+
+# === Step 4: Call runtime backend ===
+
+: compile-via-backend String List -> Bool ;
+    # ModName Defs -> Bool
+    # Call af_ring0:compile_interp_module via xcall
+    "af_ring0" to-atom "compile_interp_module" to-atom xcall .
+
+# === Main Entry Point ===
+
+: codegen-module String List -> Bool ;
+    # Stack: [DefMaps(List=TOS), ModName(String)]
+    # Step 1: Convert map defs to tuple format
+    convert-all-defs
+    # Stack: [TupleDefs, ModName]
+    # Step 2: Compile via runtime backend
+    # (Retranslation not needed: interpreted mode populates words map,
+    #  so apply_impl finds inter-word calls. Ring 1 auto-groups multi-clause.)
+    compile-via-backend .

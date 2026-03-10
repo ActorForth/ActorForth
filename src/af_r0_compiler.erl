@@ -369,6 +369,8 @@ translate_primitive("to-float")   -> {ok, [to_float]};
 translate_primitive("to-atom")    -> {ok, [to_atom]};
 %% Tuple
 translate_primitive("make-tuple") -> {ok, [tuple_make]};
+translate_primitive("list-to-raw") -> {ok, [list_to_raw]};
+translate_primitive("deep-to-raw") -> {ok, [deep_to_raw]};
 translate_primitive("from-tuple") -> {ok, [tuple_to_list]};
 translate_primitive("tuple-size") -> {ok, [tuple_size_op]};
 translate_primitive("ok-tuple")   -> {ok, [ok_tuple]};
@@ -390,6 +392,7 @@ translate_primitive("erlang-apply0") -> {ok, [{apply_impl, "erlang-apply0"}]};
 translate_primitive("erlang-call")   -> {ok, [{apply_impl, "erlang-call"}]};
 translate_primitive("erlang-call0")  -> {ok, [{apply_impl, "erlang-call0"}]};
 translate_primitive("erlang-new")    -> {ok, [{apply_impl, "erlang-new"}]};
+translate_primitive("xcall")         -> {ok, [{apply_impl, "xcall"}]};
 %% Actor primitives
 translate_primitive("spawn")   -> {ok, [spawn_actor]};
 translate_primitive("send")    -> {ok, [send_msg]};

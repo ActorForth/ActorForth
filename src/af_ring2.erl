@@ -21,12 +21,17 @@
 -export([
     compile/3,
     compile_selfhosted/3,
+    compile_via_a4_compiler/3,
     compile_file/2,
     compile_file/3,
     compile_file_selfhosted/2,
     compile_file_selfhosted/3,
+    compile_file_via_a4_compiler/2,
+    compile_from_a4_defs/1,
     translate_word/2,
-    translate_body/2
+    translate_body/2,
+    retranslate_bodies/2,
+    merge_multi_clause/1
 ]).
 
 %%% === Public API ===
@@ -97,6 +102,145 @@ compile_selfhosted(Source, Filename, ModName) ->
         Class:Reason ->
             {error, {Class, Reason}}
     end.
+
+%%% === A4-Compiler Bridge ===
+%%% Converts map-based output from compiler.a4 to tuple format for Ring 2.
+%%% compiler.a4 produces: [{'Map', #{...}}] where maps have String-tagged keys
+%%% Ring 2 expects: [{Name, SigIn, SigOut, Body}] with atom-based instructions
+
+compile_via_a4_compiler(Source, Filename, ModName) ->
+    ModAtom = list_to_atom("af_r2_" ++ to_str(ModName)),
+    try
+        SourceBin = to_bin(Source),
+        FileBin = to_bin(Filename),
+        %% Phase 1: Parse with parser.a4
+        [{'List', Tokens}] = af_r2_parser:parse([{'String', SourceBin}, {'String', FileBin}]),
+        %% Phase 2: Compile with compiler.a4
+        [{'List', DefMaps}] = af_r2_compiler:'compile-tokens'([{'List', Tokens}]),
+        %% Phase 3: Convert map format to tuple format
+        WordDefs0 = [convert_a4_def(M) || {'Map', M} <- DefMaps],
+        case WordDefs0 of
+            [] -> {error, no_words_defined};
+            _ ->
+                AllNames = lists:usort([N || {N, _, _, _} <- WordDefs0]),
+                WordDefs = retranslate_bodies(WordDefs0, AllNames),
+                MergedDefs = merge_multi_clause(WordDefs),
+                af_ring1:compile_module(ModAtom, MergedDefs, [{mode, native}])
+        end
+    catch
+        Class:Reason ->
+            {error, {Class, Reason}}
+    end.
+
+compile_file_via_a4_compiler(FilePath, ModName) ->
+    case file:read_file(FilePath) of
+        {ok, Content} ->
+            compile_via_a4_compiler(Content, FilePath, ModName);
+        {error, Reason} ->
+            {error, {file_error, Reason}}
+    end.
+
+%% Callable from compiled A4 via xcall: takes stack [DefMaps, ModName]
+%% Converts A4 compiler output maps to Ring 0 tuple format and compiles via Ring 1.
+compile_from_a4_defs([{'List', DefMaps}, {'String', ModName} | Rest]) ->
+    ModAtom = list_to_atom("af_r2_" ++ binary_to_list(ModName)),
+    WordDefs0 = [convert_a4_def(M) || {'Map', M} <- DefMaps],
+    case WordDefs0 of
+        [] -> [{'Bool', false} | Rest];
+        _ ->
+            AllNames = lists:usort([N || {N, _, _, _} <- WordDefs0]),
+            WordDefs = retranslate_bodies(WordDefs0, AllNames),
+            MergedDefs = merge_multi_clause(WordDefs),
+            case af_ring1:compile_module(ModAtom, MergedDefs, [{mode, native}]) of
+                {ok, _} -> [{'Bool', true} | Rest];
+                _ -> [{'Bool', false} | Rest]
+            end
+    end.
+
+%% Convert a single word definition map to {Name, SigIn, SigOut, Body} tuple
+convert_a4_def(Map) ->
+    Name = get_str(Map, <<"name">>),
+    SigIn = convert_sig(get_list(Map, <<"sig_in">>)),
+    SigOut = convert_sig(get_list(Map, <<"sig_out">>)),
+    Body = convert_body(get_list(Map, <<"body">>)),
+    {Name, SigIn, SigOut, Body}.
+
+%% Extract string value from map with String-tagged keys
+get_str(Map, Key) ->
+    {'String', Val} = maps:get({'String', Key}, Map),
+    binary_to_list(Val).
+
+get_list(Map, Key) ->
+    {'List', Val} = maps:get({'String', Key}, Map),
+    Val.
+
+%% Convert signature list: ["Int", "Bool"] -> [Int, Bool] (atoms)
+convert_sig(Items) ->
+    [convert_sig_item(I) || I <- Items].
+
+convert_sig_item({'String', <<"True">>}) -> {'Bool', true};
+convert_sig_item({'String', <<"true">>}) -> {'Bool', true};
+convert_sig_item({'String', <<"False">>}) -> {'Bool', false};
+convert_sig_item({'String', <<"false">>}) -> {'Bool', false};
+convert_sig_item({'String', Name}) ->
+    case try_parse_int_bin(Name) of
+        {ok, N} -> {'Int', N};
+        error -> binary_to_atom(Name, utf8)
+    end.
+
+try_parse_int_bin(Bin) ->
+    try {ok, binary_to_integer(Bin)}
+    catch _:_ -> error
+    end.
+
+%% Convert body instruction list
+convert_body(Items) ->
+    lists:flatmap(fun convert_inst/1, Items).
+
+convert_inst({'Map', M}) ->
+    {'String', Op} = maps:get({'String', <<"op">>}, M),
+    convert_inst_by_op(binary_to_list(Op), M).
+
+convert_inst_by_op("lit", M) ->
+    {'Map', ValMap} = maps:get({'String', <<"val">>}, M),
+    {'String', TypeBin} = maps:get({'String', <<"type">>}, ValMap),
+    Type = binary_to_atom(TypeBin, utf8),
+    case Type of
+        'Int' ->
+            {'Int', Val} = maps:get({'String', <<"value">>}, ValMap),
+            [{lit, {'Int', Val}}];
+        'Bool' ->
+            {'Bool', Val} = maps:get({'String', <<"value">>}, ValMap),
+            [{lit, {'Bool', Val}}];
+        'String' ->
+            {'String', Val} = maps:get({'String', <<"value">>}, ValMap),
+            [{lit, {'String', Val}}]
+    end;
+convert_inst_by_op("apply_impl", M) ->
+    {'String', Name} = maps:get({'String', <<"name">>}, M),
+    [{apply_impl, binary_to_list(Name)}];
+convert_inst_by_op("select_clause", M) ->
+    {'List', Clauses} = maps:get({'String', <<"clauses">>}, M),
+    ConvertedClauses = [convert_clause(C) || C <- Clauses],
+    [{lit, {'List', ConvertedClauses}}, select_clause];
+convert_inst_by_op("product_new", M) ->
+    {'String', TypeName} = maps:get({'String', <<"type_name">>}, M),
+    {'List', FieldsList} = maps:get({'String', <<"fields">>}, M),
+    Fields = [binary_to_atom(F, utf8) || {'String', F} <- FieldsList],
+    [{product_new, binary_to_atom(TypeName, utf8), Fields}];
+convert_inst_by_op("product_get", M) ->
+    {'String', Field} = maps:get({'String', <<"field">>}, M),
+    [{product_get, binary_to_atom(Field, utf8)}];
+convert_inst_by_op("product_set", M) ->
+    {'String', Field} = maps:get({'String', <<"field">>}, M),
+    [{product_set, binary_to_atom(Field, utf8)}];
+convert_inst_by_op(Op, _M) ->
+    [list_to_atom(Op)].
+
+convert_clause({'Map', M}) ->
+    SigIn = convert_sig(get_list(M, <<"sig_in">>)),
+    Body = convert_body(get_list(M, <<"body">>)),
+    {SigIn, Body}.
 
 compile_file_selfhosted(FilePath, ModName) ->
     compile_file_selfhosted(FilePath, ModName, []).

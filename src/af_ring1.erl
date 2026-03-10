@@ -23,7 +23,8 @@
     get_module_binary/1
 ]).
 
--define(BINARY_TABLE, af_ring1_binaries).
+%% Binary storage key prefix for process dictionary
+-define(BIN_KEY(Mod), {af_ring1_binary, Mod}).
 
 %%% === Public API ===
 
@@ -60,10 +61,9 @@ save_module(ModAtom, Path) ->
     end.
 
 get_module_binary(ModAtom) ->
-    ensure_binary_table(),
-    case ets:lookup(?BINARY_TABLE, ModAtom) of
-        [{_, Binary}] -> {ok, Binary};
-        [] -> error
+    case get(?BIN_KEY(ModAtom)) of
+        undefined -> error;
+        Binary -> {ok, Binary}
     end.
 
 %%% === Form Generation ===
@@ -397,6 +397,12 @@ translate_native(map_get, StackExpr, L, _WM, Idx) ->
     ]},
     {inline, Expr, Idx+3};
 
+%% FFI operations must execute through Ring 0, not push as atoms
+translate_native({apply_impl, OpName}, StackExpr, L, _WM, Idx)
+  when OpName =:= "erlang-apply"; OpName =:= "erlang-apply0";
+       OpName =:= "erlang-call"; OpName =:= "erlang-call0";
+       OpName =:= "erlang-new"; OpName =:= "xcall" ->
+    translate_fallback({apply_impl, OpName}, StackExpr, L, Idx);
 translate_native({apply_impl, OpName}, StackExpr, L, _WM, Idx) ->
     %% Push unknown operations as atoms — no ETS dependency
     AtomName = if is_binary(OpName) -> binary_to_atom(OpName, utf8);
@@ -579,12 +585,6 @@ make_var_list(N, L, Idx) ->
 rcall(L, Mod, Fun, Args) ->
     {call, L, {remote, L, {atom, L, Mod}, {atom, L, Fun}}, Args}.
 
-ensure_binary_table() ->
-    case ets:info(?BINARY_TABLE) of
-        undefined -> ets:new(?BINARY_TABLE, [named_table, public, set]);
-        _ -> ok
-    end.
-
 store_binary(ModAtom, Binary) ->
-    ensure_binary_table(),
-    ets:insert(?BINARY_TABLE, {ModAtom, Binary}).
+    put(?BIN_KEY(ModAtom), Binary),
+    ok.
