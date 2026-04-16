@@ -63,6 +63,9 @@ exec(dup, #r0{ds = [A | Rest]} = S) ->
 exec(drop, #r0{ds = [_ | Rest]} = S) ->
     S#r0{ds = Rest};
 
+exec(pop, S) ->
+    exec(drop, S);
+
 exec(swap, #r0{ds = [A, B | Rest]} = S) ->
     S#r0{ds = [B, A | Rest]};
 
@@ -580,6 +583,13 @@ exec(print_tos, #r0{ds = [{Type, Val} | Rest], output = Out} = S) ->
 exec(print_stack, #r0{ds = DS, output = Out} = S) ->
     Str = list_to_binary(io_lib:format("~p", [DS])),
     S#r0{output = <<Out/binary, "Stack: ", Str/binary, "\n">>};
+
+exec(dot, #r0{ds = [{Type, Val} | Rest], output = Out} = S) ->
+    Str = list_to_binary(io_lib:format("~p : ~s", [Val, Type])),
+    S#r0{ds = Rest, output = <<Out/binary, Str/binary, "\n">>};
+
+exec(dot_s, S) ->
+    exec(print_stack, S);
 
 exec(assert_true, #r0{ds = [{'Bool', true} | Rest]} = S) ->
     S#r0{ds = Rest};

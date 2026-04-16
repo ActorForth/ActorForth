@@ -1,0 +1,137 @@
+# skip_list_test.a4 — Extended tests for skip list implementation
+#
+# Loads the skip list module (which runs its own inline tests),
+# then exercises additional edge cases.
+
+"test/demos/skip_list/skip_list.a4" load
+
+# ===================================================
+#          ADDITIONAL EDGE-CASE TESTS
+# ===================================================
+
+# --- Sorted insert: single element ---
+nil 42 sorted-insert
+dup head 42 assert-eq
+dup length 1 assert-eq
+drop
+"edge: single sorted-insert: ok" print
+
+# --- Sorted insert: already sorted input ---
+nil 1 sorted-insert 2 sorted-insert 3 sorted-insert
+dup head 1 assert-eq
+dup length 3 assert-eq
+drop
+"edge: pre-sorted insert: ok" print
+
+# --- Sorted insert: reverse sorted input ---
+nil 3 sorted-insert 2 sorted-insert 1 sorted-insert
+dup head 1 assert-eq
+dup length 3 assert-eq
+drop
+"edge: reverse-sorted insert: ok" print
+
+# --- Sorted insert: duplicates ---
+nil 5 sorted-insert 5 sorted-insert
+dup length 2 assert-eq
+dup head 5 assert-eq
+drop
+"edge: duplicate sorted-insert: ok" print
+
+# --- Sorted remove: not present ---
+nil 1 sorted-insert 3 sorted-insert
+2 sorted-remove
+dup length 2 assert-eq
+drop
+"edge: remove absent key: ok" print
+
+# --- Sorted remove: last element ---
+nil 7 sorted-insert
+7 sorted-remove
+dup empty? assert
+drop
+"edge: remove last element: ok" print
+
+# --- Empty skip list queries ---
+sl-new
+dup 42 sl-has? not assert
+sl-size 0 assert-eq
+sl-keys empty? assert
+drop
+"edge: empty sl queries: ok" print
+
+# --- Insert and delete same key ---
+sl-new
+10 100 sl-insert
+10 sl-delete
+sl-size 0 assert-eq
+dup 10 sl-has? not assert
+drop
+"edge: insert then delete: ok" print
+
+# --- Delete all keys one by one ---
+sl-new
+1 10 sl-insert
+2 20 sl-insert
+3 30 sl-insert
+3 sl-delete
+2 sl-delete
+1 sl-delete
+sl-size 0 assert-eq
+drop
+"edge: delete all keys: ok" print
+
+# --- Overwrite preserves size ---
+sl-new
+5 50 sl-insert
+5 55 sl-insert
+5 500 sl-insert
+dup 5 sl-get 500 assert-eq
+drop
+"edge: overwrite preserves value: ok" print
+
+# --- Many inserts stress test ---
+sl-new
+1 10 sl-insert
+2 20 sl-insert
+3 30 sl-insert
+4 40 sl-insert
+5 50 sl-insert
+6 60 sl-insert
+7 70 sl-insert
+8 80 sl-insert
+9 90 sl-insert
+10 100 sl-insert
+
+dup sl-size 10 assert-eq
+dup 1 sl-get 10 assert-eq
+dup 5 sl-get 50 assert-eq
+dup 10 sl-get 100 assert-eq
+
+# Level 0 is sorted: first key is 1
+dup sl-keys head 1 assert-eq
+drop
+"edge: 10-element stress: ok" print
+
+# --- Keys remain sorted after mixed operations ---
+sl-new
+50 500 sl-insert
+10 100 sl-insert
+30 300 sl-insert
+20 200 sl-insert
+40 400 sl-insert
+
+# Delete middle key
+30 sl-delete
+dup sl-size 4 assert-eq
+
+# First key in sorted order is 10
+dup sl-keys head 10 assert-eq
+
+# Re-insert deleted key with new value
+30 999 sl-insert
+dup 30 sl-get 999 assert-eq
+dup sl-size 5 assert-eq
+drop
+"edge: mixed insert/delete: ok" print
+
+"All skip list tests passed!" print

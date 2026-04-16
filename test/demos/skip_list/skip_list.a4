@@ -1,0 +1,242 @@
+# skip_list.a4 — Probabilistic skip list in ActorForth
+#
+# A skip list is a sorted container with O(log n) average search/insert.
+# Multiple levels of sorted key lists skip over elements for fast search.
+#
+# Representation: a flat Map using Int keys for entries, String keys for levels.
+#   - Int key N  -> Int value (the stored data)
+#   - "l0".."l3" -> sorted List of Int keys (l0 = all keys)
+#
+# Thinking Forth: small words, domain vocabulary, self-documenting.
+
+# === Constructor ===
+
+: sl-new -> Map ;
+    map-new
+    nil "l0" map-put
+    nil "l1" map-put
+    nil "l2" map-put
+    nil "l3" map-put .
+
+# === Random Level via Erlang FFI ===
+
+: coin-flip -> Bool ;
+    2 rand uniform 1 erlang-call 1 == .
+
+: random-level Int -> Int ;
+    : 3 -> Int ;
+    : Int -> Int ; random-level-step .
+
+: do-rl-step Bool -> Int ;
+    : True -> Int ; drop 1 + random-level
+    : False -> Int ; drop .
+
+: random-level-step Int -> Int ;
+    coin-flip do-rl-step .
+
+# === Sorted List Insert ===
+# sorted-insert : List Int -> List
+# Insert key into an ascending sorted list.
+
+: do-si-empty Bool -> List ;
+    : True -> List ; drop cons
+    : False -> List ; drop sorted-insert-cmp .
+
+: sorted-insert List Int -> List ;
+    over empty? do-si-empty .
+
+: do-si-cmp Bool -> List ;
+    : True -> List ; drop cons
+    : False -> List ; drop sorted-insert-rest .
+
+: sorted-insert-cmp List Int -> List ;
+    2dup swap head <= do-si-cmp .
+
+: sorted-insert-rest List Int -> List ;
+    swap dup tail rot sorted-insert swap head cons .
+
+# === Sorted List Remove ===
+
+: do-sr-empty Bool -> List ;
+    : True -> List ; swap drop drop
+    : False -> List ; drop sorted-remove-cmp .
+
+: sorted-remove List Int -> List ;
+    over empty? do-sr-empty .
+
+: do-sr-cmp Bool -> List ;
+    : True -> List ; swap drop drop tail
+    : False -> List ; drop sorted-remove-rest .
+
+: sorted-remove-cmp List Int -> List ;
+    2dup swap head == do-sr-cmp .
+
+: sorted-remove-rest List Int -> List ;
+    swap dup tail rot sorted-remove swap head cons .
+
+# === Level Operations ===
+# Dedicated words for each level avoid deep stack manipulation.
+# Each takes Map Int (key=TOS, map=second) and returns updated Map.
+
+: sl-add-l0 Map Int -> Map ;
+    swap dup "l0" map-get rot sorted-insert "l0" map-put .
+
+: sl-add-l1 Map Int -> Map ;
+    swap dup "l1" map-get rot sorted-insert "l1" map-put .
+
+: sl-add-l2 Map Int -> Map ;
+    swap dup "l2" map-get rot sorted-insert "l2" map-put .
+
+: sl-add-l3 Map Int -> Map ;
+    swap dup "l3" map-get rot sorted-insert "l3" map-put .
+
+: sl-rm-l0 Map Int -> Map ;
+    swap dup "l0" map-get rot sorted-remove "l0" map-put .
+
+: sl-rm-l1 Map Int -> Map ;
+    swap dup "l1" map-get rot sorted-remove "l1" map-put .
+
+: sl-rm-l2 Map Int -> Map ;
+    swap dup "l2" map-get rot sorted-remove "l2" map-put .
+
+: sl-rm-l3 Map Int -> Map ;
+    swap dup "l3" map-get rot sorted-remove "l3" map-put .
+
+# === Add Key to N Levels ===
+
+: sl-add-levels Map Int Int -> Map ;
+    : Map Int 0 -> Map ; drop sl-add-l0
+    : Map Int 1 -> Map ; drop 2dup sl-add-l0 rot drop swap sl-add-l1
+    : Map Int 2 -> Map ; drop 2dup sl-add-l0 rot drop swap 2dup sl-add-l1 rot drop swap sl-add-l2
+    : Map Int 3 -> Map ; drop 2dup sl-add-l0 rot drop swap 2dup sl-add-l1 rot drop swap 2dup sl-add-l2 rot drop swap sl-add-l3 .
+
+# === Insert ===
+# sl-insert : Map Int Int -> Map
+# Stack: SL key val (val=TOS). Insert key-value pair.
+
+: sl-insert Map Int Int -> Map ;
+    rot rot 2dup 0 random-level sl-add-levels
+    swap rot drop rot swap map-put .
+
+# === Queries ===
+
+: sl-has? Map Int -> Map Bool ;
+    over swap map-has? .
+
+: sl-get Map Int -> Map Any ;
+    over swap map-get .
+
+: sl-keys Map -> Map List ;
+    dup "l0" map-get .
+
+: sl-size Map -> Map Int ;
+    sl-keys length .
+
+# === Delete ===
+
+: do-sl-delete Bool -> Map ;
+    : True -> Map ; drop sl-do-delete
+    : False -> Map ; drop drop .
+
+: sl-delete Map Int -> Map ;
+    2dup map-has? do-sl-delete .
+
+: sl-do-delete Map Int -> Map ;
+    2dup sl-rm-l3 rot drop swap
+    2dup sl-rm-l2 rot drop swap
+    2dup sl-rm-l1 rot drop swap
+    2dup sl-rm-l0 rot drop swap
+    map-delete .
+
+# ===================================================
+#                     TESTS
+# ===================================================
+
+# --- Sorted insert ---
+nil 3 sorted-insert 1 sorted-insert 5 sorted-insert 2 sorted-insert
+dup head 1 assert-eq
+dup length 4 assert-eq
+"sorted-insert: ok" print
+drop
+
+# --- Sorted remove ---
+nil 1 sorted-insert 3 sorted-insert 5 sorted-insert
+3 sorted-remove
+dup head 1 assert-eq
+dup length 2 assert-eq
+"sorted-remove: ok" print
+drop
+
+# --- Empty skip list ---
+sl-new
+sl-size 0 assert-eq
+"sl-new: ok" print
+drop
+
+# --- Single insert ---
+sl-new 10 100 sl-insert
+dup 10 sl-has? assert
+dup 10 sl-get 100 assert-eq
+sl-size 1 assert-eq
+"single insert: ok" print
+drop
+
+# --- Multiple inserts ---
+sl-new
+5 50 sl-insert
+3 30 sl-insert
+8 80 sl-insert
+1 10 sl-insert
+
+dup sl-size 4 assert-eq
+dup 1 sl-get 10 assert-eq
+dup 3 sl-get 30 assert-eq
+dup 5 sl-get 50 assert-eq
+dup 8 sl-get 80 assert-eq
+
+# Level 0 sorted — first key is 1
+dup sl-keys head 1 assert-eq
+"multi insert: ok" print
+
+# --- Delete ---
+3 sl-delete
+dup sl-size 3 assert-eq
+dup 3 sl-has? not assert
+dup 1 sl-get 10 assert-eq
+dup 5 sl-get 50 assert-eq
+dup 8 sl-get 80 assert-eq
+"delete: ok" print
+
+# --- Delete non-existent is safe ---
+99 sl-delete
+dup sl-size 3 assert-eq
+
+# --- Update existing key ---
+5 999 sl-insert
+dup 5 sl-get 999 assert-eq
+"update: ok" print
+drop
+
+# --- Larger dataset ---
+sl-new
+20 200 sl-insert
+10 100 sl-insert
+30 300 sl-insert
+15 150 sl-insert
+25 250 sl-insert
+5 50 sl-insert
+35 350 sl-insert
+
+dup sl-size 7 assert-eq
+dup 5 sl-get 50 assert-eq
+dup 35 sl-get 350 assert-eq
+
+# Show structure
+"Skip list with 7 entries:" print
+dup "l0" map-get length "  Level 0:" print print
+dup "l1" map-get length "  Level 1:" print print
+dup "l2" map-get length "  Level 2:" print print
+dup "l3" map-get length "  Level 3:" print print
+"large dataset: ok" print
+
+drop
