@@ -1264,3 +1264,893 @@ mixed_ops_test_() ->
             ?assertEqual(["Int"], maps:get(stack, Last))
         end} end
     ]}.
+
+%% === Diagnostics: stack underflow on primitives ===
+
+diag_underflow_primitive_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"+ on empty stack produces underflow diagnostic", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"+">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags)),
+            D = hd(Diags),
+            ?assertEqual(1, maps:get(severity, D)),
+            Msg = maps:get(message, D),
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"underflow">>)),
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"'+'">>))
+        end} end,
+
+        fun(_) -> {"+ with one item produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 +">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags)),
+            D = hd(Diags),
+            Msg = maps:get(message, D),
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"requires 2">>)),
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"has 1">>))
+        end} end,
+
+        fun(_) -> {"dup on empty stack produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"dup">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags)),
+            D = hd(Diags),
+            Msg = maps:get(message, D),
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"dup">>))
+        end} end,
+
+        fun(_) -> {"rot on two items produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 2 rot">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags)),
+            Msg = maps:get(message, hd(Diags)),
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"requires 3">>))
+        end} end,
+
+        fun(_) -> {"drop on empty stack produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"drop">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"swap on one item produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 swap">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"over on one item produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 over">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"2dup on one item produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 2dup">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"comparison with one item produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 ==">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"not on empty stack produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"not">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"cons on one item produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"nil cons">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"concat on one item produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"\"hi\" concat">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"print on empty stack produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"print">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"map-put on one item produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"map-new map-put">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(1, length(Diags))
+        end} end
+    ]}.
+
+%% === Diagnostics: no underflow on valid code ===
+
+diag_no_false_positive_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"1 2 + has no diagnostics", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 2 +">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end,
+
+        fun(_) -> {"dup after push has no diagnostics", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 dup">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end,
+
+        fun(_) -> {"empty doc has no diagnostics", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end,
+
+        fun(_) -> {"unknown word becomes Atom, no diagnostic", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"xyzzy">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end,
+
+        fun(_) -> {"word def and usage, no diagnostic", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<": dbl Int -> Int ; dup + .\n3 dbl">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end
+    ]}.
+
+%% === Diagnostics: range and position ===
+
+diag_range_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"underflow diagnostic has correct token range", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"+">>, 1, #{}),
+            [D] = maps:get(diagnostics, Doc),
+            ?assertEqual(1, maps:get(line, D)),
+            ?assertEqual(1, maps:get(col, D)),
+            ?assertEqual(2, maps:get(end_col, D))
+        end} end,
+
+        fun(_) -> {"underflow range for 'rot' at column 5", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 2 rot">>, 1, #{}),
+            [D] = maps:get(diagnostics, Doc),
+            ?assertEqual(5, maps:get(col, D)),
+            ?assertEqual(8, maps:get(end_col, D))
+        end} end,
+
+        fun(_) -> {"underflow on second line", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 2\n+\n+">>, 1, #{}),
+            [D] = maps:get(diagnostics, Doc),
+            %% First '+' is fine, second '+' on line 3 underflows (stack has 1)
+            ?assertEqual(3, maps:get(line, D))
+        end} end
+    ]}.
+
+%% === Diagnostics: published via didOpen / didChange ===
+
+diag_publish_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"didOpen publishes underflow diagnostics", fun() ->
+            Request = #{<<"method">> => <<"textDocument/didOpen">>,
+                       <<"params">> => #{
+                           <<"textDocument">> => #{
+                               <<"uri">> => <<"file:///t.a4">>,
+                               <<"text">> => <<"+">>,
+                               <<"version">> => 1
+                           }
+                       }},
+            State = #{docs => #{}, initialized => true},
+            {Response, _} = af_lsp:handle_request(Request, State),
+            Params = maps:get(<<"params">>, Response),
+            LspDiags = maps:get(<<"diagnostics">>, Params),
+            ?assertEqual(1, length(LspDiags)),
+            D = hd(LspDiags),
+            ?assertEqual(1, maps:get(<<"severity">>, D)),
+            ?assertEqual(<<"actorforth">>, maps:get(<<"source">>, D)),
+            Msg = maps:get(<<"message">>, D),
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"underflow">>))
+        end} end,
+
+        fun(_) -> {"didChange re-publishes updated diagnostics", fun() ->
+            Uri = <<"file:///c.a4">>,
+            Open = #{<<"method">> => <<"textDocument/didOpen">>,
+                    <<"params">> => #{
+                        <<"textDocument">> => #{
+                            <<"uri">> => Uri,
+                            <<"text">> => <<"1 2 +">>,
+                            <<"version">> => 1
+                        }}},
+            {Resp1, S1} = af_lsp:handle_request(Open, #{docs => #{}, initialized => true}),
+            D1 = maps:get(<<"diagnostics">>, maps:get(<<"params">>, Resp1)),
+            ?assertEqual([], D1),
+
+            %% Change to content that produces an error
+            Change = #{<<"method">> => <<"textDocument/didChange">>,
+                      <<"params">> => #{
+                          <<"textDocument">> => #{<<"uri">> => Uri, <<"version">> => 2},
+                          <<"contentChanges">> => [#{<<"text">> => <<"+">>}]
+                      }},
+            {Resp2, _S2} = af_lsp:handle_request(Change, S1),
+            D2 = maps:get(<<"diagnostics">>, maps:get(<<"params">>, Resp2)),
+            ?assertEqual(1, length(D2))
+        end} end,
+
+        fun(_) -> {"published diagnostic has range with start and end", fun() ->
+            Request = #{<<"method">> => <<"textDocument/didOpen">>,
+                       <<"params">> => #{
+                           <<"textDocument">> => #{
+                               <<"uri">> => <<"file:///t.a4">>,
+                               <<"text">> => <<"dup">>,
+                               <<"version">> => 1
+                           }
+                       }},
+            {Response, _} = af_lsp:handle_request(Request,
+                #{docs => #{}, initialized => true}),
+            Params = maps:get(<<"params">>, Response),
+            [D] = maps:get(<<"diagnostics">>, Params),
+            Range = maps:get(<<"range">>, D),
+            Start = maps:get(<<"start">>, Range),
+            End = maps:get(<<"end">>, Range),
+            ?assertEqual(0, maps:get(<<"line">>, Start)),
+            ?assertEqual(0, maps:get(<<"character">>, Start)),
+            ?assertEqual(0, maps:get(<<"line">>, End)),
+            %% "dup" is 3 characters, 0-indexed end = 3 (exclusive)
+            ?assertEqual(3, maps:get(<<"character">>, End))
+        end} end
+    ]}.
+
+%% === Diagnostics: multiple errors in one document ===
+
+diag_multiple_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"two underflows in a row", fun() ->
+            %% drop on [] underflows (output []), then drop on [] again underflows.
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"drop drop">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assertEqual(2, length(Diags))
+        end} end,
+
+        fun(_) -> {"error earlier does not suppress later valid code", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"+ 1 2 +">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            %% The first '+' underflows (output [Int]). Stack becomes [Int].
+            %% Then 1 2 + brings it to [Int Int Int] -> [Int Int], no more errors.
+            ?assertEqual(1, length(Diags))
+        end} end
+    ]}.
+
+%% === Diagnostics: signature mismatch on user words ===
+%%
+%% These tests register a word directly into the global registry via
+%% af_type:add_op/2, since af_lsp:lookup_word_effect consults af_type.
+%% Using interpret_tokens with a fresh continuation would write to the
+%% continuation-local dictionary (not visible to the LSP).
+
+make_op(Name, SigIn, SigOut) ->
+    #operation{
+        name = atom_to_list(Name),
+        sig_in = SigIn,
+        sig_out = SigOut,
+        impl = undefined,
+        source = undefined}.
+
+diag_sig_mismatch_test_() ->
+    {foreach,
+     fun() ->
+         setup(),
+         af_type:add_op('Any', make_op('needs-int', ['Int'], ['Int'])),
+         af_type:add_op('Any', make_op('needs-two', ['Int', 'Int'], ['Int'])),
+         af_type:add_op('Any', make_op('accepts-any', ['Any'], ['Int'])),
+         ok
+     end,
+     fun(_) -> ok end, [
+        fun(_) -> {"user word called with wrong type produces mismatch", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"\"hi\" needs-int">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assert(length(Diags) >= 1),
+            Msgs = [maps:get(message, D) || D <- Diags],
+            Found = lists:any(fun(M) ->
+                binary:match(M, <<"mismatch">>) =/= nomatch
+            end, Msgs),
+            ?assert(Found)
+        end} end,
+
+        fun(_) -> {"user word called with underflow produces underflow", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"1 needs-two">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assert(length(Diags) >= 1)
+        end} end,
+
+        fun(_) -> {"Any in sig_in accepts anything", fun() ->
+            Doc = af_lsp:analyze_document(<<"test.a4">>, <<"\"hi\" accepts-any">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end
+    ]}.
+
+%% === Diagnostics: exhaustive primitive underflow ===
+
+diag_all_primitives_underflow_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"every arithmetic/comparison/logic primitive underflow", fun() ->
+            %% One-off: for each zero-arg-prefixed primitive, invoking on an
+            %% empty stack yields exactly one underflow diagnostic.
+            Names = ["+", "-", "*", "/", "mod",
+                     "==", "!=", "<", ">", "<=", ">=",
+                     "not", "and", "or"],
+            lists:foreach(fun(N) ->
+                Src = list_to_binary(N),
+                Doc = af_lsp:analyze_document(<<"t.a4">>, Src, 1, #{}),
+                Diags = maps:get(diagnostics, Doc),
+                ?assertMatch([_ | _], Diags),
+                Msg = maps:get(message, hd(Diags)),
+                NameBin = list_to_binary(N),
+                QuotedName = iolist_to_binary([<<"'">>, NameBin, <<"'">>]),
+                ?assertNotEqual(nomatch, binary:match(Msg, QuotedName))
+            end, Names)
+        end} end,
+
+        fun(_) -> {"list primitive underflow", fun() ->
+            Names = ["cons", "head", "tail", "length", "empty?",
+                     "append", "reverse"],
+            lists:foreach(fun(N) ->
+                Src = list_to_binary(N),
+                Doc = af_lsp:analyze_document(<<"t.a4">>, Src, 1, #{}),
+                Diags = maps:get(diagnostics, Doc),
+                ?assertMatch([_ | _], Diags)
+            end, Names)
+        end} end,
+
+        fun(_) -> {"map primitive underflow", fun() ->
+            Names = ["map-put", "map-get", "map-delete", "map-has?",
+                     "map-keys", "map-values", "map-size"],
+            lists:foreach(fun(N) ->
+                Src = list_to_binary(N),
+                Doc = af_lsp:analyze_document(<<"t.a4">>, Src, 1, #{}),
+                Diags = maps:get(diagnostics, Doc),
+                ?assertMatch([_ | _], Diags)
+            end, Names)
+        end} end,
+
+        fun(_) -> {"string/conversion primitive underflow", fun() ->
+            Names = ["concat", "to-string", "to-int", "to-float"],
+            lists:foreach(fun(N) ->
+                Src = list_to_binary(N),
+                Doc = af_lsp:analyze_document(<<"t.a4">>, Src, 1, #{}),
+                Diags = maps:get(diagnostics, Doc),
+                ?assertMatch([_ | _], Diags)
+            end, Names)
+        end} end,
+
+        fun(_) -> {"IO primitive underflow", fun() ->
+            Names = ["print", "assert", "assert-eq"],
+            lists:foreach(fun(N) ->
+                Src = list_to_binary(N),
+                Doc = af_lsp:analyze_document(<<"t.a4">>, Src, 1, #{}),
+                Diags = maps:get(diagnostics, Doc),
+                ?assertMatch([_ | _], Diags)
+            end, Names)
+        end} end
+    ]}.
+
+%% === Type compatibility edge cases ===
+
+type_compat_edges_test_() ->
+    {foreach,
+     fun() ->
+         setup(),
+         af_type:add_op('Any', #operation{
+             name = "int-consumer", sig_in = ['Int'],
+             sig_out = ['Int'], impl = undefined, source = undefined}),
+         af_type:add_op('Any', #operation{
+             name = "typed-var", sig_in = ['_a'],
+             sig_out = ['_a'], impl = undefined, source = undefined}),
+         af_type:add_op('Any', #operation{
+             name = "any-consumer", sig_in = ['Any'],
+             sig_out = [], impl = undefined, source = undefined}),
+         af_type:add_op('Any', #operation{
+             name = "val-constraint", sig_in = [{'Int', 0}],
+             sig_out = ['Int'], impl = undefined, source = undefined}),
+         ok
+     end,
+     fun(_) -> ok end, [
+        fun(_) -> {"named type variable accepts any type", fun() ->
+            Doc = af_lsp:analyze_document(<<"t.a4">>, <<"\"s\" typed-var">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end,
+
+        fun(_) -> {"Any accepts String", fun() ->
+            Doc = af_lsp:analyze_document(<<"t.a4">>, <<"\"s\" any-consumer">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end,
+
+        fun(_) -> {"Int sig matches Int stack item", fun() ->
+            Doc = af_lsp:analyze_document(<<"t.a4">>, <<"1 int-consumer">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end,
+
+        fun(_) -> {"value-constraint sig matches Int stack item", fun() ->
+            Doc = af_lsp:analyze_document(<<"t.a4">>, <<"0 val-constraint">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end,
+
+        fun(_) -> {"opaque '?' stack item matches anything", fun() ->
+            %% First '+' underflows and pushes "?". Then the next word with
+            %% any sig_in should not complain about the '?' type.
+            Doc = af_lsp:analyze_document(<<"t.a4">>, <<"+ int-consumer">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            %% Only the underflow from the first '+' should appear.
+            ?assertEqual(1, length(Diags))
+        end} end,
+
+        fun(_) -> {"Atom stack item matches any sig_in", fun() ->
+            Doc = af_lsp:analyze_document(<<"t.a4">>, <<"xyzzy int-consumer">>, 1, #{}),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end} end,
+
+        fun(_) -> {"value-constraint mismatch produces diagnostic", fun() ->
+            %% val-constraint expects {Int, 0}, so a String should mismatch.
+            Doc = af_lsp:analyze_document(<<"t.a4">>, <<"\"s\" val-constraint">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assert(length(Diags) >= 1),
+            Msg = maps:get(message, hd(Diags)),
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"mismatch">>)),
+            %% The formatted sig should include the 'Int=0' constraint
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"Int=0">>))
+        end} end
+    ]}.
+
+%% === Transport IO (mock stdin/stdout) ===
+
+%% Build a mock IO transport that reads from a list of lines and captures output.
+mock_io(Lines, BodyProvider) ->
+    State = ets:new(mock_io_state, [set, public]),
+    ets:insert(State, {lines, Lines}),
+    ets:insert(State, {body_bytes, BodyProvider}),
+    ets:insert(State, {output, []}),
+    IO = #{
+        get_line => fun() ->
+            [{lines, L}] = ets:lookup(State, lines),
+            case L of
+                [] -> eof;
+                [H | T] ->
+                    ets:insert(State, {lines, T}),
+                    H
+            end
+        end,
+        get_chars => fun(_N) ->
+            [{body_bytes, Body}] = ets:lookup(State, body_bytes),
+            ets:insert(State, {body_bytes, <<>>}),
+            Body
+        end,
+        put_chars => fun(Data) ->
+            [{output, O}] = ets:lookup(State, output),
+            ets:insert(State, {output, [Data | O]})
+        end
+    },
+    {IO, State}.
+
+mock_output(State) ->
+    [{output, O}] = ets:lookup(State, output),
+    iolist_to_binary(lists:reverse(O)).
+
+read_message_mock_test_() ->
+    [
+        {"read_message parses a valid LSP frame", fun() ->
+            {IO, _} = mock_io(
+                ["Content-Length: 17\n", "\n"],
+                <<"{\"method\":\"ping\"}">>),
+            Result = af_lsp:read_message(IO),
+            ?assertMatch({ok, #{<<"method">> := <<"ping">>}}, Result)
+        end},
+
+        {"read_message returns eof on empty input", fun() ->
+            {IO, _} = mock_io([], <<>>),
+            ?assertEqual(eof, af_lsp:read_message(IO))
+        end},
+
+        {"read_message returns {error, json_decode} on malformed body", fun() ->
+            {IO, _} = mock_io(
+                ["Content-Length: 5\n", "\n"],
+                <<"not json">>),
+            ?assertEqual({error, json_decode}, af_lsp:read_message(IO))
+        end},
+
+        {"read_message skips unrecognised header lines", fun() ->
+            {IO, _} = mock_io(
+                ["X-Unknown: 42\n",
+                 "Content-Length: 11\n",
+                 "Content-Type: application/vscode-jsonrpc; charset=utf-8\n",
+                 "\n"],
+                <<"{\"ok\":true}">>),
+            Result = af_lsp:read_message(IO),
+            ?assertMatch({ok, #{<<"ok">> := true}}, Result)
+        end},
+
+        {"read_message handles initial blank line", fun() ->
+            {IO, _} = mock_io(
+                ["\n", "Content-Length: 11\n", "\n"],
+                <<"{\"ok\":true}">>),
+            Result = af_lsp:read_message(IO),
+            ?assertMatch({ok, #{<<"ok">> := true}}, Result)
+        end},
+
+        {"read_message returns eof on eof during header read", fun() ->
+            %% No Content-Length and list runs out
+            {IO, _} = mock_io(["X: y\n"], <<>>),
+            ?assertEqual(eof, af_lsp:read_message(IO))
+        end},
+
+        {"read_message returns eof when body is eof", fun() ->
+            %% We pass the atom eof as body
+            {IO, _} = mock_io(
+                ["Content-Length: 5\n", "\n"],
+                eof),
+            ?assertEqual(eof, af_lsp:read_message(IO))
+        end},
+
+        {"read_message propagates IO error from header read", fun() ->
+            IO = #{
+                get_line => fun() -> {error, terminated} end,
+                get_chars => fun(_N) -> <<>> end,
+                put_chars => fun(_) -> ok end
+            },
+            ?assertEqual({error, terminated}, af_lsp:read_message(IO))
+        end},
+
+        {"read_message propagates IO error from body read", fun() ->
+            Lines = ["Content-Length: 3\n", "\n"],
+            State = ets:new(mock, [public, set]),
+            ets:insert(State, {lines, Lines}),
+            IO = #{
+                get_line => fun() ->
+                    [{lines, L}] = ets:lookup(State, lines),
+                    case L of
+                        [] -> eof;
+                        [H | T] -> ets:insert(State, {lines, T}), H
+                    end
+                end,
+                get_chars => fun(_N) -> {error, boom} end,
+                put_chars => fun(_) -> ok end
+            },
+            ?assertEqual({error, boom}, af_lsp:read_message(IO))
+        end}
+    ].
+
+write_message_mock_test_() ->
+    [
+        {"write_message emits a Content-Length-framed body", fun() ->
+            {IO, State} = mock_io([], <<>>),
+            Msg = #{<<"jsonrpc">> => <<"2.0">>,
+                    <<"id">> => 1,
+                    <<"result">> => null},
+            af_lsp:write_message(Msg, IO),
+            Out = mock_output(State),
+            ?assertNotEqual(nomatch, binary:match(Out, <<"Content-Length: ">>)),
+            ?assertNotEqual(nomatch, binary:match(Out, <<"\r\n\r\n">>))
+        end}
+    ].
+
+loop_mock_test_() ->
+    [
+        {"loop processes shutdown request and terminates on eof", fun() ->
+            ShutdownBody = <<"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"shutdown\"}">>,
+            Len = byte_size(ShutdownBody),
+            Header = io_lib:format("Content-Length: ~B\n", [Len]),
+            {IO, State} = mock_io(
+                [lists:flatten(Header), "\n"],
+                ShutdownBody),
+            af_lsp:loop(#{docs => #{}, initialized => true}, IO),
+            Out = mock_output(State),
+            %% Should have written a response
+            ?assertNotEqual(nomatch, binary:match(Out, <<"Content-Length:">>)),
+            ?assertNotEqual(nomatch, binary:match(Out, <<"\"id\":1">>))
+        end},
+
+        {"loop handles notification (no response), then eof", fun() ->
+            NotifBody = <<"{\"jsonrpc\":\"2.0\",\"method\":\"initialized\"}">>,
+            Len = byte_size(NotifBody),
+            Header = io_lib:format("Content-Length: ~B\n", [Len]),
+            {IO, State} = mock_io(
+                [lists:flatten(Header), "\n"],
+                NotifBody),
+            af_lsp:loop(#{docs => #{}, initialized => false}, IO),
+            Out = mock_output(State),
+            %% Notification produces no output
+            ?assertEqual(<<>>, Out)
+        end},
+
+        {"loop stops on eof", fun() ->
+            {IO, _} = mock_io([], <<>>),
+            ?assertEqual(ok, af_lsp:loop(#{docs => #{}, initialized => true}, IO))
+        end},
+
+        {"loop logs and returns on read error", fun() ->
+            IO = #{
+                get_line => fun() -> {error, boom} end,
+                get_chars => fun(_) -> <<>> end,
+                put_chars => fun(_) -> ok end
+            },
+            ?assertEqual(ok, af_lsp:loop(#{docs => #{}, initialized => true}, IO))
+        end}
+    ].
+
+default_io_callable_test_() ->
+    [
+        {"default_io map lambdas are callable (may block if actually reading)",
+         fun() ->
+            IO = af_lsp:default_io(),
+            GetLine = maps:get(get_line, IO),
+            GetChars = maps:get(get_chars, IO),
+            PutChars = maps:get(put_chars, IO),
+            %% We don't actually call GetLine/GetChars (would block on real
+            %% stdin). We verify put_chars works by writing an empty iolist.
+            ?assert(is_function(GetLine, 0)),
+            ?assert(is_function(GetChars, 1)),
+            ?assertEqual(ok, PutChars([]))
+        end}
+    ].
+
+parser_error_test_() ->
+    [
+        {"analyze_document swallows parse errors", fun() ->
+            %% Pass non-binary text; binary_to_list/1 will throw badarg,
+            %% which the catch must swallow.
+            Doc = af_lsp:analyze_document(<<"t.a4">>, 42, 1, #{}),
+            ?assertEqual([], maps:get(tokens, Doc)),
+            ?assertEqual([], maps:get(diagnostics, Doc))
+        end}
+    ].
+
+%% === Frame parsing and encoding ===
+
+parse_header_test_() ->
+    [
+        ?_assertEqual({content_length, 42},
+                      af_lsp:parse_header("content-length: 42")),
+        ?_assertEqual({content_length, 100},
+                      af_lsp:parse_header("Content-Length: 100")),
+        ?_assertEqual({content_length, 7},
+                      af_lsp:parse_header("CONTENT-LENGTH: 7")),
+        %% Mixed casing that falls through the prefix match must hit the regex
+        ?_assertEqual({content_length, 3},
+                      af_lsp:parse_header("CoNtEnT-LeNgTh: 3")),
+        %% No space after colon forces the regex path (\\s*)
+        ?_assertEqual({content_length, 42},
+                      af_lsp:parse_header("Content-Length:42")),
+        ?_assertEqual(unknown,
+                      af_lsp:parse_header("some-other-header: value")),
+        ?_assertEqual(unknown,
+                      af_lsp:parse_header("garbage"))
+    ].
+
+encode_message_test_() ->
+    [
+        {"encoded message has Content-Length header", fun() ->
+            Msg = #{<<"jsonrpc">> => <<"2.0">>, <<"id">> => 1,
+                    <<"result">> => null},
+            Encoded = af_lsp:encode_message(Msg),
+            ?assert(is_binary(Encoded)),
+            ?assertNotEqual(nomatch, binary:match(Encoded, <<"Content-Length:">>))
+        end},
+
+        {"encoded header ends with blank line", fun() ->
+            Msg = #{<<"ok">> => true},
+            Encoded = af_lsp:encode_message(Msg),
+            ?assertNotEqual(nomatch, binary:match(Encoded, <<"\r\n\r\n">>))
+        end},
+
+        {"body contains the encoded JSON", fun() ->
+            Msg = #{<<"hello">> => <<"world">>},
+            Encoded = af_lsp:encode_message(Msg),
+            ?assertNotEqual(nomatch, binary:match(Encoded, <<"\"hello\"">>)),
+            ?assertNotEqual(nomatch, binary:match(Encoded, <<"\"world\"">>))
+        end},
+
+        {"Content-Length matches body byte size", fun() ->
+            Msg = #{<<"x">> => 1},
+            Encoded = af_lsp:encode_message(Msg),
+            {match, [LenStr]} = re:run(Encoded, "Content-Length: (\\d+)",
+                                        [{capture, [1], binary}]),
+            Len = binary_to_integer(LenStr),
+            %% The body starts after \r\n\r\n
+            [_, Body] = binary:split(Encoded, <<"\r\n\r\n">>),
+            ?assertEqual(Len, byte_size(Body))
+        end}
+    ].
+
+%% === default_io and init_lsp_state ===
+
+default_io_test_() ->
+    [
+        {"default_io returns a map with IO functions", fun() ->
+            IO = af_lsp:default_io(),
+            ?assert(is_map(IO)),
+            ?assert(is_function(maps:get(get_line, IO), 0)),
+            ?assert(is_function(maps:get(get_chars, IO), 1)),
+            ?assert(is_function(maps:get(put_chars, IO), 1))
+        end}
+    ].
+
+init_lsp_state_test_() ->
+    [
+        {"init_lsp_state builds expected state map", fun() ->
+            State = af_lsp:init_lsp_state(#{foo => bar}),
+            ?assertEqual(#{foo => bar}, maps:get(mods, State)),
+            ?assertEqual(#{}, maps:get(docs, State)),
+            ?assertEqual(false, maps:get(initialized, State))
+        end}
+    ].
+
+%% === Direct tests of internals ===
+
+sig_matches_direct_test_() ->
+    [
+        ?_assertEqual(true, af_lsp:sig_matches([], [])),
+        ?_assertEqual(false, af_lsp:sig_matches(['Int'], [])),
+        ?_assertEqual(false, af_lsp:sig_matches([], ["Int"])),
+        ?_assertEqual(true, af_lsp:sig_matches(['Any'], ["String"])),
+        ?_assertEqual(true, af_lsp:sig_matches(['Int', 'Bool'], ["Int", "Bool"])),
+        ?_assertEqual(false, af_lsp:sig_matches(['Int', 'Bool'], ["Bool", "Int"]))
+    ].
+
+type_compatible_direct_test_() ->
+    [
+        ?_assertEqual(true, af_lsp:type_compatible('Any', "Int")),
+        ?_assertEqual(true, af_lsp:type_compatible('_', "Int")),
+        ?_assertEqual(true, af_lsp:type_compatible('_a', "Int")),
+        ?_assertEqual(true, af_lsp:type_compatible('Int', "Int")),
+        ?_assertEqual(false, af_lsp:type_compatible('Int', "String")),
+        ?_assertEqual(true, af_lsp:type_compatible('Int', "Any")),
+        ?_assertEqual(true, af_lsp:type_compatible('Int', "?")),
+        ?_assertEqual(true, af_lsp:type_compatible('Int', "Atom")),
+        ?_assertEqual(true, af_lsp:type_compatible({'Int', 0}, "Int")),
+        ?_assertEqual(false, af_lsp:type_compatible({'Int', 0}, "String")),
+        %% Catch-all for truly weird sig_in values
+        ?_assertEqual(false, af_lsp:type_compatible(42, "Int"))
+    ].
+
+format_sig_item_direct_test_() ->
+    [
+        ?_assertEqual("Int", lists:flatten(af_lsp:format_sig_item('Int'))),
+        ?_assertEqual("Int=0",
+                      lists:flatten(af_lsp:format_sig_item({'Int', 0}))),
+        ?_assertEqual("foo", lists:flatten(af_lsp:format_sig_item("foo"))),
+        ?_assert(is_list(lists:flatten(af_lsp:format_sig_item(42))))
+    ].
+
+find_snap_at_edge_test_() ->
+    [
+        {"empty snaps returns undefined", fun() ->
+            ?assertEqual(undefined, af_lsp:find_snap_at([], 0, 0))
+        end},
+
+        {"target before all snaps returns undefined", fun() ->
+            %% Content with snaps on line 6 (0-indexed line 5)
+            Src = <<"\n\n\n\n\n1 2">>,
+            Doc = af_lsp:analyze_document(<<"t.a4">>, Src, 1, #{}),
+            Snaps = maps:get(stack_snaps, Doc),
+            %% Query at line -1 in 1-indexed terms would be impossible, but we can
+            %% pass a doc whose snaps are all past our target line.
+            %% LSP line 0 = internal line 1. So if all snaps are on internal line
+            %% 6, and we ask for line 0... Before = [] -> undefined
+            ?assertEqual(undefined, af_lsp:find_snap_at(Snaps, -1, 0))
+        end}
+    ].
+
+log_test_() ->
+    [
+        {"log writes to stderr without error", fun() ->
+            %% Capturing stderr is fragile in eunit; just verify the call
+            %% returns without raising.
+            ?assertEqual(ok,
+                (fun() -> af_lsp:log("~s~n", ["test log"]), ok end)())
+        end}
+    ].
+
+%% === Weird sig_in values flow end-to-end ===
+
+weird_sig_test_() ->
+    {foreach,
+     fun() ->
+         setup(),
+         af_type:add_op('Any', #operation{
+             name = "weird", sig_in = [42],
+             sig_out = [], impl = undefined, source = undefined}),
+         ok
+     end,
+     fun(_) -> ok end, [
+        fun(_) -> {"weird sig_in value triggers mismatch with ~p format", fun() ->
+            Doc = af_lsp:analyze_document(<<"t.a4">>, <<"1 weird">>, 1, #{}),
+            Diags = maps:get(diagnostics, Doc),
+            ?assert(length(Diags) >= 1),
+            Msg = maps:get(message, hd(Diags)),
+            ?assertNotEqual(nomatch, binary:match(Msg, <<"mismatch">>))
+        end} end
+    ]}.
+
+%% === Primitive arity table ===
+
+primitive_arity_table_test_() ->
+    [
+        ?_assertEqual({known, 1, ["?", "?"]}, af_lsp:primitive_arity("dup")),
+        ?_assertEqual({known, 1, []}, af_lsp:primitive_arity("drop")),
+        ?_assertEqual({known, 2, ["?", "?"]}, af_lsp:primitive_arity("swap")),
+        ?_assertEqual({known, 3, ["?", "?", "?"]}, af_lsp:primitive_arity("rot")),
+        ?_assertEqual({known, 2, ["Int"]}, af_lsp:primitive_arity("+")),
+        ?_assertEqual({known, 2, ["Int"]}, af_lsp:primitive_arity("mod")),
+        ?_assertEqual({known, 2, ["Bool"]}, af_lsp:primitive_arity("==")),
+        ?_assertEqual({known, 1, ["Bool"]}, af_lsp:primitive_arity("not")),
+        ?_assertEqual({known, 2, ["Bool"]}, af_lsp:primitive_arity("and")),
+        ?_assertEqual({known, 2, ["List"]}, af_lsp:primitive_arity("cons")),
+        ?_assertEqual({known, 1, ["Any"]}, af_lsp:primitive_arity("head")),
+        ?_assertEqual({known, 3, ["Map"]}, af_lsp:primitive_arity("map-put")),
+        ?_assertEqual({known, 2, ["Any"]}, af_lsp:primitive_arity("map-get")),
+        ?_assertEqual({known, 1, ["Int"]}, af_lsp:primitive_arity("map-size")),
+        ?_assertEqual({known, 2, ["String"]}, af_lsp:primitive_arity("concat")),
+        ?_assertEqual({known, 1, ["String"]}, af_lsp:primitive_arity("to-string")),
+        ?_assertEqual({known, 1, []}, af_lsp:primitive_arity("print")),
+        ?_assertEqual({known, 2, []}, af_lsp:primitive_arity("assert-eq")),
+        ?_assertEqual(unknown, af_lsp:primitive_arity("not-a-word")),
+        ?_assertEqual(unknown, af_lsp:primitive_arity(""))
+    ].
+
+%% === sig_out_item formatting ===
+
+sig_out_item_test_() ->
+    [
+        ?_assertEqual("Int", af_lsp:sig_out_item('Int')),
+        ?_assertEqual("Int", af_lsp:sig_out_item({'Int', 42})),
+        ?_assertEqual("abc", af_lsp:sig_out_item("abc")),
+        ?_assert(is_list(af_lsp:sig_out_item({weird_term, x}))),
+        %% Non-atom, non-list, non-tuple triggers catch-all with ~p format
+        ?_assert(is_list(af_lsp:sig_out_item(42)))
+    ].
+
+%% === publish_diagnostics shape ===
+
+publish_diagnostics_shape_test_() ->
+    [
+        {"empty diags produces empty list", fun() ->
+            N = af_lsp:publish_diagnostics(<<"file:///x.a4">>, []),
+            ?assertEqual(<<"textDocument/publishDiagnostics">>,
+                         maps:get(<<"method">>, N)),
+            Params = maps:get(<<"params">>, N),
+            ?assertEqual([], maps:get(<<"diagnostics">>, Params))
+        end},
+
+        {"full diag is translated into LSP shape", fun() ->
+            Diag = #{line => 3, col => 5, end_col => 8,
+                     severity => 1, message => <<"bad">>},
+            N = af_lsp:publish_diagnostics(<<"file:///y.a4">>, [Diag]),
+            Params = maps:get(<<"params">>, N),
+            [D] = maps:get(<<"diagnostics">>, Params),
+            ?assertEqual(<<"actorforth">>, maps:get(<<"source">>, D)),
+            ?assertEqual(<<"bad">>, maps:get(<<"message">>, D)),
+            ?assertEqual(1, maps:get(<<"severity">>, D)),
+            Range = maps:get(<<"range">>, D),
+            %% col is 1-indexed in our internal form, 0-indexed in LSP
+            ?assertEqual(2, maps:get(<<"line">>, maps:get(<<"start">>, Range))),
+            ?assertEqual(4, maps:get(<<"character">>, maps:get(<<"start">>, Range))),
+            ?assertEqual(7, maps:get(<<"character">>, maps:get(<<"end">>, Range)))
+        end}
+    ].
+
+%% === Diagnostics: snap carries diags field ===
+
+diag_snap_field_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"each snap has a diags field (may be empty)", fun() ->
+            Tokens = af_parser:parse("1 2 +", "test"),
+            Snaps = af_lsp:infer_stacks(Tokens),
+            lists:foreach(fun(S) ->
+                ?assert(maps:is_key(diags, S))
+            end, Snaps)
+        end} end,
+
+        fun(_) -> {"snap for bad token carries its diag", fun() ->
+            Tokens = af_parser:parse("+", "test"),
+            Snaps = af_lsp:infer_stacks(Tokens),
+            [S] = Snaps,
+            Diags = maps:get(diags, S),
+            ?assertEqual(1, length(Diags))
+        end} end
+    ]}.

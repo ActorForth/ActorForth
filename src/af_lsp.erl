@@ -8,6 +8,12 @@
 -export([analyze_document/4, infer_stacks/1]).
 -export([compute_hover/3, compute_completions/3, compute_definition/4]).
 -export([format_stack/1, handle_request/2]).
+%% Exported for unit tests; used internally by the transport loop.
+-export([parse_header/1, encode_message/1, publish_diagnostics/2]).
+-export([primitive_arity/1, sig_out_item/1]).
+-export([read_message/1, read_headers/1, write_message/2, loop/2]).
+-export([default_io/0, init_lsp_state/1, sig_matches/2, type_compatible/2]).
+-export([format_sig_item/1, find_snap_at/3, log/2]).
 
 -include("token.hrl").
 -include("operation.hrl").
@@ -47,18 +53,23 @@ compile_lsp_modules() ->
 init_lsp_state(Mods) ->
     #{mods => Mods, docs => #{}, initialized => false}.
 
-%% Main loop: read JSON-RPC message, dispatch, write response
+%% Main loop: read JSON-RPC message, dispatch, write response.
+%% `IO` is a transport record of fun-arity functions. For production use
+%% `default_io/0`. Tests inject synthetic IO functions.
 loop(State) ->
-    case read_message() of
+    loop(State, default_io()).
+
+loop(State, IO) ->
+    case read_message(IO) of
         {ok, Request} ->
             {Response, NewState} = handle_request(Request, State),
             case Response of
                 no_response -> ok;
-                _ -> write_message(Response)
+                _ -> write_message(Response, IO)
             end,
             case maps:get(<<"method">>, Request, undefined) of
                 <<"exit">> -> halt(0);
-                _ -> loop(NewState)
+                _ -> loop(NewState, IO)
             end;
         eof ->
             ok;
@@ -67,15 +78,23 @@ loop(State) ->
             ok
     end.
 
-%% Read a JSON-RPC message from stdin
-read_message() ->
-    case read_headers() of
+default_io() ->
+    #{get_line => fun() -> io:get_line(standard_io, "") end,
+      get_chars => fun(N) -> io:get_chars(standard_io, "", N) end,
+      put_chars => fun(Data) -> io:put_chars(standard_io, Data) end}.
+
+%% Read a JSON-RPC message using the given IO functions.
+%% Returns {ok, Map} on success; eof when input ends cleanly; {error, Reason}
+%% for malformed input.
+read_message(IO) ->
+    case read_headers(IO) of
         {ok, ContentLength} ->
-            case io:get_chars(standard_io, "", ContentLength) of
+            GetChars = maps:get(get_chars, IO),
+            case GetChars(ContentLength) of
                 eof -> eof;
                 {error, _} = E -> E;
                 Body ->
-                    try jsx:decode(iolist_to_binary(Body), [return_maps])
+                    try {ok, jsx:decode(iolist_to_binary(Body), [return_maps])}
                     catch _:_ -> {error, json_decode}
                     end
             end;
@@ -83,12 +102,13 @@ read_message() ->
         {error, _} = E -> E
     end.
 
-%% Read Content-Length headers
-read_headers() ->
-    read_headers(undefined).
+%% Read Content-Length headers.
+read_headers(IO) when is_map(IO) ->
+    read_headers_loop(IO, undefined).
 
-read_headers(ContentLength) ->
-    case io:get_line(standard_io, "") of
+read_headers_loop(IO, ContentLength) ->
+    GetLine = maps:get(get_line, IO),
+    case GetLine() of
         eof -> eof;
         {error, _} = E -> E;
         Line ->
@@ -97,13 +117,13 @@ read_headers(ContentLength) ->
                 "" when ContentLength =/= undefined ->
                     {ok, ContentLength};
                 "" ->
-                    read_headers(ContentLength);
+                    read_headers_loop(IO, ContentLength);
                 _ ->
                     case parse_header(Trimmed) of
                         {content_length, N} ->
-                            read_headers(N);
+                            read_headers_loop(IO, N);
                         _ ->
-                            read_headers(ContentLength)
+                            read_headers_loop(IO, ContentLength)
                     end
             end
     end.
@@ -119,11 +139,17 @@ parse_header(Line) ->
             end
     end.
 
-%% Write a JSON-RPC response to stdout
-write_message(Response) ->
+%% Write a JSON-RPC response via the provided IO transport.
+write_message(Response, IO) ->
+    PutChars = maps:get(put_chars, IO),
+    PutChars(encode_message(Response)).
+
+%% Build the LSP frame for a response (Content-Length header + JSON body).
+%% Separated from write_message so that framing can be unit-tested without IO.
+encode_message(Response) ->
     Body = jsx:encode(Response),
     Header = io_lib:format("Content-Length: ~B\r\n\r\n", [byte_size(Body)]),
-    io:put_chars(standard_io, [Header, Body]).
+    iolist_to_binary([Header, Body]).
 
 %% Handle a JSON-RPC request
 handle_request(#{<<"method">> := Method} = Request, State) ->
@@ -140,14 +166,7 @@ handle_request(#{<<"method">> := Method} = Request, State) ->
         {notify, Notification, NewState} ->
             {Notification, NewState};
         {noreply, NewState} ->
-            {no_response, NewState};
-        {error_reply, Code, Msg, NewState} ->
-            Response = #{
-                <<"jsonrpc">> => <<"2.0">>,
-                <<"id">> => Id,
-                <<"error">> => #{<<"code">> => Code, <<"message">> => Msg}
-            },
-            {Response, NewState}
+            {no_response, NewState}
     end;
 handle_request(_BadRequest, State) ->
     {no_response, State}.
@@ -253,19 +272,26 @@ handle_method(<<"textDocument/definition">>, _Id, Params, State) ->
 handle_method(_Method, _Id, _Params, State) ->
     {noreply, State}.
 
-%% Analyze a document: tokenize and infer stacks
+%% Analyze a document: tokenize, infer stacks, collect diagnostics.
 analyze_document(Uri, Text, Version, _State) ->
     Tokens = try
         af_parser:parse(binary_to_list(Text), binary_to_list(Uri))
     catch _:_ -> []
     end,
     StackSnaps = infer_stacks(Tokens),
-    Diagnostics = compute_diagnostics(Tokens, StackSnaps),
+    Diagnostics = collect_diagnostics(StackSnaps),
     #{uri => Uri, version => Version, text => Text,
       tokens => Tokens, stack_snaps => StackSnaps,
       diagnostics => Diagnostics}.
 
-%% Stack inference: walk tokens, simulate stack effects
+%% Gather all diagnostics from snap list into a flat list.
+collect_diagnostics(Snaps) ->
+    lists:append([maps:get(diags, S, []) || S <- Snaps]).
+
+%% Stack inference: walk tokens, simulate stack effects.
+%% Returns a list of snapshots, each snapshot has {idx, line, col, token, stack}.
+%% Diagnostics collected during inference are stored on each snapshot under
+%% key `diags` (a list of diagnostic maps for the token at that snapshot).
 infer_stacks(Tokens) ->
     infer_stacks(Tokens, [], [], 0).
 
@@ -275,101 +301,197 @@ infer_stacks([Token | Rest], Stack, Snaps, Idx) ->
     Line = Token#token.line,
     Col = Token#token.column,
     Value = Token#token.value,
+    {NewStack, Diags} = apply_stack_effect(Value, Token, Stack),
     Snap = #{idx => Idx, line => Line, col => Col,
-             token => Value, stack => Stack},
-    NewStack = apply_stack_effect(Value, Token, Stack),
+             token => Value, stack => Stack, diags => Diags},
     infer_stacks(Rest, NewStack, [Snap | Snaps], Idx + 1).
 
-%% Apply stack effect of a token
+%% Apply stack effect of a token.
+%% Returns {NewStack, Diagnostics} where Diagnostics is a list of diagnostic
+%% maps (one per error produced by this token).
 apply_stack_effect(":", _Token, Stack) ->
-    [{def_marker} | Stack];
+    {[{def_marker} | Stack], []};
 apply_stack_effect(";", _Token, Stack) ->
-    Stack;
+    {Stack, []};
 apply_stack_effect(".", _Token, Stack) ->
-    %% End of definition — pop back to def_marker or leave as-is
-    drop_to_marker(Stack);
+    %% End of definition: pop back to def_marker or clear
+    {drop_to_marker(Stack), []};
 apply_stack_effect("->", _Token, Stack) ->
-    Stack;
+    {Stack, []};
 
-%% Stack primitives
-apply_stack_effect("dup", _Token, [H | T]) -> [H, H | T];
-apply_stack_effect("drop", _Token, [_ | T]) -> T;
-apply_stack_effect("swap", _Token, [A, B | T]) -> [B, A | T];
-apply_stack_effect("rot", _Token, [A, B, C | T]) -> [C, A, B | T];
-apply_stack_effect("over", _Token, [A, B | T]) -> [B, A, B | T];
-apply_stack_effect("2dup", _Token, [A, B | T]) -> [A, B, A, B | T];
+%% Stack primitives (happy path)
+apply_stack_effect("dup", _Token, [H | T]) -> {[H, H | T], []};
+apply_stack_effect("drop", _Token, [_ | T]) -> {T, []};
+apply_stack_effect("swap", _Token, [A, B | T]) -> {[B, A | T], []};
+apply_stack_effect("rot", _Token, [A, B, C | T]) -> {[C, A, B | T], []};
+apply_stack_effect("over", _Token, [A, B | T]) -> {[B, A, B | T], []};
+apply_stack_effect("2dup", _Token, [A, B | T]) -> {[A, B, A, B | T], []};
 
 %% Arithmetic: two numbers -> one number
-apply_stack_effect("+", _Token, [_, _ | T]) -> ["Int" | T];
-apply_stack_effect("-", _Token, [_, _ | T]) -> ["Int" | T];
-apply_stack_effect("*", _Token, [_, _ | T]) -> ["Int" | T];
-apply_stack_effect("/", _Token, [_, _ | T]) -> ["Int" | T];
-apply_stack_effect("mod", _Token, [_, _ | T]) -> ["Int" | T];
+apply_stack_effect("+", _Token, [_, _ | T]) -> {["Int" | T], []};
+apply_stack_effect("-", _Token, [_, _ | T]) -> {["Int" | T], []};
+apply_stack_effect("*", _Token, [_, _ | T]) -> {["Int" | T], []};
+apply_stack_effect("/", _Token, [_, _ | T]) -> {["Int" | T], []};
+apply_stack_effect("mod", _Token, [_, _ | T]) -> {["Int" | T], []};
 
 %% Comparison: two values -> Bool
-apply_stack_effect("==", _Token, [_, _ | T]) -> ["Bool" | T];
-apply_stack_effect("!=", _Token, [_, _ | T]) -> ["Bool" | T];
-apply_stack_effect("<", _Token, [_, _ | T]) -> ["Bool" | T];
-apply_stack_effect(">", _Token, [_, _ | T]) -> ["Bool" | T];
-apply_stack_effect("<=", _Token, [_, _ | T]) -> ["Bool" | T];
-apply_stack_effect(">=", _Token, [_, _ | T]) -> ["Bool" | T];
+apply_stack_effect("==", _Token, [_, _ | T]) -> {["Bool" | T], []};
+apply_stack_effect("!=", _Token, [_, _ | T]) -> {["Bool" | T], []};
+apply_stack_effect("<", _Token, [_, _ | T]) -> {["Bool" | T], []};
+apply_stack_effect(">", _Token, [_, _ | T]) -> {["Bool" | T], []};
+apply_stack_effect("<=", _Token, [_, _ | T]) -> {["Bool" | T], []};
+apply_stack_effect(">=", _Token, [_, _ | T]) -> {["Bool" | T], []};
 
 %% Logic
-apply_stack_effect("not", _Token, [_ | T]) -> ["Bool" | T];
-apply_stack_effect("and", _Token, [_, _ | T]) -> ["Bool" | T];
-apply_stack_effect("or", _Token, [_, _ | T]) -> ["Bool" | T];
+apply_stack_effect("not", _Token, [_ | T]) -> {["Bool" | T], []};
+apply_stack_effect("and", _Token, [_, _ | T]) -> {["Bool" | T], []};
+apply_stack_effect("or", _Token, [_, _ | T]) -> {["Bool" | T], []};
 
 %% List operations
-apply_stack_effect("nil", _Token, Stack) -> ["List" | Stack];
-apply_stack_effect("cons", _Token, [_, _ | T]) -> ["List" | T];
-apply_stack_effect("head", _Token, [_ | T]) -> ["Any" | T];
-apply_stack_effect("tail", _Token, [_ | T]) -> ["List" | T];
-apply_stack_effect("length", _Token, [_ | T]) -> ["Int" | T];
-apply_stack_effect("empty?", _Token, [_ | T]) -> ["Bool" | T];
-apply_stack_effect("append", _Token, [_, _ | T]) -> ["List" | T];
-apply_stack_effect("reverse", _Token, [_ | T]) -> ["List" | T];
+apply_stack_effect("nil", _Token, Stack) -> {["List" | Stack], []};
+apply_stack_effect("cons", _Token, [_, _ | T]) -> {["List" | T], []};
+apply_stack_effect("head", _Token, [_ | T]) -> {["Any" | T], []};
+apply_stack_effect("tail", _Token, [_ | T]) -> {["List" | T], []};
+apply_stack_effect("length", _Token, [_ | T]) -> {["Int" | T], []};
+apply_stack_effect("empty?", _Token, [_ | T]) -> {["Bool" | T], []};
+apply_stack_effect("append", _Token, [_, _ | T]) -> {["List" | T], []};
+apply_stack_effect("reverse", _Token, [_ | T]) -> {["List" | T], []};
 
 %% Map operations
-apply_stack_effect("map-new", _Token, Stack) -> ["Map" | Stack];
-apply_stack_effect("map-put", _Token, [_, _, _ | T]) -> ["Map" | T];
-apply_stack_effect("map-get", _Token, [_, _ | T]) -> ["Any" | T];
-apply_stack_effect("map-delete", _Token, [_, _ | T]) -> ["Map" | T];
-apply_stack_effect("map-has?", _Token, [_, _ | T]) -> ["Bool" | T];
-apply_stack_effect("map-keys", _Token, [_ | T]) -> ["List" | T];
-apply_stack_effect("map-values", _Token, [_ | T]) -> ["List" | T];
-apply_stack_effect("map-size", _Token, [_ | T]) -> ["Int" | T];
+apply_stack_effect("map-new", _Token, Stack) -> {["Map" | Stack], []};
+apply_stack_effect("map-put", _Token, [_, _, _ | T]) -> {["Map" | T], []};
+apply_stack_effect("map-get", _Token, [_, _ | T]) -> {["Any" | T], []};
+apply_stack_effect("map-delete", _Token, [_, _ | T]) -> {["Map" | T], []};
+apply_stack_effect("map-has?", _Token, [_, _ | T]) -> {["Bool" | T], []};
+apply_stack_effect("map-keys", _Token, [_ | T]) -> {["List" | T], []};
+apply_stack_effect("map-values", _Token, [_ | T]) -> {["List" | T], []};
+apply_stack_effect("map-size", _Token, [_ | T]) -> {["Int" | T], []};
 
 %% String operations
-apply_stack_effect("concat", _Token, [_, _ | T]) -> ["String" | T];
-apply_stack_effect("to-string", _Token, [_ | T]) -> ["String" | T];
-apply_stack_effect("to-int", _Token, [_ | T]) -> ["Int" | T];
-apply_stack_effect("to-float", _Token, [_ | T]) -> ["Float" | T];
+apply_stack_effect("concat", _Token, [_, _ | T]) -> {["String" | T], []};
+apply_stack_effect("to-string", _Token, [_ | T]) -> {["String" | T], []};
+apply_stack_effect("to-int", _Token, [_ | T]) -> {["Int" | T], []};
+apply_stack_effect("to-float", _Token, [_ | T]) -> {["Float" | T], []};
 
 %% IO
-apply_stack_effect("print", _Token, [_ | T]) -> T;
-apply_stack_effect("stack", _Token, Stack) -> Stack;
-apply_stack_effect("assert", _Token, [_ | T]) -> T;
-apply_stack_effect("assert-eq", _Token, [_, _ | T]) -> T;
+apply_stack_effect("print", _Token, [_ | T]) -> {T, []};
+apply_stack_effect("stack", _Token, Stack) -> {Stack, []};
+apply_stack_effect("assert", _Token, [_ | T]) -> {T, []};
+apply_stack_effect("assert-eq", _Token, [_, _ | T]) -> {T, []};
 
-%% Literals: integers push Int
+%% Catch-all: either a known primitive that underflowed, a literal, a user word,
+%% or an unrecognised token (Atom).
 apply_stack_effect(Value, Token, Stack) ->
-    case Token#token.quoted of
-        true -> ["String" | Stack];
-        false ->
-            case is_integer_literal(Value) of
-                true -> ["Int" | Stack];
+    case primitive_arity(Value) of
+        {known, ArityIn, OutTypes} ->
+            %% Known primitive that failed pattern-match => stack underflow
+            {OutTypes ++ Stack,
+             [underflow_diag(Value, ArityIn, length(Stack), Token)]};
+        unknown ->
+            case Token#token.quoted of
+                true -> {["String" | Stack], []};
                 false ->
-                    case is_float_literal(Value) of
-                        true -> ["Float" | Stack];
+                    case is_integer_literal(Value) of
+                        true -> {["Int" | Stack], []};
                         false ->
-                            %% Try to look up as a known word
-                            case lookup_word_effect(Value) of
-                                {ok, Effect} -> apply_word_effect(Effect, Stack);
-                                not_found -> ["Atom" | Stack]
+                            case is_float_literal(Value) of
+                                true -> {["Float" | Stack], []};
+                                false ->
+                                    %% Try to look up as a known word
+                                    case lookup_word_effect(Value) of
+                                        {ok, Op} ->
+                                            apply_word_effect(Op, Token, Stack);
+                                        not_found ->
+                                            {["Atom" | Stack], []}
+                                    end
                             end
                     end
             end
     end.
+
+%% Primitive-arity table for underflow detection.
+%% Maps primitive name to {known, ArityIn, OutputStackItems}.
+%% OutputStackItems is the list pushed onto the stack when underflow occurs,
+%% approximating what the op would have left there.
+primitive_arity("dup")       -> {known, 1, ["?", "?"]};
+primitive_arity("drop")      -> {known, 1, []};
+primitive_arity("swap")      -> {known, 2, ["?", "?"]};
+primitive_arity("rot")       -> {known, 3, ["?", "?", "?"]};
+primitive_arity("over")      -> {known, 2, ["?", "?", "?"]};
+primitive_arity("2dup")      -> {known, 2, ["?", "?", "?", "?"]};
+primitive_arity("+")         -> {known, 2, ["Int"]};
+primitive_arity("-")         -> {known, 2, ["Int"]};
+primitive_arity("*")         -> {known, 2, ["Int"]};
+primitive_arity("/")         -> {known, 2, ["Int"]};
+primitive_arity("mod")       -> {known, 2, ["Int"]};
+primitive_arity("==")        -> {known, 2, ["Bool"]};
+primitive_arity("!=")        -> {known, 2, ["Bool"]};
+primitive_arity("<")         -> {known, 2, ["Bool"]};
+primitive_arity(">")         -> {known, 2, ["Bool"]};
+primitive_arity("<=")        -> {known, 2, ["Bool"]};
+primitive_arity(">=")        -> {known, 2, ["Bool"]};
+primitive_arity("not")       -> {known, 1, ["Bool"]};
+primitive_arity("and")       -> {known, 2, ["Bool"]};
+primitive_arity("or")        -> {known, 2, ["Bool"]};
+primitive_arity("cons")      -> {known, 2, ["List"]};
+primitive_arity("head")      -> {known, 1, ["Any"]};
+primitive_arity("tail")      -> {known, 1, ["List"]};
+primitive_arity("length")    -> {known, 1, ["Int"]};
+primitive_arity("empty?")    -> {known, 1, ["Bool"]};
+primitive_arity("append")    -> {known, 2, ["List"]};
+primitive_arity("reverse")   -> {known, 1, ["List"]};
+primitive_arity("map-put")   -> {known, 3, ["Map"]};
+primitive_arity("map-get")   -> {known, 2, ["Any"]};
+primitive_arity("map-delete")-> {known, 2, ["Map"]};
+primitive_arity("map-has?")  -> {known, 2, ["Bool"]};
+primitive_arity("map-keys")  -> {known, 1, ["List"]};
+primitive_arity("map-values")-> {known, 1, ["List"]};
+primitive_arity("map-size")  -> {known, 1, ["Int"]};
+primitive_arity("concat")    -> {known, 2, ["String"]};
+primitive_arity("to-string") -> {known, 1, ["String"]};
+primitive_arity("to-int")    -> {known, 1, ["Int"]};
+primitive_arity("to-float")  -> {known, 1, ["Float"]};
+primitive_arity("print")     -> {known, 1, []};
+primitive_arity("assert")    -> {known, 1, []};
+primitive_arity("assert-eq") -> {known, 2, []};
+primitive_arity(_)           -> unknown.
+
+%% Build a stack-underflow diagnostic for a token.
+underflow_diag(Value, NeededIn, Have, Token) ->
+    Msg = iolist_to_binary(io_lib:format(
+        "stack underflow: '~s' requires ~B item(s), stack has ~B",
+        [Value, NeededIn, Have])),
+    token_diag(Token, 1, Msg).
+
+%% Build a signature-mismatch diagnostic for a word application.
+mismatch_diag(Name, Expected, Got, Token) ->
+    Msg = iolist_to_binary(io_lib:format(
+        "type mismatch: '~s' expected ~s on stack, got ~s",
+        [Name, format_sig_for_msg(Expected), format_sig_for_msg(Got)])),
+    token_diag(Token, 1, Msg).
+
+token_diag(Token, Severity, Message) ->
+    Line = Token#token.line,
+    Col = Token#token.column,
+    Len = length(Token#token.value),
+    #{line => Line,
+      col => Col,
+      end_col => Col + Len,
+      severity => Severity,
+      message => Message}.
+
+format_sig_for_msg(List) ->
+    Strs = [format_sig_item(I) || I <- List],
+    iolist_to_binary([$(, lists:join($\s, Strs), $)]).
+
+format_sig_item({Type, Val}) when is_atom(Type) ->
+    io_lib:format("~s=~p", [atom_to_list(Type), Val]);
+format_sig_item(Type) when is_atom(Type) ->
+    atom_to_list(Type);
+format_sig_item(Type) when is_list(Type) ->
+    Type;
+format_sig_item(Other) ->
+    io_lib:format("~p", [Other]).
 
 is_integer_literal(Value) ->
     case catch list_to_integer(Value) of
@@ -383,15 +505,14 @@ is_float_literal(Value) ->
         _ -> false
     end.
 
-%% Look up a word's stack effect from the type registry
+%% Look up a word's stack effect from the type registry.
+%% Ops are keyed by string name (matching the token's value), not by atom.
 lookup_word_effect(Name) ->
-    %% Try to find in Any type first, then try as type constructor
-    case af_type:find_op_by_name(list_to_atom(Name), 'Any') of
+    case af_type:find_op_by_name(Name, 'Any') of
         {ok, Op} -> {ok, Op};
         not_found ->
-            %% Check all types
             AllTypes = af_type:all_types(),
-            find_in_types(list_to_atom(Name), AllTypes)
+            find_in_types(Name, AllTypes)
     end.
 
 find_in_types(_Name, []) -> not_found;
@@ -402,19 +523,65 @@ find_in_types(Name, [Type | Rest]) ->
         not_found -> find_in_types(Name, Rest)
     end.
 
-apply_word_effect(Op, Stack) ->
+apply_word_effect(Op, Token, Stack) ->
     SigIn = Op#operation.sig_in,
     SigOut = Op#operation.sig_out,
     InLen = length(SigIn),
-    case length(Stack) >= InLen of
+    StackLen = length(Stack),
+    OutTypes = [sig_out_item(T) || T <- SigOut],
+    case StackLen >= InLen of
+        false ->
+            Name = Token#token.value,
+            {["?" | Stack],
+             [underflow_diag(Name, InLen, StackLen, Token)]};
         true ->
             Remaining = lists:nthtail(InLen, Stack),
-            OutTypes = [atom_to_list(T) || T <- SigOut],
-            OutTypes ++ Remaining;
-        false ->
-            %% Stack underflow — mark as unknown
-            ["?" | Stack]
+            Taken = lists:sublist(Stack, InLen),
+            case sig_matches(SigIn, Taken) of
+                true ->
+                    {OutTypes ++ Remaining, []};
+                false ->
+                    Name = Token#token.value,
+                    {OutTypes ++ Remaining,
+                     [mismatch_diag(Name, SigIn, Taken, Token)]}
+            end
     end.
+
+%% Convert a sig_out element into its stack-picture string.
+sig_out_item({Type, _Val}) when is_atom(Type) -> atom_to_list(Type);
+sig_out_item(T) when is_atom(T) -> atom_to_list(T);
+sig_out_item(T) when is_list(T) -> T;
+sig_out_item(Other) -> io_lib:format("~p", [Other]).
+
+%% Check if the taken stack items match the sig_in. sig_in is in the same
+%% TOS-first order as the stack (it's already reversed by the caller of
+%% apply_word_effect via af_type:find_op_by_name semantics).
+%% Each sig_in entry is either:
+%%   - an atom type name (e.g. 'Int', 'Bool', 'Any')
+%%   - an atom starting with '_' (named type variable or anonymous wildcard)
+%%   - a {Type, Value} tuple (value constraint; we only check Type here)
+sig_matches([], []) -> true;
+sig_matches([SigItem | SRest], [StackItem | TRest]) ->
+    case type_compatible(SigItem, StackItem) of
+        true -> sig_matches(SRest, TRest);
+        false -> false
+    end;
+sig_matches(_, _) -> false.
+
+type_compatible(_SigItem, StackStr) when StackStr =:= "Any";
+                                          StackStr =:= "?";
+                                          StackStr =:= "Atom" ->
+    true;
+type_compatible({Type, _Val}, StackStr) ->
+    type_compatible(Type, StackStr);
+type_compatible('Any', _) -> true;
+type_compatible('_', _) -> true;
+type_compatible(SigAtom, StackStr) when is_atom(SigAtom), is_list(StackStr) ->
+    case atom_to_list(SigAtom) of
+        [$_ | _] -> true;                    %% named type variable
+        Str -> Str =:= StackStr
+    end;
+type_compatible(_, _) -> false.
 
 drop_to_marker([]) -> [];
 drop_to_marker([{def_marker} | T]) -> T;
@@ -525,14 +692,7 @@ format_sig(Types) ->
     iolist_to_binary(lists:join(<<" ">>, Strs)).
 
 to_binary(A) when is_atom(A) -> atom_to_binary(A, utf8);
-to_binary(L) when is_list(L) -> list_to_binary(L);
-to_binary(B) when is_binary(B) -> B;
-to_binary(T) -> iolist_to_binary(io_lib:format("~p", [T])).
-
-%% Compute diagnostics from stack inference
-compute_diagnostics(_Tokens, _Snaps) ->
-    %% TODO: detect stack underflows, type mismatches
-    [].
+to_binary(L) when is_list(L) -> list_to_binary(L).
 
 %% Compute go-to-definition
 compute_definition(Doc, Uri, Line, Char) ->
