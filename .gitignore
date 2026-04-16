@@ -22,3 +22,9 @@ rebar3.crashdump
 __pycache__
 *.pyc
 .env
+resume_claude
+.claude/execution_plan.md
+zig-wrapper/.zig-cache/
+zig-wrapper/zig-out/
+zig-wrapper/src/release.tar.zst
+zig-wrapper/src/release.hash

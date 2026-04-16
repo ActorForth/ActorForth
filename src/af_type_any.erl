@@ -21,6 +21,24 @@ init() ->
         impl = fun op_drop/1
     }),
 
+    %% pop : _ ->  (alias for drop)
+    af_type:add_op('Any', #operation{
+        name = "pop", sig_in = ['_'], sig_out = [],
+        impl = fun op_drop/1
+    }),
+
+    %% . : Any ->  (print TOS, Forth-style)
+    af_type:add_op('Any', #operation{
+        name = ".", sig_in = ['Any'], sig_out = [],
+        impl = fun op_dot/1
+    }),
+
+    %% .s : ->  (show stack, alias for stack)
+    af_type:add_op('Any', #operation{
+        name = ".s", sig_in = [], sig_out = [],
+        impl = fun op_stack/1
+    }),
+
     %% swap : _a _b -> _b _a
     af_type:add_op('Any', #operation{
         name = "swap", sig_in = ['_a', '_b'], sig_out = ['_b', '_a'],
@@ -194,6 +212,11 @@ op_2dup(Cont) ->
 op_print(Cont) ->
     [{_Type, Value} | Rest] = Cont#continuation.data_stack,
     io:format("~p~n", [Value]),
+    Cont#continuation{data_stack = Rest}.
+
+op_dot(Cont) ->
+    [{Type, Value} | Rest] = Cont#continuation.data_stack,
+    io:format("~p : ~s~n", [Value, Type]),
     Cont#continuation{data_stack = Rest}.
 
 op_stack(Cont) ->

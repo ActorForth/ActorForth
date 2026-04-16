@@ -300,6 +300,7 @@ translate_token(Value, false, WN) ->
 
 translate_primitive("dup")   -> {ok, [dup]};
 translate_primitive("drop")  -> {ok, [drop]};
+translate_primitive("pop")   -> {ok, [drop]};
 translate_primitive("swap")  -> {ok, [swap]};
 translate_primitive("rot")   -> {ok, [to_r, swap, from_r, swap]};
 translate_primitive("over")  -> {ok, [to_r, dup, from_r, swap]};
@@ -379,7 +380,9 @@ translate_primitive("is-ok")      -> {ok, [is_ok]};
 translate_primitive("unwrap-ok")  -> {ok, [unwrap_ok]};
 %% I/O
 translate_primitive("print")      -> {ok, [print_tos]};
+translate_primitive(".")          -> {ok, [dot]};
 translate_primitive("stack")      -> {ok, [print_stack]};
+translate_primitive(".s")         -> {ok, [print_stack]};
 translate_primitive("assert")     -> {ok, [assert_true]};
 translate_primitive("assert-eq")  -> {ok, [assert_eq]};
 %% File
