@@ -177,6 +177,12 @@ init() ->
         handler = fun handle_debug/2
     }),
 
+    %% forget : String ->  (remove named word plus everything defined after it)
+    af_type:add_op('Any', #operation{
+        name = "forget", sig_in = ['String'], sig_out = [],
+        impl = fun op_forget/1
+    }),
+
     ok.
 
 get_ops(TypeName) ->
@@ -548,6 +554,20 @@ group_defs_by_type(WordDefs) ->
 op_auto_compile(Cont) ->
     [{'Bool', Flag} | Rest] = Cont#continuation.data_stack,
     persistent_term:put(af_auto_compile, Flag),
+    Cont#continuation{data_stack = Rest}.
+
+%% forget <name-as-string>: Forth-style dictionary rollback.
+op_forget(Cont) ->
+    [{'String', Name} | Rest] = Cont#continuation.data_stack,
+    NameStr = case Name of
+        B when is_binary(B) -> binary_to_list(B);
+        L when is_list(L) -> L
+    end,
+    case af_type:forget(NameStr) of
+        ok -> ok;
+        {error, not_found} ->
+            io:format("forget: word '~s' is not defined~n", [NameStr])
+    end,
     Cont#continuation{data_stack = Rest}.
 
 %% Called by af_type_compiler after word registration when auto-compile is enabled.

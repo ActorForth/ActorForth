@@ -10,6 +10,7 @@
 -export([find_op/2, find_op_in_tos/2, find_op_in_any/2, find_op_by_name/2, match_sig/2, match_guard/2]).
 -export([get_type/1, all_types/0]).
 -export([snapshot/0]).
+-export([forget/1, current_def_counter/0]).
 -export([dict_find_op_in_tos/3, dict_find_op_in_any/3, dict_get_type/2,
          dict_all_types/1, dict_add_op/3, dict_register_type/2, dict_replace_ops/4]).
 
@@ -18,7 +19,17 @@
 -type type_constraint() :: 'Any' | atom() | {atom(), term()}.
 -type stack_item() :: {atom(), term()}.
 
--define(TABLE, af_type_registry).
+%% The type registry uses ETS for mutable read/write. Each op is stamped with
+%% a monotonic `defined_at` counter tracked in a second ETS table so that the
+%% Forth-style `forget` word can rewind the dictionary back to a known point.
+%%
+%% A previous attempt stored the registry as a single `persistent_term` map.
+%% That works semantically but exhausts the BEAM "literal heap" when the
+%% compiler rewrites the map thousands of times during test runs: persistent_term
+%% copies the whole value into a GC-collected literal area on every put. ETS
+%% remains the right tool for this write-heavy path.
+-define(TABLE,   af_type_registry).
+-define(CTRTAB,  af_type_counter).
 
 %%% API
 
@@ -27,12 +38,19 @@ init() ->
         undefined -> ets:new(?TABLE, [named_table, set, public, {keypos, #af_type.name}]);
         _ -> ok
     end,
+    case ets:info(?CTRTAB) of
+        undefined ->
+            ets:new(?CTRTAB, [named_table, set, public]),
+            ets:insert(?CTRTAB, {counter, 0});
+        _ -> ok
+    end,
     ensure_type('Any'),
     ensure_type('Atom'),
     ok.
 
 reset() ->
     catch ets:delete(?TABLE),
+    catch ets:delete(?CTRTAB),
     af_repl:init_types().
 
 register_type(#af_type{} = Type) ->
@@ -42,9 +60,10 @@ register_type(#af_type{} = Type) ->
 add_op(TypeName, #operation{} = Op) ->
     case ets:lookup(?TABLE, TypeName) of
         [#af_type{ops = Ops} = Type] ->
-            OpName = Op#operation.name,
+            StampedOp = stamp_op(Op),
+            OpName = StampedOp#operation.name,
             Existing = maps:get(OpName, Ops, []),
-            NewOps = maps:put(OpName, Existing ++ [Op], Ops),
+            NewOps = maps:put(OpName, Existing ++ [StampedOp], Ops),
             ets:insert(?TABLE, Type#af_type{ops = NewOps}),
             ok;
         [] ->
@@ -52,10 +71,14 @@ add_op(TypeName, #operation{} = Op) ->
     end.
 
 %% Replace all operations with a given name in a type's dictionary.
+%% Preserves `defined_at` from the existing ops so that native-wrapper
+%% replacement does not disturb the monotonic ordering relied on by `forget`.
 replace_ops(TypeName, OpName, NewOps) when is_list(NewOps) ->
     case ets:lookup(?TABLE, TypeName) of
         [#af_type{ops = Ops} = Type] ->
-            UpdatedOps = maps:put(OpName, NewOps, Ops),
+            ExistingList = maps:get(OpName, Ops, []),
+            Preserved = preserve_defined_at(NewOps, ExistingList),
+            UpdatedOps = maps:put(OpName, Preserved, Ops),
             ets:insert(?TABLE, Type#af_type{ops = UpdatedOps}),
             ok;
         [] ->
@@ -132,6 +155,47 @@ get_type(Name) ->
 all_types() ->
     ets:tab2list(?TABLE).
 
+%% Current monotonic counter value. Exposed so tests and tooling can snapshot
+%% the dictionary state to roll back to.
+current_def_counter() ->
+    case ets:lookup(?CTRTAB, counter) of
+        [{counter, N}] -> N;
+        [] -> 0
+    end.
+
+%% Forth-style `forget`: remove every operation named OpName from every type
+%% dictionary, together with every op defined at or after OpName's first
+%% defined_at counter. Types themselves are not forgotten.
+%%
+%% Returns `ok` when at least one op was removed, `{error, not_found}` when
+%% no op with that name exists.
+forget(OpName) when is_list(OpName) ->
+    case find_first_def_counter(OpName) of
+        not_found -> {error, not_found};
+        {ok, C} ->
+            lists:foreach(fun(#af_type{ops = Ops} = Type) ->
+                FilteredOps = maps:map(fun(_K, OpList) ->
+                    [Op || Op <- OpList, keep_op(Op, C)]
+                end, Ops),
+                CleanedOps = maps:filter(fun(_K, V) -> V =/= [] end,
+                                         FilteredOps),
+                ets:insert(?TABLE, Type#af_type{ops = CleanedOps})
+            end, ets:tab2list(?TABLE)),
+            %% Roll the counter back so subsequent definitions reuse slots.
+            case ets:lookup(?CTRTAB, counter) of
+                [{counter, _}] -> ets:insert(?CTRTAB, {counter, C - 1});
+                [] -> ok
+            end,
+            ok
+    end;
+forget(OpName) when is_atom(OpName) ->
+    forget(atom_to_list(OpName));
+forget(OpName) when is_binary(OpName) ->
+    forget(binary_to_list(OpName)).
+
+keep_op(#operation{defined_at = undefined}, _Cutoff) -> true;
+keep_op(#operation{defined_at = At}, Cutoff) -> At < Cutoff.
+
 %%% Internal
 
 ensure_type(Name) ->
@@ -173,6 +237,46 @@ match_guard(#operation{guard = GuardTokens}, Stack) ->
         #continuation{data_stack = [{'Bool', true} | _]} -> true;
         _ -> false
     catch _:_ -> false
+    end.
+
+%% Stamp an op with the next monotonic counter. An op that already carries a
+%% counter (e.g. one carried across replace_ops) keeps it unchanged.
+stamp_op(#operation{defined_at = undefined} = Op) ->
+    Op#operation{defined_at = next_def_counter()};
+stamp_op(Op) -> Op.
+
+%% Allocate the next monotonic counter. ets:update_counter is atomic.
+next_def_counter() ->
+    ets:update_counter(?CTRTAB, counter, 1).
+
+%% Carry defined_at from existing ops onto new ones that lack it.
+preserve_defined_at(NewOps, ExistingOps) ->
+    ExistingCounters = [O#operation.defined_at || O <- ExistingOps,
+                        O#operation.defined_at =/= undefined],
+    {Out, _} = lists:mapfoldl(fun
+        (Op, Acc) when Op#operation.defined_at =/= undefined ->
+            {Op, Acc};
+        (Op, [H | T]) ->
+            {Op#operation{defined_at = H}, T};
+        (Op, []) ->
+            {Op#operation{defined_at = next_def_counter()}, []}
+    end, ExistingCounters, NewOps),
+    Out.
+
+%% Locate the smallest defined_at counter associated with any op named OpName.
+find_first_def_counter(OpName) ->
+    Candidates = lists:foldl(fun(#af_type{ops = Ops}, Acc) ->
+        case maps:get(OpName, Ops, []) of
+            [] -> Acc;
+            OpList ->
+                [Op#operation.defined_at
+                 || Op <- OpList, Op#operation.defined_at =/= undefined]
+                ++ Acc
+        end
+    end, [], ets:tab2list(?TABLE)),
+    case Candidates of
+        [] -> not_found;
+        _ -> {ok, lists:min(Candidates)}
     end.
 
 %%% ============================================================
