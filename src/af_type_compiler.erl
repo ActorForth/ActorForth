@@ -139,8 +139,35 @@ handle_word_definition(TokenValue, Cont) ->
 %% Supports value constraints: "0 Int" -> {Int, 0}
 %% When a literal (integer/float/bool) is seen, buffer it as pending_value.
 %% When the next type name arrives, combine into {Type, Value}.
+%%
+%% Also supports guard expressions. The keyword `where` flips the handler into
+%% guard-collecting mode; subsequent tokens up to `->` are accumulated as the
+%% guard body. The guard is a sequence of words evaluated on a snapshot of the
+%% stack at dispatch time; if the guard leaves {Bool, true} on top, the clause
+%% matches.
+handle_input_sig("where", Cont) ->
+    [{'InputTypeSignature', State} | Rest] = Cont#continuation.data_stack,
+    NewState = State#{in_guard => true, guard => []},
+    Cont#continuation{
+        data_stack = [{'InputTypeSignature', NewState} | Rest]
+    };
 handle_input_sig(TokenValue, Cont) ->
     [{'InputTypeSignature', State} | Rest] = Cont#continuation.data_stack,
+    case maps:get(in_guard, State, false) of
+        true ->
+            %% In guard-collecting mode: append the ORIGINAL token (which
+            %% preserves quoted flag and position).
+            Guard = maps:get(guard, State, []),
+            Token = Cont#continuation.current_token,
+            NewState = State#{guard => Guard ++ [Token]},
+            Cont#continuation{
+                data_stack = [{'InputTypeSignature', NewState} | Rest]
+            };
+        false ->
+            handle_input_sig_type(TokenValue, State, Rest, Cont)
+    end.
+
+handle_input_sig_type(TokenValue, State, Rest, Cont) ->
     #{sig_in := SigIn, pending_value := PendingValue} = State,
     case PendingValue of
         undefined ->
@@ -313,10 +340,13 @@ resolve_compile_token(TokenValue, OrigToken) ->
     }.
 
 %% -> transition: InputTypeSignature -> OutputTypeSignature
+%% Also ends any guard-collecting mode so trailing tokens in the output sig
+%% are parsed as types rather than guard words.
 op_arrow(Cont) ->
     [{'InputTypeSignature', State} | Rest] = Cont#continuation.data_stack,
+    NewState = State#{in_guard => false},
     Cont#continuation{
-        data_stack = [{'OutputTypeSignature', State} | Rest]
+        data_stack = [{'OutputTypeSignature', NewState} | Rest]
     }.
 
 %% ; transition: OutputTypeSignature -> CodeCompile
@@ -370,6 +400,7 @@ op_dot(Cont) ->
 
 register_single_word(State, Rest, Cont) ->
     #{name := Name, sig_in := SigIn0, sig_out := SigOut0, body := Body} = State,
+    Guard = maps:get(guard, State, undefined),
 
     %% Signatures are accumulated left-to-right (Forth convention: leftmost = deepest).
     %% Reverse so element 0 = TOS for match_sig and dispatch.
@@ -389,13 +420,20 @@ register_single_word(State, Rest, Cont) ->
         sig_in = SigIn,
         sig_out = SigOut,
         impl = Impl,
-        source = {compiled, Body}
+        source = {compiled, Body},
+        guard = Guard
     },
 
     ensure_type(TargetType),
     af_type:add_op(TargetType, NewOp),
 
-    af_type_any:auto_compile_word(Name),
+    %% Guarded words currently bypass the BEAM word compiler; the interpreter
+    %% evaluates the guard at dispatch time.
+    case Guard of
+        undefined -> af_type_any:auto_compile_word(Name);
+        [] -> af_type_any:auto_compile_word(Name);
+        _ -> ok
+    end,
 
     %% Sync local dictionary from ETS (auto_compile_word may have replaced ops)
     Dict1 = sync_type_from_ets(TargetType, Cont#continuation.dictionary),
@@ -404,6 +442,14 @@ register_single_word(State, Rest, Cont) ->
 
 register_multi_word(State, Clauses, Rest, Cont) ->
     #{name := Name, sig_in := MasterSigIn0} = State,
+    MasterGuard = maps:get(guard, State, undefined),
+    case MasterGuard of
+        G when G =/= undefined, G =/= [] ->
+            error({guard_on_multiclause, Name,
+                "Top-level 'where' guards cannot combine with sub-clauses. "
+                "Define separate top-level clauses with the same name instead."});
+        _ -> ok
+    end,
     MasterSigIn = lists:reverse(MasterSigIn0),
     TargetType = get_target_type(MasterSigIn),
     ensure_type(TargetType),

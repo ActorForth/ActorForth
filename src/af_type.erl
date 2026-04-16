@@ -1,11 +1,13 @@
 -module(af_type).
 
+-include("token.hrl").
 -include("operation.hrl").
 -include("af_type.hrl").
+-include("continuation.hrl").
 
 -export([init/0, reset/0]).
 -export([register_type/1, add_op/2, replace_ops/3]).
--export([find_op/2, find_op_in_tos/2, find_op_in_any/2, find_op_by_name/2, match_sig/2]).
+-export([find_op/2, find_op_in_tos/2, find_op_in_any/2, find_op_by_name/2, match_sig/2, match_guard/2]).
 -export([get_type/1, all_types/0]).
 -export([snapshot/0]).
 -export([dict_find_op_in_tos/3, dict_find_op_in_any/3, dict_get_type/2,
@@ -151,8 +153,26 @@ find_op_in_type(TypeName, OpName, Stack) ->
 match_first_op([], _Stack) -> not_found;
 match_first_op([Op | Rest], Stack) ->
     case match_sig(Op#operation.sig_in, Stack) of
-        true -> {ok, Op};
+        true ->
+            case match_guard(Op, Stack) of
+                true -> {ok, Op};
+                false -> match_first_op(Rest, Stack)
+            end;
         false -> match_first_op(Rest, Stack)
+    end.
+
+%% Evaluate an operation's guard (if any) on a snapshot of the stack.
+%% The guard is a list of #token{} records run as a small A4 program against
+%% the current data stack. It must leave {Bool, true} on top to match.
+%% An operation with no guard always matches (returns true).
+match_guard(#operation{guard = undefined}, _Stack) -> true;
+match_guard(#operation{guard = []}, _Stack) -> true;
+match_guard(#operation{guard = GuardTokens}, Stack) ->
+    TempCont = #continuation{data_stack = Stack},
+    try af_interpreter:interpret_tokens(GuardTokens, TempCont) of
+        #continuation{data_stack = [{'Bool', true} | _]} -> true;
+        _ -> false
+    catch _:_ -> false
     end.
 
 %%% ============================================================
