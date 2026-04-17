@@ -51,6 +51,9 @@ init() ->
 reset() ->
     catch ets:delete(?TABLE),
     catch ets:delete(?CTRTAB),
+    %% Reset the auto-compile flag too — tests that leave it enabled would
+    %% otherwise cause subsequent tests to native-compile words unexpectedly.
+    catch persistent_term:erase(af_auto_compile),
     af_repl:init_types().
 
 register_type(#af_type{} = Type) ->

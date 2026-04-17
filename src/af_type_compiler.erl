@@ -228,11 +228,14 @@ handle_output_sig(TokenValue, Cont) ->
 handle_code_compile(":", Cont) ->
     [{'CodeCompile', State} | Rest] = Cont#continuation.data_stack,
     #{body := Body, clauses := Clauses, current_sub := CurrentSub} = State,
-    %% Complete any active sub-clause
+    %% Complete any active sub-clause, carrying any guard through.
     NewClauses = case CurrentSub of
         undefined -> Clauses;
-        #{sub_sig_in := SSI, sub_sig_out := SSO} ->
-            Clauses ++ [#{sig_in => SSI, sig_out => SSO, body => Body}]
+        #{sub_sig_in := SSI, sub_sig_out := SSO} = Sub ->
+            Clauses ++ [#{sig_in => SSI,
+                          sig_out => SSO,
+                          body => Body,
+                          guard => maps:get(sub_guard, Sub, undefined)}]
     end,
     %% Transition to SubClauseInput
     SubState = State#{
@@ -258,17 +261,35 @@ handle_code_compile(TokenValue, Cont) ->
 
 %% Handler: SubClauseInput
 %% Accumulate raw token info; resolution happens in op_sub_arrow after all tokens collected.
-handle_sub_clause_input(TokenValue, Cont) ->
+%% Recognises the `where` keyword to switch into guard-collection mode; tokens
+%% after `where` and before `->` are recorded as the sub-clause's guard body.
+handle_sub_clause_input("where", Cont) ->
     [{'SubClauseInput', State} | Rest] = Cont#continuation.data_stack,
-    #{sub_sig_in := SubSigIn} = State,
-    Token = Cont#continuation.current_token,
-    IsQuoted = case Token of #token{quoted = true} -> true; _ -> false end,
-    NewState = State#{
-        sub_sig_in => SubSigIn ++ [{TokenValue, IsQuoted}]
-    },
+    NewState = State#{sub_in_guard => true, sub_guard => []},
     Cont#continuation{
         data_stack = [{'SubClauseInput', NewState} | Rest]
-    }.
+    };
+handle_sub_clause_input(TokenValue, Cont) ->
+    [{'SubClauseInput', State} | Rest] = Cont#continuation.data_stack,
+    case maps:get(sub_in_guard, State, false) of
+        true ->
+            Token = Cont#continuation.current_token,
+            Guard = maps:get(sub_guard, State, []),
+            NewState = State#{sub_guard => Guard ++ [Token]},
+            Cont#continuation{
+                data_stack = [{'SubClauseInput', NewState} | Rest]
+            };
+        false ->
+            #{sub_sig_in := SubSigIn} = State,
+            Token = Cont#continuation.current_token,
+            IsQuoted = case Token of #token{quoted = true} -> true; _ -> false end,
+            NewState = State#{
+                sub_sig_in => SubSigIn ++ [{TokenValue, IsQuoted}]
+            },
+            Cont#continuation{
+                data_stack = [{'SubClauseInput', NewState} | Rest]
+            }
+    end.
 
 %% Handler: SubClauseOutput
 %% Accumulate raw token info; resolution happens in op_sub_semicolon.
@@ -357,24 +378,36 @@ op_semicolon(Cont) ->
     }.
 
 %% -> in SubClauseInput: resolve accumulated tokens right-aligned, transition to SubClauseOutput
+%% Also ends any guard-collecting mode opened by `where`.
 op_sub_arrow(Cont) ->
     [{'SubClauseInput', State} | Rest] = Cont#continuation.data_stack,
     #{sub_sig_in := RawSubSigIn, sig_in := MasterSigIn} = State,
     %% Resolve raw tokens right-aligned against master sig
     ResolvedSubSigIn = resolve_sub_tokens_right_aligned(RawSubSigIn, MasterSigIn),
-    NewState = State#{sub_sig_in => ResolvedSubSigIn, sub_sig_out => [], sub_out_position => 0},
+    NewState = State#{
+        sub_sig_in => ResolvedSubSigIn,
+        sub_sig_out => [],
+        sub_out_position => 0,
+        sub_in_guard => false
+    },
     Cont#continuation{
         data_stack = [{'SubClauseOutput', NewState} | Rest]
     }.
 
 %% ; in SubClauseOutput: resolve output tokens right-aligned, transition to CodeCompile
+%% Carry the sub-clause guard (if any) into the clause record.
 op_sub_semicolon(Cont) ->
     [{'SubClauseOutput', State} | Rest] = Cont#continuation.data_stack,
     #{sub_sig_in := SubSigIn, sub_sig_out := RawSubSigOut, sig_out := MasterSigOut} = State,
     ResolvedSubSigOut = resolve_sub_tokens_right_aligned(RawSubSigOut, MasterSigOut),
+    SubGuard = maps:get(sub_guard, State, undefined),
+    ClauseRec = #{sub_sig_in => SubSigIn,
+                  sub_sig_out => ResolvedSubSigOut,
+                  sub_guard => SubGuard},
     NewState = State#{
-        current_sub => #{sub_sig_in => SubSigIn, sub_sig_out => ResolvedSubSigOut},
-        body => []
+        current_sub => ClauseRec,
+        body => [],
+        sub_guard => undefined
     },
     Cont#continuation{
         data_stack = [{'CodeCompile', NewState} | Rest]
@@ -389,11 +422,15 @@ op_dot(Cont) ->
             %% Normal case: single operation, no sub-clauses
             register_single_word(State, Rest, Cont);
         false ->
-            %% Multi-clause: complete any active sub-clause and register all
+            %% Multi-clause: complete any active sub-clause and register all.
+            %% Carry per-sub-clause guards through.
             AllClauses = case CurrentSub of
                 undefined -> Clauses;
-                #{sub_sig_in := SSI, sub_sig_out := SSO} ->
-                    Clauses ++ [#{sig_in => SSI, sig_out => SSO, body => Body}]
+                #{sub_sig_in := SSI, sub_sig_out := SSO} = Sub ->
+                    Clauses ++ [#{sig_in => SSI,
+                                  sig_out => SSO,
+                                  body => Body,
+                                  guard => maps:get(sub_guard, Sub, undefined)}]
             end,
             register_multi_word(State, AllClauses, Rest, Cont)
     end.
@@ -427,13 +464,11 @@ register_single_word(State, Rest, Cont) ->
     ensure_type(TargetType),
     af_type:add_op(TargetType, NewOp),
 
-    %% Guarded words currently bypass the BEAM word compiler; the interpreter
-    %% evaluates the guard at dispatch time.
-    case Guard of
-        undefined -> af_type_any:auto_compile_word(Name);
-        [] -> af_type_any:auto_compile_word(Name);
-        _ -> ok
-    end,
+    %% Attempt native compilation regardless of guard. The word compiler
+    %% translates simple guards (`dup LITERAL CMP`) into Erlang function-head
+    %% guards; complex guards cause compile to fail gracefully and the op
+    %% stays interpreter-dispatched.
+    af_type_any:auto_compile_word(Name),
 
     %% Sync local dictionary from ETS (auto_compile_word may have replaced ops)
     Dict1 = sync_type_from_ets(TargetType, Cont#continuation.dictionary),
@@ -443,12 +478,19 @@ register_single_word(State, Rest, Cont) ->
 register_multi_word(State, Clauses, Rest, Cont) ->
     #{name := Name, sig_in := MasterSigIn0} = State,
     MasterGuard = maps:get(guard, State, undefined),
-    case MasterGuard of
+    %% Top-level `where` applies to every sub-clause: any sub-clause without
+    %% its own guard inherits the master guard; sub-clauses with their own
+    %% guard keep it (no implicit conjunction for v1 — per-clause wins).
+    Clauses1 = case MasterGuard of
         G when G =/= undefined, G =/= [] ->
-            error({guard_on_multiclause, Name,
-                "Top-level 'where' guards cannot combine with sub-clauses. "
-                "Define separate top-level clauses with the same name instead."});
-        _ -> ok
+            lists:map(fun(C) ->
+                case maps:get(guard, C, undefined) of
+                    undefined -> C#{guard => MasterGuard};
+                    [] -> C#{guard => MasterGuard};
+                    _ -> C
+                end
+            end, Clauses);
+        _ -> Clauses
     end,
     MasterSigIn = lists:reverse(MasterSigIn0),
     TargetType = get_target_type(MasterSigIn),
@@ -457,21 +499,35 @@ register_multi_word(State, Clauses, Rest, Cont) ->
     %% Register each sub-clause as a separate operation.
     %% Value-constrained clauses come first (they were added in order),
     %% general clauses last — match_first_op tries in list order.
-    lists:foreach(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody}) ->
+    %% Each clause may carry its own `where` guard.
+    HasAnyGuard = lists:any(fun(C) ->
+        case maps:get(guard, C, undefined) of
+            undefined -> false;
+            [] -> false;
+            _ -> true
+        end
+    end, Clauses1),
+    lists:foreach(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody} = C) ->
         CSigIn = lists:reverse(CSigIn0),
         CSigOut = lists:reverse(CSigOut0),
         type_check_body(Name, CSigIn, CSigOut, CBody),
         Impl = make_word_impl(CBody, Name),
+        CGuard = maps:get(guard, C, undefined),
         Op = #operation{
             name = Name,
             sig_in = CSigIn,
             sig_out = CSigOut,
             impl = Impl,
-            source = {compiled, CBody}
+            source = {compiled, CBody},
+            guard = CGuard
         },
         af_type:add_op(TargetType, Op)
-    end, Clauses),
+    end, Clauses1),
 
+    %% Attempt native compilation regardless of guards. Simple guards compile
+    %% to Erlang function-head guards; complex guards cause that clause to be
+    %% dropped from the native build and fall back to the interpreter.
+    _ = HasAnyGuard,
     af_type_any:auto_compile_word(Name),
 
     %% Sync local dictionary from ETS
