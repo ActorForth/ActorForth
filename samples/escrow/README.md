@@ -24,7 +24,7 @@ release changes nothing.
 
 ```
 rebar3 shell
-1> af_repl:run_file("test/demos/escrow/escrow_test.a4").
+1> af_repl:run_file("samples/escrow/escrow_test.a4").
 ```
 
 Expected output:

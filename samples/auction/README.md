@@ -15,7 +15,7 @@ state:
 
 ```
 rebar3 shell
-1> af_repl:run_file("test/demos/auction/auction_test.a4").
+1> af_repl:run_file("samples/auction/auction_test.a4").
 ```
 
 Expected output:
