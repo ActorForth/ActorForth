@@ -1,0 +1,83 @@
+"escrow.a4" load
+
+# ============================================================
+# Happy path: deposit -> verify -> release
+# ============================================================
+
+"alice" "bob" "oracle" 1000 PENDING escrow
+
+    state PENDING assert-eq
+
+# Buyer deposits exactly 1000
+1000 "alice" deposit
+    state FUNDED assert-eq
+
+# Oracle verifies
+"oracle" verify
+    state VERIFIED assert-eq
+
+# Release to seller
+release
+    is-released? true assert-eq
+
+drop
+"escrow happy path: passed" print
+
+# ============================================================
+# Invalid transitions are no-ops
+# ============================================================
+
+"alice" "bob" "oracle" 500 PENDING escrow
+
+# Can't verify before funding
+"oracle" verify
+    state PENDING assert-eq
+
+# Can't release before funding
+release
+    state PENDING assert-eq
+
+# Fund it
+500 "alice" deposit
+    state FUNDED assert-eq
+
+# Can't release before verifying
+release
+    state FUNDED assert-eq
+
+# Verify
+"oracle" verify
+    state VERIFIED assert-eq
+
+# Can't fund again
+999 "alice" deposit
+    state VERIFIED assert-eq
+
+# Release
+release
+    is-released? true assert-eq
+
+# Can't release twice
+release
+    is-released? true assert-eq
+
+drop
+"escrow state guards: passed" print
+
+# ============================================================
+# Dispute path: deposit -> dispute -> refunded
+# ============================================================
+
+"alice" "bob" "oracle" 750 PENDING escrow
+750 "alice" deposit
+    state FUNDED assert-eq
+
+"alice" dispute
+    is-refunded? true assert-eq
+
+# Can't release after refund
+release
+    is-refunded? true assert-eq
+
+drop
+"escrow dispute path: passed" print

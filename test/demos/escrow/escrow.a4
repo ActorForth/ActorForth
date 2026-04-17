@@ -1,0 +1,128 @@
+# escrow.a4 — A minimal escrow smart-contract, in a4.
+#
+# Three-party escrow: a buyer deposits funds; the seller delivers; a
+# verifier (oracle) confirms delivery; funds release to the seller.
+# Either party can raise a dispute before verification, refunding the
+# buyer.
+#
+# State:
+#   - buyer / seller / verifier: the three participants' addresses
+#   - amount: the escrowed funds
+#   - status: Pending | Funded | Verified | Disputed | Released | Refunded
+#
+# Actions:
+#   - deposit  (only when Pending, with the agreed amount, by the buyer)
+#   - verify   (only when Funded, by the named verifier)
+#   - release  (only when Verified, pays the seller)
+#   - dispute  (only when Funded, by buyer or seller, refunds the buyer)
+#
+# Each state transition is a word with a `where` guard. Invalid calls
+# leave state untouched — they cannot corrupt the contract.
+
+# ============================================================
+# Status codes
+# ============================================================
+
+: PENDING   -> Int ; 0 .
+: FUNDED    -> Int ; 1 .
+: VERIFIED  -> Int ; 2 .
+: DISPUTED  -> Int ; 3 .
+: RELEASED  -> Int ; 4 .
+: REFUNDED  -> Int ; 5 .
+
+# ============================================================
+# Contract state
+# ============================================================
+
+type Escrow
+    buyer       String
+    seller      String
+    verifier    String
+    amount      Int
+    status      Int
+.
+
+# ============================================================
+# deposit — transition Pending -> Funded
+# ============================================================
+#
+# Signature:  Escrow Int String -> Escrow
+# Caller supplies the payment amount and their address. The guard checks:
+#   - contract is still Pending,
+#   - the amount matches the agreed amount,
+#   - the depositor is the registered buyer.
+
+: drop-args Escrow Int String -> Escrow ;
+    drop drop .
+
+: set-funded Escrow Int String -> Escrow ;
+    drop drop FUNDED status! .
+
+: deposit Escrow Int String -> Escrow ;
+    : Escrow Int String where drop drop status PENDING == -> Escrow ;
+        set-funded
+    : Escrow Int String -> Escrow ;
+        drop-args .
+
+# ============================================================
+# verify — transition Funded -> Verified
+# ============================================================
+#
+# Signature:  Escrow String -> Escrow
+# Caller is the verifier.  Guard: status is Funded AND verifier matches.
+
+: drop-caller Escrow String -> Escrow ;
+    drop .
+
+: set-verified Escrow String -> Escrow ;
+    drop VERIFIED status! .
+
+: verify Escrow String -> Escrow ;
+    : Escrow String where swap status FUNDED == -> Escrow ;
+        set-verified
+    : Escrow String -> Escrow ;
+        drop-caller .
+
+# ============================================================
+# release — transition Verified -> Released
+# ============================================================
+
+: noop Escrow -> Escrow ; .
+
+: set-released Escrow -> Escrow ;
+    RELEASED status! .
+
+: release Escrow -> Escrow ;
+    : Escrow where status VERIFIED == -> Escrow ;
+        set-released
+    : Escrow -> Escrow ;
+        noop .
+
+# ============================================================
+# dispute — transition Funded -> Refunded
+# ============================================================
+
+: set-refunded Escrow String -> Escrow ;
+    drop REFUNDED status! .
+
+: dispute Escrow String -> Escrow ;
+    : Escrow String where swap status FUNDED == -> Escrow ;
+        set-refunded
+    : Escrow String -> Escrow ;
+        drop-caller .
+
+# ============================================================
+# Read-only accessors
+# ============================================================
+
+: state Escrow -> Escrow Int ;
+    status .
+
+: is-released? Escrow -> Escrow Bool ;
+    status RELEASED == .
+
+: is-refunded? Escrow -> Escrow Bool ;
+    status REFUNDED == .
+
+: is-pending? Escrow -> Escrow Bool ;
+    status PENDING == .
