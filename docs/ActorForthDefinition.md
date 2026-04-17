@@ -443,6 +443,47 @@ Multiple definitions of the same word with different signatures:
 Value-constrained signatures (`{Int, 0}`) are tried before general ones (`Int`).
 This is the preferred control flow mechanism over if/else branching.
 
+### Guard Expressions (`where`)
+
+When value-constraint patterns aren't enough, guards let you dispatch on
+arbitrary predicates. The keyword `where` introduces a predicate block that
+runs on a snapshot of the stack; the clause matches only if the predicate
+leaves `{Bool, true}` on top.
+
+```
+: step Int where dup 0 > -> Int ; 1 - .
+: step Int               -> Int ; drop 0 .
+
+5 step   # 4  (guard passes)
+-3 step  # 0  (guard fails; falls through)
+```
+
+Guards may also be attached to individual sub-clauses within a multi-clause
+word. A top-level `where` propagates to every sub-clause that doesn't define
+its own:
+
+```
+: classify Int -> Int ;
+    : Int where dup 0 > -> Int ; drop  1
+    : Int where dup 0 < -> Int ; drop -1
+    : Int               -> Int ; drop  0
+.
+
+7 classify    # 1
+-2 classify   # -1
+0 classify    # 0
+```
+
+Simple guards of the form `dup LITERAL CMP` (where `CMP` is `>`, `<`, `==`,
+`!=`, `>=`, or `<=`) compile to Erlang function-head guards when the word
+is native-compiled — same machinery BEAM uses for pattern-matched records.
+More complex guards evaluate through the interpreter at dispatch time.
+
+Guards are the mechanism for expressing refinement-style constraints on
+top of a4's type system. Smart-contract and safety-critical code
+typically combines value-constraint patterns for exact cases with `where`
+guards for ranges and predicates.
+
 ### Product Types
 
 User-defined composite types with named fields:
@@ -626,3 +667,98 @@ supervisable OTP citizens:
 af_server:cast(Pid, "increment", []),
 {ok, [1]} = af_server:call(Pid, "count", []).
 ```
+
+### Dictionary Rollback with `forget`
+
+Forth tradition includes a `forget` word that removes a named definition
+along with every word defined after it, rolling the dictionary back to a
+known state. ActorForth adopts the same semantics:
+
+```
+: one   Int -> Int ; 1 + .
+: two   Int -> Int ; 2 + .
+: three Int -> Int ; 3 + .
+
+"two" forget     # removes 'two' AND 'three'
+
+5 one            # 6  (still defined)
+5 two            # error: 'two' is unknown
+```
+
+Every operation is stamped with a monotonic `defined_at` counter at
+registration time. `forget` looks up the earliest counter for the named
+word and drops every op at or after it across all type dictionaries.
+
+### Ring Architecture
+
+Compilation is organised into three cleanly-layered "rings":
+
+- **Ring 0** (`af_ring0.erl`) — the primitive virtual machine: ~80
+  instructions covering stack operations, arithmetic, logic, control flow,
+  types, pattern matching, actors, I/O, and FFI. Self-contained; no
+  dependency on the interpreter.
+- **Ring 1** (`af_ring1.erl`) — the BEAM target backend. Emits Erlang
+  abstract forms from Ring 0 programs. Has two modes: interpreted (wraps
+  Ring 0 at runtime) and native (direct abstract-form generation).
+- **Ring 2** (`af_ring2.erl`) — the A4 → Ring 0 compiler. Two paths: a
+  "parasitic" path that reuses the Erlang-side parser/interpreter, and a
+  fully self-hosted path (`af_r0_parser` + `af_r0_compiler`) that uses
+  nothing but Ring 0 primitives.
+
+The self-hosted bootstrap lives in `src/bootstrap/`: the parser, compiler,
+code generator, and build driver are all written in ActorForth and compile
+themselves to BEAM modules. Only the three Erlang modules above are
+required at runtime.
+
+### Command-Line Interface (`a4c`)
+
+`src/af_cli.erl` implements a standalone `a4c` command with `compile`,
+`build`, `run`, and `repl` subcommands. The `zig-wrapper/` directory
+packages an OTP release plus the runtime into a single native binary
+(per platform) that can be distributed without a local Erlang install.
+Cross-compilation is supported for Linux, macOS, and Windows:
+
+```
+zig-wrapper/build.sh --target x86_64-linux-gnu
+zig-wrapper/build.sh --target aarch64-macos
+```
+
+### Editor Support (LSP)
+
+`src/af_lsp.erl` implements a Language Server Protocol server over stdio.
+It provides:
+
+- **Hover**: shows the stack picture at the current token — what types
+  the stack holds at that exact point in the source.
+- **Completions**: suggests operations from the TOS type's dictionary
+  plus the `Any` dictionary.
+- **Go-to-definition**: jumps to where a word is defined in the same file.
+- **Diagnostics**: flags stack underflow (every arity-mismatched primitive
+  or word call) and type mismatches against a word's `sig_in`. Published
+  via `textDocument/publishDiagnostics` on every `didOpen` / `didChange`.
+
+Editor-side configuration lives under `editor/`. The Sublime Text setup
+(`editor/sublime/`) includes a syntax-highlighting file and an LSP-plugin
+config. The server runs as a subprocess the editor launches on `.a4`
+files. A VS Code extension is planned; see `editor/EDITOR_SUPPORT_PLAN.md`
+for the roadmap.
+
+### Cross-Language Compilation Targets
+
+Beyond the native BEAM target, ActorForth has experimental compilers to
+other languages:
+
+- **C++20** (`src/af_cpp_compiler.erl`) — generates C++20 using
+  coroutine-based actors. Not feature-complete; sufficient for the
+  cross-language benchmark suite.
+- **TypeScript** — a TypeScript interpreter with a JS FFI and its own
+  compiler. Full language coverage; 180+ tests. See `ts/`.
+- **Core Erlang** (`src/af_core_target.erl`) — MVP backend emitting
+  Core Erlang (cerl) AST for the a4 → BEAM pipeline. Supports stack
+  primitives, arithmetic, literals, single-clause words. Multi-clause,
+  product types, actors, collections are follow-up work.
+
+All three produce actual loadable code for their targets. The cross-
+language benchmark suite (`test/demos/comprehensive/`) exercises all of
+them side-by-side with hand-written C++, Python, Erlang, Elixir, and
+TypeScript reference implementations.
