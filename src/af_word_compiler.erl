@@ -10,6 +10,7 @@
 -export([find_native_word/1]).
 -export([find_compiled_word_defs/1]).
 -export([group_by_name/1]).
+-export([guard_to_head_form/3]).  %% exposed for testing
 
 %% Binary storage key prefix for process dictionary
 -define(BIN_KEY(Mod), {af_module_binary, Mod}).
@@ -49,8 +50,10 @@ get_module_binary(ModuleName) ->
 %% Compile word definitions to a BEAM binary without loading.
 %% Groups same-name words into multi-clause functions for pattern matching.
 %% Returns {ok, ModuleName, Binary} | {error, Reason}.
-compile_words_to_binary(ModuleName, WordDefs) when is_atom(ModuleName) ->
+compile_words_to_binary(ModuleName, WordDefs0) when is_atom(ModuleName) ->
     L = 1,
+    %% Normalise to 5-tuple form so internal code paths don't branch on shape.
+    WordDefs = [normalise_def(D) || D <- WordDefs0],
     Ctx = #{module => ModuleName, words => build_word_index(WordDefs)},
     Groups = group_by_name(WordDefs),
     FunForms = lists:filtermap(fun({Name, Defs}) ->
@@ -83,11 +86,14 @@ compile_words_to_binary(ModuleName, WordDefs) when is_atom(ModuleName) ->
             end
     end.
 
-%% Group word definitions by name, preserving order.
+%% Group word definitions by name, preserving order. Accepts either 4-tuple
+%% (no guard) or 5-tuple (with guard) form.
 group_by_name(WordDefs) ->
-    {Groups, Order} = lists:foldl(fun({Name, SI, SO, Body}, {Acc, Ord}) ->
+    {Groups, Order} = lists:foldl(fun(Def, {Acc, Ord}) ->
+        Name = element(1, Def),
+        DefN = normalise_def(Def),
         Existing = maps:get(Name, Acc, []),
-        NewAcc = maps:put(Name, Existing ++ [{Name, SI, SO, Body}], Acc),
+        NewAcc = maps:put(Name, Existing ++ [DefN], Acc),
         NewOrd = case lists:member(Name, Ord) of
             true -> Ord;
             false -> Ord ++ [Name]
@@ -97,9 +103,13 @@ group_by_name(WordDefs) ->
     [{Name, maps:get(Name, Groups)} || Name <- Order].
 
 %% Compile a group of same-name word defs.
+%% Normalise a word-def tuple to {Name, SigIn, SigOut, Body, Guard}.
+normalise_def({N, SI, SO, B}) -> {N, SI, SO, B, undefined};
+normalise_def({_, _, _, _, _} = D) -> D.
+
 %% All functions take arity 1 (the tagged stack list).
-compile_word_group(Name, [{_, SigIn, SigOut, Body}], L, Ctx) ->
-    compile_single_word(Name, SigIn, SigOut, Body, L, Ctx);
+compile_word_group(Name, [{_, SigIn, SigOut, Body, Guard}], L, Ctx) ->
+    compile_single_word(Name, SigIn, SigOut, Body, Guard, L, Ctx);
 compile_word_group(Name, Defs, L, Ctx) ->
     %% Try loop optimization for self-recursive words with << >> blocks
     case try_loop_opt(Name, Defs, L, Ctx) of
@@ -107,8 +117,8 @@ compile_word_group(Name, Defs, L, Ctx) ->
             {ok, Forms, Exports};
         not_applicable ->
             FunAtom = list_to_atom(Name),
-            Clauses = lists:filtermap(fun({_N, SigIn, SigOut, Body}) ->
-                case compile_clause(SigIn, SigOut, Body, L, Ctx) of
+            Clauses = lists:filtermap(fun({_N, SigIn, SigOut, Body, Guard}) ->
+                case compile_clause(SigIn, SigOut, Body, Guard, L, Ctx) of
                     {ok, Clause} -> {true, Clause};
                     {error, _} -> false
                 end
@@ -123,32 +133,130 @@ compile_word_group(Name, Defs, L, Ctx) ->
 
 %% Compile a single-clause word function.
 %% Function signature: fun([{Type, Val}, ...]) -> [{Type, Val}, ...]
-compile_single_word(Name, SigIn, SigOut, Body, L, Ctx) ->
+%% If a guard is present, try to translate it to an Erlang head-guard
+%% expression. If it's not translatable, fail compilation so the caller
+%% falls back to the interpreter path.
+compile_single_word(Name, SigIn, SigOut, Body, Guard, L, Ctx) ->
     FunAtom = list_to_atom(Name),
     {HeadPat, InitExprStack, RestVar} = build_head_pattern(SigIn, L),
-    case simulate_body(Body, InitExprStack, L, Ctx#{rest_var => RestVar}) of
-        {ok, ResultStack, SideEffects} ->
-            ReturnExpr = build_tagged_return(ResultStack, SigOut, RestVar, L),
-            BodyExprs = SideEffects ++ [ReturnExpr],
-            Clause = {clause, L, [HeadPat], [], BodyExprs},
-            Form = {function, L, FunAtom, 1, [Clause]},
-            {ok, Form, {FunAtom, 1}};
+    case guard_or_empty(Guard, InitExprStack, L) of
+        {ok, GuardExprs} ->
+            case simulate_body(Body, InitExprStack, L, Ctx#{rest_var => RestVar}) of
+                {ok, ResultStack, SideEffects} ->
+                    ReturnExpr = build_tagged_return(ResultStack, SigOut, RestVar, L),
+                    BodyExprs = SideEffects ++ [ReturnExpr],
+                    Clause = {clause, L, [HeadPat], GuardExprs, BodyExprs},
+                    Form = {function, L, FunAtom, 1, [Clause]},
+                    {ok, Form, {FunAtom, 1}};
+                {error, Reason} ->
+                    {error, {Name, Reason}}
+            end;
         {error, Reason} ->
             {error, {Name, Reason}}
     end.
 
 %% Compile a single clause for a multi-clause function.
-compile_clause(SigIn, SigOut, Body, L, Ctx) ->
+compile_clause(SigIn, SigOut, Body, Guard, L, Ctx) ->
     {HeadPat, InitExprStack, RestVar} = build_head_pattern(SigIn, L),
-    case simulate_body(Body, InitExprStack, L, Ctx#{rest_var => RestVar}) of
-        {ok, ResultStack, SideEffects} ->
-            ReturnExpr = build_tagged_return(ResultStack, SigOut, RestVar, L),
-            BodyExprs = SideEffects ++ [ReturnExpr],
-            Clause = {clause, L, [HeadPat], [], BodyExprs},
-            {ok, Clause};
+    case guard_or_empty(Guard, InitExprStack, L) of
+        {ok, GuardExprs} ->
+            case simulate_body(Body, InitExprStack, L, Ctx#{rest_var => RestVar}) of
+                {ok, ResultStack, SideEffects} ->
+                    ReturnExpr = build_tagged_return(ResultStack, SigOut, RestVar, L),
+                    BodyExprs = SideEffects ++ [ReturnExpr],
+                    Clause = {clause, L, [HeadPat], GuardExprs, BodyExprs},
+                    {ok, Clause};
+                {error, Reason} ->
+                    {error, Reason}
+            end;
         {error, Reason} ->
             {error, Reason}
     end.
+
+%% Translate an operation's `guard` field into Erlang function-head guard
+%% expressions. A guard of `undefined` or `[]` means "no guard" and produces
+%% the empty guard list (i.e. the clause always matches type-wise).
+guard_or_empty(undefined, _InitExprStack, _L) -> {ok, []};
+guard_or_empty([], _InitExprStack, _L) -> {ok, []};
+guard_or_empty(GuardTokens, InitExprStack, L) ->
+    guard_to_head_form(GuardTokens, InitExprStack, L).
+
+%% Translate a list of guard tokens into Erlang guard-form exprs.
+%% Currently recognises the pattern `dup LITERAL CMP` — the most common
+%% per-clause guard shape (e.g. `dup 0 >`). TOS is the first entry in
+%% InitExprStack; the tuple pattern bound its raw value to a variable we
+%% can reference here.
+%%
+%% Returns {ok, [[GuardExpr]]} for Erlang's guard-sequence-of-alts form,
+%% or {error, guard_not_compilable} if we can't translate.
+guard_to_head_form(Tokens, InitExprStack, L) ->
+    case simple_guard_shape(Tokens) of
+        {cmp, Cmp, Lit} ->
+            case InitExprStack of
+                [{TosExpr, _TosType} | _] ->
+                    %% Extract the raw value from the TOS tuple:
+                    %%   element(2, TosTuple)
+                    RawVal = extract_val({TosExpr, any}, L),
+                    LitExpr = literal_to_abstract(Lit, L),
+                    GuardExpr = {op, L, cmp_to_op(Cmp), RawVal, LitExpr},
+                    {ok, [[GuardExpr]]};
+                [] ->
+                    {error, guard_not_compilable}
+            end;
+        not_recognised ->
+            {error, guard_not_compilable}
+    end.
+
+%% Recognise `dup LITERAL CMP` guard shape.
+%% Returns {cmp, ">" | "<" | "==" | ..., LiteralValue} or not_recognised.
+simple_guard_shape([T1, T2, T3]) ->
+    case {T1#token.value, T2#token.value, T3#token.value} of
+        {"dup", LitStr, Cmp} ->
+            case {is_cmp_op(Cmp), try_parse_literal(LitStr, T2)} of
+                {true, {ok, Lit}} -> {cmp, Cmp, Lit};
+                _ -> not_recognised
+            end;
+        _ -> not_recognised
+    end;
+simple_guard_shape(_) -> not_recognised.
+
+is_cmp_op(">") -> true;
+is_cmp_op("<") -> true;
+is_cmp_op("==") -> true;
+is_cmp_op("!=") -> true;
+is_cmp_op(">=") -> true;
+is_cmp_op("<=") -> true;
+is_cmp_op(_) -> false.
+
+cmp_to_op(">") -> '>';
+cmp_to_op("<") -> '<';
+cmp_to_op("==") -> '=:=';
+cmp_to_op("!=") -> '=/=';
+cmp_to_op(">=") -> '>=';
+cmp_to_op("<=") -> '=<'.
+
+try_parse_literal(Str, #token{quoted = true}) ->
+    {ok, {string, list_to_binary(Str)}};
+try_parse_literal(Str, _Tok) ->
+    case catch list_to_integer(Str) of
+        N when is_integer(N) -> {ok, {integer, N}};
+        _ ->
+            case catch list_to_float(Str) of
+                F when is_float(F) -> {ok, {float, F}};
+                _ ->
+                    case Str of
+                        "true" -> {ok, {atom, true}};
+                        "false" -> {ok, {atom, false}};
+                        _ -> error
+                    end
+            end
+    end.
+
+literal_to_abstract({integer, N}, L) -> {integer, L, N};
+literal_to_abstract({float, F}, L) -> {float, L, F};
+literal_to_abstract({atom, A}, L) -> {atom, L, A};
+literal_to_abstract({string, B}, L) ->
+    {bin, L, [{bin_element, L, {string, L, binary_to_list(B)}, default, default}]}.
 
 %% Loop optimization for self-recursive words.
 %% Detects words like blast that have << >> send blocks and self-recursive
@@ -156,8 +264,10 @@ compile_clause(SigIn, SigOut, Body, L, Ctx) ->
 %% per-iteration list reconstruction and map lookups.
 
 try_loop_opt(Name, Defs, L, Ctx) ->
-    %% Partition into base cases and recursive cases
-    {BaseCases, RecCases} = lists:partition(fun({_, _, _, Body}) ->
+    %% Partition into base cases and recursive cases.
+    %% Defs here are 5-tuples after normalise_def.
+    {BaseCases, RecCases} = lists:partition(fun(Def) ->
+        Body = element(4, Def),
         case Body of
             [] -> true;
             _ ->
@@ -166,7 +276,7 @@ try_loop_opt(Name, Defs, L, Ctx) ->
         end
     end, Defs),
     case {BaseCases, RecCases} of
-        {[_ | _], [{_, RecSigIn, _RecSigOut, RecBody}]} ->
+        {[_ | _], [{_, RecSigIn, _RecSigOut, RecBody, _RecGuard}]} ->
             %% Single recursive clause with base case(s)
             %% Check if body starts with << word >> (send block)
             case has_send_block(RecBody) of
@@ -225,7 +335,9 @@ generate_loop_opt(Name, BaseCases, RecSigIn, SendWord, _BodyAfterSend, L, _Ctx) 
 
             %% Generate loop function
             %% Base case(s): from the original base cases
-            LoopBaseClauses = lists:filtermap(fun({_, BaseSigIn, _BaseSigOut, BaseBody}) ->
+            LoopBaseClauses = lists:filtermap(fun(BaseDef) ->
+                BaseSigIn = element(2, BaseDef),
+                BaseBody = element(4, BaseDef),
                 generate_loop_base_clause(BaseSigIn, BaseBody, ActorPos, VariantPos, L)
             end, BaseCases),
 
@@ -1016,8 +1128,10 @@ arg_name(3) -> 'Z';
 arg_name(N) -> list_to_atom("Arg" ++ integer_to_list(N)).
 
 %% Build an index of word names -> {Arity, NumOutputs} for inter-word call resolution.
+%% Accepts either 4-tuple (no guard) or 5-tuple (with guard) form.
 build_word_index(WordDefs) ->
-    lists:foldl(fun({Name, SigIn, SigOut, _Body}, Acc) ->
+    lists:foldl(fun(Def, Acc) ->
+        {Name, SigIn, SigOut, _Body, _Guard} = normalise_def(Def),
         maps:put(Name, {length(SigIn), length(SigOut)}, Acc)
     end, #{}, WordDefs).
 
@@ -1040,8 +1154,22 @@ find_compiled_word_defs(Name) ->
             [] -> [];
             OpList ->
                 lists:filtermap(fun
-                    (#operation{name = N, sig_in = SI, sig_out = SO, source = {compiled, Body}}) ->
+                    (#operation{name = N, sig_in = SI, sig_out = SO,
+                                source = {compiled, Body},
+                                guard = undefined}) ->
                         {true, {N, SI, SO, Body}};
+                    (#operation{name = N, sig_in = SI, sig_out = SO,
+                                source = {compiled, Body},
+                                guard = []}) ->
+                        {true, {N, SI, SO, Body}};
+                    (#operation{name = N, sig_in = SI, sig_out = SO,
+                                source = {compiled, Body},
+                                guard = G}) ->
+                        %% 5-tuple form carries the guard. Callers that only
+                        %% pattern-match on the 4-tuple shape will miss this
+                        %% clause — acceptable since those callers predate
+                        %% guards.
+                        {true, {N, SI, SO, Body, G}};
                     (_) -> false
                 end, OpList)
         end

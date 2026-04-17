@@ -417,7 +417,13 @@ op_get_word_defs(Cont) ->
     Name = binary_to_list(NameBin),
     WordDefs = af_word_compiler:find_compiled_word_defs(Name),
     %% Convert to list of maps for A4 consumption
-    DefList = lists:map(fun({WName, SigIn, SigOut, Body}) ->
+    DefList = lists:map(fun(Def) ->
+        %% Def is either 4-tuple or 5-tuple (guarded). We expose only the
+        %% first four fields; guard surfaces through other paths.
+        WName = element(1, Def),
+        SigIn = element(2, Def),
+        SigOut = element(3, Def),
+        Body = element(4, Def),
         {'Map', #{
             {'String', <<"name">>} => {'String', list_to_binary(WName)},
             {'String', <<"sig_in">>} => {'List', [sig_item_to_stack(S) || S <- SigIn]},
@@ -502,7 +508,8 @@ op_compile(Cont) ->
                     ByType = group_defs_by_type(WordDefs),
                     lists:foreach(fun({TargetType, Defs}) ->
                         BroadSigIn = broadest_sig_in(Defs),
-                        {_, _, BroadSigOut, _} = find_broadest_def(Defs),
+                        BroadDef = find_broadest_def(Defs),
+                        BroadSigOut = element(3, BroadDef),
                         Wrapper = af_word_compiler:make_wrapper(ModAtom, FunAtom, BroadSigIn, BroadSigOut),
                         af_type:replace_ops(TargetType, Name, [Wrapper])
                     end, ByType),
@@ -525,14 +532,34 @@ op_compile(Cont) ->
     end.
 
 %% Get the broadest sig_in (strip value constraints to bare types).
+%% Accepts both 4-tuple and 5-tuple def shapes.
 broadest_sig_in(Defs) ->
-    {_, SigIn, _, _} = find_broadest_def(Defs),
+    SigIn = element(2, find_broadest_def(Defs)),
     [case S of {T, _V} -> T; T -> T end || S <- SigIn].
+
+%% Return a guard shared by the whole group if any def has one. If defs
+%% have different guards we don't try to unify them — the wrapper matches
+%% the whole name, so the first non-undefined guard we find "stands for"
+%% the group. (In multi-clause cases the individual clauses still carry
+%% their own guards as sub-clause metadata inside the compiled module.)
+broadest_guard(Defs) ->
+    GetGuard = fun(D) ->
+        %% Guard is the 5th element if present.
+        case tuple_size(D) of
+            5 -> element(5, D);
+            _ -> undefined
+        end
+    end,
+    case [G || D <- Defs, (G = GetGuard(D)) =/= undefined, G =/= []] of
+        [First | _] -> First;
+        [] -> undefined
+    end.
 
 %% Find the def with the broadest (no value constraints) sig_in,
 %% or fall back to the last def if all have constraints.
 find_broadest_def(Defs) ->
-    case lists:filter(fun({_, SigIn, _, _}) ->
+    case lists:filter(fun(Def) ->
+        SigIn = element(2, Def),
         not lists:any(fun(S) -> is_tuple(S) end, SigIn)
     end, Defs) of
         [Def | _] -> Def;
@@ -540,7 +567,9 @@ find_broadest_def(Defs) ->
     end.
 
 group_defs_by_type(WordDefs) ->
-    Groups = lists:foldl(fun({_Name, SigIn, _SigOut, _Body} = Def, Acc) ->
+    %% Accepts 4-tuple (legacy, no guard) or 5-tuple (with guard) defs.
+    Groups = lists:foldl(fun(Def, Acc) ->
+        SigIn = element(2, Def),
         TargetType = case SigIn of
             [{T, _} | _] -> T;
             [T | _] when is_atom(T) -> T;
@@ -586,8 +615,19 @@ auto_compile_word(Name) ->
                             ByType = group_defs_by_type(WordDefs),
                             lists:foreach(fun({TargetType, Defs}) ->
                                 BroadSigIn = broadest_sig_in(Defs),
-                                {_, _, BroadSigOut, _} = find_broadest_def(Defs),
-                                Wrapper = af_word_compiler:make_wrapper(ModAtom, FunAtom, BroadSigIn, BroadSigOut),
+                                BroadDef = find_broadest_def(Defs),
+                                BroadSigOut = element(3, BroadDef),
+                                %% If any def in this group has a guard, carry
+                                %% it onto the wrapper so dispatch still checks
+                                %% it at match time. The native function also
+                                %% has the head guard compiled in; the double
+                                %% check is cheap and keeps multi-clause fall-
+                                %% through working in match_first_op.
+                                BroadGuard = broadest_guard(Defs),
+                                Wrapper0 = af_word_compiler:make_wrapper(
+                                              ModAtom, FunAtom,
+                                              BroadSigIn, BroadSigOut),
+                                Wrapper = Wrapper0#operation{guard = BroadGuard},
                                 af_type:replace_ops(TargetType, Name, [Wrapper])
                             end, ByType);
                         {error, _Reason} ->

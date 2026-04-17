@@ -182,7 +182,8 @@ group_by_name_single_test() ->
     Defs = [{"a", ['Int'], ['Int'], []}],
     Groups = af_word_compiler:group_by_name(Defs),
     ?assertEqual(1, length(Groups)),
-    ?assertMatch({"a", [{"a", ['Int'], ['Int'], []}]}, hd(Groups)).
+    %% group_by_name normalises defs to 5-tuple {Name, SigIn, SigOut, Body, Guard}.
+    ?assertMatch({"a", [{"a", ['Int'], ['Int'], [], undefined}]}, hd(Groups)).
 
 group_by_name_multiple_distinct_test() ->
     Defs = [{"a", ['Int'], ['Int'], []},
