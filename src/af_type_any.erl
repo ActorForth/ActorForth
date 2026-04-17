@@ -216,13 +216,27 @@ op_2dup(Cont) ->
     Cont#continuation{data_stack = [A, B | Cont#continuation.data_stack]}.
 
 op_print(Cont) ->
-    [{_Type, Value} | Rest] = Cont#continuation.data_stack,
+    [Item | Rest] = Cont#continuation.data_stack,
+    Value = case Item of
+        {_Type, V} -> V;
+        Tuple when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
+            %% Product type instance: show as {TypeName, V1, V2, ...}
+            Tuple;
+        Other -> Other
+    end,
     io:format("~p~n", [Value]),
     Cont#continuation{data_stack = Rest}.
 
 op_dot(Cont) ->
-    [{Type, Value} | Rest] = Cont#continuation.data_stack,
-    io:format("~p : ~s~n", [Value, Type]),
+    [Item | Rest] = Cont#continuation.data_stack,
+    case Item of
+        {Type, Value} when is_atom(Type) ->
+            io:format("~p : ~s~n", [Value, Type]);
+        Tuple when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
+            TypeName = element(1, Tuple),
+            Fields = tl(tuple_to_list(Tuple)),
+            io:format("~p : ~s~n", [Fields, TypeName])
+    end,
     Cont#continuation{data_stack = Rest}.
 
 op_stack(Cont) ->
@@ -231,8 +245,18 @@ op_stack(Cont) ->
         [] -> io:format("Stack empty~n");
         _ ->
             io:format("Stack(~p):~n", [length(Stack)]),
-            lists:foldl(fun({Type, Val}, Idx) ->
-                io:format("  ~p) ~p : ~p~n", [Idx, Val, Type]),
+            lists:foldl(fun(Item, Idx) ->
+                case Item of
+                    {Type, Val} when is_atom(Type) ->
+                        io:format("  ~p) ~p : ~p~n", [Idx, Val, Type]);
+                    Tuple when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
+                        %% Product type: {TypeName, V1, V2, ...}
+                        TypeName = element(1, Tuple),
+                        Fields = tl(tuple_to_list(Tuple)),
+                        io:format("  ~p) ~p : ~p~n", [Idx, Fields, TypeName]);
+                    Other ->
+                        io:format("  ~p) ~p : ?~n", [Idx, Other])
+                end,
                 Idx + 1
             end, 0, Stack)
     end,

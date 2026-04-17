@@ -1,0 +1,90 @@
+# auction.a4 — Live auction actor
+#
+# Each auction is an actor. Bids are validated inside the actor's
+# dispatch handler, so concurrent bids from different callers are
+# naturally serialised by the BEAM mailbox.
+#
+# Validation lives in guard expressions, so an invalid bid never
+# touches state:
+#   - if the auction is closed, the bid is dropped;
+#   - if the amount is not strictly greater than the current bid, dropped;
+#   - otherwise the state is updated.
+
+# ============================================================
+# Domain types
+# ============================================================
+
+# Auction status codes. a4 doesn't have a distinct enum; small Ints
+# used as tags dispatch well via value-constrained patterns.
+: OPEN   -> Int ; 0 .
+: CLOSED -> Int ; 1 .
+
+type Auction
+    item           String
+    current_bid    Int
+    highest_bidder String
+    status         Int
+.
+
+# ============================================================
+# Internal helpers
+# ============================================================
+
+# Apply a known-valid bid: update both fields and return the new state.
+# Stack entry: [ bidder, amount, Auction ] (bidder is TOS).
+: apply-bid Auction Int String -> Auction ;
+    rot                              # bring Auction to TOS: [amount, bidder, Auction]
+    swap                             # [amount, Auction, bidder]
+    over                             # [amount, Auction, bidder, Auction]
+    swap                             # [amount, Auction, Auction, bidder]
+    highest_bidder!                  # consumes [Auction, bidder] -> [Auction']
+                                     # stack: [amount, Auction, Auction']
+    swap drop                        # drop the old Auction: [amount, Auction']
+    swap                             # [Auction', amount]
+    over                             # [Auction', amount, Auction']
+    swap                             # [Auction', Auction', amount]
+    current_bid!                     # consumes [Auction', amount] -> [Auction'']
+                                     # stack: [Auction', Auction'']
+    swap drop .                      # keep the newest: [Auction'']
+
+# Drop the bid args, return state unchanged.
+: drop-bid Auction Int String -> Auction ;
+    drop drop .
+
+# ============================================================
+# bid — the word the caller invokes via << bid amount bidder >>
+# ============================================================
+#
+# Three clauses, tried in order. The guard on each clause inspects
+# the Auction (third from TOS) via `rot` to bring it to top and
+# `rot rot` to restore the original order when returning from the
+# predicate (the predicate runs on a snapshot of the stack so the
+# mutation is harmless).
+
+: bid Auction Int String -> Auction ;
+    : Auction Int String where drop drop status CLOSED == -> Auction ;
+        drop-bid
+    : Auction Int String where rot current_bid swap drop rot >= -> Auction ;
+        drop-bid
+    : Auction Int String -> Auction ;
+        apply-bid .
+
+# ============================================================
+# close — transition to Closed
+# ============================================================
+
+: close Auction -> Auction ;
+    CLOSED status! .
+
+# ============================================================
+# query — read-only accessors
+# ============================================================
+
+: leading-bid Auction -> Auction Int ;
+    current_bid .
+
+: leader Auction -> Auction String ;
+    highest_bidder .
+
+: is-open? Auction -> Auction Bool ;
+    status OPEN == .
