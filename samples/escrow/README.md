@@ -20,14 +20,13 @@ Invalid transitions are no-ops. `release` before `verify` changes
 nothing. `deposit` after `verify` changes nothing. `dispute` after
 release changes nothing.
 
-## Run the test
+## Run the tests across all languages
 
 ```
-rebar3 shell
-1> af_repl:run_file("samples/escrow/escrow_test.a4").
+./run_all.sh
 ```
 
-Expected output:
+Expected ActorForth output:
 
 ```
 escrow happy path: passed
@@ -39,16 +38,23 @@ The test exercises: happy path (deposit → verify → release), invalid
 transitions at each state, and the dispute path (deposit → dispute →
 refund). Every invalid call is verified to leave state unchanged.
 
-## Comparison with Solidity
+## Code-size comparison
 
-Line counts (non-comment, non-blank):
+Non-blank, non-comment lines of the implementation file:
 
-| | Lines |
-|---|---|
-| `escrow.a4` | 54 |
-| `Escrow.sol` | 57 |
+| Language     | Impl lines | Notes |
+|--------------|-----------:|-------|
+| **a4**       | **54**     | Product type + guarded sub-clauses; `server` promotes to actor |
+| Solidity     | 57         | Runtime modifiers; contract-per-address isolation |
+| Elixir       | 68         | GenServer with struct + pattern-matched `handle_call` per transition |
+| Erlang       | 81         | gen_server with record + case-based state guards |
+| TypeScript   | 86         | Class with Status enum + `if`-based state checks |
+| Python       | 86         | Class with Enum Status + method guards |
+| C++20        | 86         | Class with enum Status + method guards |
 
-The line count isn't the story. The story is where validation lives.
+(ActorForth test harness is an additional 39 lines in `escrow_test.a4`.)
+
+Line counts matter less than **where validation lives**.
 
 ### Solidity
 
@@ -113,10 +119,15 @@ swap off.
 
 ## Files in this directory
 
-- `escrow.a4` — ActorForth implementation (~54 non-comment lines)
+- `escrow.a4` — ActorForth implementation (54 non-comment lines)
 - `escrow_test.a4` — end-to-end test through happy/invalid/dispute paths
-- `Escrow.sol` — Solidity reference implementation (~57 non-comment lines)
-- (planned) `escrow.py` / `escrow.erl` / `escrow.ts` — more references
+- `Escrow.sol` — Solidity reference (57 non-comment lines)
+- `escrow.py` — Python reference (86 lines)
+- `escrow.erl` — Erlang gen_server reference (81 lines)
+- `escrow.exs` — Elixir GenServer reference (68 lines)
+- `escrow.ts` — TypeScript class reference (86 lines)
+- `escrow.cpp` — C++20 class reference (86 lines)
+- `run_all.sh` — runs every implementation and checks the pass message
 
 ## Known limitations (intentional for the demo scope)
 

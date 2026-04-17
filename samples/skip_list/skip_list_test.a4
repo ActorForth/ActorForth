@@ -3,7 +3,7 @@
 # Loads the skip list module (which runs its own inline tests),
 # then exercises additional edge cases.
 
-"test/demos/skip_list/skip_list.a4" load
+"skip_list.a4" load
 
 # ===================================================
 #          ADDITIONAL EDGE-CASE TESTS

@@ -15,7 +15,7 @@ set -euo pipefail
 exec 0</dev/null
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BUILD_DIR="$SCRIPT_DIR/.build"
 
 BENCH_ITERS=0
@@ -141,10 +141,10 @@ bench_a4() {
 # ------------------------------------------------------------------
 # 1. ActorForth
 # ------------------------------------------------------------------
-echo -e "${CYAN}[1/4] ActorForth${RESET} (debounce_demo.a4)"
+echo -e "${CYAN}[1/6] ActorForth${RESET} (debounce_demo.a4)"
 echo -n "  Running... "
 
-if time_cmd run_a4 "test/demos/debounce/debounce_demo.a4"; then
+if time_cmd run_a4 "$SCRIPT_DIR/debounce_demo.a4"; then
     pass
 else
     fail
@@ -152,7 +152,7 @@ fi
 
 if ((BENCH_ITERS > 0)); then
     echo -n "  Benchmarking ($BENCH_ITERS iterations, in-process)... "
-    RESULT=$(extract_bench bench_a4 "$BENCH_ITERS" "test/demos/debounce/debounce_demo.a4")
+    RESULT=$(extract_bench bench_a4 "$BENCH_ITERS" "$SCRIPT_DIR/debounce_demo.a4")
     parse_bench "ActorForth" "$RESULT"
     echo "done."
 fi
@@ -160,7 +160,7 @@ fi
 # ------------------------------------------------------------------
 # 2. Erlang
 # ------------------------------------------------------------------
-echo -e "${CYAN}[2/4] Erlang/OTP${RESET} (debounce_erlang_equivalent.erl)"
+echo -e "${CYAN}[2/6] Erlang/OTP${RESET} (debounce_erlang_equivalent.erl)"
 echo -n "  Compiling... "
 
 if erlc -o "$BUILD_DIR" "$SCRIPT_DIR/debounce_erlang_equivalent.erl" 2>/dev/null; then
@@ -186,7 +186,7 @@ fi
 # ------------------------------------------------------------------
 # 3. Python
 # ------------------------------------------------------------------
-echo -e "${CYAN}[3/4] Python${RESET} (debounce_python_equivalent.py)"
+echo -e "${CYAN}[3/6] Python${RESET} (debounce_python_equivalent.py)"
 echo -n "  Running... "
 
 if time_cmd python3 "$SCRIPT_DIR/debounce_python_equivalent.py"; then
@@ -206,7 +206,29 @@ fi
 # ------------------------------------------------------------------
 # 4. C++20
 # ------------------------------------------------------------------
-echo -e "${CYAN}[4/4] C++20${RESET} (debounce_cpp20_equivalent.cpp)"
+echo -e "${CYAN}[4/6] Elixir${RESET} (debounce_elixir_equivalent.exs)"
+echo -n "  Running... "
+if time_cmd elixir "$SCRIPT_DIR/debounce_elixir_equivalent.exs"; then
+    pass
+else
+    fail
+fi
+
+# ------------------------------------------------------------------
+# 5. TypeScript
+# ------------------------------------------------------------------
+echo -e "${CYAN}[5/6] TypeScript${RESET} (debounce_typescript_equivalent.ts)"
+echo -n "  Running... "
+if time_cmd bash -c "cd '$PROJECT_ROOT/ts' && npx tsx '$SCRIPT_DIR/debounce_typescript_equivalent.ts'"; then
+    pass
+else
+    fail
+fi
+
+# ------------------------------------------------------------------
+# 6. C++20
+# ------------------------------------------------------------------
+echo -e "${CYAN}[6/6] C++20${RESET} (debounce_cpp20_equivalent.cpp)"
 echo -n "  Compiling... "
 
 CPP_BIN="$BUILD_DIR/debounce_cpp20"
@@ -244,6 +266,8 @@ count_lines() {
         erl)  grep -cvE '^\s*$|^\s*%%' "$file" ;;
         py)   grep -cvE '^\s*$|^\s*#|^\s*"""' "$file" | head -1 ;;
         cpp)  grep -cvE '^\s*$|^\s*//|^\s*/?\*' "$file" ;;
+        exs)  grep -cvE '^\s*$|^\s*#' "$file" ;;
+        ts)   grep -cvE '^\s*$|^\s*//|^\s*/?\*' "$file" ;;
     esac
 }
 
@@ -251,6 +275,8 @@ for pair in \
     "ActorForth:$SCRIPT_DIR/debounce_demo.a4" \
     "Erlang:$SCRIPT_DIR/debounce_erlang_equivalent.erl" \
     "Python:$SCRIPT_DIR/debounce_python_equivalent.py" \
+    "Elixir:$SCRIPT_DIR/debounce_elixir_equivalent.exs" \
+    "TypeScript:$SCRIPT_DIR/debounce_typescript_equivalent.ts" \
     "C++20:$SCRIPT_DIR/debounce_cpp20_equivalent.cpp"; do
     label="${pair%%:*}"
     file="${pair#*:}"

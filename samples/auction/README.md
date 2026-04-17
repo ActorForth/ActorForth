@@ -11,14 +11,14 @@ state:
 - bid not strictly greater than the current bid → dropped
 - otherwise → state updated, new current_bid and highest_bidder
 
-## Run the test
+## Run the tests across all languages
 
 ```
-rebar3 shell
-1> af_repl:run_file("samples/auction/auction_test.a4").
+./run_all.sh
 ```
 
-Expected output:
+This builds and runs the reference implementation in every language and
+confirms each one's pass message. Expected ActorForth output:
 
 ```
 auction test: direct word calls passed
@@ -31,28 +31,26 @@ rejection, and post-close rejection.
 
 ## Code-size comparison (same functionality)
 
-| Language   | Lines of impl | Boilerplate |
-|------------|---------------|-------------|
-| **a4**     | **~60**       | Actor-as-type, typed messages auto-dispatched |
-| Erlang     | ~180          | gen_server callbacks + records + case-based validation |
-| Elixir     | ~150          | GenServer callbacks + structs + pattern-matched validation |
-| Python     | ~220          | asyncio.Lock + dict + runtime type checks |
-| TypeScript | ~180          | Promise-based state machine + interface guards |
-| C++        | ~380          | std::mutex + std::condition_variable + class hierarchy |
+Non-blank, non-comment lines of the implementation file:
 
-(The a4 line count excludes section headers and counts only word
-definitions + the `type` block. The cross-language comparison
-implementations are a work-in-progress and will land in this directory
-as `auction.py`, `auction.erl`, `auction.exs`, `auction.ts`,
-`auction.cpp`.)
+| Language     | Impl lines | Notes |
+|--------------|-----------:|-------|
+| **a4**       | **37**     | `type Auction` with `server` — actor is a typed instance; guards dispatch bid outcome |
+| Elixir       | 47         | GenServer with struct + pattern-matched `handle_call` clauses |
+| TypeScript   | 56         | Class with validated `bid` method |
+| Python       | 61         | Class with `asyncio.Lock` per auction |
+| C++20        | 61         | Class with `std::mutex` guarding state |
+| Erlang       | 62         | gen_server with record + case-based validation |
 
-## Why a4 wins here
+(ActorForth test harness is an additional 30 lines in `auction_test.a4`.)
 
-Three things compound to make the a4 version short:
+## Why a4 is short here
+
+Three things compound to make the a4 version the smallest:
 
 1. **Actor-as-type.** `server` turns any typed instance into an actor.
    No `init/1`, `handle_call/3`, `handle_cast/2`, `terminate/2` callbacks.
-   Erlang + Elixir lose 30–50 lines to gen_server shape alone.
+   Erlang and Elixir lose 10–20 lines to gen_server shape alone.
 
 2. **Guards express preconditions.** The three validation cases (closed,
    too-low, accept) are three sub-clauses with `where` guards. In every
@@ -61,5 +59,10 @@ Three things compound to make the a4 version short:
 
 3. **Typed messages make the interface tight.** `<< 150 "alice" bid >>`
    can only be built with an Int and a String in that order; the type
-   system rejects `<< "alice" 150 bid >>` at dispatch, before state
-   touches.
+   system rejects `<< "alice" 150 bid >>` at dispatch, before state is
+   touched.
+
+Elixir is the closest competitor — its struct + pattern-matched `handle_call`
+clauses are compact — but it still carries explicit GenServer boilerplate
+(`use GenServer`, `init/1`, `start_link`, `handle_call` heads with `_from`,
+state-tuple returns) that a4 elides entirely.
