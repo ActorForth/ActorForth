@@ -19,7 +19,7 @@ gen_server_test_() ->
             C3 = eval(": peek Gadget -> Gadget Int ; value .", C2),
             C4 = eval("af_gs_gadget Gadget gen-server-module", C3),
             [{'Atom', "af_gs_gadget"}] = C4#continuation.data_stack,
-            InitState = {'Gadget', #{value => {'Int', 0}}},
+            InitState = {'Gadget', 0},
             {ok, Pid} = gen_server:start_link(af_gs_gadget, InitState, []),
             %% cast bump (async)
             ok = gen_server:cast(Pid, bump),
@@ -65,7 +65,7 @@ gen_server_test_() ->
             C2 = eval(": getval Item -> Item Int ; val .", C1),
             C3 = eval("af_gs_item Item gen-server-module", C2),
             [{'Atom', "af_gs_item"}] = C3#continuation.data_stack,
-            InitState = {'Item', #{val => {'Int', 55}}},
+            InitState = {'Item', 55},
             {ok, Pid} = gen_server:start_link(af_gs_item, InitState, []),
             {ok, 55} = gen_server:call(Pid, getval),
             gen_server:stop(Pid)
@@ -76,7 +76,7 @@ gen_server_test_() ->
             C2 = eval(": peek-fin Fin -> Fin Int ; val .", C1),
             C3 = eval("af_gs_fin Fin gen-server-module", C2),
             [{'Atom', "af_gs_fin"}] = C3#continuation.data_stack,
-            InitState = {'Fin', #{val => {'Int', 1}}},
+            InitState = {'Fin', 1},
             {ok, Pid} = gen_server:start_link(af_gs_fin, InitState, []),
             {ok, 1} = gen_server:call(Pid, 'peek-fin'),
             %% Stopping exercises terminate/2

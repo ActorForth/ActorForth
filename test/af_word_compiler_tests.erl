@@ -1054,7 +1054,9 @@ product_ops_test_() ->
             C2 = eval(": test-getx Point -> Point Int ; x .", C1),
             C3 = eval("\"test-getx\" compile", C2),
             C4 = eval("3 int 5 int point test-getx", C3),
-            [{'Int', 3}, {'Point', _}] = C4#continuation.data_stack
+            %% New storage: product instance is a positional tuple, not a map.
+            [{'Int', 3}, Instance] = C4#continuation.data_stack,
+            ?assertEqual('Point', element(1, Instance))
         end} end,
 
         fun(_) -> {"product setter compiles to native BEAM", fun() ->
@@ -1063,8 +1065,9 @@ product_ops_test_() ->
             C2 = eval(": test-setx Point Int -> Point ; x! .", C1),
             C3 = eval("\"test-setx\" compile", C2),
             C4 = eval("3 int 5 int point 99 test-setx", C3),
-            [{'Point', Fields}] = C4#continuation.data_stack,
-            ?assertEqual({'Int', 99}, maps:get(x, Fields))
+            [Instance] = C4#continuation.data_stack,
+            ?assertEqual('Point', element(1, Instance)),
+            ?assertEqual(99, element(2, Instance))
         end} end,
 
         fun(_) -> {"product getter-then-op compiles to native BEAM", fun() ->
@@ -1073,8 +1076,9 @@ product_ops_test_() ->
             C2 = eval(": test-inc Counter -> Counter ; value 1 int + value! .", C1),
             C3 = eval("\"test-inc\" compile", C2),
             C4 = eval("0 int counter test-inc", C3),
-            [{'Counter', Fields}] = C4#continuation.data_stack,
-            ?assertEqual({'Int', 1}, maps:get(value, Fields))
+            [Instance] = C4#continuation.data_stack,
+            ?assertEqual('Counter', element(1, Instance)),
+            ?assertEqual(1, element(2, Instance))
         end} end
     ]}.
 
