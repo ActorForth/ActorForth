@@ -1,0 +1,87 @@
+{
+  "date": "2026-04-17T10:17:10Z",
+  "git_sha": "1f73310",
+  "quick": false,
+  "results": {
+    "a4_cpp": {
+      "arith": 0.272,
+      "list": 1.15,
+      "map": 0.691,
+      "product": 0.698,
+      "string": 0.154,
+      "wordchain": 0.301
+    },
+    "a4_direct": {
+      "arith": 0.081,
+      "list": 0.054,
+      "map": 0.104,
+      "product": 0.785,
+      "string": 0.658,
+      "wordchain": 1.164
+    },
+    "a4_interp": {
+      "arith": 2.688,
+      "list": 4.628,
+      "map": 2.287,
+      "product": 4.818,
+      "string": 1.406,
+      "wordchain": 2.745
+    },
+    "a4_native": {
+      "arith": 0.427,
+      "list": 4.568,
+      "map": 2.268,
+      "product": 1.656,
+      "string": 1.028,
+      "wordchain": 1.547
+    },
+    "cpp": {
+      "arith": 0.0,
+      "list": 0.024,
+      "map": 0.082,
+      "product": 0.001,
+      "string": 0.044,
+      "wordchain": 0.0
+    },
+    "elixir": {
+      "arith": 0.019,
+      "list": 0.042,
+      "map": 0.03,
+      "product": 0.026,
+      "string": 0.315,
+      "wordchain": 0.019
+    },
+    "erlang": {
+      "arith": 0.025,
+      "list": 0.057,
+      "map": 0.118,
+      "product": 0.031,
+      "string": 0.597,
+      "wordchain": 0.024
+    },
+    "python": {
+      "arith": 0.114,
+      "list": 0.225,
+      "map": 0.171,
+      "product": 0.244,
+      "string": 0.086,
+      "wordchain": 0.164
+    },
+    "ts_interp": {
+      "arith": 10.08,
+      "list": 18.767,
+      "map": 12.881,
+      "product": 17.018,
+      "string": 2.774,
+      "wordchain": 10.167
+    },
+    "ts_native": {
+      "arith": 0.001,
+      "list": 0.174,
+      "map": 0.061,
+      "product": 0.023,
+      "string": 0.016,
+      "wordchain": 0.001
+    }
+  }
+}

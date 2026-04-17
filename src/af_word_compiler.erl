@@ -345,12 +345,18 @@ build_head_pattern(SigIn, L) ->
 %% Build an ActorForth wrapper operation that calls a native BEAM function.
 %% The wrapper pops tagged items, passes the tagged stack to the native function,
 %% and pushes the result (which is already a tagged stack).
+%%
+%% Perf note: uses `ModAtom:FunAtom(Stack)` (fully-qualified remote call) rather
+%% than `erlang:apply(ModAtom, FunAtom, [Stack])`. The M:F(X) form is a single
+%% BIF-backed call; apply/3 with runtime atoms walks the global export table on
+%% every invocation. The throughput demo's OPTIMIZATION_LOG.md established the
+%% same fix for the actor-worker dispatch path (~17x improvement in that path).
 make_wrapper(ModAtom, FunAtom, SigIn, SigOut) ->
     Impl = fun(Cont) ->
         Stack = Cont#continuation.data_stack,
         %% Pass the full stack to the compiled function
         %% which will pattern match what it needs and leave the rest
-        Result = erlang:apply(ModAtom, FunAtom, [Stack]),
+        Result = ModAtom:FunAtom(Stack),
         Cont#continuation{data_stack = Result}
     end,
     #operation{
@@ -387,7 +393,13 @@ simulate_body([#operation{name = OpName, source = quoted_string} | Rest], [{Stac
     StrTagged = {tuple, L, [{atom, L, 'String'}, BinExpr]},
     NewExpr = {cons, L, StrTagged, StackExpr},
     simulate_body(Rest, [{NewExpr, stack}], L, Ctx, SideEffects);
-%% Opaque stack: check for same-module words first, then fall back to apply_impl
+%% Opaque stack: prefer direct calls in this order:
+%%   1. Same-module function (local call, cheapest)
+%%   2. Cross-module native wrapper (direct remote call)
+%%   3. Primitive fast-path fun in af_compile (direct remote, no find_op)
+%%   4. af_compile:apply_impl fallback (runtime lookup, allocates Cont record)
+%%
+%% Only the fourth path is slow. The others are a single call instruction.
 simulate_body([#operation{name = OpName} | Rest], [{StackExpr, stack}], L, Ctx, SideEffects) ->
     Words = maps:get(words, Ctx, #{}),
     NewExpr = case maps:get(OpName, Words, undefined) of
@@ -395,9 +407,28 @@ simulate_body([#operation{name = OpName} | Rest], [{StackExpr, stack}], L, Ctx, 
             %% Same-module word: call locally
             {call, L, {atom, L, list_to_atom(OpName)}, [StackExpr]};
         undefined ->
-            {call, L,
-                {remote, L, {atom, L, af_compile}, {atom, L, apply_impl}},
-                [{string, L, OpName}, StackExpr]}
+            case find_native_word(OpName) of
+                {ok, NativeMod, _Arity, _NumOut} ->
+                    %% Already-compiled cross-module word: direct remote call
+                    {call, L,
+                     {remote, L, {atom, L, NativeMod},
+                                 {atom, L, list_to_atom(OpName)}},
+                     [StackExpr]};
+                not_found ->
+                    case af_compile:primitive_fast_fun(OpName) of
+                        {ok, FunAtom} ->
+                            %% Primitive fast path: call af_compile:prim_*/1
+                            {call, L,
+                             {remote, L, {atom, L, af_compile},
+                                         {atom, L, FunAtom}},
+                             [StackExpr]};
+                        not_found ->
+                            {call, L,
+                             {remote, L, {atom, L, af_compile},
+                                         {atom, L, apply_impl}},
+                             [{string, L, OpName}, StackExpr]}
+                    end
+            end
     end,
     simulate_body(Rest, [{NewExpr, stack}], L, Ctx, SideEffects);
 %% Quoted string literals: push as tagged {String, Binary}
