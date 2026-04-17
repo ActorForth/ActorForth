@@ -17,6 +17,8 @@ import os
 import re
 import shutil
 import tempfile
+import json
+import datetime
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
@@ -216,8 +218,37 @@ def print_table(results):
             print()
 
 
+def git_sha():
+    try:
+        r = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, cwd=PROJECT_ROOT, timeout=5
+        )
+        return r.stdout.strip() if r.returncode == 0 else None
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+
+def parse_args(argv):
+    opts = {"quick": False, "json_out": None}
+    i = 1
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--quick":
+            opts["quick"] = True
+        elif arg == "--json-out":
+            i += 1
+            opts["json_out"] = argv[i]
+        elif arg == "--help" or arg == "-h":
+            print(__doc__)
+            sys.exit(0)
+        i += 1
+    return opts
+
+
 def main():
-    quick = "--quick" in sys.argv
+    opts = parse_args(sys.argv)
+    quick = opts["quick"]
 
     print("\n" + "=" * 60)
     print("  ActorForth Cross-Language Benchmark Suite")
@@ -322,6 +353,21 @@ def main():
 
     # Print the comparison table
     print_table(results)
+
+    # Optionally dump structured results for history / diffing
+    if opts.get("json_out"):
+        out_path = opts["json_out"]
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        payload = {
+            "date": datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "git_sha": git_sha(),
+            "quick": quick,
+            "results": results,
+        }
+        with open(out_path, "w") as f:
+            json.dump(payload, f, indent=2, sort_keys=True)
+            f.write("\n")
+        print(f"\nWrote structured results to {out_path}")
 
 
 if __name__ == "__main__":
