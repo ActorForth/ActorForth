@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="520" viewBox="0 0 920 520" font-family="ui-sans-serif, -apple-system, sans-serif" font-size="12">
+<style>text{fill:#222}</style>
+<text x="460" y="24" text-anchor="middle" font-size="16" font-weight="600">A4 Native perf across today's optimizations (us/op, shorter = faster)</text>
+<line x1="50" y1="430" x2="900" y2="430" stroke="#888"/>
+<rect x="60" y="468" width="14" height="14" fill="#c1272d"/>
+<text x="80" y="480">Baseline</text>
+<rect x="260" y="468" width="14" height="14" fill="#f58220"/>
+<text x="280" y="480">After PR #36</text>
+<rect x="460" y="468" width="14" height="14" fill="#2e8b57"/>
+<text x="480" y="480">After PR #39</text>
+<rect x="71.0" y="330.98199999999997" width="36" height="99.018" fill="#c1272d"/>
+<text x="89.0" y="327.98199999999997" text-anchor="middle" font-size="10" fill="#c1272d">11.0</text>
+<rect x="111.0" y="426.157" width="36" height="3.843" fill="#f58220"/>
+<text x="129.0" y="423.157" text-anchor="middle" font-size="10" fill="#f58220">0.43</text>
+<rect x="151.0" y="426.562" width="36" height="3.438" fill="#2e8b57"/>
+<text x="169.0" y="423.562" text-anchor="middle" font-size="10" fill="#2e8b57">0.38</text>
+<text x="125" y="446" text-anchor="middle" font-weight="600">Arith</text>
+<text x="125" y="460" text-anchor="middle" font-size="10" fill="#666">28.8× faster</text>
+<rect x="201.0" y="387.448" width="36" height="42.552" fill="#c1272d"/>
+<text x="219.0" y="384.448" text-anchor="middle" font-size="10" fill="#c1272d">4.7</text>
+<rect x="241.0" y="388.88800000000003" width="36" height="41.111999999999995" fill="#f58220"/>
+<text x="259.0" y="385.88800000000003" text-anchor="middle" font-size="10" fill="#f58220">4.6</text>
+<rect x="281.0" y="391.93" width="36" height="38.07000000000001" fill="#2e8b57"/>
+<text x="299.0" y="388.93" text-anchor="middle" font-size="10" fill="#2e8b57">4.2</text>
+<text x="255" y="446" text-anchor="middle" font-weight="600">List</text>
+<text x="255" y="460" text-anchor="middle" font-size="10" fill="#666">1.1× faster</text>
+<rect x="331.0" y="420.20799999999997" width="36" height="9.792000000000002" fill="#c1272d"/>
+<text x="349.0" y="417.20799999999997" text-anchor="middle" font-size="10" fill="#c1272d">1.1</text>
+<rect x="371.0" y="420.748" width="36" height="9.252" fill="#f58220"/>
+<text x="389.0" y="417.748" text-anchor="middle" font-size="10" fill="#f58220">1.0</text>
+<rect x="411.0" y="421.063" width="36" height="8.937" fill="#2e8b57"/>
+<text x="429.0" y="418.063" text-anchor="middle" font-size="10" fill="#2e8b57">0.99</text>
+<text x="385" y="446" text-anchor="middle" font-weight="600">String</text>
+<text x="385" y="460" text-anchor="middle" font-size="10" fill="#666">1.1× faster</text>
+<rect x="461.0" y="408.256" width="36" height="21.744" fill="#c1272d"/>
+<text x="479.0" y="405.256" text-anchor="middle" font-size="10" fill="#c1272d">2.4</text>
+<rect x="501.0" y="409.588" width="36" height="20.412" fill="#f58220"/>
+<text x="519.0" y="406.588" text-anchor="middle" font-size="10" fill="#f58220">2.3</text>
+<rect x="541.0" y="410.173" width="36" height="19.826999999999998" fill="#2e8b57"/>
+<text x="559.0" y="407.173" text-anchor="middle" font-size="10" fill="#2e8b57">2.2</text>
+<text x="515" y="446" text-anchor="middle" font-weight="600">Map</text>
+<text x="515" y="460" text-anchor="middle" font-size="10" fill="#666">1.1× faster</text>
+<rect x="591.0" y="93.18400000000003" width="36" height="336.816" fill="#c1272d"/>
+<text x="609.0" y="90.18400000000003" text-anchor="middle" font-size="10" fill="#c1272d">37.4</text>
+<rect x="631.0" y="415.096" width="36" height="14.904" fill="#f58220"/>
+<text x="649.0" y="412.096" text-anchor="middle" font-size="10" fill="#f58220">1.7</text>
+<rect x="671.0" y="416.5" width="36" height="13.5" fill="#2e8b57"/>
+<text x="689.0" y="413.5" text-anchor="middle" font-size="10" fill="#2e8b57">1.5</text>
+<text x="645" y="446" text-anchor="middle" font-weight="600">Product</text>
+<text x="645" y="460" text-anchor="middle" font-size="10" fill="#666">24.9× faster</text>
+<rect x="721.0" y="322.567" width="36" height="107.43299999999999" fill="#c1272d"/>
+<text x="739.0" y="319.567" text-anchor="middle" font-size="10" fill="#c1272d">11.9</text>
+<rect x="761.0" y="416.077" width="36" height="13.923" fill="#f58220"/>
+<text x="779.0" y="413.077" text-anchor="middle" font-size="10" fill="#f58220">1.5</text>
+<rect x="801.0" y="416.185" width="36" height="13.815" fill="#2e8b57"/>
+<text x="819.0" y="413.185" text-anchor="middle" font-size="10" fill="#2e8b57">1.5</text>
+<text x="775" y="446" text-anchor="middle" font-weight="600">WordChain</text>
+<text x="775" y="460" text-anchor="middle" font-size="10" fill="#666">7.8× faster</text>
+<text x="52" y="55" text-anchor="end" font-size="10" fill="#666">40 us/op</text>
+<text x="52" y="434" text-anchor="end" font-size="10" fill="#666">0</text>
+<text x="770" y="80" font-weight="600">Total (sum)</text>
+<rect x="770" y="96" width="120.0" height="14" fill="#c1272d"/>
+<text x="894.0" y="107" font-size="10">68.6</text>
+<rect x="770" y="118" width="20.10758801661929" height="14" fill="#f58220"/>
+<text x="794.1075880166193" y="129" font-size="10">11.5</text>
+<rect x="770" y="140" width="18.968729499234637" height="14" fill="#2e8b57"/>
+<text x="792.9687294992347" y="151" font-size="10">10.8</text>
+<text x="770" y="166" font-size="10" fill="#666">→ 6.3× total</text>
+<text x="60" y="512" font-size="10" fill="#666">Same machine, same benchmarks (test/demos/comprehensive/), N=10k iterations.</text>
+</svg>
