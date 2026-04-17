@@ -1,0 +1,61 @@
+# auction_test.a4
+"auction.a4" load
+
+# ============================================================
+# Direct word-call tests
+# ============================================================
+# Getters are non-destructive (leave instance on stack, push value on
+# top), so `getter expected assert-eq` consumes the pair and leaves the
+# auction in place for the next assertion.
+
+"laptop" 100 "" OPEN auction
+
+# Alice bids 150 -> accepted
+150 "alice" bid
+    leader        "alice" assert-eq
+    leading-bid   150     assert-eq
+
+# Bob bids 120 -> rejected (too low), state unchanged
+120 "bob" bid
+    leader        "alice" assert-eq
+    leading-bid   150     assert-eq
+
+# Bob bids 200 -> accepted
+200 "bob" bid
+    leader        "bob" assert-eq
+    leading-bid   200   assert-eq
+
+# Close the auction
+close
+    is-open?      false assert-eq
+
+# Further bids rejected even after close
+500 "carol" bid
+    leader        "bob" assert-eq
+    leading-bid   200   assert-eq
+
+drop
+
+"auction test: direct word calls passed" print
+
+# ============================================================
+# Actor-based test
+# ============================================================
+
+"laptop" 100 "" OPEN auction server
+
+<< 150 "alice" bid >>
+<< 120 "bob"   bid >>
+<< 200 "bob"   bid >>
+
+<< leader >>       "bob" assert-eq
+<< leading-bid >>  200   assert-eq
+
+<< close >>
+<< 500 "carol" bid >>
+<< leading-bid >>  200   assert-eq
+<< leader >>       "bob" assert-eq
+
+<< stop >> drop
+
+"auction test: actor roundtrip passed" print

@@ -276,9 +276,12 @@ handle_actor_send(TokenValue, Cont) ->
             %% Actor vocabulary word — find matching entry and dispatch
             dispatch_actor_word(TokenValue, Entries, ActorInfo, LocalStack, State, Rest, Cont);
         error ->
-            %% Not an actor word — execute locally on temp stack
+            %% Not an actor word — execute locally on temp stack. Preserve
+            %% the original token's metadata (especially the `quoted` flag
+            %% so "alice" inside `<< >>` is still recognised as a String
+            %% literal, not pushed as an Atom).
             TempCont = #continuation{data_stack = LocalStack},
-            Token = #token{value = TokenValue},
+            Token = Cont#continuation.current_token,
             NewTempCont = af_interpreter:interpret_token(Token, TempCont),
             NewLocalStack = NewTempCont#continuation.data_stack,
             NewState = State#{local_stack => NewLocalStack},
