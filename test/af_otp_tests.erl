@@ -24,7 +24,7 @@ gen_server_test_() ->
             C4 = eval("af_gs_counter Counter gen-server-module", C3),
             [{'Atom', "af_gs_counter"}] = C4#continuation.data_stack,
             %% Start with a tagged product type instance as state
-            InitState = {'Counter', #{value => {'Int', 0}}},
+            InitState = {'Counter', 0},
             {ok, Pid} = gen_server:start_link(af_gs_counter, InitState, []),
             %% Cast: increment (async)
             ok = gen_server:cast(Pid, increment),
@@ -42,7 +42,7 @@ gen_server_test_() ->
             C2 = eval(": get Simple -> Simple Int ; value .", C1),
             C3 = eval("af_gs_simple Simple gen-server-module", C2),
             [{'Atom', "af_gs_simple"}] = C3#continuation.data_stack,
-            InitState = {'Simple', #{value => {'Int', 42}}},
+            InitState = {'Simple', 42},
             {ok, Pid} = gen_server:start_link(af_gs_simple, InitState, []),
             ?assertEqual({error, unknown_call}, gen_server:call(Pid, nonexistent)),
             gen_server:stop(Pid)
@@ -56,16 +56,17 @@ dispatch_test_() ->
         fun(_) -> {"dispatch call_word returns values", fun() ->
             C1 = eval("type Box value Int .", af_interpreter:new_continuation()),
             _C2 = eval(": get-value Box -> Box Int ; value .", C1),
-            State = {'Box', #{value => {'Int', 99}}},
+            State = {'Box', 99},
             {ReturnValues, _NewState} = af_otp_dispatch:call_word("get-value", [], State),
             ?assertEqual([99], ReturnValues)
         end} end,
         fun(_) -> {"dispatch cast_word modifies state", fun() ->
             C1 = eval("type Box value Int .", af_interpreter:new_continuation()),
             _C2 = eval(": set-42 Box -> Box ; 42 value! .", C1),
-            State = {'Box', #{value => {'Int', 0}}},
-            {'Box', NewFields} = af_otp_dispatch:cast_word("set-42", [], State),
-            ?assertEqual({'Int', 42}, maps:get(value, NewFields))
+            State = {'Box', 0},
+            NewState = af_otp_dispatch:cast_word("set-42", [], State),
+            ?assertEqual('Box', element(1, NewState)),
+            ?assertEqual(42, element(2, NewState))
         end} end
     ]}.
 
@@ -90,7 +91,7 @@ error_path_test_() ->
             _C2 = eval(": reset Acc -> Acc ; 0 value! .", C1),
             C3 = eval("af_gs_acc Acc gen-server-module", _C2),
             [{'Atom', "af_gs_acc"}] = C3#continuation.data_stack,
-            InitState = {'Acc', #{value => {'Int', 10}}},
+            InitState = {'Acc', 10},
             {ok, Pid} = gen_server:start_link(af_gs_acc, InitState, []),
             ok = gen_server:cast(Pid, reset),
             timer:sleep(50),
@@ -104,7 +105,7 @@ error_path_test_() ->
             _C2 = eval(": get-both Pair -> Pair Int Int ; a swap b swap .", C1),
             C3 = eval("af_gs_pair Pair gen-server-module", _C2),
             [{'Atom', "af_gs_pair"}] = C3#continuation.data_stack,
-            InitState = {'Pair', #{a => {'Int', 1}, b => {'Int', 2}}},
+            InitState = {'Pair', 1, 2},
             {ok, Pid} = gen_server:start_link(af_gs_pair, InitState, []),
             {ok, Result} = gen_server:call(Pid, 'get-both'),
             %% Multi-return: result is list of raw values
@@ -127,7 +128,7 @@ error_path_test_() ->
             C3 = eval("\"get-val\" compile", C2),
             C4 = eval("af_gs_ncounter NCounter gen-server-module", C3),
             [{'Atom', "af_gs_ncounter"}] = C4#continuation.data_stack,
-            InitState = {'NCounter', #{val => {'Int', 77}}},
+            InitState = {'NCounter', 77},
             {ok, Pid} = gen_server:start_link(af_gs_ncounter, InitState, []),
             {ok, Val} = gen_server:call(Pid, 'get-val'),
             ?assertEqual(77, Val),

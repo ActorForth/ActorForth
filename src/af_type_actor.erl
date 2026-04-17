@@ -174,7 +174,8 @@ get_ops(TypeName) ->
 %%% --- server: spawn actor from type instance ---
 
 op_server(Cont) ->
-    [{TypeName, _Value} = Instance | Rest] = Cont#continuation.data_stack,
+    [Instance | Rest] = Cont#continuation.data_stack,
+    TypeName = element(1, Instance),
     Vocab0 = build_vocab(TypeName),
     Vocab = Vocab0#{"stop" => [#{args => [], returns => []}]},
     LoopFun = get_actor_loop_fun(TypeName, Instance),
@@ -230,7 +231,8 @@ remove_first(Elem, [H | Rest]) -> [H | remove_first(Elem, Rest)].
 %%% --- supervised-server: spawn under OTP supervisor ---
 
 op_supervised_server(Cont) ->
-    [{TypeName, _Value} = Instance | Rest] = Cont#continuation.data_stack,
+    [Instance | Rest] = Cont#continuation.data_stack,
+    TypeName = element(1, Instance),
     Vocab0 = build_vocab(TypeName),
     Vocab = Vocab0#{"stop" => [#{args => [], returns => []}]},
     %% Ensure supervisor is running
@@ -436,11 +438,21 @@ execute_actor_call(WordName, Args, TypeName, StateInstance) ->
     separate_reply(TypeName, ResultStack).
 
 %% Split the stack into reply values (above state) and state instance.
+%% State instance is any tuple whose first element is TypeName. For product
+%% types the instance is a positional N-tuple; for other types (Message etc.)
+%% it's a plain 2-tuple. We accept both.
 separate_reply(TypeName, Stack) ->
     separate_reply(TypeName, Stack, []).
 
-separate_reply(TypeName, [{TypeName, _} = State | _Rest], ReplyAcc) ->
-    {lists:reverse(ReplyAcc), State};
+separate_reply(TypeName, [Item | _Rest] = Stack, ReplyAcc) when is_tuple(Item) ->
+    case tuple_size(Item) >= 2 andalso element(1, Item) =:= TypeName of
+        true ->
+            [State | _] = Stack,
+            {lists:reverse(ReplyAcc), State};
+        false ->
+            [Head | Rest] = Stack,
+            separate_reply(TypeName, Rest, [Head | ReplyAcc])
+    end;
 separate_reply(TypeName, [Item | Rest], ReplyAcc) ->
     separate_reply(TypeName, Rest, [Item | ReplyAcc]);
 separate_reply(_TypeName, [], ReplyAcc) ->

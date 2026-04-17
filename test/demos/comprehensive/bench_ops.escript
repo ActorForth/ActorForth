@@ -248,9 +248,9 @@ run_direct_map(N) ->
 
 run_direct_product(N) ->
     lists:foreach(fun(I) ->
-        %% Construct Vec3 instance directly (what the constructor does)
-        FieldMap = #{x => {'Int', I}, y => {'Int', I+1}, z => {'Int', I+2}},
-        Instance = {'Vec3', FieldMap},
+        %% Construct Vec3 instance directly (what the constructor does).
+        %% New storage: positional tuple with raw values.
+        Instance = {'Vec3', I, I+1, I+2},
         'af_native_vec-mag2':'vec-mag2'([Instance])
     end, lists:seq(1, N)).
 

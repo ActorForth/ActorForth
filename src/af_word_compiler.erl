@@ -427,6 +427,11 @@ generate_loop_base_clause(BaseSigIn, _BaseBody, _ActorPos, VariantPos, L) ->
 %% Returns {HeadPattern, [{TaggedExpr, Type}], RestVar}
 %% HeadPattern is a cons-list pattern like [{Int, X}, {Int, Y} | Rest]
 %% suitable for use directly in the function head (not body match).
+%%
+%% For product types we DON'T pattern-match the internal fields — the instance
+%% comes through as an opaque tuple whose shape depends on its fields. We bind
+%% a whole variable to it, with a guard-free pattern. Getters/setters in the
+%% body will use element/setelement on it.
 build_head_pattern(SigIn, L) ->
     {TuplePats, ExprStack, _} = lists:foldl(fun(SigEntry, {Pats, Exps, I}) ->
         case SigEntry of
@@ -444,8 +449,17 @@ build_head_pattern(SigIn, L) ->
                 {Pats ++ [TuplePat], Exps ++ [{TuplePat, Type}], I + 1};
             Type when is_atom(Type) ->
                 Var = {var, L, arg_name(I)},
-                TuplePat = {tuple, L, [{atom, L, Type}, Var]},
-                {Pats ++ [TuplePat], Exps ++ [{TuplePat, Type}], I + 1}
+                Pat = case is_product_type(Type) of
+                    true ->
+                        %% Product: match any tuple whose first elem is Type.
+                        %% We use a bound var only — type discrimination is
+                        %% handled by the caller (match_sig).
+                        Var;
+                    false ->
+                        %% Regular tagged {Type, Val} 2-tuple.
+                        {tuple, L, [{atom, L, Type}, Var]}
+                end,
+                {Pats ++ [Pat], Exps ++ [{Pat, Type}], I + 1}
         end
     end, {[], [], 1}, SigIn),
     FinalRestVar = {var, L, '__RestFinal'},
@@ -453,6 +467,13 @@ build_head_pattern(SigIn, L) ->
         {cons, L, Pat, Acc}
     end, FinalRestVar, TuplePats),
     {HeadPat, ExprStack, FinalRestVar}.
+
+%% Check if a type name refers to a registered product type (one with fields).
+is_product_type(TypeName) ->
+    case catch af_type:get_type(TypeName) of
+        {ok, #af_type{fields = Fields}} when Fields =/= [] -> true;
+        _ -> false
+    end.
 
 %% Build an ActorForth wrapper operation that calls a native BEAM function.
 %% The wrapper pops tagged items, passes the tagged stack to the native function,
@@ -908,6 +929,13 @@ runtime_dispatch(Name, Stack, L, Ctx) ->
     end.
 
 %% Try to compile a product type getter or setter.
+%%
+%% Product instances use the positional-tuple format:
+%%   {TypeName, V1, V2, ..., Vn}
+%% where field `i` is at tuple position `i+1`. The type's #af_type.fields
+%% list gives the 0-indexed field ordering; we add 2 to get the Erlang
+%% tuple position (1 is the type atom).
+%%
 %% Getters: instance on TOS, push field value + keep instance
 %% Setters (name!): new_value and instance on stack, return updated instance
 try_product_op(Name, [{_Expr, TosType} | _] = Stack, L, _Ctx) when is_atom(TosType), TosType =/= stack ->
@@ -916,37 +944,57 @@ try_product_op(Name, [{_Expr, TosType} | _] = Stack, L, _Ctx) when is_atom(TosTy
             %% Setter: TOS is the new value, second item is the instance
             BaseName = lists:droplast(Name),
             [{NewValExpr, _ValType}, {InstanceExpr, InstanceType} | Rest] = Stack,
-            case catch af_type:get_type(InstanceType) of
-                {ok, #af_type{ops = _Ops}} ->
-                    FieldName = list_to_atom(BaseName),
-                    FieldMapExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, element}},
-                        [{integer, L, 2}, InstanceExpr]},
-                    UpdatedMap = {map, L, FieldMapExpr,
-                        [{map_field_exact, L, {atom, L, FieldName}, NewValExpr}]},
-                    ResultExpr = {tuple, L, [{atom, L, InstanceType}, UpdatedMap]},
-                    {ok, [{ResultExpr, InstanceType} | Rest]};
-                _ -> not_product
+            case field_position(list_to_atom(BaseName), InstanceType) of
+                {ok, Pos} ->
+                    %% setelement(Pos, Instance, extract_val(NewVal))
+                    RawValExpr = extract_val({NewValExpr, any}, L),
+                    UpdatedExpr = {call, L,
+                        {remote, L, {atom, L, erlang}, {atom, L, setelement}},
+                        [{integer, L, Pos}, InstanceExpr, RawValExpr]},
+                    {ok, [{UpdatedExpr, InstanceType} | Rest]};
+                not_found -> not_product
             end;
         _ ->
             %% Getter: look in TOS type's ops
-            case catch af_type:get_type(TosType) of
-                {ok, #af_type{ops = Ops}} ->
-                    case maps:get(Name, Ops, []) of
-                        [#operation{source = auto, sig_out = [FieldType, _]} | _] ->
-                            [{InstanceExpr, _} | Rest] = Stack,
-                            FieldName = list_to_atom(Name),
-                            FieldMapExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, element}},
-                                [{integer, L, 2}, InstanceExpr]},
-                            ValExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, map_get}},
-                                [{atom, L, FieldName}, FieldMapExpr]},
-                            {ok, [{ValExpr, FieldType}, {InstanceExpr, TosType} | Rest]};
-                        _ -> not_product
-                    end;
-                _ -> not_product
+            case field_getter_info(Name, TosType) of
+                {ok, FieldType, Pos} ->
+                    [{InstanceExpr, _} | Rest] = Stack,
+                    RawExpr = {call, L,
+                        {remote, L, {atom, L, erlang}, {atom, L, element}},
+                        [{integer, L, Pos}, InstanceExpr]},
+                    TaggedExpr = {tuple, L,
+                        [{atom, L, FieldType}, RawExpr]},
+                    {ok, [{TaggedExpr, FieldType}, {InstanceExpr, TosType} | Rest]};
+                not_found -> not_product
             end
     end;
 try_product_op(_Name, _Stack, _L, _Ctx) ->
     not_product.
+
+%% Look up the tuple position (1-indexed, element/N) of a product-type
+%% field by name. Returns {ok, Pos} or not_found.
+field_position(FieldName, TypeName) ->
+    case catch af_type:get_type(TypeName) of
+        {ok, #af_type{fields = Fields}} when Fields =/= [] ->
+            field_position_loop(FieldName, Fields, 2);
+        _ -> not_found
+    end.
+
+field_position_loop(_Name, [], _Pos) -> not_found;
+field_position_loop(Name, [{Name, _Type} | _], Pos) -> {ok, Pos};
+field_position_loop(Name, [_ | Rest], Pos) -> field_position_loop(Name, Rest, Pos + 1).
+
+%% For a getter named `Name` on TosType, find the field's type and position.
+field_getter_info(Name, TosType) ->
+    case catch af_type:get_type(TosType) of
+        {ok, #af_type{fields = Fields}} when Fields =/= [] ->
+            field_getter_loop(list_to_atom(Name), Fields, 2);
+        _ -> not_found
+    end.
+
+field_getter_loop(_Name, [], _Pos) -> not_found;
+field_getter_loop(Name, [{Name, Type} | _], Pos) -> {ok, Type, Pos};
+field_getter_loop(Name, [_ | Rest], Pos) -> field_getter_loop(Name, Rest, Pos + 1).
 
 %% Collect operations between << and >>. Returns {SendOps, RemainingOps}.
 collect_send_block(Ops) ->

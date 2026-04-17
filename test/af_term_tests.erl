@@ -1,6 +1,7 @@
 -module(af_term_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("af_type.hrl").
 
 %% --- to_stack_item ---
 
@@ -87,7 +88,12 @@ from_stack_item_test_() ->
                          af_term:from_stack_item({'Actor', #{pid => self(), type_name => t, vocab => #{}}}))
         end},
         {"product type becomes map with type key", fun() ->
-            Instance = {'Point', #{x => {'Int', 10}, y => {'Int', 20}}},
+            %% Register the type so from_stack_item can find its field layout.
+            af_type:reset(),
+            af_type:register_type(#af_type{name = 'Point',
+                                            fields = [{x, 'Int'}, {y, 'Int'}]}),
+            %% New storage: positional tuple with raw values.
+            Instance = {'Point', 10, 20},
             Result = af_term:from_stack_item(Instance),
             ?assertEqual(#{type => 'Point', x => 10, y => 20}, Result)
         end}

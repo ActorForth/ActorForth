@@ -186,17 +186,29 @@ format_dispatch(atom) -> "->Atom".
 %%% Internal
 
 get_tos_handler([]) -> none;
-get_tos_handler([{TosType, _} | _]) ->
-    case af_type:get_type(TosType) of
-        {ok, #af_type{handler = Handler}} when Handler =/= undefined ->
-            {ok, Handler};
-        _ -> none
-    end.
+get_tos_handler([TosItem | _]) when is_tuple(TosItem), tuple_size(TosItem) >= 2 ->
+    TosType = element(1, TosItem),
+    case is_atom(TosType) of
+        true ->
+            case af_type:get_type(TosType) of
+                {ok, #af_type{handler = Handler}} when Handler =/= undefined ->
+                    {ok, Handler};
+                _ -> none
+            end;
+        false -> none
+    end;
+get_tos_handler(_) -> none.
 
 get_tos_handler([], _Dict) -> none;
-get_tos_handler([{TosType, _} | _], Dict) ->
-    case af_type:dict_get_type(TosType, Dict) of
-        {ok, #af_type{handler = Handler}} when Handler =/= undefined ->
-            {ok, Handler};
-        _ -> none
-    end.
+get_tos_handler([TosItem | _], Dict) when is_tuple(TosItem), tuple_size(TosItem) >= 2 ->
+    TosType = element(1, TosItem),
+    case is_atom(TosType) of
+        true ->
+            case af_type:dict_get_type(TosType, Dict) of
+                {ok, #af_type{handler = Handler}} when Handler =/= undefined ->
+                    {ok, Handler};
+                _ -> none
+            end;
+        false -> none
+    end;
+get_tos_handler(_, _) -> none.

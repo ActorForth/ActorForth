@@ -1,5 +1,7 @@
 -module(af_term).
 
+-include("af_type.hrl").
+
 -export([to_stack_item/1, from_stack_item/1]).
 -export([to_stack_items/1, from_stack_items/1]).
 
@@ -41,11 +43,24 @@ from_stack_item({'Map', M}) ->
         [{from_stack_item(K), from_stack_item(V)} || {K, V} <- maps:to_list(M)]
     );
 from_stack_item({'Actor', #{pid := Pid}}) -> Pid;
-from_stack_item({ProductType, FieldMap}) when is_atom(ProductType), is_map(FieldMap) ->
-    Converted = maps:from_list(
-        [{F, from_stack_item(V)} || {F, V} <- maps:to_list(FieldMap)]
-    ),
-    Converted#{type => ProductType}.
+from_stack_item(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
+    %% Product type instance: {TypeName, V1, V2, ..., Vn}.
+    %% Values are raw (untagged) and field names come from the registry.
+    TypeName = element(1, Tuple),
+    case is_atom(TypeName) of
+        false -> Tuple;
+        true ->
+            case catch af_type:get_type(TypeName) of
+                {ok, #af_type{fields = Fields}} when Fields =/= [] ->
+                    FieldPairs = lists:zip(
+                        [F || {F, _T} <- Fields],
+                        tl(tuple_to_list(Tuple))
+                    ),
+                    Converted = maps:from_list(FieldPairs),
+                    Converted#{type => TypeName};
+                _ -> Tuple
+            end
+    end.
 
 %% Batch conversion
 -spec to_stack_items([term()]) -> [{atom(), term()}].

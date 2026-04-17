@@ -90,19 +90,37 @@ replace_ops(TypeName, OpName, NewOps) when is_list(NewOps) ->
 
 %% Core dispatch: find operation by token name against current stack.
 %% Searches TOS type dictionary first, then falls back to Any.
-find_op(TokenName, [{TosType, _} | _] = Stack) ->
-    case find_op_in_type(TosType, TokenName, Stack) of
-        {ok, _Op} = Found -> Found;
-        not_found -> find_op_in_type('Any', TokenName, Stack)
-    end;
 find_op(TokenName, []) ->
-    find_op_in_type('Any', TokenName, []).
+    find_op_in_type('Any', TokenName, []);
+find_op(TokenName, [TosItem | _] = Stack) ->
+    case tos_type_of(TosItem) of
+        {ok, TosType} ->
+            case find_op_in_type(TosType, TokenName, Stack) of
+                {ok, _Op} = Found -> Found;
+                not_found -> find_op_in_type('Any', TokenName, Stack)
+            end;
+        none ->
+            find_op_in_type('Any', TokenName, Stack)
+    end.
 
 %% Search ONLY in the TOS type's dictionary (no Any fallback).
-find_op_in_tos(TokenName, [{TosType, _} | _] = Stack) ->
-    find_op_in_type(TosType, TokenName, Stack);
 find_op_in_tos(_TokenName, []) ->
-    not_found.
+    not_found;
+find_op_in_tos(TokenName, [TosItem | _] = Stack) ->
+    case tos_type_of(TosItem) of
+        {ok, TosType} -> find_op_in_type(TosType, TokenName, Stack);
+        none -> not_found
+    end.
+
+%% Extract the type atom from a stack item. Handles both plain tagged values
+%% {Type, Val} and product instances {TypeName, V1, V2, ..., Vn}.
+tos_type_of(Item) when is_tuple(Item), tuple_size(Item) >= 2 ->
+    First = element(1, Item),
+    case is_atom(First) of
+        true -> {ok, First};
+        false -> none
+    end;
+tos_type_of(_) -> none.
 
 %% Search ONLY in the Any dictionary.
 find_op_in_any(TokenName, Stack) ->
@@ -128,24 +146,26 @@ match_sig(['Any' | SigRest], [_ | StackRest]) ->
     match_sig(SigRest, StackRest);
 match_sig(['_' | SigRest], [_ | StackRest]) ->
     match_sig(SigRest, StackRest);
-match_sig([{Type, Value} | SigRest], [{Type, Value} | StackRest]) ->
-    match_sig(SigRest, StackRest);
-match_sig([Type | SigRest], [{Type, _} | StackRest]) when is_atom(Type) ->
-    case af_type_check:is_type_variable(Type) of
-        true ->
-            %% Type variable — already matched by name coincidence, but
-            %% should match ANY type. Re-do: this clause matched because
-            %% the stack item's type atom happened to equal the variable name.
-            %% That's fine — it matches. Continue.
-            match_sig(SigRest, StackRest);
-        false ->
-            match_sig(SigRest, StackRest)
+match_sig([{Type, Value} | SigRest], [StackItem | StackRest]) ->
+    %% Value constraint: stack item must be {Type, Value} exactly. Works only
+    %% on 2-tuple tagged values, not on product-type tuples (product types
+    %% don't support value constraints).
+    case StackItem of
+        {Type, Value} -> match_sig(SigRest, StackRest);
+        _ -> false
     end;
-match_sig([Type | SigRest], [_ | StackRest]) when is_atom(Type) ->
-    %% Type didn't match stack item's type — check if it's a type variable
-    case af_type_check:is_type_variable(Type) of
-        true -> match_sig(SigRest, StackRest);
-        false -> false
+match_sig([Type | SigRest], [StackItem | StackRest]) when is_atom(Type) ->
+    StackType = case StackItem of
+        Tuple when is_tuple(Tuple), tuple_size(Tuple) >= 2 -> element(1, Tuple);
+        _ -> undefined
+    end,
+    case StackType of
+        Type -> match_sig(SigRest, StackRest);
+        _ ->
+            case af_type_check:is_type_variable(Type) of
+                true -> match_sig(SigRest, StackRest);
+                false -> false
+            end
     end;
 match_sig(_, _) -> false.
 
@@ -293,11 +313,15 @@ snapshot() ->
         maps:put(Name, Type, Acc)
     end, #{}, ets:tab2list(?TABLE)).
 
-%% Look up op in TOS type's dictionary (local map, no ETS)
-dict_find_op_in_tos(TokenName, [{TosType, _} | _] = Stack, Dict) ->
-    dict_find_op_in_type(TosType, TokenName, Stack, Dict);
+%% Look up op in TOS type's dictionary (local map, no ETS).
+%% Supports both plain tagged values and product-type tuple instances.
 dict_find_op_in_tos(_TokenName, [], _Dict) ->
-    not_found.
+    not_found;
+dict_find_op_in_tos(TokenName, [TosItem | _] = Stack, Dict) ->
+    case tos_type_of(TosItem) of
+        {ok, TosType} -> dict_find_op_in_type(TosType, TokenName, Stack, Dict);
+        none -> not_found
+    end.
 
 %% Look up op in Any dictionary (local map, no ETS)
 dict_find_op_in_any(TokenName, Stack, Dict) ->

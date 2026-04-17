@@ -18,7 +18,7 @@ worker_test_() ->
         fun(_) -> {"call returns value and updates state", fun() ->
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
             _C2 = eval(": get-value Cntr -> Cntr Int ; value .", C1),
-            Instance = {'Cntr', #{value => {'Int', 42}}},
+            Instance = {'Cntr', 42},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             {ok, ReplyValues} = gen_server:call(Pid, {call, "get-value", []}),
             ?assertEqual([{'Int', 42}], ReplyValues),
@@ -26,7 +26,7 @@ worker_test_() ->
         end} end,
 
         fun(_) -> {"call with error returns error tuple (line 29)", fun() ->
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             %% Call a word that doesn't exist as a compiled word - will error
             %% because the type Cntr isn't registered in this test
@@ -39,14 +39,14 @@ worker_test_() ->
         end} end,
 
         fun(_) -> {"unknown request returns error (line 33)", fun() ->
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             ?assertEqual({error, unknown_request}, gen_server:call(Pid, some_random_request)),
             gen_server:stop(Pid)
         end} end,
 
         fun(_) -> {"cast stop stops the worker (line 35-36)", fun() ->
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             gen_server:cast(Pid, {cast, "stop", []}),
             timer:sleep(100),
@@ -56,7 +56,7 @@ worker_test_() ->
         fun(_) -> {"cast executes word (line 38-46)", fun() ->
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
             _C2 = eval(": inc Cntr -> Cntr ; value 1 + value! .", C1),
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             gen_server:cast(Pid, {cast, "inc", []}),
             timer:sleep(50),
@@ -69,7 +69,7 @@ worker_test_() ->
         end} end,
 
         fun(_) -> {"unknown cast is ignored (line 48-49)", fun() ->
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             gen_server:cast(Pid, unknown_cast_msg),
             timer:sleep(50),
@@ -78,7 +78,7 @@ worker_test_() ->
         end} end,
 
         fun(_) -> {"handle_info is ignored (line 51-52)", fun() ->
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             Pid ! some_random_message,
             timer:sleep(50),
@@ -90,7 +90,7 @@ worker_test_() ->
             %% Define a word that drops the state and pushes unrelated items
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
             _C2 = eval(": weird Cntr -> Int ; value drop 99 .", C1),
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             %% This call will execute the word; separate_reply won't find Cntr in result
             _Result = gen_server:call(Pid, {call, "weird", []}),
@@ -98,7 +98,7 @@ worker_test_() ->
         end} end,
 
         fun(_) -> {"cast atom stop stops the worker", fun() ->
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             gen_server:cast(Pid, {cast, stop, []}),
             timer:sleep(100),
@@ -108,7 +108,7 @@ worker_test_() ->
         fun(_) -> {"cast with args exercises args code path", fun() ->
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
             _C2 = eval(": inc Cntr -> Cntr ; value 1 + value! .", C1),
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             %% Pass args to cast — the inc word ignores them but exercises
             %% the Args =/= [] branch in handle_cast
@@ -122,7 +122,7 @@ worker_test_() ->
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
             %% get-value: Cntr -> Cntr Int
             _C2 = eval(": get-value Cntr -> Cntr Int ; value .", C1),
-            Instance = {'Cntr', #{value => {'Int', 10}}},
+            Instance = {'Cntr', 10},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             %% Pass args to call — the word ignores them but the code path
             %% exercises the Args =/= [] branch in handle_call
@@ -142,7 +142,7 @@ worker_test_() ->
         fun(_) -> {"cast with atom word name", fun() ->
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
             _C2 = eval(": inc Cntr -> Cntr ; value 1 + value! .", C1),
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             gen_server:cast(Pid, {cast, inc, []}),
             timer:sleep(50),
@@ -155,7 +155,7 @@ worker_test_() ->
         fun(_) -> {"call with atom word name", fun() ->
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
             _C2 = eval(": get-value Cntr -> Cntr Int ; value .", C1),
-            Instance = {'Cntr', #{value => {'Int', 42}}},
+            Instance = {'Cntr', 42},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             {ok, Reply} = gen_server:call(Pid, {call, 'get-value', []}),
             ?assertEqual([{'Int', 42}], Reply),
@@ -168,7 +168,7 @@ worker_test_() ->
             _C2 = eval(": get-value Cntr -> Cntr Int ; value .", C1),
             %% A word that will crash: head on empty list
             _C3 = eval(": crasher Cntr -> Cntr ; drop nil head .", C1),
-            Instance = {'Cntr', #{value => {'Int', 7}}},
+            Instance = {'Cntr', 7},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             %% This will cause an error in interpret_cast, caught by the catch
             gen_server:cast(Pid, {cast, "crasher", []}),
@@ -183,7 +183,7 @@ worker_test_() ->
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
             %% A word that will crash
             _C2 = eval(": crasher Cntr -> Int ; drop nil head .", C1),
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             Result = gen_server:call(Pid, {call, "crasher", []}),
             ?assertMatch({error, _}, Result),
@@ -226,7 +226,7 @@ worker_test_() ->
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
             %% A word that drops everything
             _C2 = eval(": dropper Cntr -> ; drop .", C1),
-            Instance = {'Cntr', #{value => {'Int', 0}}},
+            Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             %% This will result in empty stack after separate_reply
             Result = gen_server:call(Pid, {call, "dropper", []}),

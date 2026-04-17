@@ -116,10 +116,26 @@ op_type_dot(Cont) ->
     Cont#continuation{data_stack = Rest, dictionary = Dict}.
 
 %% Register a product type with auto-generated constructor and getters.
-%% Updates both ETS (for compilation tools) and the local dictionary.
+%%
+%% NEW STORAGE FORMAT (2026-04-17):
+%%
+%%   Instance = {TypeName, V1, V2, ..., Vn}
+%%
+%% where field `i` (1-indexed, zero-indexed in the field list) is at tuple
+%% position i+1, and `Vi` is the RAW value (not tagged). The tag lives only
+%% on the outer tuple. Field types are known from the registry, so the
+%% tag on individual field values is redundant.
+%%
+%% Previous format was `{TypeName, #{field => {Type, Value}}}`. The old
+%% format cost a map allocation per update and a tagged tuple per field;
+%% the new format makes field access a single BEAM `element/2` and
+%% field update a single `setelement/3`.
+%%
+%% The #af_type{fields = [{FieldName, FieldType}, ...]} metadata carries
+%% the field->position mapping so getters/setters can index correctly.
 register_product_type(TypeName, Fields, Dict0) ->
-    %% Register the type itself
-    af_type:register_type(#af_type{name = TypeName}),
+    %% Register the type itself, recording field layout
+    af_type:register_type(#af_type{name = TypeName, fields = Fields}),
 
     %% Constructor: lowercase type name, registered in Any
     ConstructorName = string:lowercase(atom_to_list(TypeName)),
@@ -129,41 +145,45 @@ register_product_type(TypeName, Fields, Dict0) ->
         name = ConstructorName,
         sig_in = ConstructorSigIn,
         sig_out = [TypeName],
-        impl = make_constructor(TypeName, Fields),
+        impl = make_constructor(TypeName, length(Fields)),
         source = auto
     },
     af_type:add_op('Any', Constructor),
 
-    %% Getters: one per field, registered in the new type
-    lists:foreach(fun({FieldName, FieldType}) ->
+    %% Getters: one per field, registered in the new type. Each gets its
+    %% 1-indexed tuple position baked in.
+    lists:foldl(fun({FieldName, FieldType}, Pos) ->
         Getter = #operation{
             name = atom_to_list(FieldName),
             sig_in = [TypeName],
             sig_out = [FieldType, TypeName],
-            impl = make_getter(FieldName),
+            impl = make_getter(FieldType, Pos),
             source = auto
         },
-        af_type:add_op(TypeName, Getter)
-    end, Fields),
+        af_type:add_op(TypeName, Getter),
+        Pos + 1
+    end, 2, Fields),  %% pos 1 is the type atom; fields start at pos 2
 
     %% Setters: field name with ! suffix, takes new value + instance
-    lists:foreach(fun({FieldName, FieldType}) ->
+    lists:foldl(fun({FieldName, FieldType}, Pos) ->
         SetterName = atom_to_list(FieldName) ++ "!",
         Setter = #operation{
             name = SetterName,
             sig_in = [FieldType, TypeName],
             sig_out = [TypeName],
-            impl = make_setter(FieldName),
+            impl = make_setter(Pos),
             source = auto
         },
-        af_type:add_op('Any', Setter)
-    end, Fields),
+        af_type:add_op('Any', Setter),
+        Pos + 1
+    end, 2, Fields),
 
     %% Update local dictionary if present
     case Dict0 of
         undefined -> undefined;
         _ -> sync_type_from_ets(TypeName, sync_type_from_ets('Any',
-                af_type:dict_register_type(#af_type{name = TypeName}, Dict0)))
+                af_type:dict_register_type(
+                    #af_type{name = TypeName, fields = Fields}, Dict0)))
     end.
 
 sync_type_from_ets(TypeName, Dict) ->
@@ -172,42 +192,35 @@ sync_type_from_ets(TypeName, Dict) ->
         _ -> Dict
     end.
 
-%% Build constructor function
-%% Takes N values from stack (in order matching field list), creates instance
-make_constructor(TypeName, Fields) ->
-    NumFields = length(Fields),
+%% Build constructor: takes NumFields tagged stack items, strips tags,
+%% builds a positional tuple {TypeName, V1, V2, ..., Vn}.
+make_constructor(TypeName, NumFields) ->
     fun(Cont) ->
         {Values, Rest} = take_n(NumFields, Cont#continuation.data_stack),
-        %% Values are in stack order (TOS first), fields are in definition order
-        %% Stack: ... field1_val field2_val  (field2 is TOS)
-        %% We need to pair fields with values in reverse
+        %% Values are in stack order (TOS first). Stack: ... val1 val2 ... valN
+        %% where valN is TOS. Field order matches definition order, so:
         ReversedValues = lists:reverse(Values),
-        FieldMap = maps:from_list(
-            lists:zipwith(
-                fun({FName, _FType}, {_VType, VVal}) ->
-                    {FName, {_VType, VVal}}
-                end,
-                Fields, ReversedValues
-            )
-        ),
-        Instance = {TypeName, FieldMap},
+        RawVals = [V || {_, V} <- ReversedValues],
+        Instance = list_to_tuple([TypeName | RawVals]),
         Cont#continuation{data_stack = [Instance | Rest]}
     end.
 
-%% Build getter function (non-destructive: leaves instance on stack)
-make_getter(FieldName) ->
+%% Build getter: non-destructive, leaves instance on stack, pushes tagged
+%% {FieldType, FieldValue} on top.
+make_getter(FieldType, Pos) ->
     fun(Cont) ->
-        [{_TypeName, FieldMap} = Instance | Rest] = Cont#continuation.data_stack,
-        Value = maps:get(FieldName, FieldMap),
-        Cont#continuation{data_stack = [Value, Instance | Rest]}
+        [Instance | Rest] = Cont#continuation.data_stack,
+        RawVal = element(Pos, Instance),
+        Cont#continuation{data_stack = [{FieldType, RawVal}, Instance | Rest]}
     end.
 
-%% Build setter function: new_value instance setter! -> updated_instance
-make_setter(FieldName) ->
+%% Build setter: pops tagged new value + instance, returns updated instance.
+%% new_value is stripped of its tag; instance keeps its type tag.
+make_setter(Pos) ->
     fun(Cont) ->
-        [NewValue, {TypeName, FieldMap} | Rest] = Cont#continuation.data_stack,
-        UpdatedMap = maps:put(FieldName, NewValue, FieldMap),
-        Cont#continuation{data_stack = [{TypeName, UpdatedMap} | Rest]}
+        [{_VType, NewVal}, Instance | Rest] = Cont#continuation.data_stack,
+        UpdatedInstance = setelement(Pos, Instance, NewVal),
+        Cont#continuation{data_stack = [UpdatedInstance | Rest]}
     end.
 
 %% Take N items from top of stack

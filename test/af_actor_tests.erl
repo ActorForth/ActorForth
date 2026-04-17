@@ -590,18 +590,17 @@ product_field_update_actor_test_() ->
             C0 = af_interpreter:new_continuation(),
             C1 = eval("type Account balance Int .", C0),
             C2 = eval(": credit Account Int -> Account ; over balance rot + balance! swap drop .", C1),
-            Instance = {'Account', #{balance => {'Int', 1000}}},
+            Instance = {'Account', 1000},
             NewState = af_type_actor:execute_actor_word("credit", [{'Int', 500}], 'Account', Instance),
-            ?assertMatch({'Account', _}, NewState),
-            {'Account', Fields} = NewState,
-            ?assertEqual({'Int', 1500}, maps:get(balance, Fields))
+            ?assertEqual('Account', element(1, NewState)),
+            ?assertEqual(1500, element(2, NewState))
         end} end,
 
         fun(_) -> {"execute_actor_call returns reply values and updated state", fun() ->
             C0 = af_interpreter:new_continuation(),
             C1 = eval("type Account balance Int .", C0),
             _C2 = eval(": get-balance Account -> Account Int ; balance .", C1),
-            Instance = {'Account', #{balance => {'Int', 1000}}},
+            Instance = {'Account', 1000},
             {Reply, NewState} = af_type_actor:execute_actor_call("get-balance", [], 'Account', Instance),
             ?assertEqual([{'Int', 1000}], Reply),
             ?assertEqual(Instance, NewState)
@@ -711,7 +710,7 @@ actor_loop_cache_test_() ->
             eval("\"get_count\" compile", C3),
             %% Build cache manually and spawn generic loop
             Cache = af_actor_worker:build_native_cache('Counter'),
-            Instance = {'Counter', #{count => {'Int', 0}}},
+            Instance = {'Counter', 0},
             Self = self(),
             Pid = spawn(fun() ->
                 %% Tell parent we're ready
@@ -741,7 +740,7 @@ actor_loop_cache_test_() ->
             eval("\"add\" compile", C3),
             eval("\"get_count\" compile", C3),
             Cache = af_actor_worker:build_native_cache('Counter'),
-            Instance = {'Counter', #{count => {'Int', 0}}},
+            Instance = {'Counter', 0},
             Self = self(),
             Pid = spawn(fun() ->
                 Self ! ready,
@@ -767,7 +766,7 @@ actor_loop_cache_test_() ->
             eval("\"add\" compile", C3),
             eval("\"get_count\" compile", C3),
             Cache = af_actor_worker:build_native_cache('Counter'),
-            Instance = {'Counter', #{count => {'Int', 0}}},
+            Instance = {'Counter', 0},
             Self = self(),
             Pid = spawn(fun() ->
                 Self ! ready,
@@ -788,7 +787,8 @@ actor_loop_cache_test_() ->
             C2 = eval(": get_count Counter -> Counter Int ; count .", C1),
             eval("\"get_count\" compile", C2),
             Cache = af_actor_worker:build_native_cache('Counter'),
-            Instance = {'Counter', #{count => {'Int', 5}}},
+            %% New storage: positional tuple with raw field value.
+            Instance = {'Counter', 5},
             Self = self(),
             Pid = spawn(fun() ->
                 Self ! ready,
@@ -1211,16 +1211,16 @@ coverage_test_() ->
             C0 = af_interpreter:new_continuation(),
             C1 = eval("type Foo val Int .", C0),
             _C2 = eval(": inc Foo -> Foo ; val 1 + val! .", C1),
-            State = {'Foo', #{val => {'Int', 10}}},
+            State = {'Foo', 10},
             NewState = af_type_actor:execute_actor_word("inc", [], 'Foo', State),
-            ?assertEqual({'Foo', #{val => {'Int', 11}}}, NewState)
+            ?assertEqual({'Foo', 11}, NewState)
         end} end,
 
         fun(_) -> {"execute_actor_call directly", fun() ->
             C0 = af_interpreter:new_continuation(),
             C1 = eval("type Foo val Int .", C0),
             _C2 = eval(": get-val Foo -> Foo Int ; val .", C1),
-            State = {'Foo', #{val => {'Int', 42}}},
+            State = {'Foo', 42},
             {ReplyValues, _NewState} = af_type_actor:execute_actor_call("get-val", [], 'Foo', State),
             ?assertEqual([{'Int', 42}], ReplyValues)
         end} end,
