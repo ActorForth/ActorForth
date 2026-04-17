@@ -1,0 +1,16 @@
+#!/usr/bin/env escript
+%%! -pa _build/default/lib/actorforth/ebin -pa _build/default/lib/jsx/ebin
+%% Standalone LSP server entry point for ActorForth.
+%%
+%% Used by editors (Sublime, VS Code, etc.) to launch the LSP over stdio.
+%% Expects `rebar3 compile` to have been run in the project root so the
+%% beam files exist under `_build/default/lib/`.
+%%
+%% Usage (typical — wired via editor LSP client config):
+%%
+%%     bin/af_lsp
+%%
+%% Any stdout / stdin traffic is LSP protocol; logs go to stderr.
+
+main(_Args) ->
+    af_lsp:main([]).

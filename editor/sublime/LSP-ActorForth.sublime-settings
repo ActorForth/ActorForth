@@ -2,7 +2,15 @@
     "clients": {
         "actorforth": {
             "enabled": true,
-            "command": ["rebar3", "shell", "--eval", "af_lsp:start()."],
+
+            // Launch the LSP server via the standalone escript in bin/af_lsp.
+            // Requires `rebar3 compile` to have been run once in the project
+            // root so the beam files exist under _build/default/lib/.
+            //
+            // Absolute path: change /home/scherrey/projects/ActorForth to your
+            // local checkout path before saving this into Sublime's Packages/User/.
+            "command": ["/home/scherrey/projects/ActorForth/bin/af_lsp"],
+
             "selector": "source.actorforth",
             "languages": [
                 {

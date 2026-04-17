@@ -31,6 +31,10 @@ contexts:
     - match: '\->'
       scope: keyword.operator.arrow.actorforth
 
+    # Guard introducer (where <predicate> ->)
+    - match: '\b(where)\b'
+      scope: keyword.control.guard.actorforth
+
     # Semicolon (body start)
     - match: '(?<=\s)(;)(?=\s|$)'
       captures:
@@ -77,8 +81,8 @@ contexts:
     - match: '\b(not|and|or)\b'
       scope: keyword.operator.logical.actorforth
 
-    # IO / debug
-    - match: '\b(print|stack|debug|assert|assert-eq)\b'
+    # IO / debug / dictionary management
+    - match: '\b(print|stack|debug|assert|assert-eq|see|words|types|forget|compile|auto-compile|load|import)\b'
       scope: support.function.io.actorforth
 
     # Actor words
