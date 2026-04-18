@@ -788,11 +788,13 @@ This is useful for actors that need to send messages to themselves, or pass thei
 
 ## Chapter 8: Testing Your Code
 
-ActorForth provides two assertion words that make it easy to test programs inline. Both are in the Any dictionary, available everywhere.
+ActorForth's test story has two layers. The bottom layer is two inline assertion words, already part of the core language. The upper layer is a *test DSL* — itself written in ActorForth — that turns inline assertions into named tests, groups, parallel actors, coverage, and structured output.
 
-### `assert`
+We'll start with the inline assertions, because the DSL is built on top of them.
 
-Pops a Bool from the stack. If it's true, nothing happens. If it's false, execution stops with an error that includes the file, line, and column where the assertion failed:
+### The two assertion words
+
+**`assert`** pops a `Bool`. If it's `True`, nothing happens. If it's `False`, execution stops with an error that names the file, line, and column:
 
 ```
 ok: 5 3 > assert         # passes — 5 > 3 is true
@@ -802,31 +804,139 @@ Error: assertion_failed at stdin:1:7
   Stack(1): False:Bool
 ```
 
-### `assert-eq`
-
-Pops two values from the stack. If they're equal (same type and value), nothing happens. If not, the error shows you what was expected and what was actually there:
+**`assert-eq`** pops two values. If they're equal (same type and value), nothing happens. Otherwise the error shows what was expected and what was actually there:
 
 ```
 ok: 7 square 49 assert-eq     # passes — 49 == 49
 ok: 7 square 50 assert-eq     # FAILS
 Error: assert_eq_failed at stdin:1:14
   Expected 50 but got 49
-  Stack(2): 50:Int 49:Int
 ```
 
-### Testing in Sample Files
+That's enough to sanity-check anything. Every sample file under `samples/` uses assertions as self-tests — run the file and silence means success.
 
-Every sample file uses assertions as self-tests. Run them and silence means success:
+### The test DSL
+
+Inline assertions are great while you're hacking. When you have hundreds of them, you want structure: names, grouping, per-test isolation, parallel execution, coverage. ActorForth ships a DSL for this, written *in ActorForth itself*, under `lib/testing/`. It's the canonical example of the DSL-first workflow that language is for.
+
+Here's a complete test file:
 
 ```
-# From fib.a4
-0 fib 0 assert-eq
-1 fib 1 assert-eq
-6 fib 8 assert-eq
-10 fib 55 assert-eq
+# lib/testing/list_ops.test.a4 — excerpt
+
+"cons chains build list" test :
+    nil 1 cons 2 cons 3 cons
+    dup length 3 assert-eq
+    head 3 assert-eq
+;
+
+"head on empty raises" test-raises empty_list :
+    nil head
+;
 ```
 
-No output means all assertions passed. An error halts execution at the exact point of failure with the exact values involved. No test framework needed — the assertions are just words, like everything else.
+The `.test.a4` extension tells the test runner "this file contains tests." The filename, with the extension stripped, becomes the implicit outer group — so the test above shows up in the report as `list_ops/cons chains build list`.
+
+### The vocabulary in brief
+
+| word | shape | what it does |
+|---|---|---|
+| `<atom> group …  .` | group with an atom name, closed with `.` | open a scope |
+| `<atom> group-serial …  .` | opt out of parallel execution within this group | |
+| `"name" test :` … `;` | positive test | body runs; silence = pass |
+| `"name" test-raises Kind :` … `;` | negative test | body must raise `Kind` |
+| `"name" "reason" skip-test :` … `;` | registered but skipped | emitted as `skip` with the reason |
+| `"name" test-compiled :` … `;` | flag body for native compilation (speed) | |
+| `setup :` … `;` | fixture before each test in the group | |
+| `teardown :` … `;` | fixture after each test | |
+| `"label" tag` | attach tag to next test (accumulating) | |
+| `N max-depth` | auto-assert peak data stack depth ≤ N | |
+| `N max-return-depth` | auto-assert peak return stack depth ≤ N | |
+
+Names are atoms for groups (short identifier) and strings for tests (descriptive prose). The type system enforces that — it's a design choice, not a stylistic convention. See the architectural-drivers doc for the reasoning.
+
+### Running tests
+
+From the project root:
+
+```
+rebar3 shell --eval 'af_test_runner:run(["lib/testing"]).'
+```
+
+or, once you've built a release:
+
+```
+a4c test
+```
+
+Three output modes:
+
+- **`--dashboard`** (default on a TTY) — full-screen live dashboard at 10 Hz, with the BEAM pids running right now visible in the "Running" column and completions streaming into the right-hand side.
+- **`--stream`** — one line per test as it finishes. Colored. TAP-compatible with `--tap`.
+- **`--quiet`** — only the final summary.
+
+The dashboard is one of the more visible payoffs of the actor model: every test is a BEAM process, and the dashboard shows those pids as they enter and leave the "running" set. You get to *see* the parallelism.
+
+### Structured output for CI
+
+Three flags emit machine-readable results:
+
+```
+--tap                # TAP 13 to stdout
+--junit PATH         # JUnit XML to a file
+--json PATH          # JSON to a file
+```
+
+These are designed to slot into any CI system without special plugins. TAP in particular is the universal test protocol — pipe it into any TAP consumer and you're done.
+
+### Filters and reproducibility
+
+```
+--match PATTERN      # substring match on test name
+--tag LABEL          # only tests with this tag
+--seed N             # fix the scheduler seed for reproducible parallel order
+```
+
+The seed is *always* reported in the summary, so a flaky run can always be replayed by passing the seed back.
+
+### Coverage
+
+```
+--coverage               # enable token-level coverage accumulation
+--coverage-threshold N   # custom floor (default 95%)
+--lax-coverage           # disable the threshold gate
+```
+
+Coverage is computed by stamping every dispatched token's `{file, line, column}` position during traced dispatch. At the end of the run, the runner tokenizes every `lib/**/*.a4` that isn't a test or DSL internal, counts positions, and compares against what was visited. Below the threshold, the run exits non-zero.
+
+`.test.a4` files and `lib/testing/*.a4` are explicitly excluded from the denominator: tests don't measure themselves, and the DSL is exercised by construction on every run.
+
+### Diagnostics when a test fails
+
+When a test fails, the runner's diagnostic engine inspects the fail-time data stack and classifies the failure into one of six categories from the test-DSL plan: *extra atom*, *missing consumer*, *wrong order*, *wrong clause fired*, *silent type mismatch*, *suddenly deep*. A typical failure line looks like:
+
+```
+not ok <0.213.0> talk_demo/lists/broken cons chain  891us
+  {error, {af_error, assert_eq_failed, "Expected 5 but got foo", ...}}
+  extra_atom: extra atom "foo" on stack (fallthrough: no op bound
+    to this name, or not yet defined in this scope). Check spelling
+    and scope.
+    at samples/talk_demo.test.a4:57:15 (token: assert-eq)
+```
+
+The engine is itself written mostly in ActorForth (skeletons in `lib/testing/diagnose.a4`, category detection currently Erlang-side for speed). Users can add custom categories without touching any Erlang.
+
+### One-time isolation: `dict-snapshot` / `dict-restore`
+
+Every test runs in its own fresh continuation, so word definitions inside a test body don't leak to other tests. If you want to snapshot and restore within a test — say, to test that `forget` behaves correctly — the primitives `dict-snapshot` and `dict-restore` (from `af_test_prim`) give you per-test dictionary checkpointing.
+
+### Size — measured
+
+After porting 14 test suites from Erlang EUnit to `.test.a4`, the average reduction is **41%** in line count, for equivalent behavioral coverage. The range is +8% to −75% depending on how much of the Erlang test was fixture boilerplate versus actual assertions. Full table in `docs/design/test-dsl-plan.md`.
+
+### The point
+
+The language ships with inline assertions (two words) and a test DSL (ten more words, written in ActorForth). The DSL itself is a demonstration of the language — it's written in the same language it tests. When you want tests to do something the DSL doesn't do yet, you write the word; you don't wait for a release.
 
 
 ## Chapter 9: Maps
