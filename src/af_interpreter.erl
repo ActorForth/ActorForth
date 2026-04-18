@@ -5,18 +5,46 @@
 -include("continuation.hrl").
 -include("af_type.hrl").
 
--export([interpret_tokens/2, interpret_token/2, new_continuation/0]).
+-export([interpret_tokens/2, interpret_fast/2, interpret_traced/2,
+         interpret_token/2, interpret_token_traced/2, new_continuation/0]).
 
 -spec new_continuation() -> #continuation{}.
 new_continuation() ->
     #continuation{dictionary = af_type:snapshot()}.
 
+%% Gate at interpret_tokens/2 entry: production (tracing = false) takes the
+%% fast path, which is bit-identical to the historical hot path. Test mode
+%% (tracing = true) diverts to interpret_traced, which records one exec
+%% event and updates depth stats per dispatch.
 -spec interpret_tokens([#token{}], #continuation{}) -> #continuation{}.
-interpret_tokens([], Cont) ->
+interpret_tokens(Tokens, #continuation{tracing = false} = Cont) ->
+    interpret_fast(Tokens, Cont);
+interpret_tokens(Tokens, #continuation{tracing = true} = Cont) ->
+    interpret_traced(Tokens, Cont).
+
+%% Fast path — today's hot loop with one extra clause so that mid-batch
+%% `trace-on` starts recording events from the next token. The extra guard
+%% only matches when tracing has just been switched on; in steady-state
+%% production (tracing = false) BEAM's clause selection skips it for free.
+-spec interpret_fast([#token{}], #continuation{}) -> #continuation{}.
+interpret_fast([], Cont) ->
     Cont;
-interpret_tokens([Token | Rest], Cont) ->
+interpret_fast([_ | _] = Tokens, #continuation{tracing = true} = Cont) ->
+    interpret_traced(Tokens, Cont);
+interpret_fast([Token | Rest], Cont) ->
     NewCont = interpret_token(Token, Cont),
-    interpret_tokens(Rest, NewCont).
+    interpret_fast(Rest, NewCont).
+
+%% Traced path — same dispatch, plus event push + depth-stats update per token.
+%% Symmetric mid-stream check so `trace-off` stops recording immediately.
+-spec interpret_traced([#token{}], #continuation{}) -> #continuation{}.
+interpret_traced([], Cont) ->
+    Cont;
+interpret_traced([_ | _] = Tokens, #continuation{tracing = false} = Cont) ->
+    interpret_fast(Tokens, Cont);
+interpret_traced([Token | Rest], Cont) ->
+    NewCont = interpret_token_traced(Token, Cont),
+    interpret_traced(Rest, NewCont).
 
 %% The outer interpreter. For each token:
 %% 1. Search TOS type's dictionary
@@ -245,6 +273,177 @@ interpret_unquoted(Value, Stack, Debug, Cont1) ->
                     end
             end
     end.
+
+%%% Traced dispatch path
+%%% Parallel to interpret_token + its helpers, with a record_event/3 call
+%%% at each dispatch outcome. The traced path mirrors the fast path's shape
+%%% exactly so a failing test's event sequence reflects what really happened.
+
+-spec interpret_token_traced(#token{}, #continuation{}) -> #continuation{}.
+interpret_token_traced(#token{value = Value} = Token, Cont) ->
+    Stack = Cont#continuation.data_stack,
+    Debug = Cont#continuation.debug,
+    Cont1 = Cont#continuation{current_token = Token},
+    case Cont#continuation.dictionary of
+        undefined ->
+            interpret_token_ets_traced(Value, Token, Stack, Debug, Cont1);
+        Dict ->
+            interpret_token_dict_traced(Value, Token, Stack, Dict, Debug, Cont1)
+    end.
+
+interpret_token_dict_traced(Value, Token, Stack, Dict, Debug, Cont1) ->
+    case Token#token.quoted of
+        true ->
+            case get_tos_handler(Stack, Dict) of
+                {ok, Handler} ->
+                    debug_trace(Debug, Value, Stack, handler),
+                    Result = Handler(Value, Cont1),
+                    record_event(Token, handler, Result);
+                none ->
+                    StringVal = {'String', list_to_binary(Value)},
+                    debug_trace(Debug, Value, Stack, {literal, StringVal}),
+                    Result = Cont1#continuation{data_stack = [StringVal | Stack]},
+                    record_event(Token, {literal, StringVal}, Result)
+            end;
+        false ->
+            dispatch_unquoted_traced(Value, Token, Stack, Dict, Debug, Cont1)
+    end.
+
+dispatch_unquoted_traced(Value, Token, Stack, Dict, Debug, Cont1) ->
+    Key = stack_key(Value, Stack),
+    Cache = Cont1#continuation.dispatch_cache,
+    case maps:find(Key, Cache) of
+        {ok, {op, Impl} = Entry} ->
+            debug_trace(Debug, Value, Stack, cache_op),
+            Result = Impl(Cont1),
+            record_event(Token, {cache_hit, Entry}, Result);
+        {ok, {literal, TypedValue} = Entry} ->
+            debug_trace(Debug, Value, Stack, {literal, TypedValue}),
+            Result = Cont1#continuation{data_stack = [TypedValue | Stack]},
+            record_event(Token, {cache_hit, Entry}, Result);
+        {ok, atom} ->
+            debug_trace(Debug, Value, Stack, atom),
+            Result = Cont1#continuation{data_stack = [{'Atom', Value} | Stack]},
+            record_event(Token, {cache_hit, atom}, Result);
+        error ->
+            full_dispatch_and_cache_traced(Value, Token, Stack, Dict, Debug, Cont1, Key)
+    end.
+
+full_dispatch_and_cache_traced(Value, Token, Stack, Dict, Debug, Cont1, Key) ->
+    TosType = case Key of {_, T0, _, _} -> T0 end,
+    case af_type:dict_find_op_in_tos(Value, Stack, Dict) of
+        {ok, #operation{impl = Impl, sig_in = SigIn, guard = Guard} = Op} ->
+            debug_trace(Debug, Value, Stack, {tos, Op}),
+            ClauseCount = af_type:dict_op_clause_count(TosType, Value, Dict),
+            Cached = maybe_cache(Key, SigIn, Guard, ClauseCount, Cont1, {op, Impl}, Impl(Cont1)),
+            record_event(Token, {tos, Op}, Cached);
+        not_found ->
+            case get_tos_handler(Stack, Dict) of
+                {ok, Handler} ->
+                    debug_trace(Debug, Value, Stack, handler),
+                    Result = Handler(Value, Cont1),
+                    record_event(Token, handler, Result);
+                none ->
+                    case af_type:dict_find_op_in_any(Value, Stack, Dict) of
+                        {ok, #operation{impl = Impl, sig_in = SigIn, guard = Guard} = Op} ->
+                            debug_trace(Debug, Value, Stack, {any, Op}),
+                            AnyCount = af_type:dict_op_clause_count('Any', Value, Dict),
+                            Cached = maybe_cache(Key, SigIn, Guard, AnyCount, Cont1, {op, Impl}, Impl(Cont1)),
+                            record_event(Token, {any, Op}, Cached);
+                        not_found ->
+                            case try_literals(Value, Dict) of
+                                {ok, TypedValue} ->
+                                    debug_trace(Debug, Value, Stack, {literal, TypedValue}),
+                                    Result = Cont1#continuation{data_stack = [TypedValue | Stack]},
+                                    Cached = maybe_cache(Key, [], undefined, 1, Cont1, {literal, TypedValue}, Result),
+                                    record_event(Token, {literal, TypedValue}, Cached);
+                                not_found ->
+                                    debug_trace(Debug, Value, Stack, atom),
+                                    Result = Cont1#continuation{data_stack = [{'Atom', Value} | Stack]},
+                                    Cached = maybe_cache_atom(Key, Value, Cont1, Result),
+                                    record_event(Token, atom, Cached)
+                            end
+                    end
+            end
+    end.
+
+interpret_token_ets_traced(Value, Token, Stack, Debug, Cont1) ->
+    case Token#token.quoted of
+        true ->
+            case get_tos_handler(Stack) of
+                {ok, Handler} ->
+                    debug_trace(Debug, Value, Stack, handler),
+                    Result = Handler(Value, Cont1),
+                    record_event(Token, handler, Result);
+                none ->
+                    StringVal = {'String', list_to_binary(Value)},
+                    debug_trace(Debug, Value, Stack, {literal, StringVal}),
+                    Result = Cont1#continuation{data_stack = [StringVal | Stack]},
+                    record_event(Token, {literal, StringVal}, Result)
+            end;
+        false ->
+            interpret_unquoted_traced(Value, Token, Stack, Debug, Cont1)
+    end.
+
+interpret_unquoted_traced(Value, Token, Stack, Debug, Cont1) ->
+    case af_type:find_op_in_tos(Value, Stack) of
+        {ok, #operation{impl = Impl} = Op} ->
+            debug_trace(Debug, Value, Stack, {tos, Op}),
+            Result = Impl(Cont1),
+            record_event(Token, {tos, Op}, Result);
+        not_found ->
+            case get_tos_handler(Stack) of
+                {ok, Handler} ->
+                    debug_trace(Debug, Value, Stack, handler),
+                    Result = Handler(Value, Cont1),
+                    record_event(Token, handler, Result);
+                none ->
+                    case af_type:find_op_in_any(Value, Stack) of
+                        {ok, #operation{impl = Impl} = Op} ->
+                            debug_trace(Debug, Value, Stack, {any, Op}),
+                            Result = Impl(Cont1),
+                            record_event(Token, {any, Op}, Result);
+                        not_found ->
+                            case try_literals_ets(Value) of
+                                {ok, TypedValue} ->
+                                    debug_trace(Debug, Value, Stack, {literal, TypedValue}),
+                                    Result = Cont1#continuation{data_stack = [TypedValue | Stack]},
+                                    record_event(Token, {literal, TypedValue}, Result);
+                                not_found ->
+                                    debug_trace(Debug, Value, Stack, atom),
+                                    Result = Cont1#continuation{data_stack = [{'Atom', Value} | Stack]},
+                                    record_event(Token, atom, Result)
+                            end
+                    end
+            end
+    end.
+
+%% Record one exec-stack event and update depth stats. Called only in the
+%% traced path. Event shape: {exec, TokenRef, StackAfter, Kind}. Depth
+%% stats use length/1 — simple and correct; Phase 1.5 can tighten to O(1).
+%%
+%% If the op we just ran flipped tracing off (e.g. `trace-off`), skip the
+%% event so control-plane ops aren't part of their own trace.
+record_event(_Token, _Kind, #continuation{tracing = false} = Cont) ->
+    Cont;
+record_event(Token, Kind, #continuation{data_stack = DS,
+                                        return_stack = RS,
+                                        exec_stack = ES,
+                                        depth_stats = Stats0} = Cont) ->
+    Event = {exec, Token, DS, Kind},
+    Stats1 = case Stats0 of
+        undefined -> #depth_stats{};
+        S -> S
+    end,
+    DataDepth = length(DS),
+    RetDepth = length(RS),
+    Stats2 = Stats1#depth_stats{
+        data_max   = erlang:max(Stats1#depth_stats.data_max, DataDepth),
+        data_sum   = Stats1#depth_stats.data_sum + DataDepth,
+        return_max = erlang:max(Stats1#depth_stats.return_max, RetDepth),
+        count      = Stats1#depth_stats.count + 1
+    },
+    Cont#continuation{exec_stack = [Event | ES], depth_stats = Stats2}.
 
 %%% Literal handlers
 
