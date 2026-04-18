@@ -96,12 +96,14 @@ init() ->
     }),
 
     %% Depth assertions attached to the current GroupScope frame. N is
-    %% applied to every test registered within this group.
-    af_type:add_op('GroupScope', #operation{
+    %% applied to every test registered within this group. Registered on
+    %% 'Int' because TOS is the N literal when the word fires; the op's
+    %% sig_in requires GroupScope directly below.
+    af_type:add_op('Int', #operation{
         name = "max-depth", sig_in = ['Int', 'GroupScope'], sig_out = ['GroupScope'],
         impl = fun op_max_depth/1, source = af_type_test_dsl
     }),
-    af_type:add_op('GroupScope', #operation{
+    af_type:add_op('Int', #operation{
         name = "max-return-depth", sig_in = ['Int', 'GroupScope'], sig_out = ['GroupScope'],
         impl = fun op_max_return_depth/1, source = af_type_test_dsl
     }),

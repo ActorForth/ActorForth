@@ -212,9 +212,14 @@ emit_line_stream(#{status := skip, group := Group, name := Name,
     io:format("\e[34mskip\e[0m   ~s/~s  (~s)~n",
               [group_str(Group), Name, Reason]);
 emit_line_stream(#{status := fail, group := Group, name := Name,
-                   duration_us := Us, pid := Pid, reason := Reason}) ->
+                   duration_us := Us, pid := Pid, reason := Reason} = R) ->
     io:format("\e[31mnot ok\e[0m ~p ~s/~s  ~bus~n  ~p~n",
-              [Pid, group_str(Group), Name, Us, Reason]);
+              [Pid, group_str(Group), Name, Us, Reason]),
+    case maps:get(diagnosis, R, undefined) of
+        undefined -> ok;
+        Diag ->
+            io:format("  \e[35mdiagnosis:\e[0m ~p~n", [Diag])
+    end;
 emit_line_stream(#{status := load_error, name := Name, reason := Reason}) ->
     io:format("\e[33mLOAD ERROR\e[0m ~s~n  ~p~n", [Name, Reason]).
 

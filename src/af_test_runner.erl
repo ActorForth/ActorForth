@@ -291,24 +291,61 @@ base_result(Spec, Path) ->
 
 run_body(Kind, Setup, Body, Teardown, C0) ->
     try
-        C1 = run_tokens(Setup, C0),
-        C2 = run_tokens(Body, C1),
-        C3 = run_tokens(Teardown, C2),
+        C1 = af_interpreter:interpret_tokens(Setup, C0),
+        C2 = af_interpreter:interpret_tokens(Body, C1),
+        C3 = af_interpreter:interpret_tokens(Teardown, C2),
         case Kind of
             positive ->
                 #{status => pass, final => C3};
             {raises, Expected} ->
-                #{status => fail,
-                  reason => {expected_error, Expected, got_none}}
+                with_diagnosis(
+                    #{status => fail,
+                      reason => {expected_error, Expected, got_none}},
+                    C3#continuation.data_stack)
         end
     catch
-        throw:#af_error{type = Type} = Err ->
-            classify_error(Type, Err, Kind);
-        error:#af_error{type = Type} = Err ->
-            classify_error(Type, Err, Kind);
-        Class:Reason:Stack ->
-            classify_generic(Class, Reason, Stack, Kind)
+        throw:#af_error{type = Type, stack = S} = Err ->
+            with_diagnosis(classify_error(Type, Err, Kind), S);
+        error:#af_error{type = Type, stack = S} = Err ->
+            with_diagnosis(classify_error(Type, Err, Kind), S);
+        Class:Reason:Trace ->
+            with_diagnosis(classify_generic(Class, Reason, Trace, Kind), [])
     end.
+
+with_diagnosis(#{status := pass} = R, _) -> R;
+with_diagnosis(#{status := fail} = R, Stack) ->
+    case diagnose(Stack) of
+        no_match -> R;
+        Cat      -> R#{diagnosis => Cat}
+    end.
+
+%% Six-category diagnostic engine mirroring lib/testing/diagnose.a4.
+%% First match wins. Runs over the fail-time stack snapshot from the
+%% af_error record (no depth stats needed here — suddenly-deep is
+%% coverage-only and fires via run_single's depth check).
+diagnose(Stack) ->
+    case find_atom(Stack) of
+        {ok, AV} -> {extra_atom, AV};
+        none ->
+            case silent_type_mismatch(Stack) of
+                {ok, Mismatch} -> Mismatch;
+                none ->
+                    case Stack of
+                        [] -> no_match;
+                        L  -> {missing_consumer, length(L)}
+                    end
+            end
+    end.
+
+find_atom([]) -> none;
+find_atom([{'Atom', V} | _]) -> {ok, V};
+find_atom([_ | Rest]) -> find_atom(Rest).
+
+silent_type_mismatch([{'String', S}, {'Int', _} | _]) ->
+    {ok, {silent_type_mismatch, expected_int_got_string, S}};
+silent_type_mismatch([{'Int', _}, {'String', S} | _]) ->
+    {ok, {silent_type_mismatch, expected_int_got_string, S}};
+silent_type_mismatch(_) -> none.
 
 classify_error(Type, _Err, {raises, Type}) ->
     #{status => pass};
@@ -327,9 +364,6 @@ classify_generic(_Class, Reason, _Stack, {raises, Expected}) ->
 classify_generic(Class, Reason, Stack, positive) ->
     #{status => fail, reason => {Class, Reason, Stack}}.
 
-run_tokens([], C) -> C;
-run_tokens(Tokens, C) when is_list(Tokens) ->
-    af_interpreter:interpret_tokens(Tokens, C).
 
 %%% Collect results with streaming output
 
