@@ -33,9 +33,12 @@ run(Paths, Opts) ->
     Coverage = proplists:get_bool(coverage, Opts),
     Threshold = proplists:get_value(coverage_threshold, Opts, 95),
     LaxCoverage = proplists:get_bool(lax_coverage, Opts),
+    MatchPattern = proplists:get_value(match, Opts),
     %% Load all files up-front so the dashboard can know the total count.
     LoadedRaw = [load_file(F) || F <- Files],
-    Loaded = [enable_tracing(L, Coverage) || L <- LoadedRaw],
+    %% Apply --match filter to each file's registry.
+    LoadedFiltered = [apply_match_filter(L, MatchPattern) || L <- LoadedRaw],
+    Loaded = [enable_tracing(L, Coverage) || L <- LoadedFiltered],
     Total = lists:sum([length(maps:get(registry, L, [])) || L <- Loaded,
                                                            is_map(L)]),
     Dashboard = af_test_dashboard:start(Mode, Total),
@@ -51,6 +54,20 @@ run(Paths, Opts) ->
 enable_tracing(#{cont := C} = Loaded, true) ->
     Loaded#{cont => C#continuation{tracing = true, coverage = #{}}};
 enable_tracing(Loaded, _) -> Loaded.
+
+%% Filter registry by name-substring match (if pattern set). Applies
+%% simple substring matching; regex is a follow-up.
+apply_match_filter(#{registry := _} = Loaded, undefined) ->
+    Loaded;
+apply_match_filter(#{registry := Reg} = Loaded, Pattern) ->
+    PatBin = case is_list(Pattern) of
+        true -> list_to_binary(Pattern);
+        false -> Pattern
+    end,
+    Filtered = [S || S <- Reg,
+                     binary:match(maps:get(name, S, <<>>), PatBin) =/= nomatch],
+    Loaded#{registry => Filtered};
+apply_match_filter(Loaded, _) -> Loaded.
 
 run_file(Path) -> run_file(Path, []).
 

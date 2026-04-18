@@ -195,6 +195,33 @@ parse_args(["-o", Dir | Rest], Files, Opts) ->
     parse_args(Rest, Files, [{o, Dir} | Opts]);
 parse_args(["--selfhosted" | Rest], Files, Opts) ->
     parse_args(Rest, Files, [{selfhosted, true} | Opts]);
+%% Test-runner flags
+parse_args(["--quiet" | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{render, quiet} | Opts]);
+parse_args(["--verbose" | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{verbose, true} | Opts]);
+parse_args(["--dashboard" | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{render, dashboard} | Opts]);
+parse_args(["--stream" | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{render, stream} | Opts]);
+parse_args(["--trace" | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{trace, true} | Opts]);
+parse_args(["--match", Pattern | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{match, Pattern} | Opts]);
+parse_args(["--seed", N | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{seed, list_to_integer(N)} | Opts]);
+parse_args(["--tap" | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{tap, true} | Opts]);
+parse_args(["--junit", Path | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{junit, Path} | Opts]);
+parse_args(["--json", Path | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{json, Path} | Opts]);
+parse_args(["--coverage" | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{coverage, true} | Opts]);
+parse_args(["--lax-coverage" | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{lax_coverage, true} | Opts]);
+parse_args(["--coverage-threshold", N | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{coverage_threshold, list_to_integer(N)} | Opts]);
 parse_args(["-" ++ _ = Flag | Rest], Files, Opts) ->
     io:format(standard_error, "Unknown flag: ~s~n", [Flag]),
     parse_args(Rest, Files, Opts);
