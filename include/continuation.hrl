@@ -16,5 +16,8 @@
     %% --- test DSL fields: zero production cost when tracing = false ---
     tracing       = false :: boolean(),               %% master test-mode flag
     exec_stack    = []    :: list(),                  %% dispatch events, newest-first
-    depth_stats   = undefined :: undefined | #depth_stats{}
+    depth_stats   = undefined :: undefined | #depth_stats{},
+    %% --- test-DSL registration state ---
+    test_scope    = []    :: list(),                  %% scope stack during capture
+    test_registry = []    :: list()                   %% registered test specs
 }).

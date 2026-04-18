@@ -1,0 +1,21 @@
+# Test DSL — depth-tracking accessors (a4 layer)
+#
+# Thin wrappers over the Erlang-side `depth-stats-map` primitive. Each
+# word pulls one field out of the stats map and leaves it as an Int on
+# the stack.
+
+: data-max-depth -> Int ;
+    depth-stats-map "data_max" map-get
+.
+
+: data-sum -> Int ;
+    depth-stats-map "data_sum" map-get
+.
+
+: return-max-depth -> Int ;
+    depth-stats-map "return_max" map-get
+.
+
+: dispatch-count -> Int ;
+    depth-stats-map "count" map-get
+.

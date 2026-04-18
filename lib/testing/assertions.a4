@@ -1,0 +1,21 @@
+# Test DSL — assertion words (a4 layer)
+#
+# Built on the existing Any vocabulary (`assert`, `assert-eq`, `<=`, `>=`)
+# and the test-primitive word `capture-data`. These compose to cover the
+# Phase 2 assertion set from the test-DSL plan.
+
+# assert-max  ( Int Int -- Int )
+# Ensure the value under TOS is <= the bound at TOS. Leaves the value.
+# Usage:  result 5 assert-max   # expects result <= 5, leaves result.
+: assert-max Int Int -> Int ;
+    2dup <= assert
+    drop
+.
+
+# assert-min  ( Int Int -- Int )
+# Ensure the value under TOS is >= the bound at TOS. Leaves the value.
+# Usage:  result 0 assert-min   # expects result >= 0, leaves result.
+: assert-min Int Int -> Int ;
+    2dup >= assert
+    drop
+.

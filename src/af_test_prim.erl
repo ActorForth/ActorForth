@@ -78,6 +78,48 @@ init() ->
         name = "dict-restore", sig_in = ['DictRef'], sig_out = [],
         impl = fun op_dict_restore/1, source = af_test_prim
     }),
+
+    %% Exec-stack manipulation (same primitives the plan mentions under
+    %% "Execution-stack words (also usable outside tests)").
+    af_type:add_op('Any', #operation{
+        name = "exec-depth", sig_in = [], sig_out = ['Int'],
+        impl = fun op_exec_depth/1, source = af_test_prim
+    }),
+    af_type:add_op('Any', #operation{
+        name = "exec-peek", sig_in = [], sig_out = ['ExecEvent'],
+        impl = fun op_exec_peek/1, source = af_test_prim
+    }),
+    af_type:add_op('Any', #operation{
+        name = "exec-pop", sig_in = [], sig_out = ['ExecEvent'],
+        impl = fun op_exec_pop/1, source = af_test_prim
+    }),
+    af_type:add_op('Any', #operation{
+        name = "exec-drop", sig_in = [], sig_out = [],
+        impl = fun op_exec_drop/1, source = af_test_prim
+    }),
+    af_type:add_op('Any', #operation{
+        name = "exec-clear", sig_in = [], sig_out = [],
+        impl = fun op_exec_clear/1, source = af_test_prim
+    }),
+    af_type:add_op('Any', #operation{
+        name = "exec-reverse", sig_in = [], sig_out = [],
+        impl = fun op_exec_reverse/1, source = af_test_prim
+    }),
+
+    %% Exec event accessors — crack open an {exec, Token, Stack, Kind} tuple.
+    af_type:add_op('ExecEvent', #operation{
+        name = "event-token", sig_in = ['ExecEvent'], sig_out = ['ExecEvent', 'Map'],
+        impl = fun op_event_token/1, source = af_test_prim
+    }),
+    af_type:add_op('ExecEvent', #operation{
+        name = "event-stack", sig_in = ['ExecEvent'], sig_out = ['ExecEvent', 'List'],
+        impl = fun op_event_stack/1, source = af_test_prim
+    }),
+    af_type:add_op('ExecEvent', #operation{
+        name = "event-kind", sig_in = ['ExecEvent'], sig_out = ['ExecEvent', 'Atom'],
+        impl = fun op_event_kind/1, source = af_test_prim
+    }),
+
     ok.
 
 %%% Implementations
@@ -148,3 +190,62 @@ op_dict_restore(#continuation{data_stack = [{'DictRef', Dict} | Rest]} = Cont) -
     };
 op_dict_restore(_Cont) ->
     erlang:error({dict_restore, no_dictref_on_tos}).
+
+%%% Exec-stack manipulation
+
+op_exec_depth(#continuation{data_stack = DS, exec_stack = ES} = Cont) ->
+    Cont#continuation{data_stack = [{'Int', length(ES)} | DS]}.
+
+op_exec_peek(#continuation{data_stack = DS, exec_stack = [E | _]} = Cont) ->
+    Cont#continuation{data_stack = [{'ExecEvent', E} | DS]};
+op_exec_peek(_Cont) ->
+    erlang:error({exec_peek, empty}).
+
+op_exec_pop(#continuation{data_stack = DS, exec_stack = [E | Rest]} = Cont) ->
+    Cont#continuation{data_stack = [{'ExecEvent', E} | DS], exec_stack = Rest};
+op_exec_pop(_Cont) ->
+    erlang:error({exec_pop, empty}).
+
+op_exec_drop(#continuation{exec_stack = [_ | Rest]} = Cont) ->
+    Cont#continuation{exec_stack = Rest};
+op_exec_drop(Cont) ->
+    Cont.  %% drop on empty is a no-op
+
+op_exec_clear(Cont) ->
+    Cont#continuation{exec_stack = []}.
+
+op_exec_reverse(#continuation{exec_stack = ES} = Cont) ->
+    Cont#continuation{exec_stack = lists:reverse(ES)}.
+
+%%% Exec-event accessors
+%%%
+%%% These leave the ExecEvent on the stack (non-destructive) and push the
+%%% requested component on top. The "-" between e.g. event and token is
+%%% deliberate: Forth-style word naming keeps the verb/noun ordering.
+
+op_event_token(#continuation{data_stack = [{'ExecEvent', {exec, Token, _, _}} = Ev | Rest]} = Cont) ->
+    Map = token_to_map(Token),
+    Cont#continuation{data_stack = [{'Map', Map}, Ev | Rest]}.
+
+op_event_stack(#continuation{data_stack = [{'ExecEvent', {exec, _, Stack, _}} = Ev | Rest]} = Cont) ->
+    Cont#continuation{data_stack = [{'List', Stack}, Ev | Rest]}.
+
+op_event_kind(#continuation{data_stack = [{'ExecEvent', {exec, _, _, Kind}} = Ev | Rest]} = Cont) ->
+    KindAtom = case Kind of
+        atom                 -> "atom";
+        {tos, _}             -> "tos";
+        {any, _}             -> "any";
+        handler              -> "handler";
+        {literal, _}         -> "literal";
+        {cache_hit, _}       -> "cache_hit"
+    end,
+    Cont#continuation{data_stack = [{'Atom', KindAtom}, Ev | Rest]}.
+
+token_to_map(Token) ->
+    #{
+        <<"value">>  => {'String', list_to_binary(Token#token.value)},
+        <<"file">>   => {'String', list_to_binary(Token#token.file)},
+        <<"line">>   => {'Int',    Token#token.line},
+        <<"column">> => {'Int',    Token#token.column},
+        <<"quoted">> => {'Bool',   Token#token.quoted}
+    }.

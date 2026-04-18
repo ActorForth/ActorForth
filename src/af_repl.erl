@@ -26,7 +26,8 @@ init_types() ->
     af_type_python:init(),
     af_core_compiler:init(),
     af_cpp_compiler:init(),
-    af_test_prim:init().
+    af_test_prim:init(),
+    af_type_test_dsl:init().
 
 start() ->
     load_env(),

@@ -30,6 +30,8 @@ main(["build" | Rest]) ->
     build_cmd(Rest);
 main(["run" | Rest]) ->
     run_cmd(Rest);
+main(["test" | Rest]) ->
+    test_cmd(Rest);
 main([File | _]) ->
     %% Default: compile if it looks like a file
     case filename:extension(File) of
@@ -118,6 +120,23 @@ run_cmd(Args) ->
             end;
         _ ->
             io:format(standard_error, "run takes exactly one file~n", []),
+            halt(1)
+    end.
+
+%% --- test ---
+
+test_cmd([]) ->
+    test_cmd(["lib/testing", "test"]);
+test_cmd(Args) ->
+    {Paths, Opts} = parse_args(Args),
+    init_runtime(false),
+    Paths1 = case Paths of [] -> ["lib/testing", "test"]; _ -> Paths end,
+    {Passed, Failed, Errors} = af_test_runner:run(Paths1, Opts),
+    case Failed + Errors of
+        0 -> halt(0);
+        _ ->
+            io:format(standard_error, "~p failed, ~p errors~n", [Failed, Errors]),
+            _ = Passed,
             halt(1)
     end.
 

@@ -1,0 +1,24 @@
+# Test DSL smoke test — verifies the runner can execute a single test.
+
+"smoke" group
+
+"plain add" test :
+    1 2 +
+    3 assert-eq
+;
+
+"assert-max passes under bound" test :
+    3 5 assert-max
+    3 assert-eq
+;
+
+"assert-min passes above bound" test :
+    7 2 assert-min
+    7 assert-eq
+;
+
+"head on empty raises" test-raises empty_list :
+    nil head
+;
+
+end-group
