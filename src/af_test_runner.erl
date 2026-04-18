@@ -34,10 +34,14 @@ run(Paths, Opts) ->
     Threshold = proplists:get_value(coverage_threshold, Opts, 95),
     LaxCoverage = proplists:get_bool(lax_coverage, Opts),
     MatchPattern = proplists:get_value(match, Opts),
+    TagLabel = proplists:get_value(tag, Opts),
     %% Load all files up-front so the dashboard can know the total count.
     LoadedRaw = [load_file(F) || F <- Files],
-    %% Apply --match filter to each file's registry.
-    LoadedFiltered = [apply_match_filter(L, MatchPattern) || L <- LoadedRaw],
+    %% Apply --match and --tag filters to each file's registry.
+    LoadedFiltered = [apply_tag_filter(
+                         apply_match_filter(L, MatchPattern),
+                         TagLabel)
+                      || L <- LoadedRaw],
     Loaded = [enable_tracing(L, Coverage) || L <- LoadedFiltered],
     Total = lists:sum([length(maps:get(registry, L, [])) || L <- Loaded,
                                                            is_map(L)]),
@@ -68,6 +72,19 @@ apply_match_filter(#{registry := Reg} = Loaded, Pattern) ->
                      binary:match(maps:get(name, S, <<>>), PatBin) =/= nomatch],
     Loaded#{registry => Filtered};
 apply_match_filter(Loaded, _) -> Loaded.
+
+apply_tag_filter(#{registry := _} = Loaded, undefined) ->
+    Loaded;
+apply_tag_filter(#{registry := Reg} = Loaded, Label) ->
+    LabelBin = case is_list(Label) of
+        true -> list_to_binary(Label);
+        false -> Label
+    end,
+    Filtered = [S || S <- Reg,
+                     lists:any(fun(T) -> T =:= LabelBin end,
+                               maps:get(tags, S, []))],
+    Loaded#{registry => Filtered};
+apply_tag_filter(Loaded, _) -> Loaded.
 
 run_file(Path) -> run_file(Path, []).
 

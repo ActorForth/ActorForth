@@ -95,6 +95,23 @@ init() ->
         impl = fun op_skip_test/1, source = af_type_test_dsl
     }),
 
+    %% `"label" tag` — attach label to the enclosing group's pending-tags
+    %% list. Next test registered in this group picks them up and clears
+    %% the pending list. Accumulates: `"fast" tag "math" tag "name" test`
+    %% attaches both labels.
+    af_type:add_op('Any', #operation{
+        name = "tag", sig_in = ['String'], sig_out = [],
+        impl = fun op_tag/1, source = af_type_test_dsl
+    }),
+
+    %% `"name" test-compiled : body ;` — like test, but the body is
+    %% compiled into a word and dispatched natively. Useful when the
+    %% test itself is perf-sensitive.
+    af_type:add_op('Any', #operation{
+        name = "test-compiled", sig_in = ['String'], sig_out = ['TestPending'],
+        impl = fun op_test_compiled/1, source = af_type_test_dsl
+    }),
+
     %% Depth assertions attached to the current GroupScope frame. N is
     %% applied to every test registered within this group. Registered on
     %% 'Int' because TOS is the N literal when the word fires; the op's
@@ -209,6 +226,26 @@ op_skip_test(#continuation{data_stack = [{'String', Reason}, {'String', Name} | 
         data_stack = [{'TestPending', #{name => Name, skip => Reason}} | Rest]
     }.
 
+op_tag(#continuation{data_stack = [{'String', Label} | Rest]} = Cont) ->
+    %% Attach to the nearest enclosing GroupScope. If there is none,
+    %% drop the tag on the floor (could error instead).
+    NewRest = push_tag_to_group(Label, Rest),
+    Cont#continuation{data_stack = NewRest}.
+
+push_tag_to_group(Label, [{'GroupScope', F} | Rest]) ->
+    Tags = maps:get(pending_tags, F, []),
+    [{'GroupScope', F#{pending_tags => Tags ++ [Label]}} | Rest];
+push_tag_to_group(Label, [Other | Rest]) ->
+    %% Preserve TOS, recurse deeper.
+    [Other | push_tag_to_group(Label, Rest)];
+push_tag_to_group(_Label, []) ->
+    [].
+
+op_test_compiled(#continuation{data_stack = [{'String', Name} | Rest]} = Cont) ->
+    Cont#continuation{
+        data_stack = [{'TestPending', #{name => Name, compiled => true}} | Rest]
+    }.
+
 %% `max-depth N` on GroupScope: consume Int + GroupScope, attach limit.
 op_max_depth(#continuation{data_stack = [{'Int', N}, {'GroupScope', F} | Rest]} = Cont) ->
     Cont#continuation{data_stack = [{'GroupScope', F#{max_depth => N}} | Rest]}.
@@ -220,11 +257,28 @@ op_max_return_depth(#continuation{data_stack = [{'Int', N}, {'GroupScope', F} | 
 
 op_test_colon(#continuation{data_stack = [{'TestPending', State} | Rest],
                             current_token = Tok} = Cont) ->
+    {Tags, Rest1} = consume_group_tags(Rest),
     Body = #{name     => maps:get(name, State),
              body     => [],
              location => token_location(Tok),
-             skip     => maps:get(skip, State, undefined)},
-    Cont#continuation{data_stack = [{'TestBody', Body} | Rest]}.
+             skip     => maps:get(skip, State, undefined),
+             compiled => maps:get(compiled, State, false),
+             tags     => Tags},
+    Cont#continuation{data_stack = [{'TestBody', Body} | Rest1]}.
+
+%% Walk the stack to the nearest GroupScope, snip its pending_tags list,
+%% and return the tags + the stack with pending_tags cleared.
+consume_group_tags(Stack) ->
+    consume_group_tags(Stack, []).
+
+consume_group_tags([{'GroupScope', F} | Rest], Prefix) ->
+    Tags = maps:get(pending_tags, F, []),
+    Cleared = {'GroupScope', F#{pending_tags => []}},
+    {Tags, lists:reverse(Prefix) ++ [Cleared | Rest]};
+consume_group_tags([Other | Rest], Prefix) ->
+    consume_group_tags(Rest, [Other | Prefix]);
+consume_group_tags([], Prefix) ->
+    {[], lists:reverse(Prefix)}.
 
 op_test_raises_colon(#continuation{data_stack = [{'TestRaisesPending', State} | Rest],
                                    current_token = Tok} = Cont) ->
@@ -312,6 +366,8 @@ build_spec(Kind, Body, StackAfterPop) ->
         teardown         => Teardown,
         serial           => Serial,
         skip             => maps:get(skip, Body, undefined),
+        compiled         => maps:get(compiled, Body, false),
+        tags             => maps:get(tags, Body, []),
         max_depth        => maps:get(max_depth, Limits, undefined),
         max_return_depth => maps:get(max_return_depth, Limits, undefined),
         location         => maps:get(location, Body)

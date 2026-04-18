@@ -208,6 +208,8 @@ parse_args(["--trace" | Rest], Files, Opts) ->
     parse_args(Rest, Files, [{trace, true} | Opts]);
 parse_args(["--match", Pattern | Rest], Files, Opts) ->
     parse_args(Rest, Files, [{match, Pattern} | Opts]);
+parse_args(["--tag", Label | Rest], Files, Opts) ->
+    parse_args(Rest, Files, [{tag, Label} | Opts]);
 parse_args(["--seed", N | Rest], Files, Opts) ->
     parse_args(Rest, Files, [{seed, list_to_integer(N)} | Opts]);
 parse_args(["--tap" | Rest], Files, Opts) ->
