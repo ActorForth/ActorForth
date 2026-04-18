@@ -4,6 +4,59 @@ This document captures the *why* behind ActorForth: the driving principles, the 
 
 ---
 
+## Part 0: On Language Design — Why Engineering, Not Math
+
+Language design is hard because formal specifications are brittle. Write a complete BNF for your language, stand up separate lexers and parsers and type checkers that all depend on it, and any change to the specification cascades through the implementation. This is why most language design ends at the specification step — the cost of making the language real is too high to justify for any problem whose shape is still being discovered.
+
+This is the difference between the math people and the engineers. Edsger Dijkstra's *Notes on Structured Programming* (EWD249, 1970) established, with exquisite clarity, that a programmer's job includes *demonstrating correctness in a convincing manner.* That discipline works at the scale Dijkstra worked at — algorithms you can fit on a blackboard. Margaret Hamilton's Apollo guidance software is the other proof point: formal, exhaustive, correct — and justifiable only because the alternative was killing astronauts. Between those two, you find essentially no large deployed software for which proof scaled. De Millo, Lipton, and Perlis made the case directly in *Social Processes and Proofs of Theorems and Programs* (CACM 22(5), 1979): past a threshold, reliability is produced by peer review, revision, and use — *not* by formal verification.
+
+So what produces reliability at scale, if not proof? Chuck Moore's answer, embedded in Forth, was to make the language itself cheap enough to throw away. Build the vocabulary you need for the problem in front of you; build it small; understand it completely; when the problem shifts, build a different vocabulary. Reliability came from having the whole system small enough that it fit in one person's head. The tradeoff was the famous "write-only" reputation: without types or concurrency, Forth relied entirely on programmer discipline.
+
+ActorForth preserves Moore's engineering answer and closes the two holes:
+
+1. **Types do the bookkeeping** for what used to be the programmer's responsibility to track on the stack.
+2. **Actors are the concurrency primitive,** embracing the unbounded non-determinism (Hewitt, 1973) that real-world systems impose on you the moment execution leaves the CPU.
+
+The stance compresses to:
+
+> *A system should be expressed so simply that its correctness is obvious to the reader.*
+
+This is the author's own compression of the argument — it is the ActorForth stance, not a direct Hoare quote, though Hoare's 1980 Turing lecture carries the same spirit:
+
+> *"There are two ways of constructing a software design: one way is to make it so simple that there are obviously no deficiencies, and the other way is to make it so complicated that there are no obvious deficiencies. The first method is far more difficult."* — C.A.R. Hoare, *The Emperor's Old Clothes*, CACM 24(2), 1981
+
+and Einstein's paraphrased dictum —
+
+> *Everything should be made as simple as possible, but not simpler.*
+
+— and De Millo, Lipton & Perlis's deeper observation that simplicity scales where proof does not, because simplicity can be verified by the only sustainable review process, which is other humans reading the code.
+
+ActorForth's architectural proposition follows directly: eliminate unnecessary complexity; keep the primitive foundation small and provable; write only what this problem requires, right now; and let highly scalable complex systems emerge from the orchestration of simple, loosely-coupled, highly coherent components.
+
+---
+
+## Part 0.5: Intellectual Heritage
+
+A language is always standing on prior work. These are the figures whose ideas show up directly in ActorForth's design.
+
+**Chuck Moore (Forth, 1970).** The engineering answer that language creation can be cheap. Forth's model — a stack, a dictionary, tokens, no syntax beyond what words claim — is the direct ancestor of ActorForth's dispatch mechanism. Moore's insight that a program and its language are the same object, and that you build them together at a REPL, is the skeleton ActorForth hangs its type system and actor model on.
+
+**Carl Hewitt (Actor Model, 1973).** The concurrency story that gives correct answers in the presence of unbounded non-determinism — the observation that a finite specification cannot bound the behavior of a system whose execution path depends on observed real-world events. Every a4 test is spawned as an independent actor, every `server` / `supervised-server` is a first-class Actor, every `<<` / `>>` exchange is a primitive of the language rather than a library pattern.
+
+**Guy Steele (*Growing a Language*, 1998).** The principle that a language should be small and extensible rather than large and finished; that the users of the language should be able to grow it without needing to modify the core. ActorForth takes this literally: the compiler itself is four types with handlers, the test DSL is a handful more, and everything a user writes is in principle the same kind of object.
+
+**Bjarne Stroustrup (C++, 1983 onward; *A Tour of C++*, 2014).** Zero-overhead abstraction: user-defined types should pay the same runtime cost as built-in types. ActorForth's stance — that the best programs rarely use the built-in primitives and instead use the vocabulary the programmer defined — is the direct descendant of "the best C++ programs rarely use the built-in types." Type-driven dispatch is how a4 gets that in a dynamic language.
+
+**Evan Czaplicki (Elm, 2012 onward).** The idea that a small, opinionated, *friendly* language can still be enough to build serious things, and that language design is in part an ergonomic exercise: keeping the error messages kind, the mental model small, and the tooling helpful. ActorForth's live-pid dashboard, the diagnostic engine categories, and the deliberate choice of Atom identifiers for short names are all in this spirit.
+
+**Margaret Hamilton (Apollo, 1969).** The concrete proof that formal discipline scales to life-critical systems — *when the cost is justifiable.* Her work defines the upper boundary of what proof buys you, and why reliability-through-simplicity is the pragmatic answer below that boundary.
+
+**Edsger Dijkstra (EWD249 and *passim*).** The foundational claim that the programmer's job is to *demonstrate* correctness, not merely achieve it. ActorForth's type-driven dispatch, its preference for small understandable primitives, and its insistence on structured word composition all derive from this demand.
+
+A compact bibliography is in **Appendix A**.
+
+---
+
 ## Part I: Origin and Motivation
 
 ### The Impedance Mismatch
@@ -464,15 +517,30 @@ Small words are auditable. A one-line word can be verified by inspection. A sequ
 
 ## Appendix A: Key References
 
-- Dijkstra (1970) "Notes On Structured Programming" (EWD249) — structured programming, reliability of mechanisms, testing shows presence not absence of bugs
-- Backus (1977) Turing Award Lecture "Can Programming Be Liberated from the von Neumann Style?" — the von Neumann bottleneck
-- De Millo, Lipton, Perlis "Social Processes and Proofs of Theorems and Programs" — reliability through social processes, not just formal verification
-- Abelson & Sussman, *Structure and Interpretation of Computer Programs* — programs for people to read
-- Kernighan, *The Elements of Programming Style* — debugging twice as hard as writing
-- Bastiat (1850) "The Law" — "Law is the common force organized to act as an obstacle of injustice"
-- Scherrey (2019) "ActorForth — Architectural Drivers" (docs/ActorForth.pdf)
-- Scherrey (2019) "Why ActorForth" presentation (docs/WhyActorForth.pdf)
-- Scherrey (2019) "State of the Block Chain" (docs/StateOfTheBlockChain.docx)
+### Foundational
+
+- Moore, C. (1970s–) — Forth. See *Programming a Problem-Oriented Language*, Moore 1970; *Thinking FORTH*, Brodie 1984.
+- Hewitt, C., Bishop, P., Steiger, R. (1973) "A Universal Modular ACTOR Formalism for Artificial Intelligence." IJCAI. The original Actor Model paper.
+- Dijkstra (1970) "Notes On Structured Programming" (EWD249) — programmer's responsibility to demonstrate correctness.
+- Hoare, C.A.R. (1981) "The Emperor's Old Clothes" (1980 Turing Award Lecture), CACM 24(2) — the two ways to construct a software design.
+- De Millo, Lipton, Perlis (1979) "Social Processes and Proofs of Theorems and Programs", CACM 22(5) — reliability through social processes, not formal verification.
+- Steele, G. (1998) "Growing a Language." OOPSLA keynote. On small extensible languages.
+- Stroustrup, B. (2014) *A Tour of C++*, Addison-Wesley. On zero-overhead abstractions with user-defined types.
+- Czaplicki, E. (2012–) Elm — a small opinionated language; friendly error messages as a first-class design concern.
+
+### Historical & Secondary
+
+- Backus (1977) Turing Award Lecture "Can Programming Be Liberated from the von Neumann Style?" — the von Neumann bottleneck.
+- Abelson & Sussman, *Structure and Interpretation of Computer Programs* — programs for people to read.
+- Kernighan, *The Elements of Programming Style* — debugging twice as hard as writing.
+- Bastiat (1850) "The Law" — social-contract framing of systems rules.
+- Hamilton, M. (1969–) Apollo flight guidance. Proof-of-concept that formal discipline scales when the cost is justifiable.
+
+### ActorForth Primary
+
+- Scherrey (2019) "ActorForth — Architectural Drivers" (docs/ActorForth.pdf).
+- Scherrey (2019) "Why ActorForth" presentation (docs/WhyActorForth.pdf).
+- Scherrey (2019) "State of the Block Chain" (docs/StateOfTheBlockChain.docx).
 
 ## Appendix B: Implementation Status
 

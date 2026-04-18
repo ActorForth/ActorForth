@@ -6,6 +6,31 @@
 
 ---
 
+## Preface: Why ActorForth Exists
+
+Language design has always been one of my most favorite intellectual pastimes. I chew on a problem, imagine a language in which the solution would be easy to read, and iterate until the shape is elegant. Formally you might call this *creating an ontology for the problem domain and designing a language that expresses it well.* That language is usually unsuitable for anything else — and that's typically where the exercise ends, because making it real is too expensive to justify. So you use it as a specification and write the program in C++ or Erlang or Python instead.
+
+Forth is what happens when you refuse to accept that cost. Chuck Moore's answer to the "too expensive to build your own language" problem was to build a language-building tool so small and direct that you build your domain language *in front of yourself,* at the REPL, in minutes rather than months. The cost collapses to near zero. But Forth paid for that with famously minimal guard rails — no type system, no concurrency story — and got a reputation for being a write-only language.
+
+ActorForth is Forth with those two holes filled:
+
+1. **A type system that does the bookkeeping,** so you don't have to remember what's on the stack at run time.
+2. **Actors as a primitive,** so the unbounded non-determinism of real-world systems — the kind you encounter the moment your code touches the outside world — stops being a footnote and becomes the concurrency model itself.
+
+Everything else is in service of one idea: *programming in ActorForth means building a small language tailored to your problem, and then writing your problem in that language.* That's why the REPL is central, why types own their dispatch, why the compiler is itself four ordinary types with handlers. The machinery of making a DSL real is the machinery you already use.
+
+You may not love the RPN notation. You don't have to. The aesthetic is a means, not the point. *The best ActorForth programs rarely use ActorForth primitives* — they use the vocabulary the programmer defined for their domain, in the same spirit that the best C++ applications rarely use the built-in types.
+
+**Giants this stands on.** Chuck Moore for the engineering answer that language creation can be cheap. Carl Hewitt, whose Actor Model is the only concurrency story I've found that survives contact with unbounded non-determinism in the real world. Guy Steele for the idea that a language should be small and growable, not large and finished. Bjarne Stroustrup for building the vocabulary of zero-overhead abstractions that user-defined types can replace the built-ins without a runtime tax. Evan Czaplicki for showing that a small, opinionated language can still be a joy to write in. Margaret Hamilton and Edsger Dijkstra for establishing, at life-critical scale, what it means to demonstrate correctness — while also marking the boundary where formal verification stops scaling and *simplicity* has to take over. On that last point the ActorForth stance (set out in the 2019 architectural drivers paper) compresses to:
+
+> *A system should be expressed so simply that its correctness is obvious to the reader.*
+
+Not Hoare exactly — but the spirit runs through his Turing lecture too, and through De Millo, Lipton, and Perlis on *Social Processes and Proofs*, and through Einstein's "as simple as possible, but no simpler." The architectural-drivers document (`docs/architectural-drivers-considerations.md`) carries the formal version of this argument. What follows here is the practical one.
+
+Now — the stack.
+
+---
+
 ## Chapter 1: The Stack Is Everything
 
 If you've used Forth before, you know the feeling: there are no variables cluttering up the place, no assignment statements, no declarations. There's just the stack, and the words that transform it. ActorForth inherits this directness, but adds something Forth never had — every value on the stack knows what it is.
