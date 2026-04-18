@@ -4,6 +4,7 @@
 -include("operation.hrl").
 -include("continuation.hrl").
 -include("af_type.hrl").
+-include("af_error.hrl").
 
 -export([init/0]).
 
@@ -102,6 +103,16 @@ init() ->
     af_type:add_op('Any', #operation{
         name = "tag", sig_in = ['String'], sig_out = [],
         impl = fun op_tag/1, source = af_type_test_dsl
+    }),
+
+    %% `"word-name" ErrType raises` — inline negative assertion.
+    %% Dispatch the named word inside a try/catch; pass if it raises
+    %% the expected error atom, fail otherwise. Stack order:
+    %% the String name is beneath, so users write them in call order:
+    %%   "drop" stack_underflow raises
+    af_type:add_op('Atom', #operation{
+        name = "raises", sig_in = ['Atom', 'String'], sig_out = [],
+        impl = fun op_raises_inline/1, source = af_type_test_dsl
     }),
 
     %% `"name" test-compiled : body ;` — like test, but the body is
@@ -245,6 +256,23 @@ op_test_compiled(#continuation{data_stack = [{'String', Name} | Rest]} = Cont) -
     Cont#continuation{
         data_stack = [{'TestPending', #{name => Name, compiled => true}} | Rest]
     }.
+
+%% `"word" ErrType raises` — dispatch word in try/catch, pass iff it raises ErrType.
+op_raises_inline(#continuation{data_stack = [{'Atom', ErrTypeName},
+                                              {'String', WordBin} | Rest]} = Cont) ->
+    ExpectedAtom = list_to_atom(ErrTypeName),
+    WordName = binary_to_list(WordBin),
+    Token = #token{value = WordName},
+    InnerCont = Cont#continuation{data_stack = Rest},
+    try
+        _ = af_interpreter:interpret_token(Token, InnerCont),
+        erlang:error({raises_inline, expected, ExpectedAtom, got_none})
+    catch
+        throw:#af_error{type = T} when T =:= ExpectedAtom ->
+            Cont#continuation{data_stack = Rest};
+        error:#af_error{type = T} when T =:= ExpectedAtom ->
+            Cont#continuation{data_stack = Rest}
+    end.
 
 %% `max-depth N` on GroupScope: consume Int + GroupScope, attach limit.
 op_max_depth(#continuation{data_stack = [{'Int', N}, {'GroupScope', F} | Rest]} = Cont) ->
