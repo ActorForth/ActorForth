@@ -1,0 +1,9 @@
+# No explicit group — filename `implicit` should become the group name.
+
+"simple add" test :
+    1 2 + 3 assert-eq
+;
+
+"simple sub" test :
+    5 3 - 2 assert-eq
+;

@@ -75,13 +75,45 @@ load_file(Path) ->
         C0 = af_interpreter:new_continuation(),
         C1 = load_testing_lib(C0),
         {ok, Content} = file:read_file(Path),
-        Tokens = af_parser:parse(binary_to_list(Content), Path),
+        Tokens0 = af_parser:parse(binary_to_list(Content), Path),
+        Tokens = maybe_wrap_outer_group(Path, Tokens0),
         CLoaded = af_interpreter:interpret_tokens(Tokens, C1),
         #{path => Path, cont => CLoaded,
           registry => CLoaded#continuation.test_registry}
     catch
         Class:Reason:Stack ->
             #{path => Path, error => {Class, Reason, Stack}}
+    end.
+
+%% `.test.a4` semantics: if the file doesn't already open with an
+%% explicit group, synthesize one from the file's basename. Tests in
+%% `samples/list_ops.test.a4` implicitly live under `list_ops`.
+maybe_wrap_outer_group(Path, Tokens) ->
+    case is_test_file(Path) andalso not has_explicit_group(Tokens) of
+        true  -> wrap_with_group(Path, Tokens);
+        false -> Tokens
+    end.
+
+has_explicit_group([#token{value = _Name, quoted = false},
+                    #token{value = "group"} | _]) -> true;
+has_explicit_group([#token{value = _Name, quoted = false},
+                    #token{value = "group-serial"} | _]) -> true;
+has_explicit_group(_) -> false.
+
+wrap_with_group(Path, Tokens) ->
+    Base = basename_noext(Path),
+    Open = [#token{value = Base,    file = Path, line = 0, column = 0, quoted = false},
+            #token{value = "group", file = Path, line = 0, column = 0, quoted = false}],
+    Close = [#token{value = ".",    file = Path, line = 0, column = 0, quoted = false}],
+    Open ++ Tokens ++ Close.
+
+basename_noext(Path) ->
+    Base = filename:basename(Path),
+    case lists:suffix(".test.a4", Base) of
+        true ->
+            lists:sublist(Base, length(Base) - length(".test.a4"));
+        false ->
+            filename:rootname(Base)
     end.
 
 execute_loaded(#{error := Err, path := Path}, Dashboard) ->

@@ -45,7 +45,9 @@ format_error(Reason) ->
 compile_app(AppInfo) ->
     SrcDir = rebar_app_info:dir(AppInfo),
     EbinDir = rebar_app_info:ebin_dir(AppInfo),
-    A4Files = filelib:wildcard(filename:join(SrcDir, "src/*.a4")),
+    A4Files0 = filelib:wildcard(filename:join(SrcDir, "src/*.a4")),
+    %% `.test.a4` files are test sources, not production code.
+    A4Files = [F || F <- A4Files0, not lists:suffix(".test.a4", F)],
     case A4Files of
         [] -> ok;
         _ ->
