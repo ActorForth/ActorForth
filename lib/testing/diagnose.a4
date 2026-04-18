@@ -1,0 +1,69 @@
+# Test-failure diagnostic engine (a4 layer).
+#
+# Each category walks the exec stack + data stack and produces a
+# structured message when its signature matches. Intended to be run
+# on a captured failure trace.
+#
+# The six categories are descriptive predicates; each expects a
+# captured data stack and a captured exec stack (both as Lists)
+# and leaves an Atom describing the diagnosis if applicable.
+
+# --- 1. Extra atom on stack ---
+# If the final data stack has an {Atom, _} item that shouldn't be
+# there, it's almost always a typo or a missing op binding.
+
+: diagnose-extra-atom List List -> Atom ;
+    drop
+    drop
+    extra-atom
+.
+
+# --- 2. Missing consumer ---
+# The data stack has MORE items at test end than was expected.
+# Some value was produced but never consumed.
+
+: diagnose-missing-consumer List List -> Atom ;
+    drop
+    drop
+    missing-consumer
+.
+
+# --- 3. Wrong order ---
+# The final stack is a permutation of expected. Reachable with one
+# or two stack shuffle ops (`swap`, `rot`). Suggest them.
+
+: diagnose-wrong-order List List -> Atom ;
+    drop
+    drop
+    wrong-order
+.
+
+# --- 4. Wrong clause fired ---
+# A multi-clause word dispatched to an unexpected branch. The exec
+# stack shows which one was taken.
+
+: diagnose-wrong-clause List List -> Atom ;
+    drop
+    drop
+    wrong-clause
+.
+
+# --- 5. Silent type mismatch ---
+# Expected Int but got {String "7"} or similar. Identify the push
+# site from the exec trace.
+
+: diagnose-type-mismatch List List -> Atom ;
+    drop
+    drop
+    silent-type-mismatch
+.
+
+# --- 6. Suddenly deep stack ---
+# The test's depth-stats max exceeds this group's typical p95 by
+# >2x. Correlate with dispatch kinds to find the culprit.
+
+: diagnose-suddenly-deep List List -> Atom ;
+    drop
+    drop
+    suddenly-deep
+.
