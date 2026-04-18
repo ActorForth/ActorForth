@@ -318,50 +318,76 @@ run_body(Kind, Setup, Body, Teardown, C0) ->
                 with_diagnosis(
                     #{status => fail,
                       reason => {expected_error, Expected, got_none}},
-                    C3#continuation.data_stack)
+                    C3#continuation.data_stack,
+                    undefined)
         end
     catch
-        throw:#af_error{type = Type, stack = S} = Err ->
-            with_diagnosis(classify_error(Type, Err, Kind), S);
-        error:#af_error{type = Type, stack = S} = Err ->
-            with_diagnosis(classify_error(Type, Err, Kind), S);
+        throw:#af_error{type = Type, stack = S, token = Tok} = Err ->
+            with_diagnosis(classify_error(Type, Err, Kind), S, Tok);
+        error:#af_error{type = Type, stack = S, token = Tok} = Err ->
+            with_diagnosis(classify_error(Type, Err, Kind), S, Tok);
         Class:Reason:Trace ->
-            with_diagnosis(classify_generic(Class, Reason, Trace, Kind), [])
+            with_diagnosis(classify_generic(Class, Reason, Trace, Kind), [], undefined)
     end.
 
-with_diagnosis(#{status := pass} = R, _) -> R;
-with_diagnosis(#{status := fail} = R, Stack) ->
-    case diagnose(Stack) of
+with_diagnosis(#{status := pass} = R, _, _) -> R;
+with_diagnosis(#{status := fail} = R, Stack, Tok) ->
+    case diagnose(Stack, Tok) of
         no_match -> R;
-        Cat      -> R#{diagnosis => Cat}
+        Diag     -> R#{diagnosis => Diag}
     end.
 
-%% Six-category diagnostic engine mirroring lib/testing/diagnose.a4.
-%% First match wins. Runs over the fail-time stack snapshot from the
-%% af_error record (no depth stats needed here — suddenly-deep is
-%% coverage-only and fires via run_single's depth check).
-diagnose(Stack) ->
+%% Diagnostic engine — produces a structured diagnosis from the
+%% fail-time stack snapshot plus the token that raised the error.
+%% Mirrors the six plan categories; first match wins. A diagnosis is
+%% a map with `category` (atom), `message` (prose), and optional
+%% `location` / `details` keys. Dashboard renders this richly.
+diagnose(Stack, Tok) ->
+    Loc = loc(Tok),
     case find_atom(Stack) of
-        {ok, AV} -> {extra_atom, AV};
+        {ok, AV} ->
+            #{category => extra_atom,
+              location => Loc,
+              message  => io_lib:format(
+                "extra atom \"~s\" on stack (fallthrough: no op bound to this name, "
+                "or not yet defined in this scope). Check spelling and scope.",
+                [AV]),
+              details  => #{atom_value => AV}};
         none ->
             case silent_type_mismatch(Stack) of
-                {ok, Mismatch} -> Mismatch;
+                {ok, Detail} ->
+                    #{category => silent_type_mismatch,
+                      location => Loc,
+                      message  => io_lib:format(
+                        "stack shape looks like a type mismatch: ~p", [Detail]),
+                      details  => Detail};
                 none ->
                     case Stack of
                         [] -> no_match;
-                        L  -> {missing_consumer, length(L)}
+                        L  ->
+                            #{category => missing_consumer,
+                              location => Loc,
+                              message  => io_lib:format(
+                                "~b item(s) remained on the stack at failure time "
+                                "— a producer with no matching consumer.",
+                                [length(L)]),
+                              details  => #{stack_depth => length(L)}}
                     end
             end
     end.
+
+loc(undefined) -> undefined;
+loc(#token{file = F, line = L, column = C, value = V}) ->
+    #{file => F, line => L, column => C, token => V}.
 
 find_atom([]) -> none;
 find_atom([{'Atom', V} | _]) -> {ok, V};
 find_atom([_ | Rest]) -> find_atom(Rest).
 
 silent_type_mismatch([{'String', S}, {'Int', _} | _]) ->
-    {ok, {silent_type_mismatch, expected_int_got_string, S}};
+    {ok, {expected_int_got_string, S}};
 silent_type_mismatch([{'Int', _}, {'String', S} | _]) ->
-    {ok, {silent_type_mismatch, expected_int_got_string, S}};
+    {ok, {expected_int_got_string, S}};
 silent_type_mismatch(_) -> none.
 
 classify_error(Type, _Err, {raises, Type}) ->

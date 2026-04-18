@@ -8,8 +8,10 @@
 -export([init/0]).
 -export([send_cast/3, send_call/3]).  %% Used by compiled word code
 -export([compile_actor_loop/1]).       %% Generate specialized receive loop
--export([actor_loop/2, actor_loop/3]). %% Generic loop (exported for compiled loops)
--export([execute_actor_word/4, execute_actor_call/4, separate_reply/2]). %% For compiled loop fallback
+-export([actor_loop/2, actor_loop/3, actor_loop/4]). %% Generic loop (exported for compiled loops)
+-export([execute_actor_word/4, execute_actor_word/5,
+         execute_actor_call/4, execute_actor_call/5,
+         separate_reply/2]). %% For compiled loop fallback
 -export([to_atom_key/1, to_string_key/1]). %% Key conversion helpers
 -export([actor_loop_module_name/1]). %% For testing
 
@@ -176,18 +178,26 @@ get_ops(TypeName) ->
 op_server(Cont) ->
     [Instance | Rest] = Cont#continuation.data_stack,
     TypeName = element(1, Instance),
-    Vocab0 = build_vocab(TypeName),
+    %% Capture caller's dict so the actor's interpreter dispatch can see
+    %% words the caller defined. ETS is the fallback for stdlib.
+    Dict = Cont#continuation.dictionary,
+    Vocab0 = build_vocab(TypeName, Dict),
     Vocab = Vocab0#{"stop" => [#{args => [], returns => []}]},
-    LoopFun = get_actor_loop_fun(TypeName, Instance),
+    LoopFun = get_actor_loop_fun(TypeName, Instance, Dict),
     Pid = erlang:spawn_opt(LoopFun, [link, {min_heap_size, 100000}]),
     ActorVal = #{pid => Pid, type_name => TypeName, vocab => Vocab},
     Cont#continuation{data_stack = [{'Actor', ActorVal} | Rest]}.
 
 %% Try to use a compiled actor loop; fall back to generic loop.
-get_actor_loop_fun(TypeName, Instance) ->
+%% Dict is the caller's continuation dictionary snapshot (may be undefined).
+get_actor_loop_fun(TypeName, Instance, Dict) ->
     case compile_actor_loop(TypeName) of
         {ok, Mod} -> fun() -> Mod:loop(Instance) end;
-        error     -> fun() -> actor_loop(TypeName, Instance) end
+        error     ->
+            fun() ->
+                Cache = af_actor_worker:build_native_cache(TypeName),
+                actor_loop(TypeName, Instance, Cache, Dict)
+            end
     end.
 
 actor_loop_module_name(TypeName) ->
@@ -197,7 +207,13 @@ actor_loop_module_name(TypeName) ->
 %% Only includes user-defined words (source =/= auto) whose sig_in includes the state type.
 %% Searches ALL type dicts since multi-type words register in the TOS type's dict.
 build_vocab(TypeName) ->
-    AllTypes = af_type:all_types(),
+    build_vocab(TypeName, undefined).
+
+%% Dict-aware version: when a continuation dict is provided, merge its
+%% types with ETS so words defined in the caller's continuation are
+%% also exposed. Dict wins on conflict (most-recent definition).
+build_vocab(TypeName, Dict) ->
+    AllTypes = merge_types(af_type:all_types(), Dict),
     lists:foldl(fun(#af_type{ops = Ops}, OuterAcc) ->
         maps:fold(fun(WordName, OpList, InnerAcc) ->
             Entries = lists:filtermap(fun(#operation{source = Source} = Op) ->
@@ -222,6 +238,15 @@ build_vocab(TypeName) ->
             end
         end, OuterAcc, Ops)
     end, #{}, AllTypes).
+
+%% Select the authoritative type listing. When the caller supplies a
+%% continuation dict, that's already a superset (it's a snapshot taken
+%% from ETS plus any local additions), so prefer it over the live ETS
+%% view to avoid duplicating op entries that appear in both.
+merge_types(EtsTypes, undefined) -> EtsTypes;
+merge_types(_EtsTypes, Dict) when is_map(Dict) ->
+    maps:values(Dict);
+merge_types(EtsTypes, _) -> EtsTypes.
 
 %% Remove the first occurrence of an element from a list.
 remove_first(_Elem, []) -> [];
@@ -368,9 +393,14 @@ op_self(Cont) ->
 
 actor_loop(TypeName, StateInstance) ->
     Cache = af_actor_worker:build_native_cache(TypeName),
-    actor_loop(TypeName, StateInstance, Cache).
+    actor_loop(TypeName, StateInstance, Cache, undefined).
 
+%% Back-compat: third arg is a native-cache map. Legacy callers that
+%% passed a Cache continue to work; Dict defaults to undefined.
 actor_loop(TypeName, StateInstance, Cache) ->
+    actor_loop(TypeName, StateInstance, Cache, undefined).
+
+actor_loop(TypeName, StateInstance, Cache, Dict) ->
     receive
         {cast, stop, _Args} ->
             ok;
@@ -384,13 +414,12 @@ actor_loop(TypeName, StateInstance, Cache) ->
                         _  -> lists:last(Mod:Fun(Args ++ [StateInstance]))
                     end;
                 error ->
-                    execute_actor_word(to_string_key(WordName), Args, TypeName, StateInstance)
+                    execute_actor_word(to_string_key(WordName), Args, TypeName, StateInstance, Dict)
             end,
-            actor_loop(TypeName, NewState, Cache);
+            actor_loop(TypeName, NewState, Cache, Dict);
         {cast, WordName, Args} when is_list(WordName) ->
-            %% Legacy string format — convert to atom and re-dispatch
             self() ! {cast, to_atom_key(WordName), Args},
-            actor_loop(TypeName, StateInstance, Cache);
+            actor_loop(TypeName, StateInstance, Cache, Dict);
         {call, WordName, Args, From, Ref} when is_atom(WordName) ->
             {ReplyValues, NewState} = case maps:find(WordName, Cache) of
                 {ok, {Mod, Fun}} ->
@@ -400,45 +429,52 @@ actor_loop(TypeName, StateInstance, Cache) ->
                     end,
                     separate_reply(TypeName, ResultStack);
                 error ->
-                    execute_actor_call(to_string_key(WordName), Args, TypeName, StateInstance)
+                    execute_actor_call(to_string_key(WordName), Args, TypeName, StateInstance, Dict)
             end,
             From ! {reply, Ref, ReplyValues},
-            actor_loop(TypeName, NewState, Cache);
+            actor_loop(TypeName, NewState, Cache, Dict);
         {call, WordName, Args, From, Ref} when is_list(WordName) ->
-            %% Legacy string format — convert to atom and re-dispatch
             self() ! {call, to_atom_key(WordName), Args, From, Ref},
-            actor_loop(TypeName, StateInstance, Cache)
+            actor_loop(TypeName, StateInstance, Cache, Dict)
     end.
 
 %% Execute a word on the actor's stack (state instance + pushed args).
 %% Returns the updated state instance.
 execute_actor_word(WordName, Args, TypeName, StateInstance) ->
-    %% Build stack: args on top, state below (Forth convention: rightmost sig = TOS)
+    execute_actor_word(WordName, Args, TypeName, StateInstance, undefined).
+
+execute_actor_word(WordName, Args, TypeName, StateInstance, Dict) ->
     Stack = Args ++ [StateInstance],
-    Cont = #continuation{data_stack = Stack},
+    Cont = actor_cont(Stack, Dict),
     Token = #token{value = WordName},
     ResultCont = af_interpreter:interpret_token(Token, Cont),
     ResultStack = ResultCont#continuation.data_stack,
-    %% Find the state instance by type name (more robust than lists:last)
     {_ReplyValues, NewState} = separate_reply(TypeName, ResultStack),
     case NewState of
-        undefined -> StateInstance;  %% fallback: keep original state
+        undefined -> StateInstance;
         _ -> NewState
     end.
 
 %% Execute a word that returns values (call semantics).
 %% Returns {ReplyValues, NewStateInstance}.
 execute_actor_call(WordName, Args, TypeName, StateInstance) ->
-    %% Build stack: args on top, state below (Forth convention: rightmost sig = TOS)
+    execute_actor_call(WordName, Args, TypeName, StateInstance, undefined).
+
+execute_actor_call(WordName, Args, TypeName, StateInstance, Dict) ->
     Stack = Args ++ [StateInstance],
-    Cont = #continuation{data_stack = Stack},
+    Cont = actor_cont(Stack, Dict),
     Token = #token{value = WordName},
     ResultCont = af_interpreter:interpret_token(Token, Cont),
     ResultStack = ResultCont#continuation.data_stack,
-    %% Separate reply values from state.
-    %% After execution, state type should be on the stack.
-    %% Everything above it is reply data.
     separate_reply(TypeName, ResultStack).
+
+%% Build a continuation for the actor's dispatch. If the caller provided
+%% a dict snapshot, use it — the actor can then see words defined in the
+%% caller's continuation that aren't in global ETS.
+actor_cont(Stack, undefined) ->
+    #continuation{data_stack = Stack};
+actor_cont(Stack, Dict) ->
+    #continuation{data_stack = Stack, dictionary = Dict}.
 
 %% Split the stack into reply values (above state) and state instance.
 %% State instance is any tuple whose first element is TypeName. For product

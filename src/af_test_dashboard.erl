@@ -217,13 +217,22 @@ emit_line_stream(#{status := fail, group := Group, name := Name,
               [Pid, group_str(Group), Name, Us, Reason]),
     case maps:get(diagnosis, R, undefined) of
         undefined -> ok;
-        Diag ->
-            io:format("  \e[35mdiagnosis:\e[0m ~p~n", [Diag])
+        Diag when is_map(Diag) -> emit_diagnosis(Diag);
+        Other -> io:format("  \e[35mdiagnosis:\e[0m ~p~n", [Other])
     end;
 emit_line_stream(#{status := load_error, name := Name, reason := Reason}) ->
     io:format("\e[33mLOAD ERROR\e[0m ~s~n  ~p~n", [Name, Reason]).
 
 group_str([]) -> "(top)";
 group_str(Path) -> string:join([binary_to_list(B) || B <- Path], "/").
+
+emit_diagnosis(#{category := Cat, message := Msg} = Diag) ->
+    MsgStr = lists:flatten(io_lib:format("~s", [Msg])),
+    io:format("  \e[35m~s:\e[0m ~s~n", [atom_to_list(Cat), MsgStr]),
+    case maps:get(location, Diag, undefined) of
+        undefined -> ok;
+        #{file := F, line := L, column := C, token := T} ->
+            io:format("    at ~s:~b:~b (token: ~s)~n", [F, L, C, T])
+    end.
 
 now_ms() -> erlang:monotonic_time(millisecond).
