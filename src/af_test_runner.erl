@@ -6,66 +6,86 @@
 
 -export([run/1, run/2, run_file/1, run_file/2, discover/1]).
 
-%% Test runner — loads .test.a4 files, extracts tests from the test_registry
-%% field populated by the DSL layer, and runs each test.
+%% Test runner — loads .test.a4 files, extracts test specs from the
+%% test_registry field populated by the DSL layer, runs each spec in a
+%% separate process (actor), and aggregates results.
 %%
-%% Phase 3 MVP scope:
-%%   - Sequential execution (parallelism deferred to a later phase).
-%%   - Plain-text output (pass/fail counts + failure detail).
-%%   - No dashboard / TAP / JUnit / JSON yet.
-%%   - No coverage reporting yet.
+%% Parallelism model:
+%%   - Each non-serial test spawns one actor; all actors run concurrently.
+%%   - Tests inside a `group-serial` group share one actor that runs them
+%%     sequentially (but concurrently with everything else).
+%%   - Each actor inherits a copy of the post-load continuation (so
+%%     helpers and libraries are available) with stack / registry / scope
+%%     cleared.
 %%
-%% Each test runs in a fresh continuation copied from the post-load state
-%% (so helpers + loaded libraries are available) but with empty stack +
-%% empty test registry / scope fields so the test can't "see" other tests.
+%% All output is channelled through the coordinator so parallel runs
+%% produce well-ordered streams. Phase-3 MVP keeps plain-text streaming;
+%% richer output formats land in follow-up patches.
 
 %%% Public API
 
-%% run(Paths) — Paths :: [file | dir]. Returns {Passed, Failed, Skipped}.
-run(Paths) ->
-    run(Paths, []).
+run(Paths) -> run(Paths, []).
 
 run(Paths, Opts) ->
     Files = lists:flatmap(fun discover/1, Paths),
-    Results = lists:flatmap(fun(F) -> run_file(F, Opts) end, Files),
-    report(Results, Opts),
-    tally(Results).
+    Seed  = ensure_seed(Opts),
+    Mode  = resolve_mode(Opts),
+    %% Load all files up-front so the dashboard can know the total count.
+    Loaded = [load_file(F) || F <- Files],
+    Total = lists:sum([length(maps:get(registry, L, [])) || L <- Loaded,
+                                                           is_map(L)]),
+    Dashboard = af_test_dashboard:start(Mode, Total),
+    AllResults = lists:flatmap(fun(L) -> execute_loaded(L, Dashboard) end,
+                               Loaded),
+    {Passed, Failed, Errors} = af_test_dashboard:stop(Dashboard),
+    maybe_print_seed(Seed, Mode),
+    _ = {Passed, Failed, Errors},
+    tally(AllResults).
 
-%% run_file(Path) — returns a list of per-test result maps for one file.
-run_file(Path) ->
-    run_file(Path, []).
+run_file(Path) -> run_file(Path, []).
 
 run_file(Path, Opts) ->
-    Verbose = proplists:get_bool(verbose, Opts),
-    case Verbose of
-        true -> io:format("=> loading ~s~n", [Path]);
-        false -> ok
+    Seed = ensure_seed(Opts),
+    Mode = resolve_mode(Opts),
+    Loaded = load_file(Path),
+    Total = case Loaded of
+        #{registry := R} -> length(R);
+        _ -> 0
     end,
+    Dashboard = af_test_dashboard:start(Mode, Total),
+    Results = execute_loaded(Loaded, Dashboard),
+    _ = af_test_dashboard:stop(Dashboard),
+    maybe_print_seed(Seed, Mode),
+    Results.
+
+%% Load a single file and return a loaded-record {path, cont, registry} or
+%% an error marker to be surfaced as a load_error result.
+load_file(Path) ->
     try
-        %% Reset the interpreter world so each file starts clean. (Phase 3:
-        %% with parallelism we'll swap to per-actor continuations instead.)
         af_type:reset(),
         C0 = af_interpreter:new_continuation(),
-        %% Auto-load assertion library so `.test.a4` tests can use it
-        %% without an explicit `load`.
         C1 = load_testing_lib(C0),
-        %% Load the file; the DSL populates test_registry.
         {ok, Content} = file:read_file(Path),
         Tokens = af_parser:parse(binary_to_list(Content), Path),
         CLoaded = af_interpreter:interpret_tokens(Tokens, C1),
-        Registry = CLoaded#continuation.test_registry,
-        run_registry(Registry, CLoaded, Path, Opts)
+        #{path => Path, cont => CLoaded,
+          registry => CLoaded#continuation.test_registry}
     catch
         Class:Reason:Stack ->
-            [#{
-                path     => Path,
-                name     => <<"(file load)">>,
-                status   => load_error,
-                reason   => {Class, Reason, Stack}
-            }]
+            #{path => Path, error => {Class, Reason, Stack}}
     end.
 
-%% discover(Path) — expand one input path into a list of .test.a4 files.
+execute_loaded(#{error := Err, path := Path}, Dashboard) ->
+    Msg = #{path => Path, name => <<"(file load)">>,
+            group => [], kind => positive,
+            status => load_error, reason => Err,
+            duration_us => 0, pid => self()},
+    af_test_dashboard:done(Dashboard, Msg),
+    [Msg];
+execute_loaded(#{registry := Registry, cont := Loaded, path := Path},
+               Dashboard) ->
+    execute(Registry, Loaded, Path, Dashboard).
+
 discover(Path) ->
     case filelib:is_dir(Path) of
         true  -> filelib:wildcard(filename:join(Path, "**/*.test.a4"));
@@ -76,23 +96,77 @@ discover(Path) ->
             end
     end.
 
-%%% Execution
+%%% Parallel execution
 
-run_registry([], _Loaded, _Path, _Opts) ->
-    [];
-run_registry([Spec | Rest], Loaded, Path, Opts) ->
-    Result = run_spec(Spec, Loaded, Path, Opts),
-    [Result | run_registry(Rest, Loaded, Path, Opts)].
+execute(Registry, Loaded, Path, Dashboard) ->
+    %% Split specs into parallel individuals and serial-group batches.
+    {ParTasks, SerialGroups} = partition_specs(Registry),
+    Parent = self(),
+    PTags = lists:map(fun(Spec) ->
+        spawn_one_test(Spec, Loaded, Path, Parent, Dashboard)
+    end, ParTasks),
+    STags = lists:map(fun({_GP, Specs}) ->
+        spawn_serial_group(Specs, Loaded, Path, Parent, Dashboard)
+    end, maps:to_list(SerialGroups)),
+    ExpectedCount = length(ParTasks)
+                  + lists:sum([length(S) || {_, S} <- maps:to_list(SerialGroups)]),
+    collect(ExpectedCount, PTags ++ STags, [], Dashboard).
 
-run_spec(Spec, Loaded, Path, Opts) ->
+%% Returns {ParallelSpecs, #{GroupPath => [SerialSpecs]}}.
+partition_specs(Registry) ->
+    lists:foldl(fun(Spec, {Par, Ser}) ->
+        case maps:get(serial, Spec, false) of
+            false ->
+                {[Spec | Par], Ser};
+            true ->
+                GroupKey = maps:get(group_path, Spec),
+                Existing = maps:get(GroupKey, Ser, []),
+                {Par, Ser#{GroupKey => Existing ++ [Spec]}}
+        end
+    end, {[], #{}}, Registry).
+
+spawn_one_test(Spec, Loaded, Path, Parent, Dashboard) ->
+    Tag = make_ref(),
+    Pid = spawn_link(fun() ->
+        af_test_dashboard:started(Dashboard, self(),
+                                  maps:get(group_path, Spec),
+                                  maps:get(name, Spec)),
+        Result = safe_run(Spec, Loaded, Path),
+        Parent ! {test_done, Tag, self(), Result}
+    end),
+    {Tag, Pid, Spec}.
+
+spawn_serial_group(Specs, Loaded, Path, Parent, Dashboard) ->
+    Tag = make_ref(),
+    Pid = spawn_link(fun() ->
+        lists:foreach(fun(Spec) ->
+            af_test_dashboard:started(Dashboard, self(),
+                                      maps:get(group_path, Spec),
+                                      maps:get(name, Spec)),
+            Result = safe_run(Spec, Loaded, Path),
+            Parent ! {test_done, Tag, self(), Result}
+        end, Specs)
+    end),
+    {Tag, Pid, Specs}.
+
+safe_run(Spec, Loaded, Path) ->
+    try
+        run_single(Spec, Loaded, Path)
+    catch
+        Class:Reason:Stack ->
+            Base = base_result(Spec, Path),
+            Base#{status      => fail,
+                  reason      => {crash, {Class, Reason, Stack}},
+                  duration_us => 0}
+    end.
+
+run_single(Spec, Loaded, Path) ->
     Name  = maps:get(name, Spec),
     Kind  = maps:get(kind, Spec),
     Body  = maps:get(body, Spec),
     Setup = maps:get(setup, Spec),
     TDown = maps:get(teardown, Spec),
     Group = maps:get(group_path, Spec),
-    %% Build a fresh per-test continuation: keep dictionary + cache
-    %% (words loaded by the file are visible), zero the stack + registry.
     CTest0 = Loaded#continuation{
         data_stack    = [],
         return_stack  = [],
@@ -103,16 +177,22 @@ run_spec(Spec, Loaded, Path, Opts) ->
     Res = run_body(Kind, Setup, Body, TDown, CTest0),
     T1 = erlang:monotonic_time(microsecond),
     DurationUs = T1 - T0,
-    case proplists:get_bool(verbose, Opts) of
-        true -> emit_line(Res, Group, Name, DurationUs);
-        false -> emit_line(Res, Group, Name, DurationUs)
-    end,
     Res#{
         path        => Path,
         name        => Name,
         group       => Group,
         kind        => Kind,
-        duration_us => DurationUs
+        duration_us => DurationUs,
+        pid         => self()
+    }.
+
+base_result(Spec, Path) ->
+    #{
+        path  => Path,
+        name  => maps:get(name, Spec),
+        group => maps:get(group_path, Spec),
+        kind  => maps:get(kind, Spec),
+        pid   => self()
     }.
 
 run_body(Kind, Setup, Body, Teardown, C0) ->
@@ -124,7 +204,6 @@ run_body(Kind, Setup, Body, Teardown, C0) ->
             positive ->
                 #{status => pass, final => C3};
             {raises, Expected} ->
-                %% Expected an error, didn't get one → fail.
                 #{status => fail,
                   reason => {expected_error, Expected, got_none}}
         end
@@ -140,14 +219,11 @@ run_body(Kind, Setup, Body, Teardown, C0) ->
 classify_error(Type, _Err, {raises, Type}) ->
     #{status => pass};
 classify_error(Type, Err, {raises, Expected}) ->
-    #{status => fail,
-      reason => {wrong_error, Expected, Type, Err}};
+    #{status => fail, reason => {wrong_error, Expected, Type, Err}};
 classify_error(_Type, Err, positive) ->
     #{status => fail, reason => {error, Err}}.
 
 classify_generic(_Class, Reason, _Stack, {raises, Expected}) ->
-    %% A non-af_error exception — accept only if Reason happens to match
-    %% the expected atom (simple heuristic for Phase 2).
     case Reason of
         {Expected, _}                  -> #{status => pass};
         Expected                       -> #{status => pass};
@@ -161,6 +237,19 @@ run_tokens([], C) -> C;
 run_tokens(Tokens, C) when is_list(Tokens) ->
     af_interpreter:interpret_tokens(Tokens, C).
 
+%%% Collect results with streaming output
+
+collect(0, _Tags, Acc, _Dashboard) -> lists:reverse(Acc);
+collect(Remaining, Tags, Acc, Dashboard) ->
+    receive
+        {test_done, _Tag, _Pid, Result} ->
+            af_test_dashboard:done(Dashboard, Result),
+            collect(Remaining - 1, Tags, [Result | Acc], Dashboard)
+    after 60000 ->
+        io:format(standard_error, "timeout: ~p tests still pending~n", [Remaining]),
+        lists:reverse(Acc)
+    end.
+
 %%% Library loading
 
 load_testing_lib(C) ->
@@ -169,7 +258,6 @@ load_testing_lib(C) ->
         true  -> filelib:wildcard(filename:join(LibRoot, "*.a4"));
         false -> []
     end,
-    %% Exclude .test.a4 files — those are test SOURCES, not library code.
     Libs = [F || F <- Files, not is_test_file(F)],
     lists:foldl(fun load_one/2, C, Libs).
 
@@ -184,23 +272,26 @@ load_one(File, C) ->
         _ -> C
     end.
 
-%%% Reporting
+%%% Output
 
-emit_line(#{status := pass}, Group, Name, Us) ->
-    io:format("ok     ~s/~s  ~bus~n", [group_str(Group), Name, Us]);
-emit_line(#{status := fail, reason := Reason}, Group, Name, Us) ->
-    io:format("not ok ~s/~s  ~bus~n  ~p~n", [group_str(Group), Name, Us, Reason]);
-emit_line(#{status := load_error, reason := Reason}, _Group, Name, Us) ->
-    io:format("LOAD ERROR ~s  ~bus~n  ~p~n", [Name, Us, Reason]).
+resolve_mode(Opts) ->
+    case proplists:get_value(render, Opts) of
+        undefined ->
+            case proplists:get_bool(dashboard, Opts) of
+                true -> dashboard;
+                false ->
+                    case proplists:get_bool(quiet, Opts) of
+                        true -> quiet;
+                        false -> stream
+                    end
+            end;
+        Mode when Mode =:= dashboard; Mode =:= stream; Mode =:= quiet ->
+            Mode
+    end.
 
-group_str([]) -> "(top)";
-group_str(Path) -> string:join([binary_to_list(B) || B <- Path], "/").
-
-report(Results, _Opts) ->
-    {Passed, Failed, Errors} = count(Results),
-    io:format("~n==========~n"),
-    io:format("~b passed, ~b failed, ~b errors~n~n",
-              [Passed, Failed, Errors]).
+maybe_print_seed(_Seed, quiet) -> ok;
+maybe_print_seed(Seed, _Mode) ->
+    io:format("  seed=~p~n~n", [Seed]).
 
 count(Results) ->
     lists:foldl(fun
@@ -212,3 +303,15 @@ count(Results) ->
 tally(Results) ->
     {P, F, E} = count(Results),
     {P, F, E}.
+
+%%% Seed for reproducible actor ordering
+
+ensure_seed(Opts) ->
+    Seed = case proplists:get_value(seed, Opts) of
+        undefined ->
+            %% Derive from monotonic time; report it so the run can be replayed.
+            erlang:monotonic_time();
+        S when is_integer(S) -> S
+    end,
+    rand:seed(exsplus, {Seed, Seed, Seed}),
+    Seed.

@@ -67,6 +67,10 @@ init() ->
         impl = fun op_group/1, source = af_type_test_dsl
     }),
     af_type:add_op('Any', #operation{
+        name = "group-serial", sig_in = ['Atom'], sig_out = ['GroupScope'],
+        impl = fun op_group_serial/1, source = af_type_test_dsl
+    }),
+    af_type:add_op('Any', #operation{
         name = "test", sig_in = ['String'], sig_out = ['TestPending'],
         impl = fun op_test/1, source = af_type_test_dsl
     }),
@@ -146,7 +150,14 @@ op_group(#continuation{data_stack = [{'Atom', Name} | Rest]} = Cont) ->
     %% Store the name as a binary so later code (spec lookups, reporting)
     %% sees the same shape as the previous String-based implementation.
     NameBin = list_to_binary(Name),
-    Frame = {'GroupScope', #{name => NameBin, setup => [], teardown => []}},
+    Frame = {'GroupScope', #{name => NameBin, setup => [], teardown => [],
+                             serial => false}},
+    Cont#continuation{data_stack = [Frame | Rest]}.
+
+op_group_serial(#continuation{data_stack = [{'Atom', Name} | Rest]} = Cont) ->
+    NameBin = list_to_binary(Name),
+    Frame = {'GroupScope', #{name => NameBin, setup => [], teardown => [],
+                             serial => true}},
     Cont#continuation{data_stack = [Frame | Rest]}.
 
 op_close_group(#continuation{data_stack = [{'GroupScope', _} | Rest]} = Cont) ->
@@ -257,7 +268,7 @@ handle_body_capture(_TokenValue, Cont) ->
 %%% Helpers
 
 build_spec(Kind, Body, StackAfterPop) ->
-    {GroupPath, {Setup, Teardown}} = extract_group_info(StackAfterPop),
+    {GroupPath, {Setup, Teardown}, Serial} = extract_group_info(StackAfterPop),
     #{
         group_path => GroupPath,
         name       => maps:get(name, Body),
@@ -265,21 +276,24 @@ build_spec(Kind, Body, StackAfterPop) ->
         body       => maps:get(body, Body),
         setup      => Setup,
         teardown   => Teardown,
+        serial     => Serial,
         location   => maps:get(location, Body)
     }.
 
 %% Collect GroupScope sentinels from the data stack, innermost-first as
 %% they appear on the stack. The spec wants group_path outermost-first,
 %% so reverse at the end. Setup / teardown come from the innermost group
-%% (topmost on the stack).
+%% (topmost on the stack). Serial flag is true if ANY enclosing group was
+%% declared `group-serial`.
 extract_group_info(Stack) ->
     Frames = [F || {'GroupScope', F} <- Stack, is_map(F)],
     Path = [maps:get(name, F) || F <- lists:reverse(Frames)],
+    Serial = lists:any(fun(F) -> maps:get(serial, F, false) end, Frames),
     case Frames of
         [Inner | _] ->
-            {Path, {maps:get(setup, Inner, []), maps:get(teardown, Inner, [])}};
+            {Path, {maps:get(setup, Inner, []), maps:get(teardown, Inner, [])}, Serial};
         [] ->
-            {[], {[], []}}
+            {[], {[], []}, false}
     end.
 
 token_location(undefined) -> {undefined, 0};
