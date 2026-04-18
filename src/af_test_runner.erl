@@ -30,8 +30,12 @@ run(Paths, Opts) ->
     Files = lists:flatmap(fun discover/1, Paths),
     Seed  = ensure_seed(Opts),
     Mode  = resolve_mode(Opts),
+    Coverage = proplists:get_bool(coverage, Opts),
+    Threshold = proplists:get_value(coverage_threshold, Opts, 95),
+    LaxCoverage = proplists:get_bool(lax_coverage, Opts),
     %% Load all files up-front so the dashboard can know the total count.
-    Loaded = [load_file(F) || F <- Files],
+    LoadedRaw = [load_file(F) || F <- Files],
+    Loaded = [enable_tracing(L, Coverage) || L <- LoadedRaw],
     Total = lists:sum([length(maps:get(registry, L, [])) || L <- Loaded,
                                                            is_map(L)]),
     Dashboard = af_test_dashboard:start(Mode, Total),
@@ -39,8 +43,13 @@ run(Paths, Opts) ->
                                Loaded),
     {Passed, Failed, Errors} = af_test_dashboard:stop(Dashboard),
     maybe_print_seed(Seed, Mode),
-    _ = {Passed, Failed, Errors},
-    tally(AllResults).
+    CovSummary = summarize_coverage(AllResults, Coverage, Mode),
+    CovResult = gate_coverage(CovSummary, Threshold, LaxCoverage, Mode),
+    {Passed, Failed + case CovResult of fail -> 1; ok -> 0 end, Errors}.
+
+enable_tracing(#{cont := C} = Loaded, true) ->
+    Loaded#{cont => C#continuation{tracing = true, coverage = #{}}};
+enable_tracing(Loaded, _) -> Loaded.
 
 run_file(Path) -> run_file(Path, []).
 
@@ -171,19 +180,28 @@ run_single(Spec, Loaded, Path) ->
         data_stack    = [],
         return_stack  = [],
         word_trace    = [],
+        coverage      = #{},
         test_registry = []
     },
     T0 = erlang:monotonic_time(microsecond),
     Res = run_body(Kind, Setup, Body, TDown, CTest0),
     T1 = erlang:monotonic_time(microsecond),
     DurationUs = T1 - T0,
-    Res#{
+    %% Pull coverage out of the final continuation (only present on
+    %% successful runs). Skipped tests / crashed tests contribute none.
+    Cov = case Res of
+        #{final := #continuation{coverage = C}} -> C;
+        _ -> #{}
+    end,
+    BaseRes = maps:remove(final, Res),
+    BaseRes#{
         path        => Path,
         name        => Name,
         group       => Group,
         kind        => Kind,
         duration_us => DurationUs,
-        pid         => self()
+        pid         => self(),
+        coverage    => Cov
     }.
 
 base_result(Spec, Path) ->
@@ -293,16 +311,83 @@ maybe_print_seed(_Seed, quiet) -> ok;
 maybe_print_seed(Seed, _Mode) ->
     io:format("  seed=~p~n~n", [Seed]).
 
-count(Results) ->
-    lists:foldl(fun
-        (#{status := pass},       {P, F, E}) -> {P+1, F, E};
-        (#{status := fail},       {P, F, E}) -> {P, F+1, E};
-        (#{status := load_error}, {P, F, E}) -> {P, F, E+1}
-    end, {0, 0, 0}, Results).
+%%% Coverage aggregation + gate
 
-tally(Results) ->
-    {P, F, E} = count(Results),
-    {P, F, E}.
+summarize_coverage(_Results, false, _Mode) -> undefined;
+summarize_coverage(Results, true, Mode) ->
+    MergedAll = lists:foldl(fun(R, Acc) ->
+        merge_coverage(maps:get(coverage, R, #{}), Acc)
+    end, #{}, Results),
+    %% Exclude .test.a4 and lib/testing/ wrappers from coverage — tests
+    %% don't measure themselves, and the DSL itself is exercised by
+    %% construction on every run.
+    Merged = maps:filter(fun(FileBin, _) ->
+        is_production_source(FileBin)
+    end, MergedAll),
+    Visited = total_visited(Merged),
+    Total = estimate_total_positions(),
+    Pct = case Total of 0 -> 100; _ -> (Visited * 100) div Total end,
+    case Mode of
+        quiet -> ok;
+        _ ->
+            io:format("  coverage: ~b / ~b positions visited (~b%)~n",
+                      [Visited, Total, Pct]),
+            lists:foreach(fun({File, Positions}) ->
+                io:format("    ~s: ~b unique positions~n",
+                          [File, maps:size(Positions)])
+            end, lists:sort(maps:to_list(Merged)))
+    end,
+    #{visited => Visited, total => Total, pct => Pct, files => Merged}.
+
+is_production_source(FileBin) ->
+    F = case is_binary(FileBin) of
+        true  -> binary_to_list(FileBin);
+        false -> FileBin
+    end,
+    not lists:suffix(".test.a4", F)
+        andalso string:str(F, "lib/testing/") =:= 0.
+
+merge_coverage(PerTest, Acc) ->
+    maps:fold(fun(File, Positions, A) ->
+        Existing = maps:get(File, A, #{}),
+        Combined = maps:merge_with(fun(_K, V1, V2) -> V1 + V2 end,
+                                    Existing, Positions),
+        A#{File => Combined}
+    end, Acc, PerTest).
+
+total_visited(Merged) ->
+    lists:sum([maps:size(P) || P <- maps:values(Merged)]).
+
+%% Estimate total parseable positions by counting tokens in every .a4
+%% file under lib/. Tests exclude their own .test.a4 files. O(files).
+estimate_total_positions() ->
+    Files = filelib:wildcard("lib/**/*.a4"),
+    Prod = [F || F <- Files, is_production_source(F)],
+    lists:sum([count_tokens_in_file(F) || F <- Prod]).
+
+count_tokens_in_file(Path) ->
+    try
+        {ok, Bin} = file:read_file(Path),
+        Tokens = af_parser:parse(binary_to_list(Bin), Path),
+        length(Tokens)
+    catch _:_ -> 0 end.
+
+gate_coverage(undefined, _Threshold, _Lax, _Mode) -> ok;
+gate_coverage(_, _T, true, _Mode) -> ok;
+gate_coverage(#{pct := Pct}, Threshold, false, Mode) when Pct >= Threshold ->
+    case Mode of
+        quiet -> ok;
+        _ -> io:format("  coverage ok: ~b% >= ~b%~n", [Pct, Threshold])
+    end,
+    ok;
+gate_coverage(#{pct := Pct}, Threshold, false, Mode) ->
+    case Mode of
+        quiet -> ok;
+        _ -> io:format(standard_error,
+                       "  coverage FAIL: ~b% < ~b%~n", [Pct, Threshold])
+    end,
+    fail.
+
 
 %%% Seed for reproducible actor ordering
 

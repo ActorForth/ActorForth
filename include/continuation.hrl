@@ -17,6 +17,9 @@
     tracing       = false :: boolean(),               %% master test-mode flag
     exec_stack    = []    :: list(),                  %% dispatch events, newest-first
     depth_stats   = undefined :: undefined | #depth_stats{},
+    %% Coverage: map of FileBinary => #{{Line, Col} => 1} for positions
+    %% visited under traced dispatch. Updated per token when tracing is on.
+    coverage      = #{}   :: map(),
     %% --- test-DSL registration state ---
     %% Active group scopes live as {'GroupScope', #{...}} sentinels on
     %% data_stack itself, so multi-clause dispatch on `.` can close them.

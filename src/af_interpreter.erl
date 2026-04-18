@@ -418,18 +418,18 @@ interpret_unquoted_traced(Value, Token, Stack, Debug, Cont1) ->
             end
     end.
 
-%% Record one exec-stack event and update depth stats. Called only in the
-%% traced path. Event shape: {exec, TokenRef, StackAfter, Kind}. Depth
-%% stats use length/1 — simple and correct; Phase 1.5 can tighten to O(1).
+%% Record one exec-stack event, update depth stats, and add the token's
+%% position to the coverage map. Called only in the traced path.
 %%
-%% If the op we just ran flipped tracing off (e.g. `trace-off`), skip the
-%% event so control-plane ops aren't part of their own trace.
+%% If the op we just ran flipped tracing off (e.g. `trace-off`), skip
+%% the event so control-plane ops aren't part of their own trace.
 record_event(_Token, _Kind, #continuation{tracing = false} = Cont) ->
     Cont;
 record_event(Token, Kind, #continuation{data_stack = DS,
                                         return_stack = RS,
                                         exec_stack = ES,
-                                        depth_stats = Stats0} = Cont) ->
+                                        depth_stats = Stats0,
+                                        coverage = Cov0} = Cont) ->
     Event = {exec, Token, DS, Kind},
     Stats1 = case Stats0 of
         undefined -> #depth_stats{};
@@ -443,7 +443,24 @@ record_event(Token, Kind, #continuation{data_stack = DS,
         return_max = erlang:max(Stats1#depth_stats.return_max, RetDepth),
         count      = Stats1#depth_stats.count + 1
     },
-    Cont#continuation{exec_stack = [Event | ES], depth_stats = Stats2}.
+    Cov1 = record_coverage(Token, Cov0),
+    Cont#continuation{exec_stack = [Event | ES],
+                      depth_stats = Stats2,
+                      coverage = Cov1}.
+
+%% Stamp one {File, {Line, Col}} position. Each file gets a map of
+%% positions to visit counts (so future passes can report hot sites).
+record_coverage(#token{file = File, line = L, column = C}, Cov)
+  when File =/= undefined ->
+    FileBin = case is_binary(File) of
+        true  -> File;
+        false -> list_to_binary(File)
+    end,
+    Positions = maps:get(FileBin, Cov, #{}),
+    Key = {L, C},
+    NewPositions = maps:put(Key, maps:get(Key, Positions, 0) + 1, Positions),
+    Cov#{FileBin => NewPositions};
+record_coverage(_, Cov) -> Cov.
 
 %%% Literal handlers
 

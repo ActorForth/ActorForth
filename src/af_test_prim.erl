@@ -153,10 +153,14 @@ op_capture_exec(#continuation{data_stack = DS, exec_stack = ES} = Cont) ->
     ListVal = {'List', Events},
     Cont#continuation{data_stack = [ListVal | DS]}.
 
-op_get_coverage(#continuation{data_stack = DS} = Cont) ->
-    %% Phase 1: empty map. Coverage accumulation is a Phase 1.5 task.
-    MapVal = {'Map', #{}},
-    Cont#continuation{data_stack = [MapVal | DS]}.
+op_get_coverage(#continuation{data_stack = DS, coverage = Cov} = Cont) ->
+    %% Convert the coverage map into an a4 Map: FileBin => {'Int', visits}
+    %% where visits is the total count summed across all positions.
+    M = maps:map(fun(_File, Positions) ->
+        Total = lists:sum(maps:values(Positions)),
+        {'Int', Total}
+    end, Cov),
+    Cont#continuation{data_stack = [{'Map', M} | DS]}.
 
 op_depth_stats_map(#continuation{data_stack = DS, depth_stats = Stats0} = Cont) ->
     Stats = case Stats0 of
