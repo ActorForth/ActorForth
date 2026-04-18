@@ -1,0 +1,57 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "scopeName": "source.a4",
+    "name": "ActorForth",
+    "patterns": [
+        { "include": "#comments" },
+        { "include": "#strings" },
+        { "include": "#numbers" },
+        { "include": "#definition" },
+        { "include": "#test-dsl" },
+        { "include": "#keywords" },
+        { "include": "#types" }
+    ],
+    "repository": {
+        "comments": {
+            "match": "#.*$",
+            "name": "comment.line.number-sign.a4"
+        },
+        "strings": {
+            "match": "\"[^\"]*\"",
+            "name": "string.quoted.double.a4"
+        },
+        "numbers": {
+            "match": "\\b-?[0-9]+(\\.[0-9]+)?\\b",
+            "name": "constant.numeric.a4"
+        },
+        "definition": {
+            "patterns": [
+                {
+                    "match": "(:)\\s+([A-Za-z_?!\\-][A-Za-z0-9_?!\\-]*)",
+                    "captures": {
+                        "1": { "name": "keyword.control.a4" },
+                        "2": { "name": "entity.name.function.a4" }
+                    }
+                },
+                { "match": "(;|\\.)", "name": "keyword.control.a4" },
+                { "match": "->", "name": "keyword.operator.arrow.a4" }
+            ]
+        },
+        "test-dsl": {
+            "patterns": [
+                {
+                    "match": "\\b(group|group-serial|test|test-raises|test-compiled|skip-test|setup|teardown|tag|end-group|assert|assert-eq|assert-max|assert-min|max-depth|max-return-depth)\\b",
+                    "name": "entity.name.tag.a4"
+                }
+            ]
+        },
+        "keywords": {
+            "match": "\\b(type|load|import|if|then|else|where|trace-on|trace-off)\\b",
+            "name": "keyword.control.a4"
+        },
+        "types": {
+            "match": "\\b(Int|Bool|String|Float|List|Map|Tuple|Atom|Any|Actor|Counter)\\b",
+            "name": "entity.name.type.a4"
+        }
+    }
+}

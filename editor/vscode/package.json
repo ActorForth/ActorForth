@@ -1,0 +1,49 @@
+{
+  "name": "actorforth",
+  "displayName": "ActorForth",
+  "description": "Language support for ActorForth (.a4, .test.a4)",
+  "version": "0.1.0",
+  "publisher": "actorforth",
+  "engines": { "vscode": "^1.70.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "actorforth",
+        "aliases": ["ActorForth", "a4"],
+        "extensions": [".a4", ".test.a4"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "actorforth",
+        "scopeName": "source.a4",
+        "path": "./syntaxes/a4.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "ActorForth",
+      "properties": {
+        "actorforth.lsp.path": {
+          "type": "string",
+          "default": "a4c-lsp",
+          "description": "Path to the ActorForth LSP executable."
+        }
+      }
+    }
+  },
+  "main": "./out/extension.js",
+  "activationEvents": ["onLanguage:actorforth"],
+  "scripts": {
+    "compile": "tsc -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^8.0.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.70.0",
+    "typescript": "^5.0.0"
+  }
+}
