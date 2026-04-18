@@ -30,3 +30,34 @@
 
 # tuck: copy TOS below second ( a b -> b a b )
 : tuck Any Any -> Any Any Any ; swap over .
+
+# --- Sign predicates ---
+
+: positive? Int -> Bool ; 0 > .
+: negative? Int -> Bool ; 0 < .
+: zero?     Int -> Bool ; 0 == .
+
+# --- List utilities (a4, not Erlang intrinsics) ---
+
+# sum: add all Ints in a list, identity 0
+: sum List -> Int ; 0 + reduce .
+
+# product: multiply all Ints, identity 1
+: product List -> Int ; 1 * reduce .
+
+# --- Predicate helpers ---
+
+# implies: Bool Bool -> Bool   (a => b, logical implication)
+: implies Bool Bool -> Bool ; swap not or .
+
+# xor: Bool Bool -> Bool
+: xor Bool Bool -> Bool ; != .
+
+# --- Int helpers ---
+
+# clamp: value low high -> Int — constrain value to [low, high]
+: clamp Int Int Int -> Int ; rot rot max min .
+
+# inc / dec — common enough to be names
+: inc Int -> Int ; 1 + .
+: dec Int -> Int ; 1 - .

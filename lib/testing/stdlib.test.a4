@@ -59,4 +59,70 @@
     10 0 mod
 ;
 
+# --- Sign predicates ---
+
+"positive? true for positive" test :
+    5 positive? assert
+;
+
+"positive? false for zero" test :
+    0 positive? not assert
+;
+
+"negative? true for negative" test :
+    -5 negative? assert
+;
+
+"zero? true for zero" test :
+    0 zero? assert
+;
+
+# --- inc / dec ---
+
+"inc adds 1" test :
+    5 inc 6 assert-eq
+;
+
+"dec subtracts 1" test :
+    5 dec 4 assert-eq
+;
+
+# --- clamp ---
+
+"clamp below keeps low bound" test :
+    -5 0 10 clamp 0 assert-eq
+;
+
+"clamp above keeps high bound" test :
+    20 0 10 clamp 10 assert-eq
+;
+
+"clamp in range is unchanged" test :
+    5 0 10 clamp 5 assert-eq
+;
+
+# --- Boolean helpers ---
+
+"xor of differing is true" test :
+    True False xor assert
+;
+
+"xor of same is false" test :
+    True True xor not assert
+;
+
+# --- List reductions ---
+
+"sum of empty is 0" test :
+    nil sum 0 assert-eq
+;
+
+"sum of 1,2,3 is 6" test :
+    nil 1 cons 2 cons 3 cons sum 6 assert-eq
+;
+
+"product of 1,2,3,4 is 24" test :
+    nil 1 cons 2 cons 3 cons 4 cons product 24 assert-eq
+;
+
 .
