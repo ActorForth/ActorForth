@@ -1,1 +1,0 @@
-: import-rel-word Int -> Int ; dup + .
