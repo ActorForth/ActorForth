@@ -1,0 +1,13 @@
+# Demonstrates `skip "reason" "name" test` syntax.
+
+"will run" test :
+    1 2 + 3 assert-eq
+;
+
+"will skip" "not yet implemented" skip-test :
+    bogus-word
+;
+
+"will also run" test :
+    2 3 * 6 assert-eq
+;

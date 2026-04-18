@@ -208,6 +208,9 @@ run_single(Spec, Loaded, Path) ->
     Setup = maps:get(setup, Spec),
     TDown = maps:get(teardown, Spec),
     Group = maps:get(group_path, Spec),
+    Skip  = maps:get(skip, Spec, undefined),
+    MaxDepth = maps:get(max_depth, Spec, undefined),
+    MaxRetDepth = maps:get(max_return_depth, Spec, undefined),
     CTest0 = Loaded#continuation{
         data_stack    = [],
         return_stack  = [],
@@ -216,11 +219,15 @@ run_single(Spec, Loaded, Path) ->
         test_registry = []
     },
     T0 = erlang:monotonic_time(microsecond),
-    Res = run_body(Kind, Setup, Body, TDown, CTest0),
+    Res0 = case Skip of
+        undefined ->
+            run_body(Kind, Setup, Body, TDown, CTest0);
+        Reason ->
+            #{status => skip, reason => Reason}
+    end,
+    Res = check_depth(Res0, MaxDepth, MaxRetDepth),
     T1 = erlang:monotonic_time(microsecond),
     DurationUs = T1 - T0,
-    %% Pull coverage out of the final continuation (only present on
-    %% successful runs). Skipped tests / crashed tests contribute none.
     Cov = case Res of
         #{final := #continuation{coverage = C}} -> C;
         _ -> #{}
@@ -235,6 +242,25 @@ run_single(Spec, Loaded, Path) ->
         pid         => self(),
         coverage    => Cov
     }.
+
+check_depth(#{status := pass, final := #continuation{depth_stats = Stats}} = R,
+            MaxD, MaxRD)
+    when Stats =/= undefined, (MaxD =/= undefined orelse MaxRD =/= undefined) ->
+    DataMax = Stats#depth_stats.data_max,
+    RetMax  = Stats#depth_stats.return_max,
+    case over_limit(DataMax, MaxD) orelse over_limit(RetMax, MaxRD) of
+        false -> R;
+        true ->
+            #{status => fail,
+              reason => {depth_exceeded,
+                         #{data_max => DataMax, max_depth => MaxD,
+                           return_max => RetMax, max_return_depth => MaxRD}}}
+    end;
+check_depth(R, _, _) -> R.
+
+over_limit(_, undefined) -> false;
+over_limit(Actual, Limit) when Actual > Limit -> true;
+over_limit(_, _) -> false.
 
 base_result(Spec, Path) ->
     #{

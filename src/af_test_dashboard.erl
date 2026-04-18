@@ -21,6 +21,7 @@
     passed    = 0         :: non_neg_integer(),
     failed    = 0         :: non_neg_integer(),
     errors    = 0         :: non_neg_integer(),
+    skipped   = 0         :: non_neg_integer(),
     running   = #{}       :: map(),   %% Pid => {Group, Name, StartTime}
     completed = []        :: list(),
     t0        = 0         :: integer(),
@@ -114,6 +115,9 @@ loop(State, Timer) ->
 handle_done(#{status := pass, pid := Pid}, State) ->
     Running = maps:remove(Pid, State#state.running),
     State#state{passed = State#state.passed + 1, running = Running};
+handle_done(#{status := skip, pid := Pid}, State) ->
+    Running = maps:remove(Pid, State#state.running),
+    State#state{skipped = State#state.skipped + 1, running = Running};
 handle_done(#{status := fail, pid := Pid} = R, State) ->
     Running = maps:remove(Pid, State#state.running),
     State#state{failed = State#state.failed + 1,
@@ -153,16 +157,17 @@ final_render(#state{mode = dashboard} = S) ->
         "\e[?25h"  %% show cursor
     ]);
 final_render(#state{mode = stream} = S) ->
-    Done = S#state.passed + S#state.failed + S#state.errors,
+    Done = S#state.passed + S#state.failed + S#state.errors + S#state.skipped,
     Elapsed = (now_ms() - S#state.t0) / 1000,
     io:format("~n==========~n"),
-    io:format("~b passed  ~b failed  ~b errors   (~b / ~b in ~.2fs)~n~n",
-              [S#state.passed, S#state.failed, S#state.errors,
+    io:format("~b passed  ~b failed  ~b errors  ~b skipped   (~b / ~b in ~.2fs)~n~n",
+              [S#state.passed, S#state.failed, S#state.errors, S#state.skipped,
                Done, S#state.total, Elapsed]);
 final_render(#state{mode = quiet} = S) ->
-    Done = S#state.passed + S#state.failed + S#state.errors,
-    io:format("~b/~b tests passed, ~b failed, ~b errors~n",
-              [S#state.passed, Done, S#state.failed, S#state.errors]).
+    Done = S#state.passed + S#state.failed + S#state.errors + S#state.skipped,
+    io:format("~b/~b tests passed, ~b failed, ~b errors, ~b skipped~n",
+              [S#state.passed, Done, S#state.failed, S#state.errors,
+               S#state.skipped]).
 
 header() ->
     "  ActorForth Test Runner\n"
@@ -202,6 +207,10 @@ emit_line_stream(#{status := pass, group := Group, name := Name,
                    duration_us := Us, pid := Pid}) ->
     io:format("\e[32mok\e[0m     ~p ~s/~s  ~bus~n",
               [Pid, group_str(Group), Name, Us]);
+emit_line_stream(#{status := skip, group := Group, name := Name,
+                   reason := Reason}) ->
+    io:format("\e[34mskip\e[0m   ~s/~s  (~s)~n",
+              [group_str(Group), Name, Reason]);
 emit_line_stream(#{status := fail, group := Group, name := Name,
                    duration_us := Us, pid := Pid, reason := Reason}) ->
     io:format("\e[31mnot ok\e[0m ~p ~s/~s  ~bus~n  ~p~n",

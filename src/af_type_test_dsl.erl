@@ -59,6 +59,7 @@ init() ->
     af_type:register_type(#af_type{name = 'TestRaisesBody'}),
     af_type:register_type(#af_type{name = 'SetupBody'}),
     af_type:register_type(#af_type{name = 'TeardownBody'}),
+    af_type:register_type(#af_type{name = 'SkipMarker'}),
 
     %% Entry words on Any. Strict sigs: group takes an Atom identifier;
     %% test / test-raises take a String description.
@@ -85,6 +86,24 @@ init() ->
     af_type:add_op('Any', #operation{
         name = "teardown", sig_in = [], sig_out = ['TeardownBody'],
         impl = fun op_teardown/1, source = af_type_test_dsl
+    }),
+
+    %% `"name" "reason" skip-test` — register as skipped, don't run body.
+    %% Mirrors the `"name" ... test` / `"name" test-raises ...` rhythm.
+    af_type:add_op('Any', #operation{
+        name = "skip-test", sig_in = ['String', 'String'], sig_out = ['TestPending'],
+        impl = fun op_skip_test/1, source = af_type_test_dsl
+    }),
+
+    %% Depth assertions attached to the current GroupScope frame. N is
+    %% applied to every test registered within this group.
+    af_type:add_op('GroupScope', #operation{
+        name = "max-depth", sig_in = ['Int', 'GroupScope'], sig_out = ['GroupScope'],
+        impl = fun op_max_depth/1, source = af_type_test_dsl
+    }),
+    af_type:add_op('GroupScope', #operation{
+        name = "max-return-depth", sig_in = ['Int', 'GroupScope'], sig_out = ['GroupScope'],
+        impl = fun op_max_return_depth/1, source = af_type_test_dsl
     }),
 
     %% `.` on GroupScope closes the group. Multi-clause with the
@@ -183,13 +202,26 @@ op_teardown(#continuation{data_stack = DS} = Cont) ->
         data_stack = [{'TeardownBody', #{body => []}} | DS]
     }.
 
+op_skip_test(#continuation{data_stack = [{'String', Reason}, {'String', Name} | Rest]} = Cont) ->
+    Cont#continuation{
+        data_stack = [{'TestPending', #{name => Name, skip => Reason}} | Rest]
+    }.
+
+%% `max-depth N` on GroupScope: consume Int + GroupScope, attach limit.
+op_max_depth(#continuation{data_stack = [{'Int', N}, {'GroupScope', F} | Rest]} = Cont) ->
+    Cont#continuation{data_stack = [{'GroupScope', F#{max_depth => N}} | Rest]}.
+
+op_max_return_depth(#continuation{data_stack = [{'Int', N}, {'GroupScope', F} | Rest]} = Cont) ->
+    Cont#continuation{data_stack = [{'GroupScope', F#{max_return_depth => N}} | Rest]}.
+
 %%% Transitions (`:`)
 
 op_test_colon(#continuation{data_stack = [{'TestPending', State} | Rest],
                             current_token = Tok} = Cont) ->
     Body = #{name     => maps:get(name, State),
              body     => [],
-             location => token_location(Tok)},
+             location => token_location(Tok),
+             skip     => maps:get(skip, State, undefined)},
     Cont#continuation{data_stack = [{'TestBody', Body} | Rest]}.
 
 op_test_raises_colon(#continuation{data_stack = [{'TestRaisesPending', State} | Rest],
@@ -268,16 +300,19 @@ handle_body_capture(_TokenValue, Cont) ->
 %%% Helpers
 
 build_spec(Kind, Body, StackAfterPop) ->
-    {GroupPath, {Setup, Teardown}, Serial} = extract_group_info(StackAfterPop),
+    {GroupPath, {Setup, Teardown}, Serial, Limits} = extract_group_info(StackAfterPop),
     #{
-        group_path => GroupPath,
-        name       => maps:get(name, Body),
-        kind       => Kind,
-        body       => maps:get(body, Body),
-        setup      => Setup,
-        teardown   => Teardown,
-        serial     => Serial,
-        location   => maps:get(location, Body)
+        group_path       => GroupPath,
+        name             => maps:get(name, Body),
+        kind             => Kind,
+        body             => maps:get(body, Body),
+        setup            => Setup,
+        teardown         => Teardown,
+        serial           => Serial,
+        skip             => maps:get(skip, Body, undefined),
+        max_depth        => maps:get(max_depth, Limits, undefined),
+        max_return_depth => maps:get(max_return_depth, Limits, undefined),
+        location         => maps:get(location, Body)
     }.
 
 %% Collect GroupScope sentinels from the data stack, innermost-first as
@@ -289,11 +324,27 @@ extract_group_info(Stack) ->
     Frames = [F || {'GroupScope', F} <- Stack, is_map(F)],
     Path = [maps:get(name, F) || F <- lists:reverse(Frames)],
     Serial = lists:any(fun(F) -> maps:get(serial, F, false) end, Frames),
+    Limits = innermost_limits(Frames),
     case Frames of
         [Inner | _] ->
-            {Path, {maps:get(setup, Inner, []), maps:get(teardown, Inner, [])}, Serial};
+            {Path,
+             {maps:get(setup, Inner, []), maps:get(teardown, Inner, [])},
+             Serial,
+             Limits};
         [] ->
-            {[], {[], []}, false}
+            {[], {[], []}, false, #{}}
+    end.
+
+%% Depth limits from the nearest enclosing frame that sets them.
+innermost_limits([]) -> #{};
+innermost_limits([F | Rest]) ->
+    L = innermost_limits(Rest),
+    case {maps:get(max_depth, F, undefined),
+          maps:get(max_return_depth, F, undefined)} of
+        {undefined, undefined} -> L;
+        {D, undefined}         -> L#{max_depth => D};
+        {undefined, R}         -> L#{max_return_depth => R};
+        {D, R}                 -> L#{max_depth => D, max_return_depth => R}
     end.
 
 token_location(undefined) -> {undefined, 0};
