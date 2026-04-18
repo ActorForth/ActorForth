@@ -1,0 +1,71 @@
+# Sub-clause pattern matching — ported from test/af_subclause_tests.erl.
+
+"subclause" group
+
+: fib Int -> Int ;
+: 0 -> 0 ;
+: 1 -> 1 ;
+: Int -> Int ; dup 1 - fib swap 2 - fib +
+.
+
+"fib base case 0" test :
+    0 fib 0 assert-eq
+;
+
+"fib base case 1" test :
+    1 fib 1 assert-eq
+;
+
+"fib 6 = 8" test :
+    6 fib 8 assert-eq
+;
+
+"fib 10 = 55" test :
+    10 fib 55 assert-eq
+;
+
+: countdown Int -> ;
+: 0 -> ; drop
+: Int -> ; dup print 1 - countdown
+.
+
+"countdown 0 drops and returns" test :
+    0 countdown
+;
+
+"countdown 3 prints and terminates" test :
+    3 countdown
+;
+
+: special Int -> Int ;
+: 0 -> 0 ;
+: Int -> Int ; 100 +
+.
+
+"sub-clause with non-trivial body — 0 returns 0" test :
+    0 special 0 assert-eq
+;
+
+"sub-clause with non-trivial body — 5 returns 105" test :
+    5 special 105 assert-eq
+;
+
+: classify Int -> Int ;
+: 0 -> 0 ;
+: 1 -> 100 ;
+: Int -> Int ; 2 *
+.
+
+"multiple value constraints — 0 matches first" test :
+    0 classify 0 assert-eq
+;
+
+"multiple value constraints — 1 identity (empty body)" test :
+    1 classify 1 assert-eq
+;
+
+"multiple value constraints — fallthrough doubles" test :
+    5 classify 10 assert-eq
+;
+
+end-group

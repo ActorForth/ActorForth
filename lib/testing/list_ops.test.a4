@@ -1,0 +1,339 @@
+# List operations — ported from test/af_list_tests.erl.
+
+"list_ops" group
+
+# --- nil ---
+
+"nil pushes empty list" test :
+    nil length 0 assert-eq
+;
+
+"two nils push two empty lists" test :
+    nil nil
+    length 0 assert-eq
+    length 0 assert-eq
+;
+
+# --- cons ---
+
+"cons prepends item to empty list" test :
+    nil 42 cons
+    dup length 1 assert-eq
+    head 42 assert-eq
+;
+
+"cons chains build list" test :
+    nil 1 cons 2 cons 3 cons
+    dup length 3 assert-eq
+    head 3 assert-eq
+;
+
+"cons works with mixed types" test :
+    nil 42 cons True cons
+    head True assert-eq
+;
+
+# --- length ---
+
+"length of empty list is 0" test :
+    nil length 0 assert-eq
+;
+
+"length of 3-element list" test :
+    nil 1 cons 2 cons 3 cons length
+    3 assert-eq
+;
+
+# --- head / tail ---
+
+"head returns first item" test :
+    nil 1 cons 2 cons 3 cons head
+    3 assert-eq
+;
+
+"tail returns rest" test :
+    nil 1 cons 2 cons 3 cons tail
+    dup length 2 assert-eq
+    head 2 assert-eq
+;
+
+"head and tail decompose list" test :
+    nil 1 cons 2 cons
+    dup head 2 assert-eq
+    tail head 1 assert-eq
+;
+
+# --- append ---
+
+"append two non-empty lists" test :
+    nil 1 cons 2 cons
+    nil 3 cons 4 cons
+    append
+    dup length 4 assert-eq
+    head 2 assert-eq
+;
+
+"append empty list to non-empty" test :
+    nil 1 cons 2 cons
+    nil
+    append
+    length 2 assert-eq
+;
+
+"append non-empty to empty" test :
+    nil
+    nil 1 cons
+    append
+    length 1 assert-eq
+;
+
+# --- reverse ---
+
+"reverse a list" test :
+    nil 1 cons 2 cons 3 cons reverse
+    dup length 3 assert-eq
+    head 1 assert-eq
+;
+
+"reverse empty list" test :
+    nil reverse
+    length 0 assert-eq
+;
+
+"reverse single element" test :
+    nil 42 cons reverse
+    head 42 assert-eq
+;
+
+# --- nth ---
+
+"nth gets first element" test :
+    nil 1 cons 2 cons 3 cons 0 nth
+    3 assert-eq
+;
+
+"nth gets last element" test :
+    nil 1 cons 2 cons 3 cons 2 nth
+    1 assert-eq
+;
+
+"nth gets middle element" test :
+    nil 1 cons 2 cons 3 cons 1 nth
+    2 assert-eq
+;
+
+# --- last ---
+
+"last of multi-element list" test :
+    nil 1 cons 2 cons 3 cons last
+    1 assert-eq
+;
+
+"last of single-element list" test :
+    nil 42 cons last
+    42 assert-eq
+;
+
+# --- take ---
+
+"take 2 from 3-element list" test :
+    nil 1 cons 2 cons 3 cons 2 take
+    dup length 2 assert-eq
+    head 3 assert-eq
+;
+
+"take 0 gives empty list" test :
+    nil 1 cons 2 cons 0 take
+    length 0 assert-eq
+;
+
+"take more than length gives whole list" test :
+    nil 1 cons 2 cons 10 take
+    length 2 assert-eq
+;
+
+# --- drop (list) ---
+
+"drop 1 from 3-element list" test :
+    nil 1 cons 2 cons 3 cons 1 drop
+    dup length 2 assert-eq
+    head 2 assert-eq
+;
+
+"drop 0 keeps all" test :
+    nil 1 cons 2 cons 0 drop
+    length 2 assert-eq
+;
+
+"drop all gives empty list" test :
+    nil 1 cons 2 cons 2 drop
+    length 0 assert-eq
+;
+
+"drop more than length gives empty list" test :
+    nil 1 cons 2 cons 10 drop
+    length 0 assert-eq
+;
+
+# --- empty? ---
+
+"empty? on empty list is true" test :
+    nil empty? assert
+;
+
+"empty? on non-empty list is false" test :
+    nil 1 cons empty? not assert
+;
+
+# --- contains? ---
+
+"contains? finds present item" test :
+    nil 1 cons 2 cons 3 cons 2 contains? assert
+;
+
+"contains? returns false for absent item" test :
+    nil 1 cons 2 cons 99 contains? not assert
+;
+
+"contains? on empty list" test :
+    nil 1 contains? not assert
+;
+
+"contains? with bool in int list" test :
+    nil 1 cons 2 cons True contains? not assert
+;
+
+"contains? finds string in mixed list" test :
+    nil 1 cons "hello" cons "hello" contains? assert
+;
+
+# --- flatten ---
+
+"flatten nested lists" test :
+    nil nil 1 cons 2 cons cons nil 3 cons cons flatten
+    dup length 3 assert-eq
+    head 3 assert-eq
+;
+
+"flatten empty list stays empty" test :
+    nil flatten length 0 assert-eq
+;
+
+"flatten mixed list and non-list items" test :
+    nil 42 cons nil 1 cons cons flatten
+    dup length 2 assert-eq
+    head 1 assert-eq
+;
+
+"flatten list with only non-list items unchanged" test :
+    nil 1 cons 2 cons 3 cons flatten
+    length 3 assert-eq
+;
+
+# --- zip ---
+
+"zip two equal-length lists" test :
+    nil 1 cons 2 cons
+    nil 3 cons 4 cons
+    zip
+    length 2 assert-eq
+;
+
+"zip empty lists" test :
+    nil nil zip length 0 assert-eq
+;
+
+# --- map / filter / reduce ---
+
+: double Int -> Int ; 2 * .
+: positive? Int -> Bool ; 0 > .
+: mul Int Int -> Int ; * .
+: inc Int -> Int ; 1 + .
+
+"map with compiled word doubles each element" test :
+    nil 1 cons 2 cons 3 cons double map
+    dup length 3 assert-eq
+    head 6 assert-eq
+;
+
+"map over empty list returns empty list" test :
+    nil double map length 0 assert-eq
+;
+
+"map with not word" test :
+    nil True cons False cons True cons not map
+    head False assert-eq
+;
+
+"map with single element" test :
+    nil 5 cons double map head 10 assert-eq
+;
+
+"filter keeps elements where word returns true" test :
+    nil -2 cons 3 cons -1 cons 5 cons positive? filter
+    dup length 2 assert-eq
+    head 5 assert-eq
+;
+
+"filter on empty list returns empty" test :
+    nil positive? filter length 0 assert-eq
+;
+
+"filter removes all when none match" test :
+    nil -1 cons -2 cons positive? filter length 0 assert-eq
+;
+
+"filter keeps all when all match" test :
+    nil 1 cons 2 cons 3 cons positive? filter length 3 assert-eq
+;
+
+"reduce sums a list" test :
+    nil 1 cons 2 cons 3 cons 0 + reduce
+    6 assert-eq
+;
+
+"reduce with compiled word" test :
+    nil 2 cons 3 cons 4 cons 1 mul reduce
+    24 assert-eq
+;
+
+"reduce empty list returns initial value" test :
+    nil 99 + reduce 99 assert-eq
+;
+
+"reduce with single element" test :
+    nil 42 cons 0 + reduce 42 assert-eq
+;
+
+"each consumes list and word name, leaves stack clean" test :
+    42 nil 1 cons 2 cons inc each
+    42 assert-eq
+;
+
+"each on empty list is a no-op" test :
+    42 nil inc each 42 assert-eq
+;
+
+# --- error cases ---
+
+"head on empty list raises" test-raises empty_list :
+    nil head
+;
+
+"tail on empty list raises" test-raises empty_list :
+    nil tail
+;
+
+"last on empty list raises" test-raises empty_list :
+    nil last
+;
+
+"nth with negative index raises" test-raises index_out_of_range :
+    nil 1 cons -1 nth
+;
+
+"nth with index past end raises" test-raises index_out_of_range :
+    nil 1 cons 5 nth
+;
+
+end-group

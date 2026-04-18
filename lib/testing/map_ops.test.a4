@@ -1,0 +1,101 @@
+# Map operations — ported from test/af_map_tests.erl.
+
+"map_ops" group
+
+"map-new pushes empty map" test :
+    map-new map-size 0 assert-eq
+;
+
+"put and get string key" test :
+    map-new 42 "name" map-put "name" map-get 42 assert-eq
+;
+
+"put and get int key" test :
+    map-new "hello" 1 map-put 1 map-get "hello" assert-eq
+;
+
+"multiple puts" test :
+    map-new 10 "a" map-put 20 "b" map-put
+    dup "a" map-get 10 assert-eq
+    "b" map-get 20 assert-eq
+;
+
+"put overwrites existing key" test :
+    map-new 10 "x" map-put 99 "x" map-put "x" map-get 99 assert-eq
+;
+
+"get missing key errors" test-raises map_key_not_found :
+    map-new "missing" map-get
+;
+
+"delete removes key" test :
+    map-new 42 "x" map-put "x" map-delete map-size 0 assert-eq
+;
+
+"delete nonexistent key is no-op" test :
+    map-new "nope" map-delete map-size 0 assert-eq
+;
+
+"has? returns true for existing key" test :
+    map-new 42 "x" map-put "x" map-has? assert
+;
+
+"has? returns false for missing key" test :
+    map-new "x" map-has? not assert
+;
+
+"keys of empty map" test :
+    map-new map-keys length 0 assert-eq
+;
+
+"values of empty map" test :
+    map-new map-values length 0 assert-eq
+;
+
+"keys returns list of keys" test :
+    map-new 1 "a" map-put 2 "b" map-put map-keys length 2 assert-eq
+;
+
+"values returns list of values" test :
+    map-new 1 "a" map-put 2 "b" map-put map-values length 2 assert-eq
+;
+
+"size of empty map" test :
+    map-new map-size 0 assert-eq
+;
+
+"size after puts" test :
+    map-new 1 "a" map-put 2 "b" map-put 3 "c" map-put map-size 3 assert-eq
+;
+
+"merge two empty maps" test :
+    map-new map-new map-merge map-size 0 assert-eq
+;
+
+"merge combines keys" test :
+    map-new 1 "a" map-put map-new 2 "b" map-put map-merge map-size 2 assert-eq
+;
+
+"merge TOS overwrites on conflict" test :
+    map-new 1 "x" map-put map-new 99 "x" map-put map-merge "x" map-get 99 assert-eq
+;
+
+"merge preserves non-conflicting keys" test :
+    map-new 1 "a" map-put 2 "b" map-put
+    map-new 3 "c" map-put
+    map-merge map-size 3 assert-eq
+;
+
+"get-or returns value when key exists" test :
+    map-new 42 "x" map-put "x" 0 map-get-or 42 assert-eq
+;
+
+"get-or returns default when key missing" test :
+    map-new "missing" 99 map-get-or 99 assert-eq
+;
+
+"get-or with string default" test :
+    map-new "nope" "fallback" map-get-or "fallback" assert-eq
+;
+
+end-group

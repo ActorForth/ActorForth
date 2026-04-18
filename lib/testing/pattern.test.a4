@@ -1,0 +1,103 @@
+# Sub-clause pattern matching — ported from test/af_pattern_tests.erl.
+
+"pattern" group
+
+# --- Int literal patterns ---
+
+: f Int -> Int ;
+: 0 -> 0 ;
+: Int -> Int ; 100 +
+.
+
+"match int literal 0" test :
+    0 f 0 assert-eq
+;
+
+"fallthrough to general clause" test :
+    5 f 105 assert-eq
+;
+
+: g Int -> Int ;
+: 0 -> 0 ;
+: 1 -> 1 ;
+: Int -> Int ; 100 +
+.
+
+"match int literal 1" test :
+    1 g 1 assert-eq
+;
+
+# --- Bool patterns ---
+
+: to-int Bool -> Int ;
+: True -> Int ; drop 1
+: False -> Int ; drop 0
+.
+
+"match True" test :
+    True to-int 1 assert-eq
+;
+
+"match False" test :
+    False to-int 0 assert-eq
+;
+
+: choose Int Int Bool -> Int ;
+: True -> Int ; drop drop
+: False -> Int ; drop swap drop
+.
+
+"if-like via bool patterns — True keeps then-val" test :
+    10 20 True choose 10 assert-eq
+;
+
+"if-like via bool patterns — False keeps else-val" test :
+    10 20 False choose 20 assert-eq
+;
+
+# --- String patterns ---
+
+: greet String -> String ;
+: "hello" -> String ; drop "Hello World!"
+: String -> String ;
+.
+
+"match string literal" test :
+    "hello" greet "Hello World!" assert-eq
+;
+
+"string pattern fallthrough" test :
+    "goodbye" greet "goodbye" assert-eq
+;
+
+: lang String -> String ;
+: "en" -> String ; drop "English"
+: "fr" -> String ; drop "French"
+: String -> String ; drop "Unknown"
+.
+
+"multiple patterns — en" test :
+    "en" lang "English" assert-eq
+;
+
+"multiple patterns — fr" test :
+    "fr" lang "French" assert-eq
+;
+
+"multiple patterns — fallthrough" test :
+    "de" lang "Unknown" assert-eq
+;
+
+# --- Mixed (fib) ---
+
+: fib Int -> Int ;
+: 0 -> 0 ;
+: 1 -> 1 ;
+: Int -> Int ; dup 1 - fib swap 2 - fib +
+.
+
+"fib 10 = 55" test :
+    10 fib 55 assert-eq
+;
+
+end-group

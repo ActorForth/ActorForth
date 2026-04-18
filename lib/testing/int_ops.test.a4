@@ -1,0 +1,73 @@
+# Int operations — ported from test/af_type_int_tests.erl.
+
+"int_ops" group
+
+"int constructor from Atom" test :
+    42 int 42 assert-eq
+;
+
+"int passthrough when already Int" test :
+    42 int int 42 assert-eq
+;
+
+"addition" test :
+    3 5 + 8 assert-eq
+;
+
+"subtraction" test :
+    10 3 - 7 assert-eq
+;
+
+"multiplication" test :
+    4 5 * 20 assert-eq
+;
+
+"division" test :
+    20 4 / 5 assert-eq
+;
+
+"division by zero raises" test-raises division_by_zero :
+    10 0 /
+;
+
+"literal int pushed directly" test :
+    123 123 assert-eq
+;
+
+"negative literal" test :
+    -7 -7 assert-eq
+;
+
+"modulo" test :
+    10 3 mod 1 assert-eq
+;
+
+"modulo by zero raises" test-raises division_by_zero :
+    10 0 mod
+;
+
+"abs of negative" test :
+    -5 abs 5 assert-eq
+;
+
+"abs of positive" test :
+    5 abs 5 assert-eq
+;
+
+"max picks larger" test :
+    3 7 max 7 assert-eq
+;
+
+"max with equal values" test :
+    5 5 max 5 assert-eq
+;
+
+"min picks smaller" test :
+    3 7 min 3 assert-eq
+;
+
+"min with equal values" test :
+    5 5 min 5 assert-eq
+;
+
+end-group

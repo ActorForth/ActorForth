@@ -1,0 +1,67 @@
+# Bool operations — ported from test/af_type_bool_tests.erl.
+# Tests that poke Atom-on-stack paths are kept in Erlang; here we cover
+# the user-visible behavior.
+
+"bool_ops" group
+
+"literal true" test :
+    true True assert-eq
+;
+
+"literal false" test :
+    false False assert-eq
+;
+
+"literal True alias" test :
+    True true assert-eq
+;
+
+"bool constructor from true" test :
+    true bool True assert-eq
+;
+
+"bool constructor from false" test :
+    false bool False assert-eq
+;
+
+"bool passthrough when already Bool" test :
+    true bool bool True assert-eq
+;
+
+"not True is False" test :
+    true not False assert-eq
+;
+
+"not False is True" test :
+    false not True assert-eq
+;
+
+"equality comparison true case" test :
+    3 3 == assert
+;
+
+"equality comparison false case" test :
+    3 4 == not assert
+;
+
+"inequality comparison" test :
+    3 4 != assert
+;
+
+"less than" test :
+    3 5 < assert
+;
+
+"greater than" test :
+    5 3 > assert
+;
+
+"less than or equal — equal" test :
+    3 3 <= assert
+;
+
+"greater than or equal — equal" test :
+    5 3 >= assert
+;
+
+end-group

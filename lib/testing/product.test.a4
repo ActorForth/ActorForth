@@ -1,0 +1,72 @@
+# Product types — ported from test/af_product_tests.erl.
+
+"product" group
+
+type Point
+    x Int
+    y Int
+.
+
+"construct and read first field" test :
+    10 int 20 int point x
+    10 assert-eq
+    drop              # drop the instance left by getter
+;
+
+"construct and read second field" test :
+    10 int 20 int point y
+    20 assert-eq
+    drop
+;
+
+"setter updates field value" test :
+    10 int 20 int point 99 int x! x
+    99 assert-eq
+    drop
+;
+
+type Wrapper
+    val Int
+.
+
+"product type with single field" test :
+    42 int wrapper val
+    42 assert-eq
+    drop
+;
+
+type Color
+    r Int
+    g Int
+    b Int
+.
+
+"product type with three fields — read g" test :
+    255 int 128 int 0 int color g
+    128 assert-eq
+    drop
+;
+
+# --- Field update pattern: `over <getter> rot <op> <setter>` ---
+
+type Counter
+    value Int
+.
+
+: add-value Counter Int -> Counter ;
+    over value rot + value! swap drop
+.
+
+"field update pattern — add" test :
+    10 counter 5 add-value value
+    15 assert-eq
+    drop
+;
+
+"field update pattern — chained adds" test :
+    0 counter 10 add-value 20 add-value 30 add-value value
+    60 assert-eq
+    drop
+;
+
+end-group

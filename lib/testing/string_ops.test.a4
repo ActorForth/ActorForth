@@ -1,0 +1,203 @@
+# String operations — ported from test/af_string_tests.erl.
+
+"string_ops" group
+
+# --- Quoted literals ---
+
+"quoted string pushes String" test :
+    "hello" "hello" assert-eq
+;
+
+"empty quoted string" test :
+    "" length 0 assert-eq
+;
+
+"quoted string with spaces" test :
+    "hello world" length 11 assert-eq
+;
+
+# --- Constructor ---
+
+"string constructor from Atom" test :
+    hello string "hello" assert-eq
+;
+
+"string pass-through" test :
+    "hello" string "hello" assert-eq
+;
+
+# --- concat ---
+
+"concat two strings" test :
+    "hello" " world" concat "hello world" assert-eq
+;
+
+"concat empty strings" test :
+    "" "" concat "" assert-eq
+;
+
+"concat chain" test :
+    "a" "b" concat "c" concat "abc" assert-eq
+;
+
+# --- length ---
+
+"length of string" test :
+    "hello" length 5 assert-eq
+;
+
+"length of empty string" test :
+    "" length 0 assert-eq
+;
+
+# --- conversion ---
+
+"to-int" test :
+    "42" to-int 42 assert-eq
+;
+
+"to-string from Int" test :
+    42 to-string "42" assert-eq
+;
+
+"roundtrip Int -> String -> Int" test :
+    123 to-string to-int 123 assert-eq
+;
+
+# --- split ---
+
+"split by comma" test :
+    "a,b,c" "," split length 3 assert-eq
+;
+
+"split no match returns single-element list" test :
+    "hello" "," split length 1 assert-eq
+;
+
+"split by space" test :
+    "one two three" " " split length 3 assert-eq
+;
+
+# --- contains ---
+
+"contains found" test :
+    "hello world" "world" contains assert
+;
+
+"contains not found" test :
+    "hello" "xyz" contains not assert
+;
+
+"contains empty needle" test :
+    "hello" "" contains assert
+;
+
+# --- starts-with / ends-with ---
+
+"starts-with match" test :
+    "hello world" "hello" starts-with assert
+;
+
+"starts-with no match" test :
+    "hello world" "world" starts-with not assert
+;
+
+"starts-with empty prefix" test :
+    "hello" "" starts-with assert
+;
+
+"ends-with match" test :
+    "hello world" "world" ends-with assert
+;
+
+"ends-with no match" test :
+    "hello world" "hello" ends-with not assert
+;
+
+"ends-with longer suffix than target" test :
+    "hi" "hello" ends-with not assert
+;
+
+# --- trim ---
+
+"trim leading and trailing spaces" test :
+    "  hello  " trim "hello" assert-eq
+;
+
+"trim no whitespace" test :
+    "hello" trim "hello" assert-eq
+;
+
+"trim all whitespace" test :
+    "   " trim "" assert-eq
+;
+
+# --- case conversion ---
+
+"to-upper basic" test :
+    "hello" to-upper "HELLO" assert-eq
+;
+
+"to-upper already upper" test :
+    "HELLO" to-upper "HELLO" assert-eq
+;
+
+"to-upper mixed" test :
+    "Hello World" to-upper "HELLO WORLD" assert-eq
+;
+
+"to-lower basic" test :
+    "HELLO" to-lower "hello" assert-eq
+;
+
+"to-lower already lower" test :
+    "hello" to-lower "hello" assert-eq
+;
+
+"to-lower mixed" test :
+    "Hello World" to-lower "hello world" assert-eq
+;
+
+# --- reverse ---
+
+"string reverse" test :
+    "hello" reverse "olleh" assert-eq
+;
+
+"string reverse empty" test :
+    "" reverse "" assert-eq
+;
+
+"string reverse palindrome" test :
+    "aba" reverse "aba" assert-eq
+;
+
+# --- replace ---
+
+"replace single occurrence" test :
+    "hello" "world" "hello world" replace "world world" assert-eq
+;
+
+"replace all occurrences" test :
+    "a" "x" "banana" replace "bxnxnx" assert-eq
+;
+
+"replace no match" test :
+    "z" "x" "hello" replace "hello" assert-eq
+;
+
+# --- substring ---
+
+"substring from beginning" test :
+    0 5 "hello world" substring "hello" assert-eq
+;
+
+"substring from middle" test :
+    6 5 "hello world" substring "world" assert-eq
+;
+
+"substring zero length" test :
+    0 0 "hello" substring "" assert-eq
+;
+
+end-group
