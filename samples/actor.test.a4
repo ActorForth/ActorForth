@@ -1,0 +1,62 @@
+# Actor tests — user-facing subset ported from test/af_actor_tests.erl.
+# Tests that inspect the actor's internal vocab map stay in Erlang.
+
+actor group-serial
+
+    type ActorCnt
+        value Int
+    .
+
+    : increment ActorCnt -> ActorCnt ; value 1 int + value! .
+    : count ActorCnt -> ActorCnt Int ; value .
+    : add ActorCnt Int -> ActorCnt ; swap value rot + value! .
+
+    # --- basic cast / call ---
+
+    "cast via << word >> sends async message" test :
+        0 int actorcnt server
+        << increment >>
+        << count >>
+        1 assert-eq
+        drop              # drop the Actor
+        << stop >>
+    ;
+
+    "call via << word >> returns values" test :
+        0 int actorcnt server
+        << count >>
+        0 assert-eq
+        drop
+        << stop >>
+    ;
+
+    "multiple casts in sequence" test :
+        0 int actorcnt server
+        << increment >>
+        << increment >>
+        << increment >>
+        << count >>
+        3 assert-eq
+        drop
+        << stop >>
+    ;
+
+    "cast with args via << value word >>" test :
+        0 int actorcnt server
+        << 5 int add >>
+        << count >>
+        5 assert-eq
+        drop
+        << stop >>
+    ;
+
+    "chained commands in single << block" test :
+        0 int actorcnt server
+        << 5 int add 10 int add >>
+        << count >>
+        15 assert-eq
+        drop
+        << stop >>
+    ;
+
+.
