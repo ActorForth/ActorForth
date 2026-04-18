@@ -45,6 +45,7 @@ run(Paths, Opts) ->
     maybe_print_seed(Seed, Mode),
     CovSummary = summarize_coverage(AllResults, Coverage, Mode),
     CovResult = gate_coverage(CovSummary, Threshold, LaxCoverage, Mode),
+    maybe_emit_structured(AllResults, Opts),
     {Passed, Failed + case CovResult of fail -> 1; ok -> 0 end, Errors}.
 
 enable_tracing(#{cont := C} = Loaded, true) ->
@@ -369,6 +370,13 @@ maybe_print_seed(_Seed, quiet) -> ok;
 maybe_print_seed(Seed, _Mode) ->
     io:format("  seed=~p~n~n", [Seed]).
 
+group_str([]) -> "(top)";
+group_str(Path) ->
+    string:join([case B of
+        Bin when is_binary(Bin) -> binary_to_list(Bin);
+        L -> L
+    end || B <- Path], "/").
+
 %%% Coverage aggregation + gate
 
 summarize_coverage(_Results, false, _Mode) -> undefined;
@@ -445,6 +453,170 @@ gate_coverage(#{pct := Pct}, Threshold, false, Mode) ->
                        "  coverage FAIL: ~b% < ~b%~n", [Pct, Threshold])
     end,
     fail.
+
+%%% Structured output
+
+maybe_emit_structured(Results, Opts) ->
+    case proplists:get_bool(tap, Opts) of
+        true  -> emit_tap(Results, standard_io);
+        false -> ok
+    end,
+    case proplists:get_value(junit, Opts) of
+        undefined -> ok;
+        JUnitPath -> emit_junit(Results, JUnitPath)
+    end,
+    case proplists:get_value(json, Opts) of
+        undefined -> ok;
+        JsonPath  -> emit_json(Results, JsonPath)
+    end.
+
+emit_tap(Results, Io) ->
+    io:format(Io, "TAP version 13~n", []),
+    io:format(Io, "1..~b~n", [length(Results)]),
+    lists:foldl(fun(R, N) ->
+        emit_tap_line(Io, N, R),
+        N + 1
+    end, 1, Results),
+    ok.
+
+emit_tap_line(Io, N, #{status := pass, group := G, name := Name}) ->
+    io:format(Io, "ok ~b - ~s/~s~n", [N, group_str(G), Name]);
+emit_tap_line(Io, N, #{status := skip, group := G, name := Name,
+                       reason := Reason}) ->
+    io:format(Io, "ok ~b - ~s/~s # SKIP ~s~n",
+              [N, group_str(G), Name, Reason]);
+emit_tap_line(Io, N, #{status := fail, group := G, name := Name,
+                       reason := Reason}) ->
+    io:format(Io, "not ok ~b - ~s/~s~n  ---~n  reason: ~p~n  ---~n",
+              [N, group_str(G), Name, Reason]);
+emit_tap_line(Io, N, #{status := load_error, name := Name,
+                       reason := Reason}) ->
+    io:format(Io, "not ok ~b - ~s (load error)~n  ---~n  reason: ~p~n  ---~n",
+              [N, Name, Reason]).
+
+emit_junit(Results, Path) ->
+    ByGroup = group_results(Results),
+    {ok, File} = file:open(Path, [write, binary]),
+    ok = file:write(File, <<"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n">>),
+    ok = file:write(File, <<"<testsuites>\n">>),
+    lists:foreach(fun({GName, Tests}) ->
+        emit_junit_suite(File, GName, Tests)
+    end, ByGroup),
+    ok = file:write(File, <<"</testsuites>\n">>),
+    file:close(File).
+
+group_results(Results) ->
+    Map = lists:foldl(fun(R, Acc) ->
+        Key = group_str(maps:get(group, R, [])),
+        maps:update_with(Key, fun(L) -> [R | L] end, [R], Acc)
+    end, #{}, Results),
+    [{K, lists:reverse(V)} || {K, V} <- maps:to_list(Map)].
+
+emit_junit_suite(File, GName, Tests) ->
+    Failures = length([1 || #{status := fail} <- Tests]),
+    Errors = length([1 || #{status := load_error} <- Tests]),
+    TotalUs = lists:sum([maps:get(duration_us, T, 0) || T <- Tests]),
+    file:write(File,
+        io_lib:format(
+          "  <testsuite name=\"~s\" tests=\"~b\" failures=\"~b\" errors=\"~b\" time=\"~.3f\">~n",
+          [xml_escape(GName), length(Tests), Failures, Errors, TotalUs / 1.0e6])),
+    lists:foreach(fun(T) ->
+        emit_junit_case(File, GName, T)
+    end, Tests),
+    file:write(File, <<"  </testsuite>\n">>).
+
+emit_junit_case(File, GName, #{status := pass, name := Name, duration_us := Us}) ->
+    file:write(File,
+        io_lib:format("    <testcase classname=\"~s\" name=\"~s\" time=\"~.3f\"/>~n",
+                      [xml_escape(GName), xml_escape(bin(Name)), Us / 1.0e6]));
+emit_junit_case(File, GName, #{status := skip, name := Name, reason := Reason}) ->
+    file:write(File,
+        io_lib:format("    <testcase classname=\"~s\" name=\"~s\">~n"
+                      "      <skipped message=\"~s\"/>~n"
+                      "    </testcase>~n",
+                      [xml_escape(GName), xml_escape(bin(Name)),
+                       xml_escape(bin(Reason))]));
+emit_junit_case(File, GName, #{status := fail, name := Name,
+                               duration_us := Us, reason := Reason}) ->
+    ReasonStr = io_lib:format("~p", [Reason]),
+    file:write(File,
+        io_lib:format("    <testcase classname=\"~s\" name=\"~s\" time=\"~.3f\">~n"
+                      "      <failure message=\"test failed\">~s</failure>~n"
+                      "    </testcase>~n",
+                      [xml_escape(GName), xml_escape(bin(Name)), Us / 1.0e6,
+                       xml_escape(lists:flatten(ReasonStr))]));
+emit_junit_case(File, _GName, #{status := load_error, name := Name,
+                                reason := Reason}) ->
+    ReasonStr = io_lib:format("~p", [Reason]),
+    file:write(File,
+        io_lib:format("    <testcase classname=\"file\" name=\"~s\">~n"
+                      "      <error message=\"load error\">~s</error>~n"
+                      "    </testcase>~n",
+                      [xml_escape(bin(Name)), xml_escape(lists:flatten(ReasonStr))])).
+
+bin(B) when is_binary(B) -> binary_to_list(B);
+bin(L) when is_list(L)   -> L;
+bin(Other)               -> io_lib:format("~p", [Other]).
+
+xml_escape(S) when is_list(S) ->
+    lists:flatten([case C of
+        $< -> "&lt;";
+        $> -> "&gt;";
+        $& -> "&amp;";
+        $" -> "&quot;";
+        Other -> [Other]
+    end || C <- S]);
+xml_escape(Other) -> xml_escape(bin(Other)).
+
+emit_json(Results, Path) ->
+    JSON = lists:flatten([
+        "{\n",
+        "  \"summary\": ", json_summary(Results), ",\n",
+        "  \"tests\": [\n",
+        string:join([json_test(R) || R <- Results], ",\n"),
+        "\n  ]\n",
+        "}\n"
+    ]),
+    file:write_file(Path, JSON).
+
+json_summary(Results) ->
+    Passed = length([1 || #{status := pass} <- Results]),
+    Failed = length([1 || #{status := fail} <- Results]),
+    Errors = length([1 || #{status := load_error} <- Results]),
+    Skipped = length([1 || #{status := skip} <- Results]),
+    io_lib:format("{\"passed\": ~b, \"failed\": ~b, \"errors\": ~b, \"skipped\": ~b}",
+                  [Passed, Failed, Errors, Skipped]).
+
+json_test(#{status := S, name := Name, group := G} = R) ->
+    Us = maps:get(duration_us, R, 0),
+    Name1 = json_escape(bin(Name)),
+    Group1 = json_escape(group_str(G)),
+    Base = io_lib:format(
+        "    {\"status\": \"~s\", \"group\": \"~s\", \"name\": \"~s\", \"duration_us\": ~b",
+        [S, Group1, Name1, Us]),
+    Extra = case S of
+        pass -> "";
+        skip ->
+            io_lib:format(", \"reason\": \"~s\"",
+                          [json_escape(bin(maps:get(reason, R, "")))]);
+        _ ->
+            io_lib:format(", \"reason\": \"~s\"",
+                          [json_escape(lists:flatten(io_lib:format("~p",
+                                                                    [maps:get(reason, R, none)])))])
+    end,
+    [Base, Extra, "}"].
+
+json_escape(S) when is_list(S) ->
+    lists:flatten([case C of
+        $"  -> "\\\"";
+        $\\ -> "\\\\";
+        $\n -> "\\n";
+        $\r -> "\\r";
+        $\t -> "\\t";
+        Other when Other >= 32 -> [Other];
+        _ -> ""
+    end || C <- S]);
+json_escape(Other) -> json_escape(bin(Other)).
 
 
 %%% Seed for reproducible actor ordering
