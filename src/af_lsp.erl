@@ -218,8 +218,17 @@ handle_method(<<"textDocument/didChange">>, _Id, Params, State) ->
     #{<<"textDocument">> := #{<<"uri">> := Uri, <<"version">> := Version},
       <<"contentChanges">> := [#{<<"text">> := Text} | _]
     } = Params,
-    Doc = analyze_document(Uri, Text, Version, State),
     Docs = maps:get(docs, State, #{}),
+    %% Cheap short-circuit: if the text is byte-identical to the last
+    %% analyzed version of this doc, reuse its snapshots. Editors spam
+    %% didChange on every keystroke including identical-text variants
+    %% (autosave, formatters).
+    Doc = case maps:get(Uri, Docs, undefined) of
+        #{text := Text} = Prior ->
+            Prior#{version => Version};
+        _ ->
+            analyze_document(Uri, Text, Version, State)
+    end,
     NewState = State#{docs => Docs#{Uri => Doc}},
     Diags = maps:get(diagnostics, Doc, []),
     Notification = publish_diagnostics(Uri, Diags),
@@ -261,11 +270,12 @@ handle_method(<<"textDocument/definition">>, _Id, Params, State) ->
     #{<<"textDocument">> := #{<<"uri">> := Uri},
       <<"position">> := #{<<"line">> := Line, <<"character">> := Char}
     } = Params,
-    case maps:get(Uri, maps:get(docs, State, #{}), undefined) of
+    AllDocs = maps:get(docs, State, #{}),
+    case maps:get(Uri, AllDocs, undefined) of
         undefined ->
             {reply, null, State};
         Doc ->
-            DefResult = compute_definition(Doc, Uri, Line, Char),
+            DefResult = compute_definition(Doc, Uri, Line, Char, AllDocs),
             {reply, DefResult, State}
     end;
 
@@ -696,28 +706,54 @@ to_binary(L) when is_list(L) -> list_to_binary(L).
 
 %% Compute go-to-definition
 compute_definition(Doc, Uri, Line, Char) ->
+    compute_definition(Doc, Uri, Line, Char, #{}).
+
+compute_definition(Doc, Uri, Line, Char, AllDocs) ->
     Tokens = maps:get(tokens, Doc, []),
     case find_token_at(Tokens, Line + 1, Char + 1) of
         undefined -> null;
         Token ->
             WordName = Token#token.value,
             case find_word_def_token(Tokens, WordName) of
-                undefined -> null;
+                undefined ->
+                    %% Not in this file — scan other open docs.
+                    scan_other_docs_for_def(WordName, Uri, AllDocs);
                 DefToken ->
-                    #{<<"uri">> => Uri,
-                      <<"range">> => #{
-                          <<"start">> => #{
-                              <<"line">> => DefToken#token.line - 1,
-                              <<"character">> => DefToken#token.column - 1
-                          },
-                          <<"end">> => #{
-                              <<"line">> => DefToken#token.line - 1,
-                              <<"character">> => DefToken#token.column - 1 + length(DefToken#token.value)
-                          }
-                      }
-                    }
+                    def_result(Uri, DefToken)
             end
     end.
+
+scan_other_docs_for_def(_WordName, _SelfUri, AllDocs) when map_size(AllDocs) =< 1 ->
+    null;
+scan_other_docs_for_def(WordName, SelfUri, AllDocs) ->
+    Entries = maps:to_list(AllDocs),
+    scan_docs_for_def(Entries, WordName, SelfUri).
+
+scan_docs_for_def([], _WordName, _SelfUri) -> null;
+scan_docs_for_def([{SelfUri, _} | Rest], WordName, SelfUri) ->
+    scan_docs_for_def(Rest, WordName, SelfUri);
+scan_docs_for_def([{OtherUri, OtherDoc} | Rest], WordName, SelfUri) ->
+    OtherTokens = maps:get(tokens, OtherDoc, []),
+    case find_word_def_token(OtherTokens, WordName) of
+        undefined ->
+            scan_docs_for_def(Rest, WordName, SelfUri);
+        DefToken ->
+            def_result(OtherUri, DefToken)
+    end.
+
+def_result(Uri, DefToken) ->
+    #{<<"uri">> => Uri,
+      <<"range">> => #{
+          <<"start">> => #{
+              <<"line">> => DefToken#token.line - 1,
+              <<"character">> => DefToken#token.column - 1
+          },
+          <<"end">> => #{
+              <<"line">> => DefToken#token.line - 1,
+              <<"character">> => DefToken#token.column - 1 + length(DefToken#token.value)
+          }
+      }
+    }.
 
 find_token_at([], _Line, _Col) -> undefined;
 find_token_at([T | Rest], Line, Col) ->
