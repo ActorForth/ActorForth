@@ -1963,6 +1963,66 @@ ActorForth now has the full compilation pipeline, OTP integration, and BEAM inte
 
 ---
 
+## Chapter 26: ActorForth and LLMs
+
+A note on why the DSL-first model turns out to be an unusually good fit for generating code with a language model — and where the limits are.
+
+### What LLMs are good at
+
+Large language models are exceptional at two things that matter here:
+
+1. **Writing small, self-contained pieces of code** from a natural-language description. Give an LLM "a function that folds a list and picks the maximum" and it produces that function across any language it has seen.
+2. **Imitating a vocabulary.** Show an LLM a handful of examples of how a DSL is used, and it will produce more of them — often with eerie accuracy about the conventions.
+
+They're noticeably worse at:
+
+- Keeping a large program consistent over many files.
+- Holding invariants in mind across refactors.
+- Debugging when the mental model and the actual behavior diverge.
+
+### Why a4 fits the first two strengths
+
+The canonical ActorForth workflow is: **build a DSL for your problem, then solve the problem in that DSL.** Both halves of this play to LLM strengths.
+
+**The DSL layer is small, self-contained code.** New words are a few lines each. Each word fits in a token window. Each has a visible stack signature. An LLM producing a new word doesn't need to understand anything outside the signature it was given.
+
+**The domain layer is repeated vocabulary.** Once five tests use `"name" test : body ;`, an LLM can produce a hundred more by pattern. The shape is so uniform it's almost a template.
+
+The weakness of LLM code generation — long-range consistency — is mitigated two ways:
+
+- Each word is **type-checked at definition time**, so inconsistencies surface immediately instead of compounding.
+- The REPL lets you **run a suggested word in isolation** before committing. Feedback loop in seconds, not minutes.
+
+### What this looks like in practice
+
+Given a problem like "write a DSL for financial trade lifecycle events," a typical ActorForth session with LLM assistance looks like:
+
+1. You sketch the ontology in plain English. The LLM proposes a handful of words (`trade`, `match`, `settle`, `cancel`) with stack signatures.
+2. You push back on signatures that don't make sense. A few rounds.
+3. The LLM writes skeleton bodies. You run them at the REPL.
+4. Type-check failures are short, specific, and local — the LLM corrects them.
+5. Once the words work on one trade, you scale to a thousand via `map` or actors.
+
+Compare to the same exercise in Python: the LLM writes a class hierarchy, you accept it, and two weeks later the class graph has seven intersecting concerns and the initial cost of understanding is no longer recoverable. The DSL approach front-loads clarity — the ontology *is* the code.
+
+### What it doesn't solve
+
+LLMs are not magic. They still:
+
+- Invent words that don't exist (the test DSL's `extra_atom` diagnostic catches this immediately).
+- Get stack ordering wrong (the type checker catches this immediately).
+- Hallucinate behavior for built-in primitives (a type mismatch catches this).
+
+The common thread: **ActorForth's type system and immediate feedback turn these failure modes into quickly-correctable errors rather than silent long-range drift.** This is not because a4 is smarter; it is because a4 commits to smaller units of meaning.
+
+### A note on scope
+
+The argument above is a design argument, not a marketing claim. ActorForth is not "the LLM language." It is a language whose existing design — driven by concerns that predate the current LLM moment by decades — happens to align well with how LLMs produce code. If LLM capabilities change, the language does not need to.
+
+The canonical reference remains: *"The best a4 programs rarely use a4 primitives."* An LLM is just another way to get from the problem to the DSL. The language itself is concerned with the DSL and the problem, not the path between them.
+
+---
+
 ## Quick Reference
 
 ### Stack Operations (Any dictionary)
