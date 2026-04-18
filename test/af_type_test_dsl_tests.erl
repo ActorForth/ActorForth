@@ -38,35 +38,39 @@ basic_test_() ->
         end}
     ].
 
-%%% Group scope
+%%% Group scope (atom names, `.` closer)
 
 group_test_() ->
     [
         {"tests inside a group carry the group name", fun() ->
-            Src = "\"list_ops\" group "
+            Src = "list_ops group "
                   "\"cons basic\" test : 1 ; "
                   "\"head basic\" test : 2 ; "
-                  "end-group",
+                  ".",
             C = eval(Src, setup()),
             Specs = C#continuation.test_registry,
             ?assertEqual(2, length(Specs)),
             Paths = [maps:get(group_path, S) || S <- Specs],
             ?assertEqual([[<<"list_ops">>], [<<"list_ops">>]], Paths)
         end},
-        {"end-group pops the scope; tests after it lose the group name", fun() ->
-            Src = "\"g1\" group \"inside\" test : ; end-group \"outside\" test : ;",
+        {"`.` closes the scope; tests after it lose the group name", fun() ->
+            Src = "g1 group \"inside\" test : ; . \"outside\" test : ;",
             C = eval(Src, setup()),
             [In, Out] = C#continuation.test_registry,
             ?assertEqual([<<"g1">>], maps:get(group_path, In)),
             ?assertEqual([], maps:get(group_path, Out))
         end},
         {"nested groups produce nested group paths", fun() ->
-            Src = "\"outer\" group \"inner\" group \"deep test\" test : ; "
-                  "end-group end-group",
+            Src = "outer group inner group \"deep test\" test : ; . .",
             C = eval(Src, setup()),
             [Spec] = C#continuation.test_registry,
             ?assertEqual([<<"outer">>, <<"inner">>],
                          maps:get(group_path, Spec))
+        end},
+        {"group stack is empty after closing all groups", fun() ->
+            Src = "outer group inner group \"t\" test : ; . .",
+            C = eval(Src, setup()),
+            ?assertEqual([], C#continuation.data_stack)
         end}
     ].
 
@@ -87,20 +91,20 @@ test_raises_test_() ->
 setup_teardown_test_() ->
     [
         {"setup body attached to tests in group", fun() ->
-            Src = "\"g\" group "
+            Src = "g group "
                   "setup : 99 ; "
                   "\"t\" test : 1 ; "
-                  "end-group",
+                  ".",
             C = eval(Src, setup()),
             [Spec] = C#continuation.test_registry,
             Setup = maps:get(setup, Spec),
             ?assert(length(Setup) > 0)
         end},
         {"teardown body attached to tests in group", fun() ->
-            Src = "\"g\" group "
+            Src = "g group "
                   "teardown : drop ; "
                   "\"t\" test : 1 ; "
-                  "end-group",
+                  ".",
             C = eval(Src, setup()),
             [Spec] = C#continuation.test_registry,
             Teardown = maps:get(teardown, Spec),
@@ -124,5 +128,29 @@ body_capture_test_() ->
             [Spec] = C#continuation.test_registry,
             {_File, Line} = maps:get(location, Spec),
             ?assertEqual(1, Line)
+        end}
+    ].
+
+%%% Type strictness — atom name for test should fail (no sig match).
+
+strictness_test_() ->
+    [
+        {"group refuses String name — falls through to Atom", fun() ->
+            %% `"foo" group` pushes String, then `group` expects Atom on
+            %% TOS. sig fails → `group` falls through → pushed as Atom.
+            %% So no GroupScope is created and no test is registered.
+            C = eval("\"foo\" group \"t\" test : 1 ; .", setup()),
+            %% The test DID register (test only needs String on TOS, and
+            %% "t" is String). But its group_path should be empty because
+            %% `group` didn't successfully push a GroupScope.
+            Registry = C#continuation.test_registry,
+            [Spec] = Registry,
+            ?assertEqual([], maps:get(group_path, Spec))
+        end},
+        {"test refuses Atom name — falls through", fun() ->
+            %% `my_test test` pushes Atom my_test, then `test` expects
+            %% String. sig fails → no TestPending, no registration.
+            C = eval("my_test test : 1 ;", setup()),
+            ?assertEqual([], C#continuation.test_registry)
         end}
     ].

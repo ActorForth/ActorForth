@@ -1,6 +1,6 @@
 # Sub-clause pattern matching — ported from test/af_pattern_tests.erl.
 
-"pattern" group
+pattern group
 
 # --- Int literal patterns ---
 
@@ -100,4 +100,4 @@
     10 fib 55 assert-eq
 ;
 
-end-group
+.

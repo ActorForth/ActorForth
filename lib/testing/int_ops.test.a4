@@ -1,6 +1,6 @@
 # Int operations — ported from test/af_type_int_tests.erl.
 
-"int_ops" group
+int_ops group
 
 "int constructor from Atom" test :
     42 int 42 assert-eq
@@ -70,4 +70,4 @@
     5 5 min 5 assert-eq
 ;
 
-end-group
+.

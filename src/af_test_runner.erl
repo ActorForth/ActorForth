@@ -97,7 +97,6 @@ run_spec(Spec, Loaded, Path, Opts) ->
         data_stack    = [],
         return_stack  = [],
         word_trace    = [],
-        test_scope    = [],
         test_registry = []
     },
     T0 = erlang:monotonic_time(microsecond),

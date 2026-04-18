@@ -2,7 +2,7 @@
 # Tests that poke Atom-on-stack paths are kept in Erlang; here we cover
 # the user-visible behavior.
 
-"bool_ops" group
+bool_ops group
 
 "literal true" test :
     true True assert-eq
@@ -64,4 +64,4 @@
     5 3 >= assert
 ;
 
-end-group
+.

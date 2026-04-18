@@ -1,6 +1,6 @@
 # Sub-clause pattern matching — ported from test/af_subclause_tests.erl.
 
-"subclause" group
+subclause group
 
 : fib Int -> Int ;
 : 0 -> 0 ;
@@ -68,4 +68,4 @@
     5 classify 10 assert-eq
 ;
 
-end-group
+.

@@ -18,6 +18,7 @@
     exec_stack    = []    :: list(),                  %% dispatch events, newest-first
     depth_stats   = undefined :: undefined | #depth_stats{},
     %% --- test-DSL registration state ---
-    test_scope    = []    :: list(),                  %% scope stack during capture
+    %% Active group scopes live as {'GroupScope', #{...}} sentinels on
+    %% data_stack itself, so multi-clause dispatch on `.` can close them.
     test_registry = []    :: list()                   %% registered test specs
 }).

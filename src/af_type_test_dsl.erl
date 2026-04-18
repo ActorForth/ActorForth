@@ -9,14 +9,14 @@
 
 %% Test DSL — scope management + body capture.
 %%
-%% Syntax (Phase 2 subset of the full plan):
+%% Syntax:
 %%
-%%   "group-name" group
-%%       "test-name" test :
-%%           ... test body ...
+%%   list_ops group                               ← atom: short identifier
+%%       "cons chains build list" test :         ← string: descriptive name
+%%           ...
 %%       ;
-%%       "other test" test-raises stack_underflow :
-%%           ... body that should raise ...
+%%       "drop on empty raises" test-raises stack_underflow :
+%%           ...
 %%       ;
 %%       setup :
 %%           ... setup body ...
@@ -24,33 +24,35 @@
 %%       teardown :
 %%           ... teardown body ...
 %%       ;
-%%   end-group
+%%   .
 %%
-%% Deviations from plan:
-%%   - Name precedes `group` for consistency with `test` / `test-raises`.
-%%   - `end-group` explicit (rather than `;`) because `;` on data stack is
-%%     ambiguous when TOS isn't a TestBody sentinel.
+%% Groups close with `.` — same closer the compiler uses for word
+%% definitions. Multi-clause dispatch on TOS type resolves the three
+%% meanings of `.`:
+%%   TOS = CodeCompile   → compiler's end-word-definition
+%%   TOS = GroupScope    → this module's close-group
+%%   TOS = anything else → Any-level `.` (print TOS)
+%%
+%% Group names are Atoms (Forth-style identifiers); test names are
+%% Strings (natural-language descriptions). Both sigs are strict — no
+%% 'Any' or coercion.
 %%
 %% Storage:
-%%   - test_scope field holds the stack of active group names.
-%%   - test_registry field accumulates test specs:
+%%   - GroupScope sentinels live on data_stack during capture; nested
+%%     groups produce a stack of sentinels from innermost (TOS) to
+%%     outermost. `test`/`setup`/`teardown` stack their own sentinels
+%%     above whatever GroupScope is on top; `;` / `.` pops accordingly.
+%%   - test_registry accumulates test specs:
 %%       #{group_path => [...], name => ..., kind => positive | {raises, Atom},
 %%         body => [#token{}...], setup => [...], teardown => [...],
 %%         location => {File, Line}}
-%%   - During body capture, a TestBody / TestRaisesBody / SetupBody /
-%%     TeardownBody sentinel is pinned to TOS. Its handler captures every
-%%     incoming token as a #token{} record. `;` is registered on each body
-%%     type to finalize.
 %%
-%% ETS policy: DSL words mutate ETS to register the body types and their
-%% handlers at init time — but that's one-time registration, not per-test.
-%% Per-test state (scope stack, registry, body captures) lives on the
-%% continuation. Parallel test actors see separate continuations, so they
-%% do not race on this state.
+%% ETS policy: only init-time op registration touches ETS. All
+%% registration state lives on the continuation, so parallel test
+%% actors cannot race.
 
 init() ->
-    %% Register the intermediate state types FIRST so subsequent add_op
-    %% calls find them in the registry.
+    af_type:register_type(#af_type{name = 'GroupScope'}),
     af_type:register_type(#af_type{name = 'TestPending'}),
     af_type:register_type(#af_type{name = 'TestRaisesPending'}),
     af_type:register_type(#af_type{name = 'TestBody'}),
@@ -58,14 +60,11 @@ init() ->
     af_type:register_type(#af_type{name = 'SetupBody'}),
     af_type:register_type(#af_type{name = 'TeardownBody'}),
 
-    %% Entry words on Any
+    %% Entry words on Any. Strict sigs: group takes an Atom identifier;
+    %% test / test-raises take a String description.
     af_type:add_op('Any', #operation{
-        name = "group", sig_in = ['String'], sig_out = [],
+        name = "group", sig_in = ['Atom'], sig_out = ['GroupScope'],
         impl = fun op_group/1, source = af_type_test_dsl
-    }),
-    af_type:add_op('Any', #operation{
-        name = "end-group", sig_in = [], sig_out = [],
-        impl = fun op_end_group/1, source = af_type_test_dsl
     }),
     af_type:add_op('Any', #operation{
         name = "test", sig_in = ['String'], sig_out = ['TestPending'],
@@ -84,7 +83,14 @@ init() ->
         impl = fun op_teardown/1, source = af_type_test_dsl
     }),
 
-    %% Transition ops (`:`)
+    %% `.` on GroupScope closes the group. Multi-clause with the
+    %% compiler's `.` on CodeCompile and the Any-level print-TOS `.`.
+    af_type:add_op('GroupScope', #operation{
+        name = ".", sig_in = ['GroupScope'], sig_out = [],
+        impl = fun op_close_group/1, source = af_type_test_dsl
+    }),
+
+    %% Transition ops (`:`) pushing the corresponding body type.
     af_type:add_op('TestPending', #operation{
         name = ":", sig_in = ['TestPending'], sig_out = ['TestBody'],
         impl = fun op_test_colon/1, source = af_type_test_dsl
@@ -94,7 +100,7 @@ init() ->
         impl = fun op_test_raises_colon/1, source = af_type_test_dsl
     }),
 
-    %% Closers (`;`)
+    %% Closers (`;`) for each body type.
     af_type:add_op('TestBody', #operation{
         name = ";", sig_in = ['TestBody'], sig_out = [],
         impl = fun op_close_test/1, source = af_type_test_dsl
@@ -112,8 +118,8 @@ init() ->
         impl = fun op_close_teardown/1, source = af_type_test_dsl
     }),
 
-    %% Register body types with handlers (re-register TestPending/etc. as
-    %% already-registered types get their handler attached).
+    %% Handlers for Pending states (expect an immediate transition) and
+    %% the shared body-capture handler.
     register_with_handler('TestPending',       fun handle_test_pending/2),
     register_with_handler('TestRaisesPending', fun handle_test_raises_pending/2),
     register_with_handler('TestBody',          fun handle_body_capture/2),
@@ -136,20 +142,15 @@ register_with_handler(TypeName, Handler) ->
 
 %%% Entry words
 
-op_group(#continuation{data_stack = [{'String', Name} | Rest],
-                       test_scope = Scope} = Cont) ->
-    %% Push a new group frame onto test_scope. setup/teardown slots start
-    %% empty; they get filled in by op_close_setup/op_close_teardown.
-    Frame = #{name => Name, setup => [], teardown => []},
-    Cont#continuation{
-        data_stack = Rest,
-        test_scope = [Frame | Scope]
-    }.
+op_group(#continuation{data_stack = [{'Atom', Name} | Rest]} = Cont) ->
+    %% Store the name as a binary so later code (spec lookups, reporting)
+    %% sees the same shape as the previous String-based implementation.
+    NameBin = list_to_binary(Name),
+    Frame = {'GroupScope', #{name => NameBin, setup => [], teardown => []}},
+    Cont#continuation{data_stack = [Frame | Rest]}.
 
-op_end_group(#continuation{test_scope = [_ | Rest]} = Cont) ->
-    Cont#continuation{test_scope = Rest};
-op_end_group(_Cont) ->
-    erlang:error({end_group, not_in_group}).
+op_close_group(#continuation{data_stack = [{'GroupScope', _} | Rest]} = Cont) ->
+    Cont#continuation{data_stack = Rest}.
 
 op_test(#continuation{data_stack = [{'String', Name} | Rest]} = Cont) ->
     Cont#continuation{
@@ -197,7 +198,7 @@ op_test_raises_colon(#continuation{data_stack = [{'TestRaisesPending', State} | 
 %%% Closers (`;`)
 
 op_close_test(#continuation{data_stack = [{'TestBody', Body} | Rest]} = Cont) ->
-    Spec = build_spec(positive, Body, Cont),
+    Spec = build_spec(positive, Body, Rest),
     Cont#continuation{
         data_stack = Rest,
         test_registry = Cont#continuation.test_registry ++ [Spec]
@@ -205,42 +206,37 @@ op_close_test(#continuation{data_stack = [{'TestBody', Body} | Rest]} = Cont) ->
 
 op_close_test_raises(#continuation{data_stack = [{'TestRaisesBody', Body} | Rest]} = Cont) ->
     ErrType = maps:get(err_type, Body),
-    Spec = build_spec({raises, ErrType}, Body, Cont),
+    Spec = build_spec({raises, ErrType}, Body, Rest),
     Cont#continuation{
         data_stack = Rest,
         test_registry = Cont#continuation.test_registry ++ [Spec]
     }.
 
-op_close_setup(#continuation{data_stack = [{'SetupBody', Body} | Rest],
-                             test_scope = [Frame | ScopeRest]} = Cont) ->
+op_close_setup(#continuation{data_stack = [{'SetupBody', Body},
+                                           {'GroupScope', Frame} | Rest]} = Cont) ->
     Tokens = maps:get(body, Body),
     NewFrame = Frame#{setup => Tokens},
     Cont#continuation{
-        data_stack = Rest,
-        test_scope = [NewFrame | ScopeRest]
+        data_stack = [{'GroupScope', NewFrame} | Rest]
     };
 op_close_setup(_Cont) ->
     erlang:error({setup, not_in_group}).
 
-op_close_teardown(#continuation{data_stack = [{'TeardownBody', Body} | Rest],
-                                test_scope = [Frame | ScopeRest]} = Cont) ->
+op_close_teardown(#continuation{data_stack = [{'TeardownBody', Body},
+                                              {'GroupScope', Frame} | Rest]} = Cont) ->
     Tokens = maps:get(body, Body),
     NewFrame = Frame#{teardown => Tokens},
     Cont#continuation{
-        data_stack = Rest,
-        test_scope = [NewFrame | ScopeRest]
+        data_stack = [{'GroupScope', NewFrame} | Rest]
     };
 op_close_teardown(_Cont) ->
     erlang:error({teardown, not_in_group}).
 
 %%% Handlers
 
-%% TestPending handler — should rarely fire because `:` comes immediately
-%% after `test`. A stray token here is a DSL syntax error.
 handle_test_pending(TokenValue, _Cont) ->
     erlang:error({test_pending, unexpected_token, TokenValue}).
 
-%% TestRaisesPending handler — captures the next token as the err-type atom.
 handle_test_raises_pending(TokenValue, Cont) ->
     [{'TestRaisesPending', State} | Rest] = Cont#continuation.data_stack,
     case maps:get(err_type, State) of
@@ -251,9 +247,6 @@ handle_test_raises_pending(TokenValue, Cont) ->
             erlang:error({test_raises_pending, unexpected_extra_token, TokenValue})
     end.
 
-%% Universal body-capture handler — appends the original token record to
-%% the body list. Works for TestBody / TestRaisesBody / SetupBody / TeardownBody
-%% because all four carry a #{body => [#token{}...]} map.
 handle_body_capture(_TokenValue, Cont) ->
     [{BodyType, State} | Rest] = Cont#continuation.data_stack,
     Token = Cont#continuation.current_token,
@@ -263,15 +256,8 @@ handle_body_capture(_TokenValue, Cont) ->
 
 %%% Helpers
 
-build_spec(Kind, Body, Cont) ->
-    Scope = Cont#continuation.test_scope,
-    GroupPath = [maps:get(name, F) || F <- lists:reverse(Scope)],
-    {Setup, Teardown} = case Scope of
-        [Frame | _] ->
-            {maps:get(setup, Frame, []), maps:get(teardown, Frame, [])};
-        [] ->
-            {[], []}
-    end,
+build_spec(Kind, Body, StackAfterPop) ->
+    {GroupPath, {Setup, Teardown}} = extract_group_info(StackAfterPop),
     #{
         group_path => GroupPath,
         name       => maps:get(name, Body),
@@ -281,6 +267,20 @@ build_spec(Kind, Body, Cont) ->
         teardown   => Teardown,
         location   => maps:get(location, Body)
     }.
+
+%% Collect GroupScope sentinels from the data stack, innermost-first as
+%% they appear on the stack. The spec wants group_path outermost-first,
+%% so reverse at the end. Setup / teardown come from the innermost group
+%% (topmost on the stack).
+extract_group_info(Stack) ->
+    Frames = [F || {'GroupScope', F} <- Stack, is_map(F)],
+    Path = [maps:get(name, F) || F <- lists:reverse(Frames)],
+    case Frames of
+        [Inner | _] ->
+            {Path, {maps:get(setup, Inner, []), maps:get(teardown, Inner, [])}};
+        [] ->
+            {[], {[], []}}
+    end.
 
 token_location(undefined) -> {undefined, 0};
 token_location(#token{file = F, line = L}) -> {F, L}.

@@ -1,6 +1,6 @@
 # Map operations — ported from test/af_map_tests.erl.
 
-"map_ops" group
+map_ops group
 
 "map-new pushes empty map" test :
     map-new map-size 0 assert-eq
@@ -98,4 +98,4 @@
     map-new "nope" "fallback" map-get-or "fallback" assert-eq
 ;
 
-end-group
+.

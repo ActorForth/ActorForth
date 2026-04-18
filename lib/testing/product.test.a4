@@ -1,6 +1,6 @@
 # Product types — ported from test/af_product_tests.erl.
 
-"product" group
+product group
 
 type Point
     x Int
@@ -69,4 +69,4 @@ type Counter
     drop
 ;
 
-end-group
+.

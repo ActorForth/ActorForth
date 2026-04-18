@@ -1,6 +1,6 @@
 # List operations — ported from test/af_list_tests.erl.
 
-"list_ops" group
+list_ops group
 
 # --- nil ---
 
@@ -336,4 +336,4 @@
     nil 1 cons 5 nth
 ;
 
-end-group
+.

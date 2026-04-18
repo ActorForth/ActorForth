@@ -1,6 +1,6 @@
 # String operations — ported from test/af_string_tests.erl.
 
-"string_ops" group
+string_ops group
 
 # --- Quoted literals ---
 
@@ -200,4 +200,4 @@
     0 0 "hello" substring "" assert-eq
 ;
 
-end-group
+.
