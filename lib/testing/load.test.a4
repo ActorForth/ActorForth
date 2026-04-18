@@ -1,0 +1,32 @@
+# File loading — ported from test/af_load_tests.erl.
+
+"load" group
+
+"load a library file and use its words" test :
+    "../../samples/lib_math.a4" load
+    5 square 25 assert-eq
+;
+
+"loaded words compose" test :
+    "../../samples/lib_math.a4" load
+    3 double square 36 assert-eq
+;
+
+"load multiple words from same lib" test :
+    "../../samples/lib_math.a4" load
+    7 cube 343 assert-eq
+;
+
+"load nonexistent file raises" test-raises load_error :
+    "nonexistent.a4" load
+;
+
+"load preserves stack state" test :
+    42
+    "../../samples/lib_math.a4" load
+    5 square
+    25 assert-eq
+    drop          # drop the 42 below
+;
+
+.

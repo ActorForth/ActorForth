@@ -1,0 +1,62 @@
+# Stdlib tests — ported from test/af_stdlib_tests.erl (subset).
+# Loads priv/stdlib.a4 to pick up negate, square, cube, double, even?, etc.
+
+"../../priv/stdlib.a4" load
+
+"stdlib" group
+
+# --- negate ---
+
+"negate positive" test :
+    5 negate -5 assert-eq
+;
+
+"negate negative" test :
+    -3 negate 3 assert-eq
+;
+
+"negate zero" test :
+    0 negate 0 assert-eq
+;
+
+# --- double ---
+
+"double positive" test :
+    5 double 10 assert-eq
+;
+
+"double zero" test :
+    0 double 0 assert-eq
+;
+
+# --- square ---
+
+"square positive" test :
+    4 square 16 assert-eq
+;
+
+"square negative" test :
+    -3 square 9 assert-eq
+;
+
+# --- cube ---
+
+"cube positive" test :
+    3 cube 27 assert-eq
+;
+
+# --- mod ---
+
+"mod computes remainder" test :
+    10 3 mod 1 assert-eq
+;
+
+"mod with exact division" test :
+    12 4 mod 0 assert-eq
+;
+
+"mod by zero raises" test-raises division_by_zero :
+    10 0 mod
+;
+
+.

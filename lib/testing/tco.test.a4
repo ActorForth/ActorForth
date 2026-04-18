@@ -1,0 +1,42 @@
+# Tail-call optimization tests — ported from test/af_tco_tests.erl.
+
+"tco" group
+
+: countdown Int -> ;
+: 0 -> ; drop
+: Int -> ; 1 - countdown
+.
+
+"tail-recursive countdown works" test :
+    5 countdown
+;
+
+: sum-helper Int Int -> Int ;
+: Int 0 -> Int ; drop
+: Int Int -> Int ; dup rot + swap 1 - sum-helper
+.
+
+"tail-recursive sum accumulator" test :
+    0 5 sum-helper 15 assert-eq
+;
+
+: fibt Int -> Int ;
+: 0 -> 0 ;
+: 1 -> 1 ;
+: Int -> Int ; dup 1 - fibt swap 2 - fibt +
+.
+
+"non-tail-recursive fib still works" test :
+    6 fibt 8 assert-eq
+;
+
+: deep Int -> ;
+: 0 -> ; drop
+: Int -> ; 1 - deep
+.
+
+"moderate recursion depth with TCO" test :
+    1000 deep
+;
+
+.
