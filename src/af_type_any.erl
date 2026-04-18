@@ -548,7 +548,7 @@ op_compile(Cont) ->
                                 end
                             end, D, ByType)
                     end,
-                    Cont#continuation{data_stack = Rest, dictionary = Dict};
+                    Cont#continuation{data_stack = Rest, dictionary = Dict, dispatch_cache = #{}};
                 {error, Reason} ->
                     Msg = lists:flatten(io_lib:format("Compile failed for '~s': ~p", [Name, Reason])),
                     af_error:raise(compile_error, Msg, Cont)

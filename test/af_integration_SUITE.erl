@@ -274,26 +274,24 @@ word_composition(_Config) ->
     [{'Int', 32}] = C7#continuation.data_stack.
 
 %% product_type_with_words: Define a product type and words that operate on it.
+%% Uses only the language's public surface — constructor + auto-generated
+%% getters — so the test is independent of how product instances are stored
+%% internally (currently positional tuples, historically a field map).
 product_type_with_words(_Config) ->
-    %% Define Point with x and y fields
     C1 = eval("type Point x Int y Int ."),
 
-    %% Create a point: x=3, y=4
-    C2 = eval("3 int 4 int point", C1),
-    [{'Point', Fields}] = C2#continuation.data_stack,
-    ?assertEqual({'Int', 3}, maps:get(x, Fields)),
-    ?assertEqual({'Int', 4}, maps:get(y, Fields)),
+    %% Getters return the right values.
+    C2 = eval("3 int 4 int point x", C1),
+    [{'Int', 3}, {'Point', _, _}] = C2#continuation.data_stack,
+    C3 = eval("3 int 4 int point y", C1),
+    [{'Int', 4}, {'Point', _, _}] = C3#continuation.data_stack,
 
-    %% Define distance-squared word: x*x + y*y
-    C3 = eval(": distance-squared Point -> Point Int ; x dup * swap y dup * rot + .", C1),
-
-    %% Test: 3*3 + 4*4 = 9 + 16 = 25
-    C4 = eval("3 int 4 int point distance-squared", C3),
-    [{'Int', 25}, {'Point', _}] = C4#continuation.data_stack,
-
-    %% Test with different values: 5*5 + 12*12 = 25 + 144 = 169
-    C5 = eval("5 int 12 int point distance-squared", C3),
-    [{'Int', 169}, {'Point', _}] = C5#continuation.data_stack.
+    %% User-defined word composes getters with arithmetic.
+    C4 = eval(": distance-squared Point -> Point Int ; x dup * swap y dup * rot + .", C1),
+    C5 = eval("3 int 4 int point distance-squared", C4),
+    [{'Int', 25}, {'Point', _, _}] = C5#continuation.data_stack,
+    C6 = eval("5 int 12 int point distance-squared", C4),
+    [{'Int', 169}, {'Point', _, _}] = C6#continuation.data_stack.
 
 %% pattern_matching_fibonacci: Multi-clause pattern matching for fibonacci.
 pattern_matching_fibonacci(_Config) ->

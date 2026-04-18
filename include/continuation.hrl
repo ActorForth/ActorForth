@@ -4,5 +4,6 @@
     current_token = undefined :: #token{} | undefined,
     debug         = false :: boolean(),
     word_trace    = [] :: list(),
-    dictionary    = undefined :: map() | undefined  %% TypeName => #af_type{}
+    dictionary    = undefined :: map() | undefined,  %% TypeName => #af_type{}
+    dispatch_cache = #{} :: map()  %% {Value, TosType} => {op, Impl} | {literal, TV}
 }).

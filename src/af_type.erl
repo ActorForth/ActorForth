@@ -12,7 +12,8 @@
 -export([snapshot/0]).
 -export([forget/1, current_def_counter/0]).
 -export([dict_find_op_in_tos/3, dict_find_op_in_any/3, dict_get_type/2,
-         dict_all_types/1, dict_add_op/3, dict_register_type/2, dict_replace_ops/4]).
+         dict_all_types/1, dict_add_op/3, dict_register_type/2, dict_replace_ops/4,
+         dict_op_clause_count/3]).
 
 -export_type([type_constraint/0, stack_item/0]).
 
@@ -362,6 +363,17 @@ dict_replace_ops(TypeName, OpName, NewOps, Dict) when is_list(NewOps) ->
             maps:put(TypeName, Type#af_type{ops = UpdatedOps}, Dict);
         error ->
             Dict
+    end.
+
+%% Count how many clauses exist under a given op name in a type (or Any).
+%% Used by the interpreter to decide whether an op is safe to cache: a
+%% single-clause op with plain types is cacheable; overloaded or value-
+%% constrained ops must re-dispatch.
+dict_op_clause_count(TypeName, OpName, Dict) ->
+    case maps:find(TypeName, Dict) of
+        {ok, #af_type{ops = Ops}} ->
+            length(maps:get(OpName, Ops, []));
+        error -> 0
     end.
 
 %%% Internal (dictionary-local)

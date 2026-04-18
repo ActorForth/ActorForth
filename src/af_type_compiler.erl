@@ -473,7 +473,7 @@ register_single_word(State, Rest, Cont) ->
     %% Sync local dictionary from ETS (auto_compile_word may have replaced ops)
     Dict1 = sync_type_from_ets(TargetType, Cont#continuation.dictionary),
 
-    Cont#continuation{data_stack = Rest, dictionary = Dict1}.
+    Cont#continuation{data_stack = Rest, dictionary = Dict1, dispatch_cache = #{}}.
 
 register_multi_word(State, Clauses, Rest, Cont) ->
     #{name := Name, sig_in := MasterSigIn0} = State,
@@ -533,7 +533,7 @@ register_multi_word(State, Clauses, Rest, Cont) ->
     %% Sync local dictionary from ETS
     Dict1 = sync_type_from_ets(TargetType, Cont#continuation.dictionary),
 
-    Cont#continuation{data_stack = Rest, dictionary = Dict1}.
+    Cont#continuation{data_stack = Rest, dictionary = Dict1, dispatch_cache = #{}}.
 
 %% Run compile-time type check on a word body.
 %% Type mismatches are errors when inference is complete (no unknowns).

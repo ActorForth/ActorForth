@@ -55,32 +55,147 @@ interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1) ->
                     Cont1#continuation{data_stack = [StringVal | Stack]}
             end;
         false ->
-            case af_type:dict_find_op_in_tos(Value, Stack, Dict) of
-                {ok, #operation{impl = Impl} = Op} ->
-                    debug_trace(Debug, Value, Stack, {tos, Op}),
-                    Impl(Cont1);
-                not_found ->
-                    case get_tos_handler(Stack, Dict) of
-                        {ok, Handler} ->
-                            debug_trace(Debug, Value, Stack, handler),
-                            Handler(Value, Cont1);
-                        none ->
-                            case af_type:dict_find_op_in_any(Value, Stack, Dict) of
-                                {ok, #operation{impl = Impl} = Op} ->
-                                    debug_trace(Debug, Value, Stack, {any, Op}),
-                                    Impl(Cont1);
+            dispatch_unquoted(Value, Stack, Dict, Debug, Cont1)
+    end.
+
+%% Unquoted dispatch with a monomorphic inline cache keyed on the top-3 stack
+%% types plus the token value. The 3-deep key is enough to make dispatch
+%% deterministic for every op in the codebase (the deepest sig_in is 4, and
+%% we skip caching entries that would resolve against that one op).
+%%
+%% Cache is invalidated by clearing `dispatch_cache` whenever the continuation
+%% dictionary is updated (word definition, compile, type definition).
+dispatch_unquoted(Value, Stack, Dict, Debug, Cont1) ->
+    Key = stack_key(Value, Stack),
+    Cache = Cont1#continuation.dispatch_cache,
+    case maps:find(Key, Cache) of
+        {ok, {op, Impl}} ->
+            debug_trace(Debug, Value, Stack, cache_op),
+            Impl(Cont1);
+        {ok, {literal, TypedValue}} ->
+            debug_trace(Debug, Value, Stack, {literal, TypedValue}),
+            Cont1#continuation{data_stack = [TypedValue | Stack]};
+        {ok, atom} ->
+            debug_trace(Debug, Value, Stack, atom),
+            Cont1#continuation{data_stack = [{'Atom', Value} | Stack]};
+        error ->
+            full_dispatch_and_cache(Value, Stack, Dict, Debug, Cont1, Key)
+    end.
+
+full_dispatch_and_cache(Value, Stack, Dict, Debug, Cont1, Key) ->
+    TosType = case Key of {_, T0, _, _} -> T0 end,
+    case af_type:dict_find_op_in_tos(Value, Stack, Dict) of
+        {ok, #operation{impl = Impl, sig_in = SigIn, guard = Guard} = Op} ->
+            debug_trace(Debug, Value, Stack, {tos, Op}),
+            ClauseCount = af_type:dict_op_clause_count(TosType, Value, Dict),
+            maybe_cache(Key, SigIn, Guard, ClauseCount, Cont1, {op, Impl}, Impl(Cont1));
+        not_found ->
+            case get_tos_handler(Stack, Dict) of
+                {ok, Handler} ->
+                    %% Handler dispatch is stateful — never cache.
+                    debug_trace(Debug, Value, Stack, handler),
+                    Handler(Value, Cont1);
+                none ->
+                    case af_type:dict_find_op_in_any(Value, Stack, Dict) of
+                        {ok, #operation{impl = Impl, sig_in = SigIn, guard = Guard} = Op} ->
+                            debug_trace(Debug, Value, Stack, {any, Op}),
+                            AnyCount = af_type:dict_op_clause_count('Any', Value, Dict),
+                            maybe_cache(Key, SigIn, Guard, AnyCount, Cont1, {op, Impl}, Impl(Cont1));
+                        not_found ->
+                            case try_literals(Value, Dict) of
+                                {ok, TypedValue} ->
+                                    debug_trace(Debug, Value, Stack, {literal, TypedValue}),
+                                    Result = Cont1#continuation{data_stack = [TypedValue | Stack]},
+                                    maybe_cache(Key, [], undefined, 1, Cont1, {literal, TypedValue}, Result);
                                 not_found ->
-                                    case try_literals(Value, Dict) of
-                                        {ok, TypedValue} ->
-                                            debug_trace(Debug, Value, Stack, {literal, TypedValue}),
-                                            Cont1#continuation{data_stack = [TypedValue | Stack]};
-                                        not_found ->
-                                            debug_trace(Debug, Value, Stack, atom),
-                                            Cont1#continuation{data_stack = [{'Atom', Value} | Stack]}
-                                    end
+                                    debug_trace(Debug, Value, Stack, atom),
+                                    Result = Cont1#continuation{data_stack = [{'Atom', Value} | Stack]},
+                                    maybe_cache_atom(Key, Value, Cont1, Result)
                             end
                     end
             end
+    end.
+
+%% Compute a cache key from Token value and top-3 stack types.
+%% Positions below the stack depth use 'none'. Non-atom-tagged stack items
+%% force the whole key to be skipped (we return a sentinel that never hits
+%% the cache) so legacy raw stack items don't corrupt the cache.
+stack_key(Value, [A, B, C | _]) ->
+    {Value, type_tag(A), type_tag(B), type_tag(C)};
+stack_key(Value, [A, B]) ->
+    {Value, type_tag(A), type_tag(B), none};
+stack_key(Value, [A]) ->
+    {Value, type_tag(A), none, none};
+stack_key(Value, []) ->
+    {Value, none, none, none}.
+
+type_tag(Item) when is_tuple(Item), tuple_size(Item) >= 2 ->
+    First = element(1, Item),
+    case is_atom(First) of
+        true -> First;
+        false -> '$uncacheable'
+    end;
+type_tag(_) -> '$uncacheable'.
+
+%% Cache a dispatch result only when it's safe to replay:
+%%  - TOS type has no handler (dispatch is state-dependent otherwise)
+%%  - sig_in length <= 3 (the key-depth, so stack shape fully determines match)
+%%  - no value constraints in sig_in (tuple entries trigger different clauses)
+%%  - no guard expression (runtime-checked, not key-determined)
+%%  - only one clause under this name (multi-clause dispatch picks by stack
+%%    value, our key captures only types)
+maybe_cache(Key, SigIn, Guard, ClauseCount, CallCont, CacheEntry, Result) ->
+    case should_cache(Key, SigIn, Guard, ClauseCount, CallCont) of
+        false -> Result;
+        true ->
+            OldCache = CallCont#continuation.dispatch_cache,
+            ResCache = Result#continuation.dispatch_cache,
+            %% If the callee swapped out the cache (e.g. word definition
+            %% cleared it), respect that — otherwise merge our new entry in.
+            MergedCache = case ResCache =:= OldCache orelse map_size(ResCache) >= map_size(OldCache) of
+                true  -> maps:put(Key, CacheEntry, ResCache);
+                false -> ResCache
+            end,
+            Result#continuation{dispatch_cache = MergedCache}
+    end.
+
+%% Atom cache: safe only if NO op with this name exists in the dictionary.
+%% If any op exists, the atom fallback was the fallthrough for THIS specific
+%% stack shape; a different stack with the same 3-deep key could match it.
+maybe_cache_atom(Key, Value, CallCont, Result) ->
+    Dict = CallCont#continuation.dictionary,
+    case any_op_named(Value, Dict) of
+        true  -> Result;
+        false -> maybe_cache(Key, [], undefined, 1, CallCont, atom, Result)
+    end.
+
+should_cache({_, '$uncacheable', _, _}, _, _, _, _) -> false;
+should_cache({_, _, '$uncacheable', _}, _, _, _, _) -> false;
+should_cache({_, _, _, '$uncacheable'}, _, _, _, _) -> false;
+should_cache(_Key, _SigIn, Guard, _ClauseCount, _Cont) when Guard =/= undefined ->
+    false;
+should_cache(_Key, _SigIn, _Guard, ClauseCount, _Cont) when ClauseCount > 1 ->
+    false;
+should_cache({_, T0, _, _}, SigIn, _Guard, _ClauseCount, Cont) ->
+    length(SigIn) =< 3
+        andalso not has_value_constraint(SigIn)
+        andalso not tos_has_handler(T0, Cont#continuation.dictionary).
+
+has_value_constraint([]) -> false;
+has_value_constraint([{_, _} | _]) -> true;
+has_value_constraint([_ | Rest]) -> has_value_constraint(Rest).
+
+any_op_named(Name, Dict) when is_map(Dict) ->
+    maps:fold(fun(_, #af_type{ops = Ops}, Acc) ->
+        Acc orelse maps:is_key(Name, Ops)
+    end, false, Dict);
+any_op_named(_, _) -> false.
+
+tos_has_handler(none, _Dict) -> false;
+tos_has_handler(TosType, Dict) ->
+    case af_type:dict_get_type(TosType, Dict) of
+        {ok, #af_type{handler = Handler}} when Handler =/= undefined -> true;
+        _ -> false
     end.
 
 %% Legacy path: ETS-based lookup (for continuations without dictionary)
@@ -174,6 +289,7 @@ format_stack(Stack) ->
 format_dispatch({tos, #operation{name = Name}}) ->
     TosInfo = io_lib:format("TOS.~s", [Name]),
     lists:flatten(TosInfo);
+format_dispatch(cache_op) -> "cache";
 format_dispatch(handler) -> "handler";
 format_dispatch({any, #operation{name = Name}}) ->
     AnyInfo = io_lib:format("Any.~s", [Name]),

@@ -113,7 +113,7 @@ op_type_dot(Cont) ->
     [{_, State} | Rest] = Cont#continuation.data_stack,
     #{name := TypeName, fields := Fields} = State,
     Dict = register_product_type(TypeName, Fields, Cont#continuation.dictionary),
-    Cont#continuation{data_stack = Rest, dictionary = Dict}.
+    Cont#continuation{data_stack = Rest, dictionary = Dict, dispatch_cache = #{}}.
 
 %% Register a product type with auto-generated constructor and getters.
 %%

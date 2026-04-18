@@ -184,45 +184,42 @@ report_speedup(Label, SlowTime, FastTime) ->
 
 %% --- Benchmark runners: pre-parsed tokens, interpret N times ---
 
-%% Arithmetic: push Int value on stack, then interpret "arith-chain drop"
+%% Arithmetic: push Int value on stack, then interpret "arith-chain drop".
+%% Cont is threaded through iterations so the interpreter's dispatch cache
+%% amortizes across calls (matches real-world REPL / long-running usage).
 run_arith(Tokens, C, N) ->
-    lists:foreach(fun(I) ->
-        C1 = C#continuation{data_stack = [{'Int', I}]},
-        af_interpreter:interpret_tokens(Tokens, C1)
-    end, lists:seq(1, N)).
+    lists:foldl(fun(I, Acc) ->
+        Acc1 = Acc#continuation{data_stack = [{'Int', I}]},
+        af_interpreter:interpret_tokens(Tokens, Acc1)
+    end, C, lists:seq(1, N)).
 
-%% List ops: no per-iteration params, just re-interpret pre-parsed tokens
 run_list(Tokens, C, N) ->
-    lists:foreach(fun(_) ->
-        af_interpreter:interpret_tokens(Tokens, C)
-    end, lists:seq(1, N)).
+    lists:foldl(fun(_, Acc) ->
+        af_interpreter:interpret_tokens(Tokens, Acc)
+    end, C, lists:seq(1, N)).
 
-%% String ops: push string value, then interpret "str-work drop"
 run_string(Tokens, C, N) ->
-    lists:foreach(fun(_) ->
-        C1 = C#continuation{data_stack = [{'String', <<"  hello world  ">>}]},
-        af_interpreter:interpret_tokens(Tokens, C1)
-    end, lists:seq(1, N)).
+    lists:foldl(fun(_, Acc) ->
+        Acc1 = Acc#continuation{data_stack = [{'String', <<"  hello world  ">>}]},
+        af_interpreter:interpret_tokens(Tokens, Acc1)
+    end, C, lists:seq(1, N)).
 
-%% Map ops: same
 run_map(Tokens, C, N) ->
-    lists:foreach(fun(_) ->
-        af_interpreter:interpret_tokens(Tokens, C)
-    end, lists:seq(1, N)).
+    lists:foldl(fun(_, Acc) ->
+        af_interpreter:interpret_tokens(Tokens, Acc)
+    end, C, lists:seq(1, N)).
 
-%% Product: push 3 Ints, then interpret "vec3 vec-mag2 drop drop"
 run_product(Tokens, C, N) ->
-    lists:foreach(fun(I) ->
-        C1 = C#continuation{data_stack = [{'Int', I+2}, {'Int', I+1}, {'Int', I}]},
-        af_interpreter:interpret_tokens(Tokens, C1)
-    end, lists:seq(1, N)).
+    lists:foldl(fun(I, Acc) ->
+        Acc1 = Acc#continuation{data_stack = [{'Int', I+2}, {'Int', I+1}, {'Int', I}]},
+        af_interpreter:interpret_tokens(Tokens, Acc1)
+    end, C, lists:seq(1, N)).
 
-%% Composed: push Int, interpret "compose-test drop"
 run_composed(Tokens, C, N) ->
-    lists:foreach(fun(I) ->
-        C1 = C#continuation{data_stack = [{'Int', I}]},
-        af_interpreter:interpret_tokens(Tokens, C1)
-    end, lists:seq(1, N)).
+    lists:foldl(fun(I, Acc) ->
+        Acc1 = Acc#continuation{data_stack = [{'Int', I}]},
+        af_interpreter:interpret_tokens(Tokens, Acc1)
+    end, C, lists:seq(1, N)).
 
 %% --- Direct BEAM calls: call compiled module functions directly ---
 
