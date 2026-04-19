@@ -1,0 +1,226 @@
+# lib/testing/hos.test.a4 — Tests for the HOS DSL (core + combinators
+# + visualiser). Visualiser is exercised for "does not error" only;
+# its side-effect output is not diffed here.
+
+"../../lib/hos/core.a4"         load
+"../../lib/hos/combinators.a4"  load
+"../../lib/hos/visualize.a4"    load
+
+hos group
+
+
+# -----------------------------------------------------------------
+# fm-primitive — leaf nodes
+# -----------------------------------------------------------------
+
+"fm-primitive: name preserved" test :
+    "foo" [ Int ] [ Int ] fm-primitive name
+    "foo" assert-eq
+    drop
+;
+
+"fm-primitive: kind is Primitive" test :
+    "foo" [ Int ] [ Int ] fm-primitive kind
+    Primitive assert-eq
+    drop
+;
+
+"fm-primitive: children empty" test :
+    "foo" [ Int ] [ Int ] fm-primitive children length
+    0 assert-eq
+    drop
+;
+
+"fm-primitive: predicate is None" test :
+    "foo" [ Int ] [ Int ] fm-primitive predicate
+    None assert-eq
+    drop
+;
+
+"fm-primitive: sig_in length" test :
+    "foo" [ Int Bool ] [ String ] fm-primitive sig_in length
+    2 assert-eq
+    drop
+;
+
+"fm-primitive: sig_out length" test :
+    "foo" [ Int ] [ Int Bool ] fm-primitive sig_out length
+    2 assert-eq
+    drop
+;
+
+
+# -----------------------------------------------------------------
+# fm-join — dependent composition
+# -----------------------------------------------------------------
+
+"fm-join: kind is Join" test :
+    "j" [ Int ] [ Int ]
+        "a" [ Int ] [ Int ] fm-primitive
+        "b" [ Int ] [ Int ] fm-primitive
+        fm-join
+    kind Join assert-eq
+    drop
+;
+
+"fm-join: children length is 2" test :
+    "j" [ Int ] [ Int ]
+        "a" [ Int ] [ Int ] fm-primitive
+        "b" [ Int ] [ Int ] fm-primitive
+        fm-join
+    children length
+    2 assert-eq
+    drop
+;
+
+"fm-join: predicate is None" test :
+    "j" [ Int ] [ Int ]
+        "a" [ Int ] [ Int ] fm-primitive
+        "b" [ Int ] [ Int ] fm-primitive
+        fm-join
+    predicate None assert-eq
+    drop
+;
+
+
+# -----------------------------------------------------------------
+# fm-include — independent partition
+# -----------------------------------------------------------------
+
+"fm-include: kind is Include" test :
+    "i" [ Int Int ] [ Int Int ]
+        "left"  [ Int ] [ Int ] fm-primitive
+        "right" [ Int ] [ Int ] fm-primitive
+        fm-include
+    kind Include assert-eq
+    drop
+;
+
+"fm-include: children length is 2" test :
+    "i" [ Int Int ] [ Int Int ]
+        "left"  [ Int ] [ Int ] fm-primitive
+        "right" [ Int ] [ Int ] fm-primitive
+        fm-include
+    children length
+    2 assert-eq
+    drop
+;
+
+
+# -----------------------------------------------------------------
+# fm-or — alternative
+# -----------------------------------------------------------------
+
+"fm-or: kind is Or" test :
+    "o" [ Int ] [ Int ] my-pred
+        "a" [ Int ] [ Int ] fm-primitive
+        "b" [ Int ] [ Int ] fm-primitive
+        fm-or
+    kind Or assert-eq
+    drop
+;
+
+"fm-or: predicate retained" test :
+    "o" [ Int ] [ Int ] my-pred
+        "a" [ Int ] [ Int ] fm-primitive
+        "b" [ Int ] [ Int ] fm-primitive
+        fm-or
+    predicate my-pred assert-eq
+    drop
+;
+
+
+# -----------------------------------------------------------------
+# tm-primitive / tm-composite
+# -----------------------------------------------------------------
+
+"tm-primitive: name" test :
+    "Int" [ "+" "-" ] tm-primitive name
+    "Int" assert-eq
+    drop
+;
+
+"tm-primitive: primops length" test :
+    "Int" [ "+" "-" ] tm-primitive primops length
+    2 assert-eq
+    drop
+;
+
+"tm-primitive: empty children" test :
+    "Int" [ "+" ] tm-primitive children length
+    0 assert-eq
+    drop
+;
+
+"tm-composite: children length" test :
+    "Account" [ "balance" ]
+        "Int"  [ "+"    ]  tm-primitive
+        "List" [ "cons" ]  tm-primitive
+        pair
+    tm-composite children length
+    2 assert-eq
+    drop
+;
+
+
+# -----------------------------------------------------------------
+# pair helper
+# -----------------------------------------------------------------
+
+"pair: length is 2" test :
+    1 2 pair length
+    2 assert-eq
+;
+
+"pair: first element preserved" test :
+    1 2 pair head
+    1 assert-eq
+;
+
+
+# -----------------------------------------------------------------
+# Nested construction — structural integrity
+# -----------------------------------------------------------------
+
+"nested Join: inner children count" test :
+    "root" [ Int ] [ Int ]
+        "left" [ Int ] [ Int ] fm-primitive
+        "mid"  [ Int ] [ Int ]
+            "inner-a" [ Int ] [ Int ] fm-primitive
+            "inner-b" [ Int ] [ Int ] fm-primitive
+            fm-join
+        fm-join
+    children tail head children length
+    2 assert-eq
+    drop drop
+;
+
+
+# -----------------------------------------------------------------
+# Visualiser — runs without error on primitive, Join, TMap.
+# Output is not captured; we just assert no exception is raised.
+# -----------------------------------------------------------------
+
+"visualise: primitive runs" test :
+    "leaf" [ Int ] [ Int ] fm-primitive
+    show-fmap-tree
+;
+
+"visualise: join tree runs" test :
+    "j" [ Int ] [ Int ]
+        "a" [ Int ] [ Int ] fm-primitive
+        "b" [ Int ] [ Int ] fm-primitive
+        fm-join
+    show-fmap-tree
+;
+
+"visualise: tmap tree runs" test :
+    "Account" [ "balance" ]
+        "Int"  [ "+"    ]  tm-primitive
+        "List" [ "cons" ]  tm-primitive
+        pair
+    tm-composite
+    show-tmap-tree
+;
+
+.

@@ -1,0 +1,82 @@
+# samples/hos/bank_fmap.a4
+#
+# The bank actor from samples/bank_actor.a4, modelled as an explicit
+# HOS FMap. This file does not *run* the bank — it only describes
+# its two top-level operations (deposit, withdraw) as Join/Primitive
+# decompositions, then visualises the trees.
+#
+# The corresponding a4 word definitions in samples/bank_actor.a4:
+#
+#   : deposit  Account Int -> Account ;
+#       dup Deposit swap make-tx rot swap add-tx swap credit .
+#
+#   : withdraw Account Int -> Account ;
+#       dup Withdrawal swap make-tx rot swap add-tx swap debit .
+#
+# Structurally both are a dependent composition (Join) of:
+#   1. build a Transaction from (kind, amount)           [make-tx]
+#   2. append the Transaction to the Account's ledger    [add-tx]
+#   3. adjust the Account's balance                      [credit | debit]
+#
+# Hamilton's primitives are binary, so the three-step sequence is
+# modelled as Join(make-tx, Join(add-tx, credit_or_debit)).
+#
+# sig_in / sig_out entries are bare atoms (type names are not
+# registered as words, so they auto-push as atoms). TMap primops use
+# string literals because operator tokens like + - * / would
+# otherwise dispatch inside a bracket literal.
+
+"../../lib/hos/core.a4"         load
+"../../lib/hos/combinators.a4"  load
+"../../lib/hos/visualize.a4"    load
+
+
+# -----------------------------------------------------------------
+# Deposit — Join(make-tx, Join(add-tx, credit))
+# -----------------------------------------------------------------
+"deposit"  [ Account Atom Int ]  [ Account ]
+    "make-tx"         [ Atom Int ]             [ Transaction ]    fm-primitive
+    "post-tx-credit"  [ Account Atom Int ]     [ Account ]
+        "add-tx"      [ Account Transaction ]  [ Account ]        fm-primitive
+        "credit"      [ Account Int ]          [ Account ]        fm-primitive
+    fm-join
+fm-join
+
+
+# -----------------------------------------------------------------
+# Withdraw — Join(make-tx, Join(add-tx, debit))
+# -----------------------------------------------------------------
+"withdraw" [ Account Atom Int ]  [ Account ]
+    "make-tx"         [ Atom Int ]             [ Transaction ]    fm-primitive
+    "post-tx-debit"   [ Account Atom Int ]     [ Account ]
+        "add-tx"      [ Account Transaction ]  [ Account ]        fm-primitive
+        "debit"       [ Account Int ]          [ Account ]        fm-primitive
+    fm-join
+fm-join
+
+
+# -----------------------------------------------------------------
+# TMap side — the Account product type as a composite TMap node.
+# -----------------------------------------------------------------
+"Account" [ "balance" "ledger" "balance!" "ledger!" ]
+    "Int"  [ "+" "-" "*" "/" "<" ">" "<=" ">=" "==" "!=" ]        tm-primitive
+    "List" [ "head" "tail" "length" "cons" "empty?" ]             tm-primitive
+    pair
+tm-composite
+
+
+# -----------------------------------------------------------------
+# Stack at this point:  deposit-FMap  withdraw-FMap  Account-TMap
+# Print in reverse (dup/drop pattern to consume one at a time).
+# -----------------------------------------------------------------
+
+"=== Account (TMap) ===" print
+dup show-tmap-tree drop
+
+"" print
+"=== withdraw (FMap) ===" print
+dup show-fmap-tree drop
+
+"" print
+"=== deposit (FMap) ===" print
+show-fmap-tree

@@ -1,0 +1,112 @@
+# lib/hos/visualize.a4 — ASCII tree visualiser for HOS maps.
+#
+# Requires: core.a4 must be loaded before this file.
+#
+# Entry points:
+#   FMapNode show-fmap-tree      — print an FMap tree to stdout
+#   TMapNode show-tmap-tree      — print a  TMap tree to stdout
+#
+# Output is one line per node:
+#
+#     rootName
+#       childAName
+#         grandchildAName
+#       childBName
+#
+# Two-space indentation per level. Name is the only field shown at
+# this stage; kind / sig / predicate / primops are available on the
+# node values for richer formatters later.
+
+# -----------------------------------------------------------------
+# Helper: print "<prefix><name>" on one line, preserve FM on stack.
+# -----------------------------------------------------------------
+# Stack trace for show-fm-name:
+#   entry             FM Prefix
+#   over name         FM Prefix FM String_name
+#   rot               FM FM String_name Prefix
+#   swap              FM FM Prefix String_name
+#   concat            FM FM Prefix+Name
+#   print             FM FM
+#   drop              FM
+: show-fm-name FMapNode String -> FMapNode ;
+    over name
+    rot swap concat
+    print drop .
+
+
+# -----------------------------------------------------------------
+# Bool-dispatch helper: called with (List Prefix Bool) where
+# Bool answers "is the children list empty?". The full sig is
+# declared so the type checker can verify the body; the bare
+# `Bool -> ;` form compiles but triggers an "incomplete" warning
+# because the body consumes three items while the sig declares one.
+#
+# Forward references: show-fmap, show-fm-children are defined
+# later in the same file. a4 compiled-word dispatch is late-bound,
+# so by the time show-fm-children-step is first called at runtime
+# both referenced words exist.
+: show-fm-children-step List String Bool -> ;
+    : List String True -> ;
+        drop drop drop
+    : List String False -> ;
+        drop
+        over head
+        over
+        show-fmap
+        swap tail swap
+        show-fm-children .
+
+# Walk each child in a List, each at the same accumulated prefix.
+: show-fm-children List String -> ;
+    over empty? show-fm-children-step .
+
+# Show one FMap node at the given prefix, then recurse on its
+# children with a two-space-deeper prefix.
+: show-fmap FMapNode String -> ;
+    over over
+    show-fm-name
+    drop
+    swap children
+    rot "  " concat
+    rot drop
+    show-fm-children .
+
+# Public entry — render an FMap tree starting with no indent.
+: show-fmap-tree FMapNode -> ;
+    "" show-fmap .
+
+
+# -----------------------------------------------------------------
+# TMap side — same shape, different type.
+# -----------------------------------------------------------------
+
+: show-tm-name TMapNode String -> TMapNode ;
+    over name
+    rot swap concat
+    print drop .
+
+: show-tm-children-step List String Bool -> ;
+    : List String True -> ;
+        drop drop drop
+    : List String False -> ;
+        drop
+        over head
+        over
+        show-tmap
+        swap tail swap
+        show-tm-children .
+
+: show-tm-children List String -> ;
+    over empty? show-tm-children-step .
+
+: show-tmap TMapNode String -> ;
+    over over
+    show-tm-name
+    drop
+    swap children
+    rot "  " concat
+    rot drop
+    show-tm-children .
+
+: show-tmap-tree TMapNode -> ;
+    "" show-tmap .

@@ -1,0 +1,66 @@
+# lib/hos/core.a4 — Core types for the HOS DSL.
+#
+# HOS = Higher Order Software (Hamilton & Zeldin, 1976). The current
+# vehicle is the Universal Systems Language / 001AXES (Hamilton
+# Technologies). Every system is modelled as two interlocking maps:
+#
+#   FMap — Function Map. Hierarchical decomposition of *what the
+#          system does*. Each node is either a primitive or is
+#          decomposed into two children by exactly one of three
+#          primitive control structures: Join, Include, Or.
+#
+#   TMap — Type Map. Hierarchical decomposition of *what the
+#          system has*. Each node is a type that owns a set of
+#          primitive operations inherited by its instances.
+#
+# The three primitive control structures (parent; left child; right child):
+#
+#   Join    parent(a;c), left(a;b), right(b;c)
+#           Dependent composition — left's output is right's input.
+#           In a4 this is plain concatenation.
+#
+#   Include parent(a,b;c,d), left(a;c), right(b;d)
+#           Independent partition — children operate on disjoint
+#           parts of the parent's domain/codomain.
+#
+#   Or      parent(a;b) = partition(a) ? left(a;b) : right(a;b)
+#           Alternative — a predicate on the parent's inputs selects
+#           which child runs.
+#
+# This file defines only the shape; combinators, checker and
+# visualizer live in sibling files.
+#
+# Field order is chosen so the auto-generated constructor
+# `fmapnode` takes args in an order convenient for combinators:
+# kind is TOS, predicate (Or only) is just below, children above it.
+
+# -----------------------------------------------------------------
+# FMapNode — one node of a Function Map.
+# -----------------------------------------------------------------
+# name       word name, or the name of this decomposition step
+# sig_in     List of input type-name atoms  (TOS-first, as in a4 sigs)
+# sig_out    List of output type-name atoms (TOS-first)
+# children   List of FMapNode — 2 for Join / Include / Or ; empty for Primitive
+# predicate  Atom — name of partition word (Or only; None otherwise)
+# kind       Atom — Join | Include | Or | Primitive
+
+type FMapNode
+    name       String
+    sig_in     List
+    sig_out    List
+    children   List
+    predicate  Atom
+    kind       Atom .
+
+
+# -----------------------------------------------------------------
+# TMapNode — one node of a Type Map.
+# -----------------------------------------------------------------
+# name      type name (matches a4's registered type atom)
+# primops   List of primitive operation names owned by this type
+# children  List of TMapNode — sub-type decomposition (empty for primitive types)
+
+type TMapNode
+    name      String
+    primops   List
+    children  List .

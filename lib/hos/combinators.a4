@@ -1,0 +1,65 @@
+# lib/hos/combinators.a4 — Builder words for the HOS DSL.
+#
+# Requires: core.a4 must be loaded before this file.
+#
+# The three primitive FMap structures (Join, Include, Or) and the
+# Primitive leaf are built via dedicated combinators so users do not
+# have to remember the positional argument order of the raw
+# constructor.
+#
+#   fm-primitive ( name sig_in sig_out              -> FMapNode )
+#   fm-join      ( name sig_in sig_out left right   -> FMapNode )
+#   fm-include   ( name sig_in sig_out left right   -> FMapNode )
+#   fm-or        ( name sig_in sig_out pred left right -> FMapNode )
+#
+# TMap builders are a thin wrapper for symmetry with the FMap side:
+#
+#   tm-primitive ( name primops          -> TMapNode )
+#   tm-composite ( name primops children -> TMapNode )
+#
+# Predicate sentinel for non-Or nodes is the bare atom  None.
+
+# -----------------------------------------------------------------
+# pair — bundle the top two stack items into a 2-element list
+# preserving source order.    Stack: a b -> [a, b]
+# -----------------------------------------------------------------
+: pair Any Any -> List ;
+    [ ] swap cons swap cons .
+
+
+# -----------------------------------------------------------------
+# FMap combinators
+# -----------------------------------------------------------------
+
+# Primitive leaf — no children, no predicate.
+: fm-primitive String List List -> FMapNode ;
+    [ ] None Primitive fmapnode .
+
+# Join — dependent composition of two children.
+: fm-join String List List FMapNode FMapNode -> FMapNode ;
+    pair None Join fmapnode .
+
+# Include — independent partition of two children.
+: fm-include String List List FMapNode FMapNode -> FMapNode ;
+    pair None Include fmapnode .
+
+# Or — alternative between two children, selected by the predicate.
+# Stack entering body:  name sig_in sig_out pred left right
+# After  pair         : name sig_in sig_out pred [left,right]
+# After  swap         : name sig_in sig_out [left,right] pred
+# After  Or fmapnode  : FMapNode
+: fm-or String List List Atom FMapNode FMapNode -> FMapNode ;
+    pair swap Or fmapnode .
+
+
+# -----------------------------------------------------------------
+# TMap combinators
+# -----------------------------------------------------------------
+
+# Leaf type node with no sub-types.
+: tm-primitive String List -> TMapNode ;
+    [ ] tmapnode .
+
+# Composite type node with sub-types already constructed.
+: tm-composite String List List -> TMapNode ;
+    tmapnode .
