@@ -153,6 +153,12 @@ match_sig([{Type, Value} | SigRest], [StackItem | StackRest]) ->
     %% don't support value constraints).
     case StackItem of
         {Type, Value} -> match_sig(SigRest, StackRest);
+        %% Checker-only: a stack item whose value is `undefined` means
+        %% the type is known but the concrete value isn't (e.g. a fresh
+        %% Bool produced by `==`). Accept it against any value
+        %% constraint of the matching type — the runtime never produces
+        %% undefined values so this branch is effectively checker-only.
+        {Type, undefined} -> match_sig(SigRest, StackRest);
         _ -> false
     end;
 match_sig([Type | SigRest], [StackItem | StackRest]) when is_atom(Type) ->
@@ -162,6 +168,14 @@ match_sig([Type | SigRest], [StackItem | StackRest]) when is_atom(Type) ->
     end,
     case StackType of
         Type -> match_sig(SigRest, StackRest);
+        %% 'Any' on the stack matches any declared type. The type checker
+        %% produces Any as the result of operations whose static type
+        %% depends on runtime data (e.g. `head` on a heterogeneous list),
+        %% and the runtime never puts a bare 'Any' on the stack — so this
+        %% branch is effectively checker-only, and it keeps static
+        %% inference tracking through `over head` / `nth` / reduce-style
+        %% combinators without false-negatives.
+        'Any' -> match_sig(SigRest, StackRest);
         _ ->
             case af_type_check:is_type_variable(Type) of
                 true -> match_sig(SigRest, StackRest);

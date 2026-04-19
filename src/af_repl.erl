@@ -42,7 +42,12 @@ run_file(Filename) ->
     Cont0 = load_stdlib(af_interpreter:new_continuation()),
     {ok, Content} = file:read_file(Filename),
     Tokens = af_parser:parse(binary_to_list(Content), Filename),
-    af_interpreter:interpret_tokens(Tokens, Cont0).
+    Result = af_interpreter:interpret_tokens(Tokens, Cont0),
+    %% Surface any deferred type checks that never resolved during the
+    %% file load. Keeps REPL-first behaviour honest — the user sees the
+    %% debt instead of silently accruing unresolved references.
+    af_type_compiler:finalize_pending_checks(),
+    Result.
 
 %% Execute a .a4 file then enter the REPL with resulting state.
 run_file_repl(Filename) ->

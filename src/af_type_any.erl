@@ -183,6 +183,18 @@ init() ->
         impl = fun op_forget/1
     }),
 
+    %% pending : ->  (print the list of unresolved type checks)
+    af_type:add_op('Any', #operation{
+        name = "pending", sig_in = [], sig_out = [],
+        impl = fun op_pending/1
+    }),
+
+    %% verify-all : ->  (force a final retry, print any unresolved)
+    af_type:add_op('Any', #operation{
+        name = "verify-all", sig_in = [], sig_out = [],
+        impl = fun op_verify_all/1
+    }),
+
     ok.
 
 get_ops(TypeName) ->
@@ -622,6 +634,24 @@ op_forget(Cont) ->
             io:format("forget: word '~s' is not defined~n", [NameStr])
     end,
     Cont#continuation{data_stack = Rest}.
+
+%% pending: print the list of unresolved (deferred) type checks.
+op_pending(Cont) ->
+    case af_type_compiler:list_pending_checks() of
+        [] ->
+            io:format("No pending type checks.~n");
+        Pending ->
+            io:format("~p pending type check(s):~n", [length(Pending)]),
+            lists:foreach(fun({Name, SigIn, SigOut}) ->
+                io:format("  ~s  (~p -> ~p)~n", [Name, SigIn, SigOut])
+            end, Pending)
+    end,
+    Cont.
+
+%% verify-all: force a final retry of all deferred checks, then report.
+op_verify_all(Cont) ->
+    af_type_compiler:finalize_pending_checks(),
+    Cont.
 
 %% Called by af_type_compiler after word registration when auto-compile is enabled.
 auto_compile_word(Name) ->

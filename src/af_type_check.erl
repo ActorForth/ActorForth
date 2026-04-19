@@ -89,27 +89,54 @@ resolve_via_registry(Name, Stack, _Locals) ->
             case try_literal_type(Name) of
                 {ok, Type} -> {ok, [Type | Stack]};
                 not_found ->
-                    %% 5. Is the name registered under SOME type — just not
-                    %% matching against the current stack (sig mismatch or
-                    %% stack too shallow)? If so, this is a real stack-effect
-                    %% error, not a forward-reference. Reporting it as
-                    %% stack_underflow / type_mismatch lets the caller raise
-                    %% properly rather than masking with an Atom push.
-                    case af_type:find_op_by_name(Name, 'Any') of
-                        {ok, #operation{sig_in = OpSigIn, sig_out = OpSigOut}} ->
-                            apply_stack_effect(OpSigIn, OpSigOut, Stack, Name);
-                        not_found ->
-                            case find_op_by_name_in_any_type(Name) of
-                                {ok, #operation{sig_in = OpSigIn, sig_out = OpSigOut}} ->
-                                    apply_stack_effect(OpSigIn, OpSigOut, Stack, Name);
-                                not_found ->
-                                    %% Truly unknown — likely a forward
-                                    %% reference. Push Atom; the caller
-                                    %% defers until the name resolves.
-                                    {ok, ['Atom' | Stack]}
-                            end
+                    %% 5. The name is registered SOMEWHERE, but no variant's
+                    %% sig matched the current stack. Two cases:
+                    %%
+                    %%   (a) Stack is SHORTER than the op's declared sig_in —
+                    %%       that's a real underflow; raise it so callers can
+                    %%       see the bug (this is how `swap` on a 1-item
+                    %%       stack used to silently push Atom).
+                    %%
+                    %%   (b) Stack has enough depth but types/values don't
+                    %%       match — the runtime interpreter falls through
+                    %%       to the Atom-push fallback in that case (e.g.
+                    %%       `+ reduce` where `+` ends up on the stack as
+                    %%       the word atom passed to reduce). We mirror
+                    %%       that behaviour here so we don't false-alarm on
+                    %%       intentional atom pushes of registered names.
+                    case any_registered_by_name(Name) of
+                        {ok, ShortestSigInLen} when ShortestSigInLen > length(Stack) ->
+                            {error,
+                             {stack_underflow, Name,
+                              {expected_depth, ShortestSigInLen,
+                               got_depth, length(Stack)}}};
+                        _ ->
+                            {ok, ['Atom' | Stack]}
                     end
             end
+    end.
+
+%% Find the shallowest sig_in length across every registered op of this
+%% name (Any + every type). Returns {ok, N} if registered anywhere,
+%% not_found otherwise. Used to distinguish real stack underflow (stack
+%% too shallow for any variant) from intentional atom-push where the
+%% token shadows a registered name.
+any_registered_by_name(Name) ->
+    AnyVariants =
+        case af_type:find_op_by_name(Name, 'Any') of
+            {ok, Op} -> [Op];
+            not_found -> []
+        end,
+    TypeVariants =
+        case find_op_by_name_in_any_type(Name) of
+            {ok, Op2} -> [Op2];
+            not_found -> []
+        end,
+    case AnyVariants ++ TypeVariants of
+        [] -> not_found;
+        Ops ->
+            Lens = [length(O#operation.sig_in) || O <- Ops],
+            {ok, lists:min(Lens)}
     end.
 
 %% Find an op by name across ALL registered types (used after TOS-type and

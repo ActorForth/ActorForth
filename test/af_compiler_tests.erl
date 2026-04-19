@@ -204,7 +204,15 @@ multi_clause_test_() ->
         fun(_) -> {"multi-clause word with value constraints", fun() ->
             %% This exercises the multi-clause registration path (line 364)
             C1 = eval(": abs2 0 Int -> Int ; .", af_interpreter:new_continuation()),
-            C2 = eval(": abs2 Int -> Int ; dup 0 int < : true -> Int ; drop 0 int swap - : Int -> Int ; .", C1),
+            %% The second definition's pre-dispatch body `dup 0 int <`
+            %% produces Bool on top of the original Int. Each sub-clause
+            %% must therefore match Bool values explicitly — the old form
+            %% `: Int -> Int ;` as a fall-through relied on the compiler
+            %% silently discarding the pre-dispatch body, which is no
+            %% longer the case.
+            C2 = eval(": abs2 Int -> Int ; dup 0 int < "
+                      ": true -> Int ; drop 0 int swap - "
+                      ": false -> Int ; drop .", C1),
             R = eval("0 int abs2", C2),
             ?assertEqual([{'Int', 0}], R#continuation.data_stack)
         end} end,

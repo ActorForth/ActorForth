@@ -6,6 +6,8 @@
 -include("af_type.hrl").
 
 -export([init/0]).
+-export([list_pending_checks/0, finalize_pending_checks/0,
+         clear_pending_checks/0]).
 
 %% Compiler state stored on data_stack as tagged tuples:
 %%   {'WordDefinition', #{name => ..., sig_in => ..., sig_out => ..., body => ...}}
@@ -225,6 +227,13 @@ handle_output_sig(TokenValue, Cont) ->
 
 %% Handler: CodeCompile
 %% ":" starts a sub-clause; other tokens are compiled as body ops.
+%%
+%% Pre-dispatch body preservation: if tokens accumulated into `body`
+%% BEFORE the first `:` sub-clause marker, they are saved as
+%% `pre_dispatch`. At `.` time this triggers single-op registration
+%% with body = pre_dispatch ++ [select_clause]. Without this, the
+%% classic `a b op : True -> ... : False -> ...` pattern would
+%% silently lose `a b op`.
 handle_code_compile(":", Cont) ->
     [{'CodeCompile', State} | Rest] = Cont#continuation.data_stack,
     #{body := Body, clauses := Clauses, current_sub := CurrentSub} = State,
@@ -237,13 +246,23 @@ handle_code_compile(":", Cont) ->
                           body => Body,
                           guard => maps:get(sub_guard, Sub, undefined)}]
     end,
-    %% Transition to SubClauseInput
+    %% Decide whether the accumulated Body is pre-dispatch code:
+    %% non-empty AND this is the very first `:` (no existing clauses,
+    %% no current_sub). Anything else means Body is a clause body.
+    NewPreDispatch =
+        case {CurrentSub, Clauses, Body} of
+            {undefined, [], B} when B =/= [] ->
+                B;
+            _ ->
+                maps:get(pre_dispatch, State, [])
+        end,
     SubState = State#{
         clauses => NewClauses,
         current_sub => undefined,
         body => [],
         sub_sig_in => [],
-        sub_position => 0
+        sub_position => 0,
+        pre_dispatch => NewPreDispatch
     },
     Cont#continuation{
         data_stack = [{'SubClauseInput', SubState} | Rest]
@@ -382,8 +401,15 @@ op_semicolon(Cont) ->
 op_sub_arrow(Cont) ->
     [{'SubClauseInput', State} | Rest] = Cont#continuation.data_stack,
     #{sub_sig_in := RawSubSigIn, sig_in := MasterSigIn} = State,
-    %% Resolve raw tokens right-aligned against master sig
-    ResolvedSubSigIn = resolve_sub_tokens_right_aligned(RawSubSigIn, MasterSigIn),
+    %% If this word has a pre-dispatch body, the sub-clause matches against
+    %% the intermediate stack produced by that body — NOT the master sig.
+    %% In that case, skip right-align padding (it would wrongly anchor the
+    %% sig to master-sig positions) and resolve each token independently.
+    HasPreDispatch = maps:get(pre_dispatch, State, []) =/= [],
+    ResolvedSubSigIn = case HasPreDispatch of
+        true -> resolve_sub_tokens_independent(RawSubSigIn);
+        false -> resolve_sub_tokens_right_aligned(RawSubSigIn, MasterSigIn)
+    end,
     NewState = State#{
         sub_sig_in => ResolvedSubSigIn,
         sub_sig_out => [],
@@ -417,6 +443,7 @@ op_sub_semicolon(Cont) ->
 op_dot(Cont) ->
     [{'CodeCompile', State} | Rest] = Cont#continuation.data_stack,
     #{clauses := Clauses, current_sub := CurrentSub, body := Body} = State,
+    PreDispatch = maps:get(pre_dispatch, State, []),
     case Clauses =:= [] andalso CurrentSub =:= undefined of
         true ->
             %% Normal case: single operation, no sub-clauses
@@ -432,7 +459,18 @@ op_dot(Cont) ->
                                   body => Body,
                                   guard => maps:get(sub_guard, Sub, undefined)}]
             end,
-            register_multi_word(State, AllClauses, Rest, Cont)
+            case PreDispatch of
+                [] ->
+                    %% Plain multi-clause: each clause is its own op,
+                    %% dispatched by match_sig at call time.
+                    register_multi_word(State, AllClauses, Rest, Cont);
+                _ ->
+                    %% Pre-dispatch body + sub-clauses: build one op whose
+                    %% body is the pre-dispatch tokens followed by a runtime
+                    %% select-clause dispatcher.
+                    register_predispatch_word(State, AllClauses,
+                                              PreDispatch, Rest, Cont)
+            end
     end.
 
 register_single_word(State, Rest, Cont) ->
@@ -544,6 +582,100 @@ register_multi_word(State, Clauses, Rest, Cont) ->
 
     Cont#continuation{data_stack = Rest, dictionary = Dict1, dispatch_cache = #{}}.
 
+%% Register a word whose body is: pre-dispatch tokens followed by sub-clauses.
+%% This pattern (`: foo A B -> C ; pre-body : Match -> ; clause-body . `) used
+%% to silently discard `pre-body` on the parasitic compilation path. We
+%% preserve it by building a single operation whose body runs pre-dispatch
+%% first and then invokes a runtime select-clause dispatcher with the
+%% accumulated clauses.
+register_predispatch_word(State, Clauses, PreDispatch, Rest, Cont) ->
+    #{name := Name, sig_in := MSigIn0, sig_out := MSigOut0} = State,
+    Guard = maps:get(guard, State, undefined),
+    MSigIn = lists:reverse(MSigIn0),
+    MSigOut = lists:reverse(MSigOut0),
+    TargetType = get_target_type(MSigIn),
+    ensure_type(TargetType),
+    %% Normalise clause sigs to TOS-first order.
+    ClauseRecs = lists:map(fun(#{sig_in := SIn0, sig_out := SOut0, body := CBody}) ->
+        #{sig_in => lists:reverse(SIn0),
+          sig_out => lists:reverse(SOut0),
+          body => CBody,
+          guard => maps:get(guard, State, undefined)}
+    end, Clauses),
+    SelectOp = make_select_clause_op(ClauseRecs),
+    Body = PreDispatch ++ [SelectOp],
+    Impl = make_word_impl(Body, Name, MSigIn),
+    NewOp = #operation{
+        name = Name,
+        sig_in = MSigIn,
+        sig_out = MSigOut,
+        impl = Impl,
+        source = {compiled, Body},
+        guard = Guard
+    },
+    af_type:add_op(TargetType, NewOp),
+    type_check_predispatch(Name, MSigIn, MSigOut, PreDispatch, ClauseRecs),
+    af_type_any:auto_compile_word(Name),
+    Dict1 = sync_type_from_ets(TargetType, Cont#continuation.dictionary),
+    Cont#continuation{data_stack = Rest, dictionary = Dict1, dispatch_cache = #{}}.
+
+%% Build a runtime select-clause operation. At call time it examines the
+%% data stack against each clause's sig_in and runs the first that matches.
+make_select_clause_op(ClauseRecs) ->
+    #operation{
+        name = "<select-clause>",
+        sig_in = [],
+        sig_out = [],
+        impl = fun(C) -> select_clause_dispatch(ClauseRecs, C) end,
+        source = {select_clause, ClauseRecs}
+    }.
+
+select_clause_dispatch([], Cont) ->
+    af_error:raise(no_clause_match,
+        "No clause matched the current stack", Cont);
+select_clause_dispatch([#{sig_in := SIn, body := CBody} | Rest], Cont) ->
+    case af_type:match_sig(SIn, Cont#continuation.data_stack) of
+        true -> execute_body(CBody, Cont);
+        false -> select_clause_dispatch(Rest, Cont)
+    end.
+
+%% Type-check a pre-dispatch + sub-clauses word.
+%% Strategy: first, infer the stack after the pre-dispatch body. Then for
+%% each clause, build the clause's starting stack by replacing the top-N
+%% items of that intermediate stack with the clause's sig_in (so sub-clause
+%% value-constraints become visible to the checker), and run the usual
+%% defer-or-error check against the main word's declared sig_out.
+type_check_predispatch(Name, MSigIn, MSigOut, PreDispatch, ClauseRecs) ->
+    Locals = build_virtual_locals(MSigIn),
+    case af_type_check:infer_stack(PreDispatch, MSigIn, Locals) of
+        {ok, Intermediate} ->
+            lists:foreach(fun(#{sig_in := CSigIn, body := CBody}) ->
+                N = length(CSigIn),
+                case length(Intermediate) >= N of
+                    true ->
+                        Below = lists:nthtail(N, Intermediate),
+                        ClauseStack = CSigIn ++ Below,
+                        run_or_defer_check(Name, ClauseStack, MSigOut,
+                                           CBody, Locals);
+                    false ->
+                        %% Pre-dispatch produced a smaller stack than this
+                        %% clause's sig expects — latent bug in the source,
+                        %% but we defer to the checker for the main word
+                        %% rather than raise here (keeps the message in one
+                        %% place).
+                        run_or_defer_check(Name, CSigIn, MSigOut,
+                                           CBody, Locals)
+                end
+            end, ClauseRecs);
+        {error, _} ->
+            %% Pre-dispatch body has an unresolvable issue. Defer the
+            %% whole word — retry may resolve it later.
+            defer_check(Name, MSigIn, MSigOut,
+                        PreDispatch ++ [make_select_clause_op(ClauseRecs)],
+                        Locals)
+    end,
+    retry_pending_checks().
+
 %% Run compile-time type check on a word body.
 %% Type mismatches are errors when inference is complete (no unknowns).
 %% When inference encounters unknown references (forward/mutual recursion,
@@ -611,6 +743,38 @@ retry_pending_checks() ->
                 false -> ok
             end
     end.
+
+%% Return the list of pending type checks — words whose bodies reference
+%% unresolved names. Each entry: {Name, SigIn, SigOut}. Lets the REPL or
+%% test harness surface unresolved references.
+list_pending_checks() ->
+    case get(?PENDING_KEY) of
+        undefined -> [];
+        P -> maps:keys(P)
+    end.
+
+%% Force one last retry pass. If anything remains pending, print a
+%% warning listing the unresolved names and return the remaining list.
+%% Never raises — keeps the REPL alive.
+finalize_pending_checks() ->
+    retry_pending_checks(),
+    case list_pending_checks() of
+        [] -> ok;
+        Pending ->
+            io:format("~n"
+                      "Warning: ~p type check(s) remain unresolved — "
+                      "references were never defined:~n",
+                      [length(Pending)]),
+            lists:foreach(fun({Name, SigIn, SigOut}) ->
+                io:format("  ~s  (~p -> ~p)~n", [Name, SigIn, SigOut])
+            end, Pending),
+            {pending, Pending}
+    end.
+
+%% Drop the pending list. Useful for tests that want a clean slate.
+clear_pending_checks() ->
+    put(?PENDING_KEY, #{}),
+    ok.
 
 %% Build the virtual locals map that the type checker uses to resolve
 %% auto-field-binding tokens (.x, ..y, bare field names). Mirrors the
@@ -874,5 +1038,39 @@ resolve_single_sub_token(TokenValue, true, 'String') ->
 resolve_single_sub_token(TokenValue, _IsQuoted, MasterType) ->
     case try_literal_for_type(TokenValue, MasterType) of
         {ok, {Type, Value}} -> {Type, Value};
-        not_found -> list_to_atom(TokenValue)
+        not_found ->
+            %% Master didn't recognise it. Fall through to common literal
+            %% detection so tokens like True / False / 3 / 3.14 are typed
+            %% correctly even when the master position is some other type.
+            case try_common_literals(TokenValue) of
+                {ok, {Type, Value}} -> {Type, Value};
+                not_found -> list_to_atom(TokenValue)
+            end
+    end.
+
+%% Resolve sub-clause tokens without any master-sig anchoring. Used for
+%% pre-dispatch-style words, where the sub-clause matches against an
+%% intermediate stack whose types aren't known until pre-dispatch has been
+%% type-inferred. Each token is resolved on its own — quoted strings
+%% become String literals, and common literals (Int / Float / Bool) are
+%% recognised directly; everything else falls back to an atom value.
+resolve_sub_tokens_independent(RawTokens) ->
+    lists:map(fun
+        ({TokenValue, true}) ->
+            {'String', list_to_binary(TokenValue)};
+        ({TokenValue, false}) ->
+            case try_common_literals(TokenValue) of
+                {ok, {Type, Value}} -> {Type, Value};
+                not_found -> list_to_atom(TokenValue)
+            end
+    end, RawTokens).
+
+try_common_literals(TokenValue) ->
+    try_literals_seq(TokenValue, ['Int', 'Float', 'Bool']).
+
+try_literals_seq(_TokenValue, []) -> not_found;
+try_literals_seq(TokenValue, [Type | Rest]) ->
+    case try_literal_for_type(TokenValue, Type) of
+        {ok, _} = Ok -> Ok;
+        not_found -> try_literals_seq(TokenValue, Rest)
     end.
