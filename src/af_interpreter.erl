@@ -426,7 +426,6 @@ interpret_unquoted_traced(Value, Token, Stack, Debug, Cont1) ->
 record_event(_Token, _Kind, #continuation{tracing = false} = Cont) ->
     Cont;
 record_event(Token, Kind, #continuation{data_stack = DS,
-                                        return_stack = RS,
                                         exec_stack = ES,
                                         depth_stats = Stats0,
                                         coverage = Cov0} = Cont) ->
@@ -436,11 +435,9 @@ record_event(Token, Kind, #continuation{data_stack = DS,
         S -> S
     end,
     DataDepth = length(DS),
-    RetDepth = length(RS),
     Stats2 = Stats1#depth_stats{
         data_max   = erlang:max(Stats1#depth_stats.data_max, DataDepth),
         data_sum   = Stats1#depth_stats.data_sum + DataDepth,
-        return_max = erlang:max(Stats1#depth_stats.return_max, RetDepth),
         count      = Stats1#depth_stats.count + 1
     },
     Cov1 = record_coverage(Token, Cov0),

@@ -33,6 +33,18 @@ tests, where the a4 version needed an extra assertion per test) to
 The 41% figure is the weighted average of behavioral-LOC savings
 across all migrated suites (2,106 Erlang → 1,374 a4 LOC).
 
+### Post-implementation deviation: return stack removed
+
+The continuation record originally carried a `return_stack` field and
+this plan specified `max-return-depth` / `capture-return` /
+`return_max` in depth stats. After shipping, a full audit found the
+return stack was never written — declared but unused for the
+language's entire lifetime. It was removed. See the **"Struggle with
+Return Stacks"** appendix in `docs/IntroToActorForth.md` for the
+design reasoning. `max-return-depth`, `capture-return`, and
+`return_max` in `#depth_stats{}` are gone; `max-depth` (data-stack
+peak) remains.
+
 ---
 
 ## Three-world test split (locked)

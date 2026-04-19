@@ -851,7 +851,6 @@ The `.test.a4` extension tells the test runner "this file contains tests." The f
 | `teardown :` … `;` | fixture after each test | |
 | `"label" tag` | attach tag to next test (accumulating) | |
 | `N max-depth` | auto-assert peak data stack depth ≤ N | |
-| `N max-return-depth` | auto-assert peak return stack depth ≤ N | |
 
 Names are atoms for groups (short identifier) and strings for tests (descriptive prose). The type system enforces that — it's a design choice, not a stylistic convention. See the architectural-drivers doc for the reasoning.
 

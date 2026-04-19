@@ -84,7 +84,7 @@ tracing_on_events_test_() ->
         end}
     ].
 
-%%% capture-data / capture-return / capture-exec
+%%% capture-data / capture-exec
 
 capture_data_test_() ->
     [
@@ -93,12 +93,6 @@ capture_data_test_() ->
             Cont1 = eval("1 int 2 int capture-data", Cont),
             [{'List', Captured} | _] = Cont1#continuation.data_stack,
             ?assertEqual([{'Int', 2}, {'Int', 1}], Captured)
-        end},
-        {"capture-return on empty return stack returns empty List", fun() ->
-            Cont = setup(),
-            Cont1 = eval("capture-return", Cont),
-            [{'List', Captured} | _] = Cont1#continuation.data_stack,
-            ?assertEqual([], Captured)
         end},
         {"capture-exec wraps events as {'ExecEvent', Raw}", fun() ->
             Cont = setup(),
@@ -138,7 +132,6 @@ depth_stats_map_test_() ->
             [{'Map', M} | _] = Cont1#continuation.data_stack,
             ?assertEqual({'Int', 0}, maps:get(<<"data_max">>, M)),
             ?assertEqual({'Int', 0}, maps:get(<<"data_sum">>, M)),
-            ?assertEqual({'Int', 0}, maps:get(<<"return_max">>, M)),
             ?assertEqual({'Int', 0}, maps:get(<<"count">>, M))
         end},
         {"depth-stats-map reflects tracked stats after tracing", fun() ->

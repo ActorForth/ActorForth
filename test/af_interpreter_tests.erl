@@ -54,18 +54,18 @@ dispatch_test_() ->
         end} end,
         fun(_) -> {"dispatch respects TOS type", fun() ->
             af_type:register_type(#af_type{name = 'Int'}),
-            %% "show" in Int dict expects Int on top
+            %% "show" in Int dict doubles the value — exercising that the
+            %% Int-specific op fires when TOS type is Int.
             IntShow = #operation{name = "show", sig_in = ['Int'], sig_out = ['Int'],
                                 impl = fun(C) ->
-                                    [{'Int', V} | _] = C#continuation.data_stack,
-                                    C#continuation{return_stack = [V]}
+                                    [{'Int', V} | Rest] = C#continuation.data_stack,
+                                    C#continuation{data_stack = [{'Int', V * 2} | Rest]}
                                 end},
             af_type:add_op('Int', IntShow),
-            %% Manually set up a stack with an Int
             Cont = #continuation{data_stack = [{'Int', 42}]},
             Tokens = af_parser:parse("show", "test"),
             Result = af_interpreter:interpret_tokens(Tokens, Cont),
-            ?assertEqual([42], Result#continuation.return_stack)
+            ?assertEqual([{'Int', 84}], Result#continuation.data_stack)
         end} end,
         fun(_) -> {"falls through to Atom when sig doesn't match", fun() ->
             af_type:register_type(#af_type{name = 'Int'}),

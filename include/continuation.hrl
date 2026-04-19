@@ -1,13 +1,11 @@
 -record(depth_stats, {
     data_max   = 0 :: non_neg_integer(),
     data_sum   = 0 :: non_neg_integer(),
-    return_max = 0 :: non_neg_integer(),
     count      = 0 :: non_neg_integer()
 }).
 
 -record(continuation, {
     data_stack    = [] :: [af_type:stack_item()],
-    return_stack  = [] :: list(),
     current_token = undefined :: #token{} | undefined,
     debug         = false :: boolean(),
     word_trace    = [] :: list(),

@@ -12,7 +12,6 @@
 %%   trace-on         ( -- )         enable traced dispatch
 %%   trace-off        ( -- )         disable traced dispatch, clear fields
 %%   capture-data     ( -- List )    snapshot data stack as List
-%%   capture-return   ( -- List )    snapshot return stack as List
 %%   capture-exec     ( -- List )    snapshot exec stack as List of ExecEvents
 %%   get-trace        ( -- List )    alias for capture-exec
 %%   get-coverage     ( -- Map )     accumulated coverage (Phase 1: empty)
@@ -49,10 +48,6 @@ init() ->
     af_type:add_op('Any', #operation{
         name = "capture-data", sig_in = [], sig_out = ['List'],
         impl = fun op_capture_data/1, source = af_test_prim
-    }),
-    af_type:add_op('Any', #operation{
-        name = "capture-return", sig_in = [], sig_out = ['List'],
-        impl = fun op_capture_return/1, source = af_test_prim
     }),
     af_type:add_op('Any', #operation{
         name = "capture-exec", sig_in = [], sig_out = ['List'],
@@ -142,10 +137,6 @@ op_capture_data(#continuation{data_stack = Stack} = Cont) ->
     ListVal = {'List', Stack},
     Cont#continuation{data_stack = [ListVal | Stack]}.
 
-op_capture_return(#continuation{data_stack = DS, return_stack = RS} = Cont) ->
-    ListVal = {'List', RS},
-    Cont#continuation{data_stack = [ListVal | DS]}.
-
 op_capture_exec(#continuation{data_stack = DS, exec_stack = ES} = Cont) ->
     %% Wrap raw events as {'ExecEvent', RawTuple} so list items are
     %% well-formed {Type, Value} stack items.
@@ -168,10 +159,9 @@ op_depth_stats_map(#continuation{data_stack = DS, depth_stats = Stats0} = Cont) 
         S -> S
     end,
     Map = #{
-        <<"data_max">>   => {'Int', Stats#depth_stats.data_max},
-        <<"data_sum">>   => {'Int', Stats#depth_stats.data_sum},
-        <<"return_max">> => {'Int', Stats#depth_stats.return_max},
-        <<"count">>      => {'Int', Stats#depth_stats.count}
+        <<"data_max">> => {'Int', Stats#depth_stats.data_max},
+        <<"data_sum">> => {'Int', Stats#depth_stats.data_sum},
+        <<"count">>    => {'Int', Stats#depth_stats.count}
     },
     MapVal = {'Map', Map},
     Cont#continuation{data_stack = [MapVal | DS]}.

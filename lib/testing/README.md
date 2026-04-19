@@ -33,7 +33,7 @@ Detailed breakdown in `docs/design/test-dsl-plan.md` under
 | `"name" test-compiled : … ;` | flag body for native compile |
 | `setup : … ;` / `teardown : … ;` | per-test fixture inside a group |
 | `"label" tag` | tag accumulates onto the next test |
-| `N max-depth` / `N max-return-depth` | auto-assert peak stack depth |
+| `N max-depth` | auto-assert peak data-stack depth |
 | `assert` / `assert-eq` / `assert-max` / `assert-min` | assertions |
 
 Full plan and design decisions: `docs/design/test-dsl-plan.md`.

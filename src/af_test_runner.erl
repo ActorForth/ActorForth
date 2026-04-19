@@ -245,10 +245,8 @@ run_single(Spec, Loaded, Path) ->
     Group = maps:get(group_path, Spec),
     Skip  = maps:get(skip, Spec, undefined),
     MaxDepth = maps:get(max_depth, Spec, undefined),
-    MaxRetDepth = maps:get(max_return_depth, Spec, undefined),
     CTest0 = Loaded#continuation{
         data_stack    = [],
-        return_stack  = [],
         word_trace    = [],
         coverage      = #{},
         test_registry = []
@@ -260,7 +258,7 @@ run_single(Spec, Loaded, Path) ->
         Reason ->
             #{status => skip, reason => Reason}
     end,
-    Res = check_depth(Res0, MaxDepth, MaxRetDepth),
+    Res = check_depth(Res0, MaxDepth),
     T1 = erlang:monotonic_time(microsecond),
     DurationUs = T1 - T0,
     Cov = case Res of
@@ -279,23 +277,17 @@ run_single(Spec, Loaded, Path) ->
     }.
 
 check_depth(#{status := pass, final := #continuation{depth_stats = Stats}} = R,
-            MaxD, MaxRD)
-    when Stats =/= undefined, (MaxD =/= undefined orelse MaxRD =/= undefined) ->
+            MaxD)
+    when Stats =/= undefined, MaxD =/= undefined ->
     DataMax = Stats#depth_stats.data_max,
-    RetMax  = Stats#depth_stats.return_max,
-    case over_limit(DataMax, MaxD) orelse over_limit(RetMax, MaxRD) of
+    case DataMax > MaxD of
         false -> R;
         true ->
             #{status => fail,
               reason => {depth_exceeded,
-                         #{data_max => DataMax, max_depth => MaxD,
-                           return_max => RetMax, max_return_depth => MaxRD}}}
+                         #{data_max => DataMax, max_depth => MaxD}}}
     end;
-check_depth(R, _, _) -> R.
-
-over_limit(_, undefined) -> false;
-over_limit(Actual, Limit) when Actual > Limit -> true;
-over_limit(_, _) -> false.
+check_depth(R, _) -> R.
 
 base_result(Spec, Path) ->
     #{

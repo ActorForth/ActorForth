@@ -131,10 +131,6 @@ init() ->
         name = "max-depth", sig_in = ['Int', 'GroupScope'], sig_out = ['GroupScope'],
         impl = fun op_max_depth/1, source = af_type_test_dsl
     }),
-    af_type:add_op('Int', #operation{
-        name = "max-return-depth", sig_in = ['Int', 'GroupScope'], sig_out = ['GroupScope'],
-        impl = fun op_max_return_depth/1, source = af_type_test_dsl
-    }),
 
     %% `.` on GroupScope closes the group. Multi-clause with the
     %% compiler's `.` on CodeCompile and the Any-level print-TOS `.`.
@@ -278,9 +274,6 @@ op_raises_inline(#continuation{data_stack = [{'Atom', ErrTypeName},
 op_max_depth(#continuation{data_stack = [{'Int', N}, {'GroupScope', F} | Rest]} = Cont) ->
     Cont#continuation{data_stack = [{'GroupScope', F#{max_depth => N}} | Rest]}.
 
-op_max_return_depth(#continuation{data_stack = [{'Int', N}, {'GroupScope', F} | Rest]} = Cont) ->
-    Cont#continuation{data_stack = [{'GroupScope', F#{max_return_depth => N}} | Rest]}.
-
 %%% Transitions (`:`)
 
 op_test_colon(#continuation{data_stack = [{'TestPending', State} | Rest],
@@ -397,7 +390,6 @@ build_spec(Kind, Body, StackAfterPop) ->
         compiled         => maps:get(compiled, Body, false),
         tags             => maps:get(tags, Body, []),
         max_depth        => maps:get(max_depth, Limits, undefined),
-        max_return_depth => maps:get(max_return_depth, Limits, undefined),
         location         => maps:get(location, Body)
     }.
 
@@ -425,12 +417,9 @@ extract_group_info(Stack) ->
 innermost_limits([]) -> #{};
 innermost_limits([F | Rest]) ->
     L = innermost_limits(Rest),
-    case {maps:get(max_depth, F, undefined),
-          maps:get(max_return_depth, F, undefined)} of
-        {undefined, undefined} -> L;
-        {D, undefined}         -> L#{max_depth => D};
-        {undefined, R}         -> L#{max_return_depth => R};
-        {D, R}                 -> L#{max_depth => D, max_return_depth => R}
+    case maps:get(max_depth, F, undefined) of
+        undefined -> L;
+        D         -> L#{max_depth => D}
     end.
 
 token_location(undefined) -> {undefined, 0};
