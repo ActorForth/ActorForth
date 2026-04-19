@@ -52,17 +52,27 @@ tokenize([C | Rest], File, Line, Col, Current, Tokens)
     PuncToken = #token{value = [C], line = Line, column = Col, file = File},
     tokenize(Rest, File, Line, Col + 1, [], [PuncToken | Tokens1]);
 
-%% Dot: check if it's part of a float literal (digits.digits)
+%% Dot handling. Three cases, in order:
+%%   1. Part of a float literal (digits.digits) — accumulate with Current.
+%%   2. Start of a positional-field-access token (empty Current + next char
+%%      is another dot or an identifier character) — accumulate the dot as
+%%      the start of a new token. Examples:  .x  ..x  .field  ...tag  .s
+%%   3. Standalone self-delimiting punctuation — emit Current, emit "."
+%%      as its own token.
 tokenize([$. | Rest], File, Line, Col, Current, Tokens) ->
     case is_float_dot(Current, Rest) of
         true ->
-            %% Part of a float literal — keep accumulating
             tokenize(Rest, File, Line, Col + 1, Current ++ [{$., Line, Col}], Tokens);
         false ->
-            %% Self-delimiting punctuation
-            Tokens1 = emit(Current, File, Line, Col, Tokens),
-            PuncToken = #token{value = ".", line = Line, column = Col, file = File},
-            tokenize(Rest, File, Line, Col + 1, [], [PuncToken | Tokens1])
+            case starts_dot_ident(Current, Rest) of
+                true ->
+                    tokenize(Rest, File, Line, Col + 1,
+                             Current ++ [{$., Line, Col}], Tokens);
+                false ->
+                    Tokens1 = emit(Current, File, Line, Col, Tokens),
+                    PuncToken = #token{value = ".", line = Line, column = Col, file = File},
+                    tokenize(Rest, File, Line, Col + 1, [], [PuncToken | Tokens1])
+            end
     end;
 
 %% Regular character
@@ -87,6 +97,37 @@ is_float_dot(Current, [C | _]) when C >= $0, C =< $9 ->
     Chars = [Ch || {Ch, _, _} <- Current],
     all_digits(Chars);
 is_float_dot(_, _) -> false.
+
+%% Dot-prefixed identifier: the buffer is either empty or consists only
+%% of accumulated leading dots, AND the next char is either another dot
+%% or an identifier character. Used for positional field access —
+%% `.x` (pos 1), `..x` (pos 2), `...x` (pos 3), etc. — and fixes the
+%% long-standing `.s` dispatch bug (previously tokenized as two tokens).
+starts_dot_ident([], [$. | _]) -> true;
+starts_dot_ident([], [C | _]) -> is_ident_char(C);
+starts_dot_ident(Current, Rest) ->
+    case all_leading_dots(Current) of
+        true ->
+            case Rest of
+                [$. | _] -> true;
+                [C | _] -> is_ident_char(C);
+                [] -> false
+            end;
+        false -> false
+    end.
+
+all_leading_dots([]) -> true;
+all_leading_dots([{$., _, _} | Rest]) -> all_leading_dots(Rest);
+all_leading_dots(_) -> false.
+
+is_ident_char(C) when C >= $a, C =< $z -> true;
+is_ident_char(C) when C >= $A, C =< $Z -> true;
+is_ident_char(C) when C >= $0, C =< $9 -> true;
+is_ident_char($_) -> true;
+is_ident_char($-) -> true;
+is_ident_char($!) -> true;
+is_ident_char($?) -> true;
+is_ident_char(_) -> false.
 
 all_digits([]) -> false;
 all_digits([$- | Rest]) -> all_digits_strict(Rest);

@@ -498,6 +498,35 @@ ok: stack
 0) 10 : Int
 ```
 
+### Auto-Field Bindings Inside Word Bodies
+
+The `x` / `y` access above works at the REPL, but inside a word definition there's a cleaner form. When a word's signature declares a product-type input, its field names become **scoped bindings** in the body.
+
+```
+: perimeter Point -> Int ;
+    x 2 * y 2 * +
+    swap drop
+.
+```
+
+Here `x` and `y` inside the body don't fire the getters — they directly push the field values that were on the Point at the moment the word was called. The instance stays on the stack, so `swap drop` at the end still applies; the bindings are a cleaner path to the same stack state.
+
+**Positional access** handles words that take more than one product:
+
+```
+: distance Point Point -> Int ;
+    ..x .x - dup *
+    ..y .y - dup * +
+    swap drop swap drop
+.
+```
+
+Read the dot count left-to-right against the signature: `.x` is the field `x` of the **first** `Point` in the signature (source-leftmost), `..x` is the second, `...x` the third, and so on. Dot count matches slot position. This is both clearer and more reliable than stack-manipulation tricks for multi-argument access.
+
+Bare field names are available when unambiguous — if the signature has one Point and one Color, `x` is unambiguously Point.x and `r` is unambiguously Color.r. If the signature has two Points, bare `x` would be ambiguous and the compiler declines to bind it; use `.x` and `..x` instead.
+
+Field bindings are a **snapshot** taken at word entry. If the body updates a field via a setter, the binding still holds the original value. For most code this is what you want — immutable semantics everywhere — but it's worth knowing.
+
 ### Updating Fields
 
 Setters use the `!` suffix convention (read "store", as in Forth tradition). Push the new value, then apply the setter:

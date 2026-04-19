@@ -21,5 +21,14 @@
     %% --- test-DSL registration state ---
     %% Active group scopes live as {'GroupScope', #{...}} sentinels on
     %% data_stack itself, so multi-clause dispatch on `.` can close them.
-    test_registry = []    :: list()                   %% registered test specs
+    test_registry = []    :: list(),                  %% registered test specs
+    %% --- Auto-field bindings ---
+    %% Stack of frames; each frame is a #{BindingName => StackItem} map.
+    %% Populated by words whose sig_in contains a product type — the
+    %% compiler synthesizes a wrapper that pushes a frame at entry with
+    %% the product's fields bound to their names (plus positional .x
+    %% / ..x forms). The interpreter consults the top frame before
+    %% dispatching each body token; a matching name pushes the bound
+    %% value instead of dispatching as an op.
+    locals        = []    :: list()
 }).

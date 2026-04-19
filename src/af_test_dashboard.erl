@@ -227,12 +227,12 @@ group_str([]) -> "(top)";
 group_str(Path) -> string:join([binary_to_list(B) || B <- Path], "/").
 
 emit_diagnosis(#{category := Cat, message := Msg} = Diag) ->
-    MsgStr = lists:flatten(io_lib:format("~s", [Msg])),
-    io:format("  \e[35m~s:\e[0m ~s~n", [atom_to_list(Cat), MsgStr]),
+    MsgStr = lists:flatten(io_lib:format("~ts", [Msg])),
+    io:format("  \e[35m~s:\e[0m ~ts~n", [atom_to_list(Cat), MsgStr]),
     case maps:get(location, Diag, undefined) of
         undefined -> ok;
         #{file := F, line := L, column := C, token := T} ->
-            io:format("    at ~s:~b:~b (token: ~s)~n", [F, L, C, T])
+            io:format("    at ~ts:~b:~b (token: ~ts)~n", [F, L, C, T])
     end.
 
 now_ms() -> erlang:monotonic_time(millisecond).

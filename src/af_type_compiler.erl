@@ -447,7 +447,7 @@ register_single_word(State, Rest, Cont) ->
     %% Compile-time type check
     type_check_body(Name, SigIn, SigOut, Body),
 
-    Impl = make_word_impl(Body, Name),
+    Impl = make_word_impl(Body, Name, SigIn),
 
     %% Register in the TOS type's dict (first element after reversal).
     TargetType = get_target_type(SigIn),
@@ -511,7 +511,7 @@ register_multi_word(State, Clauses, Rest, Cont) ->
         CSigIn = lists:reverse(CSigIn0),
         CSigOut = lists:reverse(CSigOut0),
         type_check_body(Name, CSigIn, CSigOut, CBody),
-        Impl = make_word_impl(CBody, Name),
+        Impl = make_word_impl(CBody, Name, CSigIn),
         CGuard = maps:get(guard, C, undefined),
         Op = #operation{
             name = Name,
@@ -604,8 +604,13 @@ sync_type_from_ets(TypeName, Dict) ->
 %% For tail-recursive words (last body token is a self-call), we pop the
 %% trace frame BEFORE the tail call so the self-call is in Erlang tail
 %% position, allowing the BEAM's native TCO to prevent stack growth.
-make_word_impl(Body, WordName) ->
-    case detect_tail_call(Body, WordName) of
+%% When sig_in contains a product type, the returned impl wraps body
+%% execution in a locals-frame push/pop that exposes each product's
+%% fields as bare identifiers (when unambiguous) plus always as
+%% positional dot-prefix forms (.x for source-leftmost, ..x for next, etc.)
+make_word_impl(Body, WordName, SigIn) ->
+    ProductSlots = find_product_slots(SigIn),
+    Base = case detect_tail_call(Body, WordName) of
         {true, InitBody, TailOp} ->
             fun(Cont) ->
                 Cont1 = push_trace(WordName, Cont),
@@ -619,7 +624,89 @@ make_word_impl(Body, WordName) ->
                 ResultCont = execute_body(Body, Cont1),
                 pop_trace(WordName, ResultCont)
             end
+    end,
+    case ProductSlots of
+        []    -> Base;
+        Slots -> wrap_with_locals(Base, Slots, length(SigIn))
     end.
+
+%% Scan a sig_in list and return [{StoredPos, TypeName, Fields}] for each
+%% product type, where Fields = [{FieldName::string, FieldIdx::non_neg, FieldType::atom}].
+%% Stored position is 0-indexed from TOS. Empty/non-product / value-constrained
+%% entries are skipped.
+find_product_slots([]) -> [];
+find_product_slots(SigIn) ->
+    Indexed = lists:zip(lists:seq(0, length(SigIn) - 1), SigIn),
+    lists:filtermap(fun
+        ({Pos, Type}) when is_atom(Type) ->
+            case lookup_fields(Type) of
+                {ok, Fields} when Fields =/= [] ->
+                    FieldInfo = lists:zip3(
+                        [atom_to_list(FN) || {FN, _FT} <- Fields],
+                        lists:seq(0, length(Fields) - 1),
+                        [FT || {_FN, FT} <- Fields]),
+                    %% FieldInfo entries: {FieldName, FieldIdx, FieldType}
+                    {true, {Pos, Type,
+                            [{N, I, T} || {N, I, T} <- FieldInfo]}};
+                _ -> false
+            end;
+        (_) -> false
+    end, Indexed).
+
+lookup_fields(TypeName) ->
+    case af_type:get_type(TypeName) of
+        {ok, #af_type{fields = Fields}} when Fields =/= [] -> {ok, Fields};
+        _ -> error
+    end.
+
+%% Wrap a base impl with a locals-frame push/pop. N = total sig_in length
+%% (needed to compute source positions for dot-prefix keys).
+wrap_with_locals(BaseImpl, ProductSlots, N) ->
+    fun(Cont) ->
+        Frame = build_frame(ProductSlots, N, Cont#continuation.data_stack),
+        Cont1 = Cont#continuation{locals = [Frame | Cont#continuation.locals]},
+        try
+            Cont2 = BaseImpl(Cont1),
+            [_PoppedFrame | LocalsRest] = Cont2#continuation.locals,
+            Cont2#continuation{locals = LocalsRest}
+        catch
+            Class:Reason:Stack ->
+                %% Ensure locals frame doesn't leak on exception
+                erlang:raise(Class, Reason, Stack)
+        end
+    end.
+
+%% Build the locals frame map. Always include positional `.field` keys
+%% (source-position 1 = 1 dot, 2 = 2 dots, ...). Add bare field names
+%% only when unambiguous across all product slots. Compile-time shadowing
+%% checks could land here in a follow-up.
+build_frame(ProductSlots, N, DataStack) ->
+    %% Collect every field access with its stored-position and source-position.
+    AllEntries = lists:flatmap(fun({StoredPos, _Type, Fields}) ->
+        SourcePos = N - StoredPos,
+        DotPrefix = lists:duplicate(SourcePos, $.),
+        Product = lists:nth(StoredPos + 1, DataStack),
+        [begin
+            RawVal = element(FIdx + 2, Product),
+            Tagged = {FType, RawVal},
+            {DotPrefix ++ FName, FName, Tagged}
+         end || {FName, FIdx, FType} <- Fields]
+    end, ProductSlots),
+    %% Count bare-name occurrences to decide which are unambiguous.
+    BareCounts = lists:foldl(fun({_Dotted, Bare, _V}, Acc) ->
+        maps:update_with(Bare, fun(C) -> C + 1 end, 1, Acc)
+    end, #{}, AllEntries),
+    %% Always include dotted keys.
+    DottedFrame = lists:foldl(fun({Dotted, _, V}, Acc) ->
+        Acc#{Dotted => V}
+    end, #{}, AllEntries),
+    %% Add bare names only when they appear once across all slots.
+    lists:foldl(fun({_, Bare, V}, Acc) ->
+        case maps:get(Bare, BareCounts) of
+            1 -> Acc#{Bare => V};
+            _ -> Acc
+        end
+    end, DottedFrame, AllEntries).
 
 push_trace(undefined, Cont) -> Cont;
 push_trace(WordName, Cont) ->

@@ -53,18 +53,32 @@ interpret_traced([Token | Rest], Cont) ->
 %% 4. If still not found, try literal handlers (Int, Bool, etc.)
 %% 5. If still not found, push as Atom
 -spec interpret_token(#token{}, #continuation{}) -> #continuation{}.
-interpret_token(#token{value = Value} = Token, Cont) ->
+interpret_token(#token{value = Value, quoted = Quoted} = Token, Cont) ->
     Stack = Cont#continuation.data_stack,
     Debug = Cont#continuation.debug,
     Cont1 = Cont#continuation{current_token = Token},
-    case Cont#continuation.dictionary of
-        undefined ->
-            %% No local dictionary — fall back to ETS (legacy path)
-            interpret_token_ets(Value, Token, Stack, Debug, Cont1);
-        Dict ->
-            %% Fast path: use continuation-local dictionary
-            interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1)
+    %% Auto-field bindings: unless quoted, check the top locals frame
+    %% for a matching name. Locals win over dictionary dispatch.
+    case Quoted =:= false andalso lookup_local(Value, Cont#continuation.locals) of
+        {ok, LocalVal} ->
+            Cont1#continuation{data_stack = [LocalVal | Stack]};
+        _ ->
+            case Cont#continuation.dictionary of
+                undefined ->
+                    interpret_token_ets(Value, Token, Stack, Debug, Cont1);
+                Dict ->
+                    interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1)
+            end
     end.
+
+%% Look up Name in the top locals frame. Returns {ok, Value} or false.
+lookup_local(_Name, []) -> false;
+lookup_local(Name, [Frame | _]) when is_map(Frame) ->
+    case maps:find(Name, Frame) of
+        {ok, V} -> {ok, V};
+        error   -> false
+    end;
+lookup_local(_, _) -> false.
 
 %% Fast path: local dictionary lookup (no ETS)
 interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1) ->
@@ -280,15 +294,20 @@ interpret_unquoted(Value, Stack, Debug, Cont1) ->
 %%% exactly so a failing test's event sequence reflects what really happened.
 
 -spec interpret_token_traced(#token{}, #continuation{}) -> #continuation{}.
-interpret_token_traced(#token{value = Value} = Token, Cont) ->
+interpret_token_traced(#token{value = Value, quoted = Quoted} = Token, Cont) ->
     Stack = Cont#continuation.data_stack,
     Debug = Cont#continuation.debug,
     Cont1 = Cont#continuation{current_token = Token},
-    case Cont#continuation.dictionary of
-        undefined ->
-            interpret_token_ets_traced(Value, Token, Stack, Debug, Cont1);
-        Dict ->
-            interpret_token_dict_traced(Value, Token, Stack, Dict, Debug, Cont1)
+    case Quoted =:= false andalso lookup_local(Value, Cont#continuation.locals) of
+        {ok, LocalVal} ->
+            Cont1#continuation{data_stack = [LocalVal | Stack]};
+        _ ->
+            case Cont#continuation.dictionary of
+                undefined ->
+                    interpret_token_ets_traced(Value, Token, Stack, Debug, Cont1);
+                Dict ->
+                    interpret_token_dict_traced(Value, Token, Stack, Dict, Debug, Cont1)
+            end
     end.
 
 interpret_token_dict_traced(Value, Token, Stack, Dict, Debug, Cont1) ->

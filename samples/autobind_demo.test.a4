@@ -1,0 +1,59 @@
+# Auto-field bindings — positional dot-prefix + bare identifier access
+#
+# When a word's sig_in contains a product type, its fields become
+# accessible as scoped bindings inside the body:
+#
+#   bare name  (e.g. `x`)          — when the field is unambiguous
+#   .x                              — field x of source-leftmost slot
+#   ..x  ...x  etc.                 — subsequent source positions
+#
+# Products stay on the stack during the body (not popped) so existing
+# getter-style code continues to work.
+
+type AP
+    x Int
+    y Int
+.
+
+type AC
+    r Int
+    g Int
+    b Int
+.
+
+# Single product: bare field names work
+: ap-perim AP -> Int ;
+    x 2 * y 2 * +
+    swap drop
+.
+
+# Two different products, no field collision — bare names still work
+: ap-ac-bright AP AC -> Int ;
+    x r *
+    swap drop swap drop
+.
+
+# Same product twice: positional disambiguation is required
+: ap-dist2 AP AP -> Int ;
+    ..x .x - dup *
+    ..y .y - dup * +
+    swap drop swap drop
+.
+
+autobind group
+
+"ap-perim via bare bindings" test :
+    3 int 5 int ap ap-perim 16 assert-eq
+;
+
+"ap-ac-bright via bare bindings (unambiguous)" test :
+    2 int 4 int ap 10 int 20 int 30 int ac ap-ac-bright
+    20 assert-eq
+;
+
+"ap-dist2 via positional bindings (.x, ..x)" test :
+    0 int 0 int ap  3 int 4 int ap  ap-dist2
+    25 assert-eq
+;
+
+.
