@@ -633,6 +633,28 @@ ok: stack
 
 This matches Erlang's own list semantics. Each element is a full `{Type, Value}` pair.
 
+### Bracket Literals
+
+For straight list construction, the `nil X cons Y cons ...` idiom is noisy and its reversed visual order (last-written-first-in-list) trips people up. ActorForth accepts `[ ... ]` as syntactic sugar:
+
+```
+ok: [ 1 2 3 ]
+ok: stack
+0) [1, 2, 3] : List
+
+ok: [ ] length 0 assert-eq
+ok: [ 1 [ 2 3 ] 4 ] length 3 assert-eq
+```
+
+Brackets are just parser-level sugar: `[` pushes a sentinel and `]` collects everything back to it into a List in source order. Items between the brackets are evaluated as normal stack code, so `[ 1 2 + 10 ]` yields `[3, 10]`. Nesting works because each `[` pushes its own marker.
+
+Use whichever you prefer — brackets for literal construction, `cons` when you're prepending to an existing list. The two produce identical values when the items are literal; they differ only in visual ordering:
+
+```
+[ 1 2 3 ]                        # -> [1, 2, 3]
+nil 3 cons 2 cons 1 cons         # -> [1, 2, 3] (same value, different writing direction)
+```
+
 ### Lists in Practice
 
 Lists become powerful when combined with product types. Here's a ledger that tracks transactions:
@@ -1213,15 +1235,15 @@ Push the function name, then the module name, then `erlang-apply0`. The result i
 For functions that take arguments, build an argument list first:
 
 ```
-ok: nil -42 cons abs erlang erlang-apply
+ok: [ -42 ] abs erlang erlang-apply
 ok: stack
 0) 42 : Int
 ```
 
-Arguments go in a List (built with `nil` and `cons`), then function name, module name, then `erlang-apply`.
+Arguments go in a List, then function name, module name, then `erlang-apply`.
 
 ```
-ok: nil 10 cons 20 cons max erlang erlang-apply
+ok: [ 20 10 ] max erlang erlang-apply
 ok: stack
 0) 20 : Int
 ```

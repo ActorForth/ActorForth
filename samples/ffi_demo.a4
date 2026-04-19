@@ -5,13 +5,13 @@ node erlang erlang-apply0
 print
 
 # Call erlang:abs/1 with -42
-nil -42 cons abs erlang erlang-apply
+[ -42 ] abs erlang erlang-apply
 print
 
 # Call erlang:max/2 with 10, 20
-nil 20 cons 10 cons max erlang erlang-apply
+[ 10 20 ] max erlang erlang-apply
 print
 
 # Call lists:seq/2 to generate [1,2,3,4,5]
-nil 5 cons 1 cons seq lists erlang-apply
+[ 1 5 ] seq lists erlang-apply
 print

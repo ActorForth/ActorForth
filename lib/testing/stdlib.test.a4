@@ -114,15 +114,15 @@
 # --- List reductions ---
 
 "sum of empty is 0" test :
-    nil sum 0 assert-eq
+    [ ] sum 0 assert-eq
 ;
 
 "sum of 1,2,3 is 6" test :
-    nil 1 cons 2 cons 3 cons sum 6 assert-eq
+    [ 1 2 3 ] sum 6 assert-eq
 ;
 
 "product of 1,2,3,4 is 24" test :
-    nil 1 cons 2 cons 3 cons 4 cons product 24 assert-eq
+    [ 1 2 3 4 ] product 24 assert-eq
 ;
 
 .

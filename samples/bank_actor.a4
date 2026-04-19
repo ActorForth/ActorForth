@@ -40,7 +40,7 @@ type Account
     ledger length.
 
 # Open account with $1000 and empty ledger
-1000 nil account server
+1000 [ ] account server
 
 # Deposits
 << 500 deposit >>

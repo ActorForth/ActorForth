@@ -45,9 +45,9 @@ tokenize([$" | Rest], File, Line, Col, Current, Tokens) ->
     Token = #token{value = StringVal, line = Line, column = Col, file = File, quoted = true},
     tokenize(Rest1, File, Line1, Col1, [], [Token | Tokens1]);
 
-%% Self-delimiting punctuation: : ;
+%% Self-delimiting punctuation: : ; [ ]
 tokenize([C | Rest], File, Line, Col, Current, Tokens)
-  when C =:= $:; C =:= $; ->
+  when C =:= $:; C =:= $;; C =:= $[; C =:= $] ->
     Tokens1 = emit(Current, File, Line, Col, Tokens),
     PuncToken = #token{value = [C], line = Line, column = Col, file = File},
     tokenize(Rest, File, Line, Col + 1, [], [PuncToken | Tokens1]);

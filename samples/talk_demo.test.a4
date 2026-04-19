@@ -36,17 +36,17 @@ talk_demo group
         ;
     .
 
-    # --- lists: shows deeper stack, cons chain ---
+    # --- lists: shows bracket literals ---
     lists group
 
-        "cons chain length" test :
-            nil 1 cons 2 cons 3 cons
+        "bracket list length" test :
+            [ 1 2 3 ]
             length 3 assert-eq
         ;
 
         "reverse a list" test :
-            nil 1 cons 2 cons 3 cons reverse
-            head 1 assert-eq
+            [ 1 2 3 ] reverse
+            head 3 assert-eq
         ;
 
         # Deliberate fail: bogus-word falls through to {Atom, _}

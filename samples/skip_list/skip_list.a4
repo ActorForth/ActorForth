@@ -13,10 +13,10 @@
 
 : sl-new -> Map ;
     map-new
-    nil "l0" map-put
-    nil "l1" map-put
-    nil "l2" map-put
-    nil "l3" map-put .
+    [ ] "l0" map-put
+    [ ] "l1" map-put
+    [ ] "l2" map-put
+    [ ] "l3" map-put .
 
 # === Random Level via Erlang FFI ===
 
@@ -153,14 +153,14 @@
 # ===================================================
 
 # --- Sorted insert ---
-nil 3 sorted-insert 1 sorted-insert 5 sorted-insert 2 sorted-insert
+[ ] 3 sorted-insert 1 sorted-insert 5 sorted-insert 2 sorted-insert
 dup head 1 assert-eq
 dup length 4 assert-eq
 "sorted-insert: ok" print
 drop
 
 # --- Sorted remove ---
-nil 1 sorted-insert 3 sorted-insert 5 sorted-insert
+[ ] 1 sorted-insert 3 sorted-insert 5 sorted-insert
 3 sorted-remove
 dup head 1 assert-eq
 dup length 2 assert-eq

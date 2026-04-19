@@ -33,6 +33,7 @@
 
 init() ->
     af_type:register_type(#af_type{name = 'List'}),
+    af_type:register_type(#af_type{name = 'ListBuilder'}),
 
     %% nil: push empty list
     af_type:add_op('Any', #operation{
@@ -44,6 +45,22 @@ init() ->
     af_type:add_op('Any', #operation{
         name = "cons", sig_in = ['Any', 'List'], sig_out = ['List'],
         impl = fun op_cons/1
+    }),
+
+    %% [ and ] — bracket list literals.
+    %% `[` pushes a ListBuilder sentinel. `]` walks the data stack
+    %% back to the nearest sentinel, collecting everything above it
+    %% into a source-ordered List. Both registered on Any with no
+    %% sig_in constraints: `]` has to fire regardless of TOS because
+    %% arbitrary values between the brackets become the list contents.
+    %% `[ 1 2 3 ]` -> {List, [1, 2, 3]} (first item pushed = first in list).
+    af_type:add_op('Any', #operation{
+        name = "[", sig_in = [], sig_out = ['ListBuilder'],
+        impl = fun op_list_start/1
+    }),
+    af_type:add_op('Any', #operation{
+        name = "]", sig_in = [], sig_out = ['List'],
+        impl = fun op_list_end/1
     }),
 
     %% length: list -> int
@@ -160,6 +177,35 @@ op_nil(Cont) ->
 op_cons(Cont) ->
     [Item, {'List', Items} | Rest] = Cont#continuation.data_stack,
     Cont#continuation{data_stack = [{'List', [Item | Items]} | Rest]}.
+
+%% `[` — push a ListBuilder sentinel. Two-tuple so match_sig's
+%% `element(1, Tuple)` type check works (it requires tuple_size >= 2).
+op_list_start(Cont) ->
+    Cont#continuation{
+        data_stack = [{'ListBuilder', start} | Cont#continuation.data_stack]
+    }.
+
+%% `]` — walk back to the nearest ListBuilder sentinel, collect
+%% everything above it in source (first-pushed-first) order, and
+%% push the resulting List. Nested `[ ... ]` work automatically
+%% because each `[` pushes its own marker and `]` only collects
+%% back to the nearest one.
+op_list_end(Cont) ->
+    {Items, Below} = collect_to_marker(Cont#continuation.data_stack, []),
+    Cont#continuation{data_stack = [{'List', Items} | Below]}.
+
+collect_to_marker([{'ListBuilder', start} | Rest], Acc) ->
+    %% Acc was built by prepending each popped item, which reverses
+    %% the pop order. Pop order = TOS-first = last-pushed-first.
+    %% So Acc is now in first-pushed-first = source order.
+    {Acc, Rest};
+collect_to_marker([Item | Rest], Acc) ->
+    collect_to_marker(Rest, [Item | Acc]);
+collect_to_marker([], Acc) ->
+    %% Unterminated `[` — treat the rest as the collected items.
+    %% Arguably should raise, but preserving whatever was there is
+    %% safer for interactive REPL use.
+    {Acc, []}.
 
 op_length(Cont) ->
     [{'List', Items} | Rest] = Cont#continuation.data_stack,
