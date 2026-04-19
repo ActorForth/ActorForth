@@ -78,8 +78,8 @@ parse_test_() ->
             Transitions = element(7, Node),
             ?assertEqual(2, length(Transitions)),
             [T1, T2] = Transitions,
-            ?assertEqual({'TransitionSpec', 'Idle', 'Busy', start, <<>>, none}, T1),
-            ?assertEqual({'TransitionSpec', 'Busy', 'Idle', finish, <<>>, none}, T2)
+            ?assertEqual({'TransitionSpec', 'Idle', 'Busy', start, <<>>, none, 0}, T1),
+            ?assertEqual({'TransitionSpec', 'Busy', 'Idle', finish, <<>>, none, 0}, T2)
         end} end
     ]}.
 

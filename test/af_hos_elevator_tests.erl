@@ -354,6 +354,87 @@ effect_dispatch_test_() ->
         end} end
     ]}.
 
+
+%% -------------------------------------------------------------------
+%% Timer primitive: `: after <ms> <event>` schedules a self-send.
+%% The mailbox stays open during the wait so preemption works; a
+%% late scheduled event is input-rejected if no declared transition
+%% from the live state exists.
+%% -------------------------------------------------------------------
+
+timer_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"Motor.move-to schedules arrived after declared delay", fun() ->
+            load_valid_spec(),
+            Root = af_hos_check:lookup_system("BuildingSystem"),
+            RootPid = af_hos_runtime:spawn_system(Root),
+            DispPid = introspect_child_pid(RootPid, "Dispatcher"),
+            CarPid  = introspect_child_pid(DispPid, "Car"),
+            MotorPid = introspect_child_pid(CarPid, "Motor"),
+
+            af_hos_runtime:send_event(MotorPid, 'move-to', []),
+            timer:sleep(100),
+
+            %% 100ms into a 500ms travel: only move-to has been
+            %% received, arrived is still scheduled.
+            ?assertEqual(["move-to"], get_log(MotorPid)),
+
+            timer:sleep(600),
+
+            %% 700ms total: the scheduled arrived has fired.
+            ?assertEqual(["move-to", "arrived"], get_log(MotorPid)),
+
+            af_hos_runtime:stop_system(RootPid),
+            timer:sleep(50)
+        end} end,
+
+        fun(_) -> {"stop preempts: late arrived is input-rejected", fun() ->
+            load_valid_spec(),
+            Root = af_hos_check:lookup_system("BuildingSystem"),
+            RootPid = af_hos_runtime:spawn_system(Root),
+            DispPid = introspect_child_pid(RootPid, "Dispatcher"),
+            CarPid  = introspect_child_pid(DispPid, "Car"),
+            MotorPid = introspect_child_pid(CarPid, "Motor"),
+
+            af_hos_runtime:send_event(MotorPid, 'move-to', []),
+            timer:sleep(100),
+            af_hos_runtime:send_event(MotorPid, 'stop', []),
+            timer:sleep(600),
+
+            %% After move-to -> stop -> (late arrived), Motor's log
+            %% records all three receptions. The arrived transition
+            %% Stopped -> ? is not declared under arrived, so Axiom 4
+            %% input-rejects it; Motor stays Stopped.
+            Log = get_log(MotorPid),
+            ?assertEqual(["move-to", "stop", "arrived"], Log),
+
+            af_hos_runtime:stop_system(RootPid),
+            timer:sleep(50)
+        end} end,
+
+        fun(_) -> {"timer scheduling an undeclared event is rejected", fun() ->
+            %% The scheduled event must be a declared handler on
+            %% this system. A timer that fires an event nobody
+            %% handles would be a silent dead-letter.
+            try
+                eval_new(
+                    "system M "
+                    "  parent P "
+                    "  state MState "
+                    "  on go -> ; "
+                    "    -> Running "
+                    "  transitions "
+                    "    Idle -> Running go : after 100 ghost "
+                    "end"),
+                ?assert(false)
+            catch
+                error:{axiom_violation, Msg} ->
+                    ?assertNotEqual(nomatch, string:find(Msg, "axiom_1")),
+                    ?assertNotEqual(nomatch, string:find(Msg, "ghost"))
+            end
+        end} end
+    ]}.
+
 %% Restore the introspect helper so effect_dispatch_test_ can reach
 %% into the tree by name. This is a test-only hook provided by the
 %% runtime's introspect_child message.

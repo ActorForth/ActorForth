@@ -79,26 +79,48 @@ enforcement mechanism. What cannot be named cannot be called.
 A stateful HOS system declares:
 
 - Its state type.
-- Its handler event signatures.
-- A transitions table whose rows are `From -> To Trigger : Target event`.
+- Its handler event names.
+- A transitions table whose rows are one of:
+  - `From -> To Trigger` (no effect)
+  - `From -> To Trigger : Target event` (immediate subsystem call)
+  - `From -> To Trigger : after <ms> event` (timer primitive)
 
 The `: Target event` clause is the **effect**. It declares the
 subsystem interaction that happens ON the transition, in the
 transition table, not inside a handler body.
 
-Handler bodies of stateful systems contain only `-> State` markers.
-There is no room inside a body for a subsystem call; the language
-disallows it. Subsystem interactions live on transitions.
+The `: after <ms> event` clause is the **timer primitive**: when
+the transition fires, a self-send of `event` is scheduled after
+`<ms>` milliseconds. The mailbox stays open during the wait, so
+other events arriving in that window are processed as they would
+be otherwise. A late scheduled event whose transition is not
+declared from the live state is input-rejected (Axiom 4).
 
-The consequence: any reordering, retargeting, or omission of a
-subsystem call is a visible change to the transitions table. It is
-not a sequence inside an imperative body that a reviewer has to
-mentally simulate.
+Handler bodies of stateful systems contain only `-> State` markers.
+There is no room inside a body for a subsystem call, a direct
+`erlang:send_after`, or any imperative statement; the language
+disallows it. Subsystem interactions live on transitions, and
+actuation time is declared there too.
+
+The consequence: any reordering, retargeting, omission, or timing
+change of a subsystem call is a visible change to the transitions
+table. It is not a sequence inside an imperative body that a
+reviewer has to mentally simulate.
 
 Stateless systems (no `state` declared) are pure routers: they
 receive an event and fan it out to declared children or a parent.
 Their bodies can contain `Target Event` pairs directly, because the
 system has no state machine for transitions to drive.
+
+**Events in this DSL are pure signals.** Handler signatures carry
+no arguments in v1: `on move-to -> ;` rather than
+`on move-to Floor -> ;`. The motivating case ("which floor?") is
+real, but belongs to data propagation, which is a v2 concern to be
+handled via system state (e.g., each Car holds its current
+Assignment in CarState; transitions read state to populate effect
+context). Treating events as signals now keeps the structural
+story clean; adding a data channel later does not require revisiting
+the axioms.
 
 ---
 
@@ -132,16 +154,18 @@ system Motor
     parent Car
     state MotorState
 
-    on move-to Floor -> ;
+    on move-to -> ;
         -> Moving
+
+    on arrived -> ;
         -> Stopped
 
     on stop -> ;
         -> Stopped
 
     transitions
-        Stopped -> Moving move-to
-        Moving -> Stopped move-to
+        Stopped -> Moving move-to : after 500 arrived
+        Moving -> Stopped arrived
         Moving -> Stopped stop
 end
 
@@ -150,7 +174,7 @@ system Car
     state CarState
     children Door Motor
 
-    on assign Assignment -> ;
+    on assign -> ;
         -> PreparingToMove
         -> Moving
         -> Arriving
@@ -202,10 +226,10 @@ system Dispatcher
     state DispatcherState
     children Car
 
-    on request Request -> ;
+    on request -> ;
         -> Normal
 
-    on set-emergency Bool -> ;
+    on set-emergency -> ;
         -> Emergency
 
     on clear-emergency -> ;
@@ -220,7 +244,7 @@ end
 system BuildingSystem
     children Dispatcher EmergencySource
 
-    on floor-button-press Floor Direction -> ;
+    on floor-button-press -> ;
         Dispatcher request
 
     on fire-alarm -> ;
@@ -235,6 +259,12 @@ end
 
 Notes:
 
+- `Motor` uses the timer primitive. On `move-to`, Motor transitions
+  Stopped to Moving and schedules a self-send of `arrived` after
+  500ms. When `arrived` fires, Motor transitions Moving to Stopped.
+  If a `stop` event arrives during travel, Motor transitions to
+  Stopped immediately; the late `arrived` is input-rejected because
+  no declared transition exists from Stopped under `arrived`.
 - `Car` has nine states and sixteen transitions. Four of the normal
   transitions carry declared effects (Door close, Motor move-to,
   Door open, Door close). Seven emergency transitions carry Motor
@@ -244,7 +274,9 @@ Notes:
   `Door close` or `Motor move-to` anywhere in a body; those live on
   the transitions that produce them.
 - `Dispatcher` is stateful. `Normal -> Normal request` is a
-  self-loop carrying `Car assign`.
+  self-loop carrying `Car assign` as an effect. The self-loop is a
+  known smell (see Section 7): a transition whose only purpose is
+  to carry an effect, not to change state.
 - `EmergencySource` and `BuildingSystem` are stateless pass-through
   routers, so their bodies contain direct `Target Event` pairs.
 
@@ -440,6 +472,28 @@ scope
 Effects are first-class references. The same scope rule that
 applies to handler bodies applies to effect targets.
 
+### Timer scheduling an undeclared event
+
+A timer effect must schedule an event the system itself handles.
+Otherwise the self-send would be a silent dead-letter:
+
+```a4
+system M
+    parent P
+    state MState
+    on go -> ;
+        -> Running
+    transitions
+        Idle -> Running go : after 100 ghost
+end
+```
+
+```
+axiom_1: system 'M' declares timer effect Idle -> Running under
+trigger 'go' scheduling event 'ghost', but 'ghost' is not a
+declared handler on this system
+```
+
 ---
 
 ## 6. The happy path: effects reach the target
@@ -501,31 +555,54 @@ Sound claims:
 
 Scoped, not claimed:
 
-- **Multi-car dispatcher selection.** The spec has a single Car under
-  a single Dispatcher. A production dispatcher would hold N cars and
-  pick one (the classic "idle closest to request" rule) inside the
-  dispatch handler; that needs a collection primitive (something
-  like `children Car[]` with a query operator that executes
-  atomically as one FMap node). The current spec does not include
-  this. Flaw 6 (duplicate assignment from a stale snapshot) is
-  prevented for the single-car case by the actor mailbox being
-  serialised; the multi-car version of Flaw 6 is not proven
-  prevented until the collection primitive exists.
-- **In-handler preemption.** When Car is driving a seven-step assign
-  sequence and an emergency arrives, the emergency is queued and
-  processed after the assign sequence completes. There is no
-  mid-sequence interrupt. This is a runtime choice, not an axiom
-  failure: every transition Car takes is still declared. But in a
-  production elevator you would want preemption. The way to get it
-  structurally is to decompose the multi-step handler into a chain
-  of self-sends so the mailbox interleaves; that is not in the MVP.
+- **Handler bodies are redundant with the transitions table.** A
+  stateful handler body like Car's `on assign` walks seven state
+  markers that the transitions table already declares edges for
+  under trigger `assign`. The body is a restatement of the table
+  that can desync if someone edits one and not the other. The clean
+  version eliminates the body entirely: "receive event E, walk
+  declared edges under E from current state until fixed point." The
+  v2 of this DSL will do that. For now the body is there and the
+  runtime walks it literally.
+- **Dispatcher self-loop is a smell.** `Normal -> Normal request :
+  Car assign` is a transition whose only job is to carry an effect,
+  not to change state. A cleaner construct ("in state S, on event
+  E, dispatch F, no transition") is future work.
+- **Multi-car dispatcher selection.** The spec has a single Car
+  under a single Dispatcher. A production dispatcher would hold N
+  cars and pick one (the classic "idle closest to request" rule)
+  inside the dispatch handler; that needs a collection primitive
+  (something like `children Car[]` with a query operator that
+  executes atomically as one FMap node). Flaw 6 (duplicate
+  assignment from a stale snapshot) is prevented for the single-car
+  case by the actor mailbox being serialised; the multi-car version
+  of Flaw 6 is not proven prevented until the collection primitive
+  exists.
+- **In-handler preemption.** When Car is driving a seven-step
+  assign sequence and an emergency arrives, the emergency is queued
+  and processed after the assign sequence completes. There is no
+  mid-sequence interrupt at the Car layer. (The Motor layer, by
+  contrast, *is* preemptable: `stop` during travel works because
+  the timer primitive decomposes travel into an `arrived`
+  self-send, so Motor's mailbox interleaves.) The missing piece at
+  Car is the same decomposition: each step becomes its own
+  self-send. That's the body-elimination work above.
 - **Cross-system preconditions.** A transition's effect target is
   scope-checked but not precondition-checked. If a transition
   declares `: Door open` when the logical precondition is "Motor is
   stopped", nothing in the current language enforces that
-  precondition. A full USL would let Motor declare "stopped is the
+  precondition. Full USL would let Motor declare "stopped is the
   only state I accept the stop event in" and the checker would
   verify Car's transitions satisfy it. Future work.
+- **Data propagation.** Handler signatures carry no arguments.
+  Motor does not know which floor it's supposed to travel to; the
+  Floor arg is not passed in any form. Data propagation is future
+  work via system state (each Car holds its Assignment in CarState,
+  transitions read state to populate effect context).
+- **Physical actuation beyond time.** The timer primitive covers
+  "this takes N milliseconds." More complex actuation (sensors,
+  external I/O, physical feedback) needs additional primitives.
+  Only the time dimension is covered in this pass.
 - **Flaw 6 runtime dimension** (the stale-snapshot race) is
   prevented by Erlang's serialised mailbox for the single-car case,
   which is an actor-model standard guarantee rather than a
@@ -555,12 +632,15 @@ The full FAT suite:
 rebar3 eunit --module=af_hos_elevator_tests
 ```
 
-Sixteen tests. Four assert the happy path (compiles, all systems
-registered, tree spawns, an event routes). Eight assert
-compile-time rejections of flawed specs. Two assert that the
-runtime dispatches declared effects to leaves in the declared order.
-Two more assert the tree spawns correctly and emergency
-propagates up through EmergencySource.
+Nineteen tests. Four assert the happy path (compiles, all systems
+registered, tree spawns, an event routes). Ten assert compile-time
+rejections of flawed specs (including the new timer-scheduling-an-
+undeclared-event case). Two assert that the runtime dispatches
+declared subsystem effects to leaves in declared order. Three
+assert the timer primitive: the delay is honored, preemption via
+`stop` works through input rejection of the late scheduled event,
+and timer effects scheduling undeclared events are rejected at
+compile time.
 
 ---
 

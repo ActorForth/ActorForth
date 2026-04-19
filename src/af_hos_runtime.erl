@@ -286,8 +286,11 @@ fire_transition(From, To, Event, State) ->
     case find_transition(From, To, Event, Transitions) of
         not_found ->
             skip;
-        {'TransitionSpec', _F, _T, _Trig, EffectTarget, EffectEvent} ->
-            dispatch_effect(EffectTarget, EffectEvent, State),
+        {'TransitionSpec', _F, _T, _Trig, Target, EvtEff, Delay} ->
+            dispatch_effect(Target, EvtEff, Delay, State),
+            {ok, State#{current_state => To}};
+        {'TransitionSpec', _F, _T, _Trig, Target, EvtEff} ->
+            dispatch_effect(Target, EvtEff, 0, State),
             {ok, State#{current_state => To}};
         {'TransitionSpec', _F, _T, _Trig} ->
             {ok, State#{current_state => To}}
@@ -302,10 +305,24 @@ find_transition(From, To, Event, [T | Rest]) ->
         false -> find_transition(From, To, Event, Rest)
     end.
 
-dispatch_effect(<<>>, _Event, _State) -> ok;
-dispatch_effect("", _Event, _State)   -> ok;
-dispatch_effect(_Target, 'none', _State) -> ok;
-dispatch_effect(Target, Event, State) ->
+%% dispatch_effect/4 handles three cases:
+%%   * no target: effect is absent (ok).
+%%   * target "after" with delay > 0: schedule self-send via
+%%     erlang:send_after; the mailbox stays open so other events
+%%     (emergency, stop) can arrive and preempt via input rejection
+%%     of the late scheduled event if it no longer applies.
+%%   * target "after" with delay 0: immediate self-send.
+%%   * any other target: resolve to a parent/child PID and cast.
+dispatch_effect(<<>>, _Event, _Delay, _State) -> ok;
+dispatch_effect("", _Event, _Delay, _State)   -> ok;
+dispatch_effect(_Target, 'none', _Delay, _State) -> ok;
+dispatch_effect(<<"after">>, Event, Delay, _State) when Delay > 0 ->
+    erlang:send_after(Delay, self(), {cast, Event, []}),
+    ok;
+dispatch_effect(<<"after">>, Event, 0, _State) ->
+    self() ! {cast, Event, []},
+    ok;
+dispatch_effect(Target, Event, 0, State) ->
     TargetStr = case Target of
                     B when is_binary(B) -> binary_to_list(B);
                     L when is_list(L)   -> L
@@ -313,7 +330,11 @@ dispatch_effect(Target, Event, State) ->
     case resolve_target(TargetStr, State) of
         {ok, Pid}     -> Pid ! {cast, Event, []}, ok;
         not_a_target  -> ok
-    end.
+    end;
+dispatch_effect(_Target, _Event, _Delay, _State) ->
+    %% Non-"after" target with nonzero delay is not a supported
+    %% combination; ignore rather than crash.
+    ok.
 
 resolve_target(Name, #{child_map := ChildMap, parent_name := ParentName,
                        parent_pid := ParentPid, name := _SelfName}) ->

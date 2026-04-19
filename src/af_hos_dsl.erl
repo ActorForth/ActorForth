@@ -219,6 +219,7 @@ expect_token(Expected, [], Where) ->
 %% Transitions section. Each entry is:
 %%     From -> To Trigger
 %%     From -> To Trigger : Target event
+%%     From -> To Trigger : after <ms> event
 %%
 %% The `: Target event` clause declares the subsystem interaction
 %% that happens when this transition fires. Because the effect is in
@@ -226,6 +227,12 @@ expect_token(Expected, [], Where) ->
 %% wrong target is visible in the declared transitions. A stateful
 %% system's handler body can therefore contain only state markers;
 %% subsystem calls live only on transitions (enforced in af_hos_check).
+%%
+%% The `: after <ms> event` variant is the timer primitive: schedule
+%% a self-send of `event` after <ms> milliseconds. The mailbox stays
+%% open during the wait; preemption is free via Axiom 4 input
+%% rejection of any late event whose transition is not declared from
+%% the live state.
 parse_transitions(Tokens) ->
     parse_transitions(Tokens, []).
 
@@ -237,23 +244,30 @@ parse_transitions([{Val, _} | _] = Toks, Acc) ->
         false ->
             [{From, _}, ArrowPair, {To, _}, {Trigger, _} | Rest0] = Toks,
             "->" = element(1, ArrowPair),
-            {EffectTarget, EffectEvent, Rest} = parse_effect_clause(Rest0),
+            {EffectTarget, EffectEvent, EffectDelay, Rest} =
+                parse_effect_clause(Rest0),
             T = {'TransitionSpec',
                  list_to_atom(From),
                  list_to_atom(To),
                  list_to_atom(Trigger),
                  EffectTarget,
-                 EffectEvent},
+                 EffectEvent,
+                 EffectDelay},
             parse_transitions(Rest, [T | Acc])
     end.
 
-%% `: Target event` is the effect clause. Optional. Consumes three
-%% tokens when present (colon, target name, event name); zero
-%% otherwise. Returns {TargetBinary, EventAtom, Rest}.
+%% Effect clause forms:
+%%   (absent)                  -> no effect.
+%%   : Target event            -> immediate subsystem dispatch.
+%%   : after <ms> event        -> scheduled self-send.
+%% Returns {TargetBinary, EventAtom, DelayMs, Rest}.
+parse_effect_clause([{":", _}, {"after", _}, {DelayStr, _}, {Event, _} | Rest]) ->
+    Delay = list_to_integer(DelayStr),
+    {<<"after">>, list_to_atom(Event), Delay, Rest};
 parse_effect_clause([{":", _}, {Target, _}, {Event, _} | Rest]) ->
-    {list_to_binary(Target), list_to_atom(Event), Rest};
+    {list_to_binary(Target), list_to_atom(Event), 0, Rest};
 parse_effect_clause(Rest) ->
-    {<<>>, 'none', Rest}.
+    {<<>>, 'none', 0, Rest}.
 
 
 %% ---------------------------------------------------------------

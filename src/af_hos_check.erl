@@ -217,7 +217,7 @@ walk({'SystemNode', NameRaw, ParentRaw, StateType,
                     [] -> "";
                     [P] -> P
                 end,
-    TransitionV = check_transition_effects(Transitions, Scope, Path),
+    TransitionV = check_transition_effects(Transitions, Scope, Handlers, Path),
     HandlerV = lists:flatmap(
         fun(H) ->
             ScopeV = check_handler(H, Scope, Path),
@@ -236,14 +236,52 @@ walk({'SystemNode', NameRaw, ParentRaw, StateType,
 %% in the system's scope. A transition that invokes a subsystem name
 %% the system cannot see is an out-of-scope reference just like a
 %% body token would be.
-check_transition_effects(Transitions, Scope, Path) ->
-    lists:flatmap(fun(T) -> check_transition_effect(T, Scope, Path) end,
+%%
+%% The reserved target name "after" indicates a timer primitive
+%% (scheduled self-send). For "after" effects we verify the event
+%% is a declared handler on this system: a timer that fires an
+%% event nobody handles would be silently useless.
+check_transition_effects(Transitions, Scope, Handlers, Path) ->
+    lists:flatmap(fun(T) -> check_transition_effect(T, Scope, Handlers, Path) end,
                   Transitions).
 
+%% 7-tuple (current): with effect_delay.
 check_transition_effect({'TransitionSpec', From, To, Trigger,
-                         EffectTarget, _EffectEvent}, Scope, Path) ->
+                         EffectTarget, EffectEvent, _Delay},
+                        Scope, Handlers, Path) ->
+    check_effect_target(From, To, Trigger, EffectTarget, EffectEvent,
+                        Scope, Handlers, Path);
+%% 6-tuple (legacy): no effect_delay.
+check_transition_effect({'TransitionSpec', From, To, Trigger,
+                         EffectTarget, EffectEvent},
+                        Scope, Handlers, Path) ->
+    check_effect_target(From, To, Trigger, EffectTarget, EffectEvent,
+                        Scope, Handlers, Path);
+%% 4-tuple (legacy): no effect at all.
+check_transition_effect({'TransitionSpec', _, _, _}, _, _, _) ->
+    [].
+
+check_effect_target(From, To, Trigger, EffectTarget, EffectEvent,
+                    Scope, Handlers, Path) ->
     case effect_target_str(EffectTarget) of
         "" -> [];
+        "after" ->
+            %% Timer primitive: the scheduled event must be a
+            %% handler declared on this system, otherwise nothing
+            %% receives the self-send.
+            EventStr = atom_to_list(EffectEvent),
+            OwnEvents = [atom_to_list(element(2, H)) || H <- Handlers],
+            case lists:member(EventStr, OwnEvents) of
+                true  -> [];
+                false ->
+                    [lists:flatten(io_lib:format(
+                        "axiom_1: system '~s' declares timer effect "
+                        "~s -> ~s under trigger '~s' scheduling "
+                        "event '~s', but '~s' is not a declared "
+                        "handler on this system",
+                        [Path, From, To, Trigger,
+                         EventStr, EventStr]))]
+            end;
         Target ->
             case token_in_scope(Target, Scope) of
                 true -> [];
@@ -254,11 +292,7 @@ check_transition_effect({'TransitionSpec', From, To, Trigger,
                         "on '~s', but '~s' is not in scope",
                         [Path, From, To, Trigger, Target, Target]))]
             end
-    end;
-%% Backwards compatibility for hand-built 4-tuple TransitionSpecs in
-%% older tests. Treated as having no effect.
-check_transition_effect({'TransitionSpec', _, _, _}, _Scope, _Path) ->
-    [].
+    end.
 
 effect_target_str(<<>>) -> "";
 effect_target_str("") -> "";

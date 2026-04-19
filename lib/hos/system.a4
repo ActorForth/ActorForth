@@ -48,17 +48,24 @@ type HandlerSpec
 # to             destination state (atom)
 # trigger        event name that causes the transition
 # effect_target  name of the subsystem to invoke on this transition
-#                ("" means no effect). This is how a parent drives a
-#                child: the effect is declared in the table, not
-#                hidden in a handler body. Reorderings are visible.
+#                ("" means no effect). The reserved name "after"
+#                indicates a scheduled self-send (timer primitive).
 # effect_event   event to dispatch to effect_target ('none if no effect)
+# effect_delay   milliseconds to wait before dispatch (0 = immediate).
+#                Non-zero only when effect_target = "after"; implements
+#                the timer primitive for physical actuation like
+#                Motor travel time. The mailbox stays open during the
+#                wait, so preemption is free: a late self-send whose
+#                transition is not declared from the live state is
+#                input-rejected (Axiom 4) and has no effect.
 
 type TransitionSpec
     from           Atom
     to             Atom
     trigger        Atom
     effect_target  String
-    effect_event   Atom .
+    effect_event   Atom
+    effect_delay   Int .
 
 
 # -----------------------------------------------------------------
@@ -93,11 +100,17 @@ type SystemNode
 
 # TransitionSpec without effect. Stack: from to trigger -> TransitionSpec
 : make-transition Atom Atom Atom -> TransitionSpec ;
-    "" 'none transitionspec .
+    "" 'none 0 transitionspec .
 
-# TransitionSpec with declared effect. Stack: from to trigger target event -> TransitionSpec
+# TransitionSpec with immediate subsystem effect.
+# Stack: from to trigger target event -> TransitionSpec
 : make-transition-eff Atom Atom Atom String Atom -> TransitionSpec ;
-    transitionspec .
+    0 transitionspec .
+
+# TransitionSpec with timer effect (scheduled self-send).
+# Stack: from to trigger event delay_ms -> TransitionSpec
+: make-transition-after Atom Atom Atom Atom Int -> TransitionSpec ;
+    swap "after" swap rot transitionspec .
 
 # SystemNode. Stack: name parent_name state_type children handlers transitions -> SystemNode
 : make-system String String Atom List List List -> SystemNode ;
