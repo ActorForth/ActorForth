@@ -1,10 +1,10 @@
-# lib/hos/visualize.a4 — ASCII tree visualiser for HOS maps.
+# lib/hos/visualize.a4  -  ASCII tree visualiser for HOS maps.
 #
 # Requires: core.a4 must be loaded before this file.
 #
 # Entry points:
-#   FMapNode show-fmap-tree      — print an FMap tree to stdout
-#   TMapNode show-tmap-tree      — print a  TMap tree to stdout
+#   FMapNode show-fmap-tree       -  print an FMap tree to stdout
+#   TMapNode show-tmap-tree       -  print a  TMap tree to stdout
 #
 # Output is one line per node:
 #
@@ -71,13 +71,13 @@
     rot drop
     show-fm-children .
 
-# Public entry — render an FMap tree starting with no indent.
+# Public entry  -  render an FMap tree starting with no indent.
 : show-fmap-tree FMapNode -> ;
     "" show-fmap .
 
 
 # -----------------------------------------------------------------
-# TMap side — same shape, different type.
+# TMap side  -  same shape, different type.
 # -----------------------------------------------------------------
 
 : show-tm-name TMapNode String -> TMapNode ;

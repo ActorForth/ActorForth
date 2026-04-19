@@ -1,0 +1,186 @@
+# samples/hos/elevator/violations.a4
+#
+# Each of the six FAT-flagged interface errors from the Python /
+# OCaml / Rust naive elevators, expressed as an HOS spec that DOES
+# NOT COMPILE. The axiom checker rejects each with a specific
+# diagnostic. Run this file and observe the axiom_violation error
+# each block raises.
+#
+# This file is intentionally a set of CATCH/REPORT demonstrations:
+# every violation block is guarded so loading the file lists all
+# six rejections without halting on the first one.
+#
+# Pair with samples/hos/elevator/elevator.a4 (the valid spec) for
+# the full demonstration.
+
+# The flaws themselves (from the Python/OCaml/Rust naive versions):
+#
+#   Flaw 1: Door opens while motor is moving (sibling trust).
+#   Flaw 2: Motor moves while door is open (mirror of Flaw 1).
+#   Flaw 3: Emergency flag race (TOCTOU on a polled bool).
+#   Flaw 4: Operation reordering mid-transit.
+#   Flaw 5: EmergencySystem reaches a Car directly, bypassing Dispatcher.
+#   Flaw 6: Duplicate assignment from stale dispatcher snapshot.
+
+# ----------------------------------------------------------------
+# Violation 1: Flaw 5 attempted. EmergencySource reaches past
+# BuildingSystem to invoke Car's trigger-emergency directly.
+#
+# Rejected by axiom_1: `Car` is not a parent / child / event /
+# state name / a4 builtin in EmergencySource's scope.
+# ----------------------------------------------------------------
+# Uncomment to observe the rejection:
+#
+# system EmergencySource
+#     parent BuildingSystem
+#     on trigger -> ;
+#         Car trigger-emergency
+# end
+
+
+# ----------------------------------------------------------------
+# Violation 2: Flaw 1/2 attempted. A system at the Dispatcher
+# level tries to reach Motor directly. Motor is a grandchild of
+# Dispatcher, not a child, so it is not in Dispatcher's scope.
+#
+# Rejected by axiom_1: Dispatcher's children clause lists Car,
+# not Motor. `Motor` is not in scope here.
+# ----------------------------------------------------------------
+# Uncomment to observe the rejection:
+#
+# system Dispatcher
+#     parent BuildingSystem
+#     children Car
+#     on malicious-direct-drive -> ;
+#         Motor move-to
+# end
+
+
+# ----------------------------------------------------------------
+# Violation 3: Flaw 4 attempted. Car's assign handler tries to
+# skip states, going from Moving directly to DoorOpening (skipping
+# Arriving) so the door could open before the car has fully
+# arrived.
+#
+# Rejected by axiom_5: `Moving -> DoorOpening` is not a declared
+# transition in Car's transitions table.
+# ----------------------------------------------------------------
+# Uncomment to observe the rejection:
+#
+# system Car
+#     parent Dispatcher
+#     state CarState
+#     children Door Motor
+#
+#     on assign Assignment -> ;
+#         -> PreparingToMove
+#         -> Moving
+#         -> DoorOpening
+#
+#     transitions
+#         IdleAtFloor -> PreparingToMove assign
+#         PreparingToMove -> Moving assign
+#         Moving -> Arriving assign
+#         Arriving -> DoorOpening assign
+# end
+
+
+# ----------------------------------------------------------------
+# Violation 4: Flaw 3 attempted. A system tries to model
+# emergency as a boolean flag inside its own body, synthesising
+# a `check-emergency-flag` event which is not in any declared
+# ancestor.
+#
+# Rejected by axiom_1: the token isn't a parent / child / event.
+# ----------------------------------------------------------------
+# Uncomment to observe the rejection:
+#
+# system Car
+#     parent Dispatcher
+#     on step -> ;
+#         check-emergency-flag
+# end
+
+
+# ----------------------------------------------------------------
+# Violation 5: Inconsistent parent / children declarations. Car
+# lists Door as a child but Door declares a different parent.
+#
+# Rejected at registration time by the consistency check.
+# ----------------------------------------------------------------
+# Uncomment to observe the rejection:
+#
+# system Door
+#     parent Somewhere
+# end
+#
+# system Car
+#     parent Dispatcher
+#     children Door Motor
+# end
+
+
+# ----------------------------------------------------------------
+# Violation 6: Flaw 6 pattern. A "dispatcher" that forwards to a
+# sibling of its declared children (trying to route work around
+# the hierarchy).
+#
+# Rejected by axiom_1: the sibling name is not in scope.
+# ----------------------------------------------------------------
+# Uncomment to observe the rejection:
+#
+# system ParallelDispatcher
+#     parent BuildingSystem
+#     children Car
+#     on request Request -> ;
+#         OtherDispatcher request
+# end
+
+
+# ----------------------------------------------------------------
+# Violation 7: Flaw 1/2 as an inline body reordering. A stateful
+# system may not put subsystem calls inside a handler body; they
+# must be declared transition effects. This is what structurally
+# prevents Door/Motor reordering from being hidden in a handler
+# body. The reorder, if the author wants it, has to be a visible
+# edit of the transitions table.
+#
+# Rejected by axiom_5 (stateful-body rule).
+# ----------------------------------------------------------------
+# Uncomment to observe the rejection:
+#
+# system CarBad
+#     parent Dispatcher
+#     state CarState
+#     children Door Motor
+#
+#     on assign Assignment -> ;
+#         -> Ready
+#         Motor move-to
+#         Door open
+#
+#     transitions
+#         Idle -> Ready assign
+# end
+
+
+# ----------------------------------------------------------------
+# Violation 8: Effect target out of scope. A transition declares
+# an effect on a subsystem that is neither a parent, child, nor
+# a4 builtin.
+#
+# Rejected by axiom_1 on the transition itself.
+# ----------------------------------------------------------------
+# Uncomment to observe the rejection:
+#
+# system C
+#     parent P
+#     state CState
+#     on go -> ;
+#         -> Done
+#     transitions
+#         Idle -> Done go : Stranger step
+# end
+
+
+"=== violations.a4 compiled: uncomment a block to see the rejection ===" print

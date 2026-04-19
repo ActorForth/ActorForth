@@ -27,7 +27,10 @@ init_types() ->
     af_core_compiler:init(),
     af_cpp_compiler:init(),
     af_test_prim:init(),
-    af_type_test_dsl:init().
+    af_type_test_dsl:init(),
+    af_hos_check:init(),
+    af_hos_dsl:init(),
+    af_hos_runtime:init().
 
 start() ->
     load_env(),

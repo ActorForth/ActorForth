@@ -1,0 +1,109 @@
+# lib/hos/system.a4  -  SystemNode foundation for the HOS DSL.
+#
+# A SystemNode is the axiom-checkable description of one system in
+# the HOS control hierarchy. The tree of SystemNodes IS the control
+# graph Hamilton's axioms constrain:
+#
+#   Axiom 1 (immediate-only control). A system may reference names
+#           in its own scope: its parent (by the link below), its
+#           direct children, its state type, and its handler-local
+#           tokens. Anything else  -  siblings, aunts, distant
+#           cousins  -  is a compile error in the DSL.
+#
+#   Axiom 5 (input rejection). Transitions listed in the table are
+#           the *only* state changes allowed. A handler body whose
+#           static effect would cause an undeclared transition is a
+#           compile error.
+#
+#   FMap/TMap integration. Types named in a handler's signature
+#           must be defined in a TMap reachable through the
+#           ancestor chain of this system.
+#
+# SystemNode carries only the description  -  no live state, no
+# spawned actors. Instantiating a system spawns an actor tree whose
+# topology mirrors this tree exactly.
+
+# -----------------------------------------------------------------
+# HandlerSpec  -  one event handler declared inside a system.
+# -----------------------------------------------------------------
+# name      event name (e.g. 'assign, 'trigger-emergency)
+# sig_in    list of input type atoms (TOS-first)
+# sig_out   list of output type atoms (TOS-first)
+# body      list of token strings  -  what the handler does. Checked
+#           by the axiom verifier against the enclosing system's
+#           scope (parent / children / locals / state-transition
+#           names).
+
+type HandlerSpec
+    name     Atom
+    sig_in   List
+    sig_out  List
+    body     List .
+
+
+# -----------------------------------------------------------------
+# TransitionSpec  -  one entry in a system's transition table.
+# -----------------------------------------------------------------
+# from           source state (atom)
+# to             destination state (atom)
+# trigger        event name that causes the transition
+# effect_target  name of the subsystem to invoke on this transition
+#                ("" means no effect). This is how a parent drives a
+#                child: the effect is declared in the table, not
+#                hidden in a handler body. Reorderings are visible.
+# effect_event   event to dispatch to effect_target ('none if no effect)
+
+type TransitionSpec
+    from           Atom
+    to             Atom
+    trigger        Atom
+    effect_target  String
+    effect_event   Atom .
+
+
+# -----------------------------------------------------------------
+# SystemNode  -  one system in the HOS control tree.
+# -----------------------------------------------------------------
+# name          identifier of this system
+# parent_name   name of the parent system ("" for the root)
+# state_type    type of the system's state (atom 'None for stateless)
+# children      list of SystemNode  -  direct children only
+# handlers      list of HandlerSpec   -  declared event handlers
+# transitions   list of TransitionSpec  -  the entire allowed table
+
+type SystemNode
+    name         String
+    parent_name  String
+    state_type   Atom
+    children     List
+    handlers     List
+    transitions  List .
+
+
+# -----------------------------------------------------------------
+# Builder combinators
+# -----------------------------------------------------------------
+# These are thin wrappers on the auto-generated positional
+# constructors. They exist so explicit construction reads cleanly
+# while the declarative `system ... ;` surface is still being built.
+
+# HandlerSpec. Stack: name sig_in sig_out body -> HandlerSpec
+: make-handler Atom List List List -> HandlerSpec ;
+    handlerspec .
+
+# TransitionSpec without effect. Stack: from to trigger -> TransitionSpec
+: make-transition Atom Atom Atom -> TransitionSpec ;
+    "" 'none transitionspec .
+
+# TransitionSpec with declared effect. Stack: from to trigger target event -> TransitionSpec
+: make-transition-eff Atom Atom Atom String Atom -> TransitionSpec ;
+    transitionspec .
+
+# SystemNode. Stack: name parent_name state_type children handlers transitions -> SystemNode
+: make-system String String Atom List List List -> SystemNode ;
+    systemnode .
+
+# Leaf system  -  no children, no handlers, no transitions, no state.
+# Useful for testing the scope check without the rest of the spec.
+: leaf-system String String -> SystemNode ;
+    None [ ] [ ] [ ] systemnode .

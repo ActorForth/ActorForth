@@ -1,7 +1,7 @@
 # samples/hos/bank_fmap.a4
 #
 # The bank actor from samples/bank_actor.a4, modelled as an explicit
-# HOS FMap. This file does not *run* the bank — it only describes
+# HOS FMap. This file does not *run* the bank  -  it only describes
 # its two top-level operations (deposit, withdraw) as Join/Primitive
 # decompositions, then visualises the trees.
 #
@@ -32,7 +32,7 @@
 
 
 # -----------------------------------------------------------------
-# Deposit — Join(make-tx, Join(add-tx, credit))
+# Deposit  -  Join(make-tx, Join(add-tx, credit))
 # -----------------------------------------------------------------
 "deposit"  [ Account Atom Int ]  [ Account ]
     "make-tx"         [ Atom Int ]             [ Transaction ]    fm-primitive
@@ -44,7 +44,7 @@ fm-join
 
 
 # -----------------------------------------------------------------
-# Withdraw — Join(make-tx, Join(add-tx, debit))
+# Withdraw  -  Join(make-tx, Join(add-tx, debit))
 # -----------------------------------------------------------------
 "withdraw" [ Account Atom Int ]  [ Account ]
     "make-tx"         [ Atom Int ]             [ Transaction ]    fm-primitive
@@ -56,7 +56,7 @@ fm-join
 
 
 # -----------------------------------------------------------------
-# TMap side — the Account product type as a composite TMap node.
+# TMap side  -  the Account product type as a composite TMap node.
 # -----------------------------------------------------------------
 "Account" [ "balance" "ledger" "balance!" "ledger!" ]
     "Int"  [ "+" "-" "*" "/" "<" ">" "<=" ">=" "==" "!=" ]        tm-primitive
