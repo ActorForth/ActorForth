@@ -53,11 +53,16 @@ init() ->
         impl = fun op_send_begin/1
     }),
 
-    %% >> in ActorSend: finishes send block
+    %% >> in ActorSend: finishes send block, restoring the Actor (and any
+    %% return values produced inside the block) back onto the data stack.
+    %% For an empty `<< >>` the sig is exactly [Actor]. Blocks that
+    %% actually dispatch a `call` may push additional return values on
+    %% top — that variadic tail is a known limitation of the static
+    %% checker until we add row-polymorphic signatures.
     af_type:add_op('ActorSend', #operation{
         name = ">>",
         sig_in = ['ActorSend'],
-        sig_out = [],
+        sig_out = ['Actor'],
         impl = fun op_send_end/1
     }),
 

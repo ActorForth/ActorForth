@@ -89,7 +89,7 @@ worker_test_() ->
         fun(_) -> {"separate_reply with no matching type returns undefined (line 82-83)", fun() ->
             %% Define a word that drops the state and pushes unrelated items
             C1 = eval("type Cntr value Int .", af_interpreter:new_continuation()),
-            _C2 = eval(": weird Cntr -> Int ; value drop 99 .", C1),
+            _C2 = eval(": weird Cntr -> Int ; drop 99 .", C1),
             Instance = {'Cntr', 0},
             {ok, Pid} = af_actor_worker:start_link('Cntr', Instance),
             %% This call will execute the word; separate_reply won't find Cntr in result

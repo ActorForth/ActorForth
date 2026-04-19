@@ -102,7 +102,10 @@ error_path_test_() ->
 
         fun(_) -> {"gen_server with multi-return call", fun() ->
             C1 = eval("type Pair a Int b Int .", af_interpreter:new_continuation()),
-            _C2 = eval(": get-both Pair -> Pair Int Int ; a swap b swap .", C1),
+            %% Auto-field-binding: `a` and `b` push copies of the Pair's
+            %% fields on top of the stack (the Pair stays below). Two
+            %% reads produce [Pair, Int_a, Int_b] (TOS-first order).
+            _C2 = eval(": get-both Pair -> Pair Int Int ; a b .", C1),
             C3 = eval("af_gs_pair Pair gen-server-module", _C2),
             [{'Atom', "af_gs_pair"}] = C3#continuation.data_stack,
             InitState = {'Pair', 1, 2},

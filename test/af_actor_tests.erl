@@ -221,7 +221,7 @@ spawn_send_receive_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
         fun(_) -> {"spawn creates actor from word name", fun() ->
             %% Define a word with sig_in so name pushed as Atom (not executed)
-            C1 = eval(": echo Int -> ; receive drop .", af_interpreter:new_continuation()),
+            C1 = eval(": echo Int -> Int ; receive drop .", af_interpreter:new_continuation()),
             C2 = eval("echo spawn", C1),
             [{'Actor', Info}] = C2#continuation.data_stack,
             ?assert(is_pid(maps:get(pid, Info))),
@@ -414,7 +414,7 @@ spawn_word_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
         fun(_) -> {"spawn word creates actor from atom", fun() ->
             %% Define a word with a sig_in so typing its name pushes as Atom
-            C1 = eval(": echo-back Int -> ; receive drop .", af_interpreter:new_continuation()),
+            C1 = eval(": echo-back Int -> Int ; receive drop .", af_interpreter:new_continuation()),
             %% Now echo-back has sig_in [Int], so typing it without Int won't match
             %% and it gets pushed as Atom
             C2 = eval("echo-back spawn", C1),
@@ -680,7 +680,11 @@ actor_loop_direct_test_() ->
         fun(_) -> {"actor_loop call with args via cache", fun() ->
             C0 = af_interpreter:new_continuation(),
             C1 = eval("type Counter count Int .", C0),
-            C2 = eval(": add-get Counter Int -> Counter Int ; over count rot + dup rot swap count! swap .", C1),
+            %% Body: read old count, add addend, update counter, leave (new_counter, new_count).
+            %% The final `rot drop` discards the `over`-duplicated original Counter that
+            %% would otherwise linger under the new state — the word must end with
+            %% exactly [Counter_new, Int_new] to match its declared output.
+            C2 = eval(": add-get Counter Int -> Counter Int ; over count rot + dup rot swap count! swap rot drop .", C1),
             C3 = eval(": get_count Counter -> Counter Int ; count .", C2),
             eval("\"add-get\" compile", C3),
             eval("\"get_count\" compile", C3),

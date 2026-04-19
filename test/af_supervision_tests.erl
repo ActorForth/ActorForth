@@ -16,9 +16,10 @@ setup() ->
     C1 = eval("type Counter value Int .", af_interpreter:new_continuation()),
     %% increment: Counter -> Counter
     C2 = eval(": increment Counter -> Counter ; value 1 + value! .", C1),
-    %% count: Counter -> Int Counter (non-destructive getter returns Int, Counter)
-    C3 = eval(": count Counter -> Int Counter ; value .", C2),
-    %% add: Int Counter -> Counter
+    %% count: Counter -> Counter Int (non-destructive getter leaves Counter
+    %% below, Int on top — the rightmost type in sig_out is TOS).
+    C3 = eval(": count Counter -> Counter Int ; value .", C2),
+    %% add: Int Counter -> Counter. Increments the Counter by Int (TOS).
     _C4 = eval(": add Int Counter -> Counter ; swap value rot + value! .", C3),
     ok.
 

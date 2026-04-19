@@ -444,9 +444,6 @@ register_single_word(State, Rest, Cont) ->
     SigIn = lists:reverse(SigIn0),
     SigOut = lists:reverse(SigOut0),
 
-    %% Compile-time type check
-    type_check_body(Name, SigIn, SigOut, Body),
-
     Impl = make_word_impl(Body, Name, SigIn),
 
     %% Register in the TOS type's dict (first element after reversal).
@@ -462,7 +459,11 @@ register_single_word(State, Rest, Cont) ->
     },
 
     ensure_type(TargetType),
+    %% Register BEFORE type-checking so the body's self-references resolve.
     af_type:add_op(TargetType, NewOp),
+
+    %% Compile-time type check — self-references now visible in the registry.
+    type_check_body(Name, SigIn, SigOut, Body),
 
     %% Attempt native compilation regardless of guard. The word compiler
     %% translates simple guards (`dup LITERAL CMP`) into Erlang function-head
@@ -507,10 +508,12 @@ register_multi_word(State, Clauses, Rest, Cont) ->
             _ -> true
         end
     end, Clauses1),
-    lists:foreach(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody} = C) ->
+    %% Two-phase registration so intra-word self-references resolve during
+    %% type checking. Phase 1: build all clause ops and register them.
+    %% Phase 2: type-check each body with the full clause registry visible.
+    ClauseOps = lists:map(fun(#{sig_in := CSigIn0, sig_out := CSigOut0, body := CBody} = C) ->
         CSigIn = lists:reverse(CSigIn0),
         CSigOut = lists:reverse(CSigOut0),
-        type_check_body(Name, CSigIn, CSigOut, CBody),
         Impl = make_word_impl(CBody, Name, CSigIn),
         CGuard = maps:get(guard, C, undefined),
         Op = #operation{
@@ -521,8 +524,14 @@ register_multi_word(State, Clauses, Rest, Cont) ->
             source = {compiled, CBody},
             guard = CGuard
         },
-        af_type:add_op(TargetType, Op)
+        {CSigIn, CSigOut, CBody, Op}
     end, Clauses1),
+    lists:foreach(fun({_SIn, _SOut, _B, Op}) ->
+        af_type:add_op(TargetType, Op)
+    end, ClauseOps),
+    lists:foreach(fun({CSigIn, CSigOut, CBody, _Op}) ->
+        type_check_body(Name, CSigIn, CSigOut, CBody)
+    end, ClauseOps),
 
     %% Attempt native compilation regardless of guards. Simple guards compile
     %% to Erlang function-head guards; complex guards cause that clause to be
@@ -537,52 +546,138 @@ register_multi_word(State, Clauses, Rest, Cont) ->
 
 %% Run compile-time type check on a word body.
 %% Type mismatches are errors when inference is complete (no unknowns).
-%% When inference encounters unknown ops (product types, etc.), downgrade to warning.
+%% When inference encounters unknown references (forward/mutual recursion,
+%% product-type ops not yet registered), defer the check: stash it and retry
+%% each time a new word is registered. Unresolved checks at finalisation
+%% time will be reported then.
 type_check_body(Name, SigIn, SigOut, Body) ->
-    case af_type_check:check_word(Name, SigIn, SigOut, Body) of
+    Locals = build_virtual_locals(SigIn),
+    run_or_defer_check(Name, SigIn, SigOut, Body, Locals),
+    %% Any forward-ref defers that this new registration may have unblocked:
+    retry_pending_checks().
+
+%% Attempt a single check. On success, ok. On incomplete inference, defer.
+%% On fully-resolved mismatch, raise.
+run_or_defer_check(Name, SigIn, SigOut, Body, Locals) ->
+    Result = af_type_check:check_word(Name, SigIn, SigOut, Body, Locals),
+    case Result of
         ok -> ok;
         {error, {type_mismatch, _, #{expected := Expected, actual := Actual}}} ->
             case has_unknown_types(Actual, Expected) of
                 true ->
-                    %% Inference was incomplete — warn only
-                    io:format("Warning: type check for '~s' incomplete~n"
-                              "  declared output: ~p~n"
-                              "  inferred output: ~p~n", [Name, Expected, Actual]);
+                    defer_check(Name, SigIn, SigOut, Body, Locals);
                 false ->
-                    %% Fully resolved types don't match — error
                     error({type_error, Name,
                         lists:flatten(io_lib:format(
                             "Type mismatch in word '~s': "
                             "declared output ~p but inferred ~p",
                             [Name, Expected, Actual]))})
             end;
-        {error, {stack_underflow, OpName, _}} ->
-            io:format("Warning: type check for '~s' incomplete "
-                      "(stack underflow at '~p')~n", [Name, OpName]);
+        {error, {stack_underflow, _OpName, _}} ->
+            defer_check(Name, SigIn, SigOut, Body, Locals);
         {error, _Reason} ->
-            %% Other inference errors — warn but allow
-            ok
+            defer_check(Name, SigIn, SigOut, Body, Locals)
     end.
+
+-define(PENDING_KEY, af_type_check_pending).
+
+defer_check(Name, SigIn, SigOut, Body, Locals) ->
+    Pending = case get(?PENDING_KEY) of
+        undefined -> #{};
+        P -> P
+    end,
+    Key = {Name, SigIn, SigOut},
+    put(?PENDING_KEY, Pending#{Key => {Body, Locals}}),
+    ok.
+
+%% Retry every pending check. Any that now resolve are removed.
+%% Fixed-point: keep retrying while the pending set shrinks.
+retry_pending_checks() ->
+    case get(?PENDING_KEY) of
+        undefined -> ok;
+        Pending when map_size(Pending) =:= 0 -> ok;
+        Pending ->
+            Before = map_size(Pending),
+            put(?PENDING_KEY, #{}),
+            maps:foreach(fun({N, SI, SO}, {B, L}) ->
+                run_or_defer_check(N, SI, SO, B, L)
+            end, Pending),
+            After = case get(?PENDING_KEY) of
+                undefined -> 0;
+                P2 -> map_size(P2)
+            end,
+            case After < Before of
+                true -> retry_pending_checks();
+                false -> ok
+            end
+    end.
+
+%% Build the virtual locals map that the type checker uses to resolve
+%% auto-field-binding tokens (.x, ..y, bare field names). Mirrors the
+%% structure of build_frame/3 at runtime but records field *types* rather
+%% than tagged values.
+build_virtual_locals(SigIn) ->
+    ProductSlots = find_product_slots(SigIn),
+    N = length(SigIn),
+    build_virtual_frame(ProductSlots, N).
+
+build_virtual_frame([], _N) -> #{};
+build_virtual_frame(ProductSlots, N) ->
+    AllEntries = lists:flatmap(fun({StoredPos, _Type, Fields}) ->
+        SourcePos = N - StoredPos,
+        DotPrefix = lists:duplicate(SourcePos, $.),
+        [{DotPrefix ++ FName, FName, FType}
+         || {FName, _FIdx, FType} <- Fields]
+    end, ProductSlots),
+    BareCounts = lists:foldl(fun({_D, Bare, _T}, Acc) ->
+        maps:update_with(Bare, fun(C) -> C + 1 end, 1, Acc)
+    end, #{}, AllEntries),
+    DottedFrame = lists:foldl(fun({Dotted, _Bare, T}, Acc) ->
+        Acc#{Dotted => T}
+    end, #{}, AllEntries),
+    lists:foldl(fun({_D, Bare, T}, Acc) ->
+        case maps:get(Bare, BareCounts) of
+            1 -> Acc#{Bare => T};
+            _ -> Acc
+        end
+    end, DottedFrame, AllEntries).
 
 %% Check if inferred types suggest incomplete inference:
 %% - Contains 'Atom' from unresolved tokens (product type ops, etc.)
 %% - Different stack depth from expected (missing type info)
 %% - Expected types include non-builtin types the checker can't verify
-has_unknown_types(Types, Expected) when length(Types) =/= length(Expected) ->
-    true;
+%% Classify an inferred-vs-declared mismatch.
+%% Returns `true` only when the inference genuinely could not complete:
+%%   - the inferred stack contains 'Atom' (a forward-reference fallback), or
+%%   - the declared sig mentions a non-builtin custom type that hasn't
+%%     been registered yet.
+%% A pure length-mismatch or a clean concrete-type mismatch is a real
+%% error; we return `false` so the caller raises.
 has_unknown_types(Types, Expected) ->
-    Builtins = ['Any', '_', 'Int', 'Float', 'Bool', 'String', 'Atom', 'List', 'Map', 'Tuple',
-                'Actor', 'Message'],
-    lists:any(fun('Atom') -> true; (_) -> false end, Types)
-    orelse lists:any(fun
-        ({_T, _V}) -> false;  %% value constraints are checkable
+    Builtins = ['Any', '_', 'Int', 'Float', 'Bool', 'String', 'Atom',
+                'List', 'Map', 'Tuple', 'Actor', 'Message', 'ListBuilder'],
+    HasAtomFallback = lists:any(fun
+        ('Atom') -> true;
+        (_) -> false
+    end, Types),
+    HasUnknownExpected = lists:any(fun
+        ({_T, _V}) -> false;
         (T) ->
             not lists:member(T, Builtins)
             andalso not af_type_check:is_type_variable(T)
-    end, Expected).
+            andalso af_type:get_type(T) =:= not_found
+    end, Expected),
+    HasAtomFallback orelse HasUnknownExpected.
 
 get_target_type([{Type, _Value} | _]) -> Type;
-get_target_type([Type | _]) when is_atom(Type) -> Type;
+get_target_type([Type | _]) when is_atom(Type) ->
+    %% Type variables (like '_a') and the wildcard '_' aren't concrete
+    %% types. A word whose TOS input is polymorphic registers on 'Any'
+    %% so it stays reachable from any runtime TOS type.
+    case af_type_check:is_type_variable(Type) orelse Type =:= '_' orelse Type =:= 'Any' of
+        true -> 'Any';
+        false -> Type
+    end;
 get_target_type([]) -> 'Any'.
 
 ensure_type(TypeName) ->

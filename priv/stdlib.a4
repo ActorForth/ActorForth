@@ -26,10 +26,10 @@
 # --- Stack utilities ---
 
 # nip: remove second item ( a b -> b )
-: nip Any Any -> Any ; swap drop .
+: nip _a _b -> _b ; swap drop .
 
 # tuck: copy TOS below second ( a b -> b a b )
-: tuck Any Any -> Any Any Any ; swap over .
+: tuck _a _b -> _b _a _b ; swap over .
 
 # --- Sign predicates ---
 
