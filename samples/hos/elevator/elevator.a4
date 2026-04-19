@@ -108,8 +108,15 @@ end
 #   assign     -- command from Dispatcher, starts the cycle
 #   closed     -- upward signal from Door, after door has closed
 #   arrived    -- upward signal from Motor, after motor has stopped
+#   settled    -- self-timer, mechanical settling at the floor done
 #   opened     -- upward signal from Door, after door has opened
 #   depart     -- self-timer, door-held-open duration expired
+#
+# The `Arriving` state is occupied between Motor's `arrived` signal
+# and the mechanical settling timer elapsing. During this window the
+# doors stay closed; only a `settled` self-send causes the transition
+# to DoorOpening and the Door open dispatch. This matches the Rust
+# reference elevator's 9-state control graph.
 #
 # Emergency transitions are triggered by trigger-emergency from
 # Dispatcher; clear-emergency opens the door and returns to idle
@@ -125,6 +132,7 @@ system Car
     on closed -> ;
     on opened -> ;
     on arrived -> ;
+    on settled -> ;
     on depart -> ;
     on trigger-emergency -> ;
     on clear-emergency -> ;
@@ -132,7 +140,8 @@ system Car
     transitions
         IdleAtFloor -> PreparingToMove assign : Door close
         PreparingToMove -> Moving closed : Motor move-to
-        Moving -> DoorOpening arrived : Door open
+        Moving -> Arriving arrived : after 200 settled
+        Arriving -> DoorOpening settled : Door open
         DoorOpening -> Loading opened : after 300 depart
         Loading -> DoorClosing depart : Door close
         DoorClosing -> IdleAtFloor closed
@@ -140,6 +149,7 @@ system Car
         IdleAtFloor -> EmergencyStopped trigger-emergency : Motor stop
         PreparingToMove -> EmergencyStopped trigger-emergency : Motor stop
         Moving -> EmergencyStopped trigger-emergency : Motor stop
+        Arriving -> EmergencyStopped trigger-emergency : Motor stop
         DoorOpening -> EmergencyStopped trigger-emergency : Motor stop
         Loading -> EmergencyStopped trigger-emergency : Motor stop
         DoorClosing -> EmergencyStopped trigger-emergency : Motor stop

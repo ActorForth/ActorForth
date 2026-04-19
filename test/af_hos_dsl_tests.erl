@@ -67,8 +67,12 @@ parse_test_() ->
         end} end,
 
         fun(_) -> {"transitions section collects entries", fun() ->
+            %% Triggers must be declared as `on X -> ;` handlers to
+            %% pass the trigger-scope check (Tier 1).
             C = eval_new(
                 "system S "
+                "  on start -> ; "
+                "  on finish -> ; "
                 "  transitions "
                 "    Idle -> Busy start "
                 "    Busy -> Idle finish "

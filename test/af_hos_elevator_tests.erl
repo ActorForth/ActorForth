@@ -303,11 +303,12 @@ effect_dispatch_test_() ->
                 'floor-button-press', []),
             %% Full cycle time:
             %%   Motor travel: 500ms
+            %%   Car settling (Arriving): 200ms
             %%   Door open timer: 100ms
             %%   Car loading dwell: 300ms
             %%   Door close timer: 100ms
-            %% Total ~1000ms. Sleep 1200ms for margin.
-            timer:sleep(1200),
+            %% Total ~1200ms. Sleep 1500ms for margin.
+            timer:sleep(1500),
 
             DoorLog  = get_log(DoorPid),
             MotorLog = get_log(MotorPid),
@@ -331,11 +332,14 @@ effect_dispatch_test_() ->
 
         fun(_) -> {"safety invariant: Door open arrives AFTER Motor arrived", fun() ->
             %% Structural proof of Flaw 1/2 prevention at runtime.
-            %% Car cannot send Door open until it has received the
-            %% arrived signal from Motor, because the transition
-            %% Moving -> DoorOpening is triggered by arrived. The
-            %% mailbox timestamps on Motor's arrived and Door's open
-            %% must be ordered arrived-before-open.
+            %% Car cannot send Door open until it has received both
+            %% the arrived signal from Motor AND the settled timer
+            %% fired from Arriving. Moving -> Arriving is triggered by
+            %% arrived; Arriving -> DoorOpening is triggered by
+            %% settled. The mailbox timestamps on Motor's arrived and
+            %% Door's open must therefore be ordered
+            %% arrived-before-open with at least the settling delay in
+            %% between.
             load_valid_spec(),
             Root = af_hos_check:lookup_system("BuildingSystem"),
             RootPid = af_hos_runtime:spawn_system(Root),
@@ -356,8 +360,10 @@ effect_dispatch_test_() ->
             ?assertEqual(["close"], DoorLogMid),
             ?assertEqual(["move-to"], MotorLogMid),
 
-            timer:sleep(800),
-            %% 1200ms: full cycle complete.
+            timer:sleep(1100),
+            %% 1500ms total: full cycle complete (Motor 500ms + Car
+            %% settling 200ms + Door open 100ms + Loading 300ms +
+            %% Door close 100ms = 1200ms, with margin).
             DoorLogEnd = get_log(DoorPid),
             MotorLogEnd = get_log(MotorPid),
             ?assert(lists:member("open", DoorLogEnd)),

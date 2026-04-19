@@ -217,7 +217,11 @@ walk({'SystemNode', NameRaw, ParentRaw, StateType,
                     [] -> "";
                     [P] -> P
                 end,
-    TransitionV = check_transition_effects(Transitions, Scope, Handlers, Path),
+    TransitionV  = check_transition_effects(Transitions, Scope, Handlers, Path),
+    TriggerV     = check_transition_triggers(Transitions, Handlers,
+                                              ParentStr, ChildNames, Path),
+    ReachabilityV = check_state_reachability(Transitions, StateType, Path),
+    EmergencyV   = check_exhaustive_emergencies(Transitions, StateType, Path),
     HandlerV = lists:flatmap(
         fun(H) ->
             ScopeV = check_handler(H, Scope, Path),
@@ -230,7 +234,8 @@ walk({'SystemNode', NameRaw, ParentRaw, StateType,
     ChildV = lists:flatmap(
         fun(C) -> walk(C, Path) end,
         Children),
-    TransitionV ++ HandlerV ++ ChildV.
+    TransitionV ++ TriggerV ++ ReachabilityV ++ EmergencyV
+        ++ HandlerV ++ ChildV.
 
 %% Axiom 1 for declared effects: effect_target (if present) must be
 %% in the system's scope. A transition that invokes a subsystem name
@@ -326,6 +331,169 @@ check_stateful_body({'HandlerSpec', EventName, _SigIn, _SigOut, _Body},
 
 path("", Name) -> Name;
 path(Prefix, Name) -> Prefix ++ "." ++ Name.
+
+%% ---------------------------------------------------------------
+%% Tier 1: trigger scope check.
+%%
+%% A transition's trigger names an event this system will receive.
+%% The trigger must be a declared `on X -> ;` handler on THIS system.
+%% Upward signals from children and commands from a parent are both
+%% received here, so both are modelled as declared handlers. A trigger
+%% that is not declared is almost always a typo: the runtime will
+%% silently input-reject it (Axiom 4 safety), producing a no-op that
+%% the author will struggle to diagnose. Raising at compile time
+%% surfaces the typo immediately.
+%% ---------------------------------------------------------------
+
+check_transition_triggers(Transitions, Handlers, _ParentStr, _ChildNames, Path) ->
+    HandlerNames = [atom_to_list(element(2, H)) || H <- Handlers],
+    lists:flatmap(fun(T) ->
+        Trigger = atom_to_list(element(4, T)),
+        case lists:member(Trigger, HandlerNames) of
+            true -> [];
+            false ->
+                [lists:flatten(io_lib:format(
+                    "axiom_1: system '~s' transition ~s -> ~s uses "
+                    "trigger '~s' but '~s' is not a declared handler "
+                    "on this system. Add `on ~s -> ;` to accept this "
+                    "event.",
+                    [Path, element(2, T), element(3, T),
+                     Trigger, Trigger, Trigger]))]
+        end
+    end, Transitions).
+
+%% ---------------------------------------------------------------
+%% Tier 1: state reachability check.
+%%
+%% Every state named in the transitions table (as a From or a To)
+%% must be reachable from the initial state by following some chain
+%% of transitions. Unreachable states are dead code: they clutter
+%% the spec, mislead a reader, and usually signal a typo (wrong
+%% state name) or stale state after a refactor.
+%%
+%% The initial state is the From of the first declared transition,
+%% matching the runtime's choice in af_hos_runtime:initial_state/1.
+%% Stateless systems have no state graph and are skipped.
+%% ---------------------------------------------------------------
+
+check_state_reachability(_Transitions, 'None', _Path) -> [];
+check_state_reachability([], _StateType, _Path) -> [];
+check_state_reachability([First | _] = Transitions, _StateType, Path) ->
+    Initial = atom_to_list(element(2, First)),
+    AllStates = all_declared_states(Transitions),
+    Reachable = reachable_from(Initial, Transitions, [Initial]),
+    Unreachable = [S || S <- AllStates, not lists:member(S, Reachable)],
+    lists:map(fun(S) ->
+        lists:flatten(io_lib:format(
+            "axiom_5: system '~s' state '~s' is unreachable from "
+            "initial state '~s'. Either declare a transition into "
+            "'~s' or delete it.",
+            [Path, S, Initial, S]))
+    end, Unreachable).
+
+all_declared_states(Transitions) ->
+    Froms = [atom_to_list(element(2, T)) || T <- Transitions],
+    Tos   = [atom_to_list(element(3, T)) || T <- Transitions],
+    lists:usort(Froms ++ Tos).
+
+reachable_from(State, Transitions, Visited) ->
+    Outgoing = [atom_to_list(element(3, T)) || T <- Transitions,
+                                                atom_to_list(element(2, T))
+                                                    =:= State],
+    NewStates = [S || S <- Outgoing, not lists:member(S, Visited)],
+    case NewStates of
+        [] -> Visited;
+        _ ->
+            Visited2 = Visited ++ NewStates,
+            lists:foldl(fun(S, Acc) ->
+                reachable_from(S, Transitions, Acc)
+            end, Visited2, NewStates)
+    end.
+
+%% ---------------------------------------------------------------
+%% Tier 1: exhaustive emergency-entry check.
+%%
+%% An "emergency trigger" is a trigger under which two or more
+%% transitions converge on a single target state. That target is
+%% the emergency entry state. Every state of the system that is
+%% neither the emergency target itself nor downstream in the
+%% recovery path from the emergency target (reached via some non-
+%% emergency trigger chain that does not loop back to a state with
+%% the emergency trigger declared) MUST have a transition under the
+%% emergency trigger into the emergency target. Otherwise an
+%% emergency arriving while the system is in that non-covered state
+%% would be silently input-rejected (Axiom 4) and the emergency
+%% would be missed.
+%%
+%% Rationale: the correctness argument for emergency preemption
+%% rests on the BEAM mailbox serializing messages per actor and
+%% Axiom 4 input rejection discarding stale scheduled self-sends.
+%% Those two properties only deliver a preemption guarantee if
+%% every live state declares a transition into the emergency state.
+%% Miss one and the actor just ignores the fire alarm.
+%% ---------------------------------------------------------------
+
+check_exhaustive_emergencies(_Transitions, 'None', _Path) -> [];
+check_exhaustive_emergencies(Transitions, _StateType, Path) ->
+    ByTrigger = group_by_trigger(Transitions),
+    EmergencyTriggers = [
+        {Trigger, SingleTarget}
+        || {Trigger, Trans} <- maps:to_list(ByTrigger),
+           length(Trans) >= 2,
+           [SingleTarget] <- [lists:usort([element(3, T) || T <- Trans])]
+    ],
+    lists:flatmap(fun({Trigger, Target}) ->
+        check_one_emergency(Trigger, Target, Transitions, Path)
+    end, EmergencyTriggers).
+
+group_by_trigger(Transitions) ->
+    lists:foldl(fun(T, Acc) ->
+        Trig = element(4, T),
+        Acc#{Trig => [T | maps:get(Trig, Acc, [])]}
+    end, #{}, Transitions).
+
+check_one_emergency(Trigger, TargetAtom, Transitions, Path) ->
+    Target = atom_to_list(TargetAtom),
+    TriggerStr = atom_to_list(Trigger),
+    AllStates = all_declared_states(Transitions),
+    RecoveryReachable = recovery_states(Target, Trigger, Transitions),
+    Required = [S || S <- AllStates,
+                     S =/= Target,
+                     not lists:member(S, RecoveryReachable)],
+    Covered = [atom_to_list(element(2, T)) || T <- Transitions,
+                                               element(4, T) =:= Trigger],
+    Missing = [S || S <- Required, not lists:member(S, Covered)],
+    lists:map(fun(S) ->
+        lists:flatten(io_lib:format(
+            "axiom_5: system '~s' has emergency trigger '~s' "
+            "converging on state '~s', but state '~s' has no "
+            "declared transition under '~s'. An emergency "
+            "arriving in '~s' would be silently dropped.",
+            [Path, TriggerStr, Target, S, TriggerStr, S]))
+    end, Missing).
+
+%% States reachable from the emergency target via non-emergency
+%% transitions, stopping at any state that has the emergency trigger
+%% declared (those are main-graph states reached through a recovery
+%% edge, and they still need their own emergency coverage).
+recovery_states(Target, EmergencyTrigger, Transitions) ->
+    recovery_states_walk([Target], EmergencyTrigger, Transitions, [Target]).
+
+recovery_states_walk([], _Trigger, _Transitions, Visited) -> Visited;
+recovery_states_walk([State | Queue], Trigger, Transitions, Visited) ->
+    Outgoing = [atom_to_list(element(3, T)) || T <- Transitions,
+                                                atom_to_list(element(2, T))
+                                                    =:= State,
+                                                element(4, T) =/= Trigger],
+    New = [S || S <- Outgoing,
+                not lists:member(S, Visited),
+                not has_trigger_declared(S, Trigger, Transitions)],
+    recovery_states_walk(Queue ++ New, Trigger, Transitions, Visited ++ New).
+
+has_trigger_declared(State, Trigger, Transitions) ->
+    lists:any(fun(T) ->
+        atom_to_list(element(2, T)) =:= State andalso element(4, T) =:= Trigger
+    end, Transitions).
 
 %% ---------------------------------------------------------------
 %% Scope construction  -  what names a system body may reference.

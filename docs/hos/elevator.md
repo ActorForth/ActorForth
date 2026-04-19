@@ -113,8 +113,8 @@ Moving -> Stopped arrived : Car arrived
 
 The second row reads: "when Motor transitions Moving to Stopped
 under trigger `arrived`, send event `arrived` to Car." Car's
-transitions table has `Moving -> DoorOpening arrived`, so Car
-proceeds only after receiving the upward signal from Motor. The
+transitions table has `Moving -> Arriving arrived`, so Car proceeds
+only after receiving the upward signal from Motor. The
 synchronisation is structural: Car *cannot* transition past Moving
 until Motor has reported arrival.
 
@@ -212,6 +212,7 @@ system Car
     on closed -> ;
     on opened -> ;
     on arrived -> ;
+    on settled -> ;
     on depart -> ;
     on trigger-emergency -> ;
     on clear-emergency -> ;
@@ -219,7 +220,8 @@ system Car
     transitions
         IdleAtFloor -> PreparingToMove assign : Door close
         PreparingToMove -> Moving closed : Motor move-to
-        Moving -> DoorOpening arrived : Door open
+        Moving -> Arriving arrived : after 200 settled
+        Arriving -> DoorOpening settled : Door open
         DoorOpening -> Loading opened : after 300 depart
         Loading -> DoorClosing depart : Door close
         DoorClosing -> IdleAtFloor closed
@@ -227,6 +229,7 @@ system Car
         IdleAtFloor -> EmergencyStopped trigger-emergency : Motor stop
         PreparingToMove -> EmergencyStopped trigger-emergency : Motor stop
         Moving -> EmergencyStopped trigger-emergency : Motor stop
+        Arriving -> EmergencyStopped trigger-emergency : Motor stop
         DoorOpening -> EmergencyStopped trigger-emergency : Motor stop
         Loading -> EmergencyStopped trigger-emergency : Motor stop
         DoorClosing -> EmergencyStopped trigger-emergency : Motor stop
@@ -439,7 +442,7 @@ declared handler on this system
 ## 6. The happy path
 
 One floor-button-press event at the root drives a full assign
-cycle through the tree in roughly one second of wall clock time.
+cycle through the tree in roughly 1.2 seconds of wall clock time.
 
 ```
 Time    Event                              State transitions
@@ -454,30 +457,36 @@ Time    Event                              State transitions
 
 500ms   Motor.arrived fires (self-timer)
         Motor (Moving -> Stopped) -> Car arrived
-        Car (Moving -> DoorOpening) -> Door open
+        Car (Moving -> Arriving), schedule settled @200ms
+
+700ms   Car.settled fires (self-timer)
+        Car (Arriving -> DoorOpening) -> Door open
         Door (Closed -> Opening), schedule opened @100ms
 
-600ms   Door.opened fires
+800ms   Door.opened fires
         Door (Opening -> Open) -> Car opened
         Car (DoorOpening -> Loading), schedule depart @300ms
 
-900ms   Car.depart fires
+1100ms  Car.depart fires
         Car (Loading -> DoorClosing) -> Door close
         Door (Open -> Closing), schedule closed @100ms
 
-1000ms  Door.closed fires
+1200ms  Door.closed fires
         Door (Closing -> Closed) -> Car closed
         Car (DoorClosing -> IdleAtFloor) -- cycle complete
 ```
 
 Each step is one event, one transition, one actor message cycle.
-The safety invariant (door does not open until motor has stopped)
-holds by construction: Car's `Moving -> DoorOpening` transition is
-triggered by `arrived`, which only arrives after Motor enters
-Stopped. An FAT test asserts this directly: at 400ms into the
-cycle, Door's log contains only `close` and Motor's contains only
-`move-to`; Door has not yet received `open` because Car has not
-yet received `arrived`.
+The safety invariant (door does not open until motor has stopped
+and the car has settled) holds by construction: Car's
+`Moving -> Arriving` transition is triggered by `arrived`, which
+only arrives after Motor enters Stopped; the subsequent
+`Arriving -> DoorOpening` is triggered by the `settled` self-timer
+and is the only transition that emits `Door open`. An FAT test
+asserts this directly: at 400ms into the cycle, Door's log
+contains only `close` and Motor's contains only `move-to`; Door
+has not yet received `open` because Car has not yet received
+`arrived`, much less `settled`.
 
 ### Emergency preemption
 
@@ -492,6 +501,47 @@ late scheduled `arrived` eventually reaches Motor in Stopped and
 is input-rejected. An FAT test asserts Motor's log in this
 scenario: `[move-to, stop, arrived]`, with Motor stopped at the end.
 
+#### Why preemption is correct
+
+The preemption guarantee rests on three structural properties,
+each load-bearing:
+
+1. **BEAM mailbox serialization.** Each actor process owns a FIFO
+   mailbox. Messages sent to an actor are delivered in send order
+   and processed one at a time. No two events can "cross" inside
+   one actor; no partial-state observation is possible between
+   transitions. This is a property of the runtime, not the DSL,
+   and it is what lets us reason about preemption at all.
+
+2. **Axiom 4 input rejection.** In any state, an event that has no
+   declared transition from the current state is silently dropped.
+   A late scheduled self-send (the `arrived` timer) arriving at
+   Motor in `Stopped` has no declared transition and is ignored.
+   The actor does not crash, does not move, does not raise; the
+   stale event simply vanishes. Without this property, any
+   preempted system would leave a ticking bomb in its mailbox.
+
+3. **Exhaustive emergency entries** (checked at compile time).
+   Every non-emergency state of Car declares a transition under
+   `trigger-emergency` into `EmergencyStopped`. This is the
+   property most easily broken by hand and is enforced by the
+   checker: a trigger whose transitions converge on a single
+   target state is classified as an emergency trigger, and every
+   state that is neither the target nor a recovery-path state
+   downstream of the target must declare the transition. A missing
+   row is a compile error, not a runtime silence.
+
+The combination is the whole argument. Without (1), two events
+could interleave mid-transition. Without (2), the deferred
+`arrived` would either crash Motor or restart travel. Without (3),
+the emergency could arrive in a state Car does not handle and
+would be silently dropped. With all three, preemption is
+structural: a fire-alarm in flight at any point in the cycle is
+caught at Car, Motor is stopped, and the stale travel completion
+is discarded. The runtime FAT test demonstrates the end-to-end
+trace; the compiler check is what guarantees no hole is hiding in
+a state the test did not exercise.
+
 ---
 
 ## 7. What this means, honestly
@@ -504,17 +554,29 @@ Sound:
   visible edit of the transitions table, which is where a safety
   review lands.
 - **Flaw 1/2 also cannot race past subsystems at runtime.** Car's
-  transition to DoorOpening is triggered by Motor's `arrived`
-  signal. Car cannot proceed until the signal arrives. Removing
-  the cascade eliminated the race that a synchronous multi-marker
-  body had introduced.
+  transition to Arriving is triggered by Motor's `arrived` signal,
+  and Arriving only advances to DoorOpening on the `settled`
+  self-timer. Car cannot proceed until each signal arrives.
+  Removing the cascade eliminated the race that a synchronous
+  multi-marker body had introduced.
 - **Flaws 3 and 5 are Axiom 1 scope violations.** The scope check
   runs on both handler body tokens (for stateless systems) and
-  effect targets (for all systems).
+  effect targets (for all systems). Transition triggers are also
+  scope-checked: a trigger that is not a declared handler on this
+  system is a compile error, so a typo cannot silently vanish.
 - **Flaw 4** as "body declares a transition the table does not"
   no longer applies because there are no bodies on stateful
   systems. The analogous check is "every declared transition is
   in the table by construction" which is trivially true.
+- **Every declared state is reachable** from the initial state via
+  some chain of transitions. Unreachable states are rejected at
+  compile time as axiom_5 violations.
+- **Every emergency state is covered.** A trigger whose transitions
+  all converge on a single target state is classified as an
+  emergency trigger; every non-emergency state must declare a
+  transition into the target under that trigger, or the spec is
+  rejected. This is the compile-time half of the emergency
+  preemption correctness argument.
 - **Parent/children consistency** runs bidirectionally on every
   registration.
 - **Emergency routing is declared** via BuildingSystem and
@@ -540,8 +602,9 @@ Scoped, honestly:
   declares `: Door open` when the logical precondition is "Motor
   is stopped", the language does not enforce that precondition
   today. The event-driven synchronisation catches it at runtime
-  (Car can't reach the DoorOpening transition without the arrived
-  signal), but a compile-time check would be stronger.
+  (Car can't reach the Arriving transition without the arrived
+  signal, nor DoorOpening without settled), but a compile-time
+  check would be stronger.
 - **Data propagation.** Handler signatures carry no arguments.
   Motor does not know which floor it's supposed to travel to. v2
   will address this via state fields; the v1 spec demonstrates
@@ -550,13 +613,11 @@ Scoped, honestly:
   "this takes N milliseconds." More complex actuation (sensors,
   external I/O, physical feedback) needs additional primitives.
   Only the time dimension is covered.
-- **Axiom 1 for triggers.** Transition triggers are currently
-  permissive: any atom can be a trigger. Intentional: triggers
-  come from three places (self-declared handlers, parent commands,
-  child signals), and tracking all three at compile time adds
-  complexity. A typo in a trigger name produces a transition the
-  runtime never fires; Axiom 4 makes this harmless (no unexpected
-  behaviour), matching a4's "unknown tokens become atoms" spirit.
+- **Physical settling time is a placeholder.** The `Arriving`
+  state uses a 200ms timer as a stand-in for "mechanical
+  alignment complete." Real hardware would signal via sensor
+  input, routed as an upward event from a future `Sensor`
+  subsystem. The timer keeps the control topology the same.
 
 ---
 
@@ -594,10 +655,10 @@ preemption via stop, timer event undeclared).
 
 ## 9. Honest numbers
 
-The a4 HOS elevator spec is 216 lines including comments. The
+The a4 HOS elevator spec is 233 lines including comments. The
 Rust reference runs ~406 code lines for single-car. Stripping
-comments and blanks from the a4 spec, roughly 110 code lines: a
-~3.7x reasoning-surface reduction, for the single-car case.
+comments and blanks from the a4 spec, roughly 93 code lines: a
+~4x reasoning-surface reduction, for the single-car case.
 
 Multi-car will add rows to the transitions table plus a collection
 primitive. I'd estimate 140 to 160 code lines when that lands.
