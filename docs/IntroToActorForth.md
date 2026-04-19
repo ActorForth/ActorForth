@@ -2269,86 +2269,69 @@ Auto-generates: constructor (`typename`), non-destructive getters (`field1`, `fi
 
 ## Appendix: The Struggle with Return Stacks
 
-ActorForth has one data stack. Most Forths have two: a data stack and a return stack. This appendix explains the design reasoning, partly because the choice is load-bearing for the language's identity and partly because it will be the first question a Forth programmer asks.
+ActorForth has one data stack. The traditional Forth model has two — a data stack and a return stack. Reconciling that difference was real work during the language's design, because a return stack isn't obviously wrong; it is a coherent answer to a coherent set of problems. This appendix records what a return stack does, what ActorForth does instead, and the specific reasons the language came out on the other side of the choice.
 
-### What the return stack does in traditional Forth
+### What a return stack does in a traditional Forth
 
-Six jobs, ordered by how mechanical they are:
+Six jobs, ordered roughly from most to least mechanical:
 
-1. **Return addresses for word calls.** When `word1` calls `word2`, where control resumes after `word2` completes.
-2. **Temporary value stash.** `>r … r>` moves a value aside during an inner computation.
+1. **Return addresses for word calls.** When `word1` calls `word2`, the return stack holds the address where control resumes after `word2` completes.
+2. **Temporary value stash.** `>r … r>` moves a value aside during an inner computation so the data stack can be reshaped without losing it.
 3. **Loop counters.** `DO … LOOP` keeps limit and index on the return stack; `I` reads the current index.
-4. **Locals.** Some Forths predate locals-stacks and used the return stack as a frame.
-5. **Exception unwinding.** `CATCH`/`THROW` tracks return-stack depth to unwind correctly.
-6. **Opaque implementation stash** — anything a word wants out of the way while it reaches elsewhere.
+4. **Locals.** Some Forths use the return stack as a frame for named-local values.
+5. **Exception unwinding.** `CATCH`/`THROW` tracks return-stack depth to know how far to unwind.
+6. **Implementation stash** — any word holding something out of the way while it reaches elsewhere.
 
-Chuck Moore's early Forth hardware had no built-in call stack; the return stack was a *hardware necessity* for subroutine calls. Later Forth CPUs (MuP21, F21, GreenArrays) embedded two stacks in silicon. For those machines, two stacks is not a language choice but a reflection of the substrate.
+### What ActorForth does instead
 
-### Why ActorForth doesn't have one
+ActorForth currently runs on the BEAM. The BEAM has its own call stack with tail-call optimization, proper overflow semantics, and process-isolated frames. Every a4 word call is an Erlang function call; control transfer and return are handled by that mechanism.
 
-ActorForth runs on the BEAM. The BEAM has a real call stack of its own, with tail-call optimization, proper stack-overflow semantics, and process-isolated frames. Every time one a4 word calls another, control transfer and return happen through Erlang's native function-call machinery — not through anything the a4 programmer sees or manipulates.
+For the other five jobs:
 
-So the language doesn't need a return stack for its primary purpose. What about the other five jobs?
-
-1. **Return addresses** — BEAM's call stack. Proper TCO included.
-2. **Temporary stash** — currently stack juggling (`dup swap rot drop`). Open to improvement via combinators (`bi`, `tri`, `keep`) or auto-field bindings for product types. Not present today.
-3. **Loop counters** — tail-recursive word definitions with value-constrained sub-clauses (`: countdown Int -> ; : 0 -> ; drop : Int -> ; 1 - countdown .`). Strictly more expressive than `DO … LOOP` because you get arbitrary termination conditions, typed values, and clean return.
-4. **Locals** — planned (auto-bindings for product types; named parameters beyond that).
+1. **Return addresses** — BEAM's call stack, with proper TCO.
+2. **Temporary stash** — currently stack juggling (`dup`, `swap`, `rot`, `over`). Open to improvement via combinators and auto-field bindings for product types.
+3. **Loop counters** — tail-recursive word definitions with value-constrained sub-clauses (`: countdown Int -> ; : 0 -> ; drop : Int -> ; 1 - countdown .`). Typed, arbitrary termination conditions, clean return.
+4. **Locals** — auto-field bindings on product-type inputs; named parameters as a planned extension.
 5. **Exception unwinding** — `#af_error{}` + Erlang `try`/`catch`, with a `word_trace` field for call-chain context.
 6. **Implementation stash** — closures capture what they need.
 
+### Why a4 does not expose a return stack
+
+Three specific reasons, load-bearing:
+
+1. **Adding a user-visible return stack adds a second stack picture to every word's signature.** ActorForth already asks a word to declare its data-stack effect as `InputTypes -> OutputTypes`. Exposing a return stack requires words to also declare their effect on it — or accept that such effects are unchecked. Either option roughly doubles the cognitive load of reading or writing a word signature. The single-stack model keeps the signature story a single question: what types move across the data stack?
+
+2. **Values on a return stack would lack the type discipline every other value in a4 has.** Everything on the data stack is a `{Type, Value}` pair; dispatch, type checking, pattern matching, and error reporting all lean on that. A return stack carrying arbitrary transient values (return addresses, loop counters, user stashes) either needs a parallel type system or becomes an escape hatch where untyped values can live. Either path introduces a category of runtime behavior that the rest of the language is deliberately designed to prevent.
+
+3. **ActorForth intends to eventually target native hardware, including minimal FPGA substrates.** Keeping return-stack mechanics as an implementation detail — not part of the language's contract with user code — preserves the freedom for a future backend to choose whatever call/return mechanism fits the hardware. If the language committed to a user-visible return stack, every backend would have to provide one with the same semantics; not committing leaves the design space open.
+
 ### The homoiconicity question
 
-Does depending on BEAM's call stack weaken ActorForth's claim to homoiconicity? The honest answer is no, but it's worth working through.
+A natural worry: does depending on the BEAM's call stack weaken ActorForth's claim to homoiconicity?
 
-Homoiconicity is a claim about the relationship between *code and data*: code is represented as a data structure the language itself can manipulate. For a4:
+Homoiconicity is a claim about the relationship between code and data — that code is represented as a data structure the language itself can manipulate. For a4 that relationship holds in the specific ways that matter:
 
 - Source tokens and compiled word bodies share the representation `[#token{}]`.
 - Types are data (`#af_type{}` records).
 - The dictionary is data (a map).
-- The compiler is four types with handlers — its state is on the data stack during compilation.
+- The compiler is four types with handlers; its state is on the data stack during compilation.
 
-None of that is undermined by where control-flow happens to be tracked during execution. Lisp is homoiconic and runs on C's call stack. Scheme is homoiconic and runs on everything from bare metal to JavaScript. The relationship between `(list 1 2)` as data and `(list 1 2)` as an expression doesn't change with the host runtime.
+Where control-flow happens to be tracked during execution is a property of the runtime, not of the language. The code-as-data relationship is unchanged by it. Lisp is homoiconic and runs on C's call stack. The same argument applies here.
 
-Call/return is an *implementation* detail, not a *language* detail. Traditional Forth makes it a language detail by exposing the return stack; a4 makes it an implementation detail by not exposing one. That's actually *more* portable, not less — a future native-a4 target for an FPGA can use whatever mechanism fits the hardware without the language contract requiring a user-visible return stack.
+### What a future native / FPGA target still has to do
 
-### But won't a future FPGA need a return stack?
+*Some* mechanism has to track return addresses. A hardware return stack is a typical answer; a program-counter-plus-stack-frame mechanism in software is another; registers-plus-explicit-save/restore is another. Which one an a4 backend uses is that backend's business.
 
-Yes, in hardware. *Some* mechanism has to track return addresses. A 2-stack Forth CPU embodies this directly. A 1-stack CPU with structured call/return has a program-counter mechanism that amounts to the same thing. Either way, it's machinery.
-
-The question is whether the machinery is named in the *language*. ActorForth says no, for the same reason Lisp, Scheme, ML, Haskell, Factor, and Joy say no: exposing it couples the language to a specific implementation style without any expressive benefit over what combinators and structured recursion already provide.
-
-Factor and Joy — two influential concatenative languages in the Forth family — both made this choice explicitly. Manfred von Thun designed Joy as a single-stack concatenative language precisely to explore what the return stack actually bought you, and concluded: not enough to justify the complexity. Factor inherited that insight and built a sophisticated combinator library (`bi`, `tri`, `keep`, `dip`, `spread`) that cleanly handles every case `>r`/`r>` used to cover.
-
-ActorForth is in the same tradition. The return stack has not been a thing the language is about to grow.
-
-### A revised definition of "Forth"
-
-Early Forth's two-stack design wasn't the essence of Forth; it was a reflection of the hardware of the 1970s. The essence was:
-
-1. **Concatenative composition** — programs are compositions of words, not function applications.
-2. **RPN / postfix** — arguments precede the operator.
-3. **Interactive extensibility** — the base language and user programs are the same kind of object; you grow the language at the REPL.
-4. **Minimal primitive core** — no syntax beyond what words create.
-
-By that definition, ActorForth is unambiguously in the Forth family, as are Joy, Factor, and colorForth. The two-stack requirement falls out as an implementation detail of a specific era.
+The point of not exposing the return stack in the language is that none of these implementation choices are forced on user-facing code. Users write the same word definitions regardless of whether the backend is BEAM today, LLVM tomorrow, or a four-primitive FPGA next year. That portability is what the language contract buys when it stays silent on the mechanism.
 
 ### What was removed
 
-The continuation record originally declared a `return_stack` field, inherited from 2025-01-18 commit history. It was never written to by any code path in the language's year of development. It was read only for two purposes: a depth-tracking counter in the test DSL's traced dispatch (which always showed zero), and a `capture-return` primitive (which always returned an empty list). Both were removed alongside the field itself.
+The continuation record originally declared a `return_stack` field — unused. A full audit found that no code path in the language's first year of development ever wrote to it. It was read only in two places: a depth-tracking counter in the test DSL (which always showed zero) and a `capture-return` primitive (which always returned an empty list). Both were removed alongside the field itself. The test-DSL word `max-return-depth` went with them, since it would have been asserting against a value that could never change.
 
-The test DSL's `max-return-depth` assertion, documented as a feature for bounding return-stack depth, was removed for the same reason — it would have been asserting against a value that could never change.
-
-If a future revision of ActorForth decides a user-visible return stack is the right answer for some problem, adding the field back is trivial. Keeping an unused field on the central data structure was not serving any purpose except as a traditional artifact.
+If a future version of a4 decides a user-visible return stack is the right answer for some specific problem, adding the field back is a small change. Keeping it declared but unused was not serving any purpose.
 
 ### The temporary-stash gap
 
-There is one genuine thing the traditional return stack does *more concisely* than ActorForth currently does: give you an ergonomic place to set a value aside while you compute with others. `>r … r>` is shorter than any stack-manipulation dance a4 currently has.
+The one job the traditional return stack does more concisely than ActorForth currently does is **give you a place to set a value aside while you compute with others.** `>r … r>` is shorter than any dance of `dup`, `swap`, `rot`, `over` in a4 today.
 
-This is real — and the answer is not to bring back the return stack. The answer is the set of concatenative combinators that Factor and Joy pioneered (`bi`, `tri`, `keep`, `dip`), plus auto-field bindings for product types. Both make "hold this value aside while I do something else" a declarative annotation rather than an explicit stack operation. Both are on the roadmap.
-
-### The one-stack position, stated plainly
-
-ActorForth has one data stack. Values on it carry types. Control flow is the runtime's business. When you need a name for a value inside a word body, use a product type (which binds field names) or name it in the signature (coming). When you need to apply several operations to the same value without plumbing copies, use a combinator (coming). The return stack was a 1970s answer to a problem the BEAM already solves for you.
-
-This is the position the language settled on after considering the alternative. It is not an oversight.
+This is real, and the answer is not to bring back the return stack for the reasons above. The answer is a small set of concatenative combinators that turn "set this aside" into a declarative annotation (`bi`, `tri`, `keep`) rather than an explicit stack operation, plus auto-field bindings on product-type inputs (already shipped, see Chapter 5). Both land as features on the data stack alone, with the language's existing type discipline.
