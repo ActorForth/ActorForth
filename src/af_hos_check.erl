@@ -299,46 +299,30 @@ effect_target_str("") -> "";
 effect_target_str(B) when is_binary(B) -> binary_to_list(B);
 effect_target_str(L) when is_list(L) -> L.
 
-%% A stateful system's handler bodies must contain only state
-%% markers and passive operations. Any reference to a child, the
-%% parent, or a child's event name is an axiom violation: subsystem
-%% interactions live on transitions (as declared effects), never
-%% hidden inside a handler body. Reorderings of subsystem calls are
-%% therefore visible in the transitions table, not buried in an
-%% imperative sequence.
+%% Stateful systems are driven by the transitions table. Their
+%% `on X -> ;` declarations are optional (documentation of expected
+%% events) but must have EMPTY bodies. Any body content is an axiom
+%% violation: a stateful handler body cannot declare state markers
+%% (the table declares them), cannot contain subsystem calls (those
+%% are transition effects), and cannot contain arbitrary code
+%% (there is no data-flow surface). One event fires at most one
+%% transition, chosen by the table from the live state. Sequences
+%% of transitions happen because multiple events arrive, each one
+%% driving one step.
 check_stateful_body(_Handler, 'None', _Parent, _Children, _CEvents, _Path) ->
     [];
-check_stateful_body({'HandlerSpec', EventName, _SigIn, _SigOut, Body},
-                    _StateType, ParentStr, ChildNames, ChildEvents, Path) ->
-    EventStr = atom_to_list(EventName),
-    Forbidden = sets:from_list(
-        case ParentStr of
-            "" -> [];
-            P  -> [P]
-        end ++ ChildNames ++ ChildEvents),
-    Tokens = [token_text(T) || T <- Body],
-    scan_stateful_body(Tokens, Forbidden, EventStr, Path).
-
-scan_stateful_body([], _Forbidden, _Event, _Path) ->
+check_stateful_body({'HandlerSpec', _EventName, _SigIn, _SigOut, []},
+                    _StateType, _ParentStr, _ChildNames, _ChildEvents, _Path) ->
     [];
-scan_stateful_body(["->", _State | Rest], Forbidden, Event, Path) ->
-    scan_stateful_body(Rest, Forbidden, Event, Path);
-scan_stateful_body([Token | Rest], Forbidden, Event, Path) ->
-    case sets:is_element(Token, Forbidden) of
-        true ->
-            [format_stateful_body_violation(Path, Event, Token)
-             | scan_stateful_body(Rest, Forbidden, Event, Path)];
-        false ->
-            scan_stateful_body(Rest, Forbidden, Event, Path)
-    end.
-
-format_stateful_body_violation(Path, Event, Token) ->
-    lists:flatten(io_lib:format(
-        "axiom_5: system '~s' handler '~s' references subsystem '~s' "
-        "in its body; stateful systems must declare subsystem "
-        "interactions as transition effects (: Target event), not "
-        "inline. Move this to the transitions table.",
-        [Path, Event, Token])).
+check_stateful_body({'HandlerSpec', EventName, _SigIn, _SigOut, _Body},
+                    _StateType, _ParentStr, _ChildNames, _ChildEvents, Path) ->
+    EventStr = atom_to_list(EventName),
+    [lists:flatten(io_lib:format(
+        "axiom_5: system '~s' handler '~s' has a non-empty body; "
+        "stateful systems are driven by the transitions table "
+        "(one event fires one transition). Delete the body and "
+        "declare transitions for this trigger instead.",
+        [Path, EventStr]))].
 
 path("", Name) -> Name;
 path(Prefix, Name) -> Prefix ++ "." ++ Name.

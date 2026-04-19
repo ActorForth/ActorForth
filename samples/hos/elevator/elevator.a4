@@ -1,38 +1,45 @@
 # samples/hos/elevator/elevator.a4
 #
-# Elevator control system expressed as an HOS tree. The axiom
-# checker enforces these properties at compile time:
+# Elevator control system expressed as an HOS tree. Semantic model:
+# one event fires one transition. Sequences through multiple states
+# happen because multiple events arrive, each driving one step.
+# There is no cascade. Each `on X -> ;` declaration is optional
+# documentation of an expected event; stateful systems are driven
+# entirely by the transitions table.
+#
+# Axioms enforced at compile time:
 #
 #   Axiom 1 (references). References resolve to parent / child /
 #           declared event / declared transition state / a4 builtin.
 #           No siblings, no distant cousins.
 #
-#   Axiom 5 (transitions). Every `-> State` in a handler body
-#           corresponds to a declared transition from the current
-#           state under the handler's trigger. Skipped states are
-#           rejected; cross-trigger transitions are rejected.
-#
-#   Effects-in-transitions. A stateful system's handler body
-#           contains only state markers. Subsystem interactions
-#           (Door close, Motor move-to, etc.) are declared as
-#           transition effects with the `: Target event` clause.
-#           This moves the ordering of subsystem calls out of the
-#           handler body and into the transitions table, where it
-#           is visible and reviewable.
-#
-#   Timer primitive. Physical actuation time (Motor travel) is
-#           declared as `: after <ms> <event>` on the triggering
-#           transition, producing a scheduled self-send. The mailbox
-#           stays open during the wait; emergency events preempt
-#           naturally via Axiom 4 input rejection.
+#   Axiom 5 (transitions). Every declared transition is unique in
+#           (From, Trigger) for its system; every effect target is
+#           in scope; every timer effect schedules an event the
+#           system itself handles.
 #
 #   Parent/children consistency. `children X` and `parent Y` match
 #           bidirectionally.
 #
-# Events in this DSL are pure signals: handler signatures carry no
-# arguments in v1. Data propagation (which floor, which assignment)
-# is a v2 concern that will live in system state, not on events.
-# See docs/hos/elevator.md for the full rationale.
+#   Stateful body rule. A system with `state` declared has empty
+#           `on X -> ;` bodies. Driving is done by the transitions
+#           table, not by code.
+#
+# Child-to-parent upward signals. A child notifies its parent of a
+# completed transition by declaring the parent as an effect target:
+# `Stopped -> Moving move-to : Car arrived` sends `arrived` to Car.
+# The scope check already permits parent name as target, so upward
+# signals use the same syntax as downward commands. Synchronisation
+# (Car waits for Motor before opening Door) is therefore structural:
+# each step of the control sequence is its own event, driven by a
+# completion signal from a child.
+#
+# Timer primitive. `: after <ms> event` schedules a self-send. The
+# mailbox stays open during the wait; preemption is free via Axiom 4
+# input rejection of the late self-send.
+#
+# Events are pure signals in v1 (no arguments). Data propagation
+# (which floor) is deferred to v2 via system state fields.
 #
 # Hierarchy (parent -> children):
 #
@@ -45,7 +52,12 @@
 
 
 # ----------------------------------------------------------------
-# Door. Two states: Closed <-> Open, via Opening and Closing.
+# Door. Opening and closing each take 100ms, modelled with the
+# timer primitive: an open command schedules an `opened` self-send;
+# that self-send completes the transition and signals Car upward.
+# Idempotent self-loops handle the case where the door is already
+# in the target state: close-an-already-closed-door signals `closed`
+# immediately (so Car's waiting transition can proceed), no timer.
 # ----------------------------------------------------------------
 
 system Door
@@ -53,29 +65,25 @@ system Door
     state DoorState
 
     on open -> ;
-        -> Opening
-        -> Open
-
     on close -> ;
-        -> Closing
-        -> Closed
+    on opened -> ;
+    on closed -> ;
 
     transitions
-        Closed -> Opening open
-        Opening -> Open open
-        Open -> Closing close
-        Closing -> Closed close
+        Closed -> Opening open : after 100 opened
+        Opening -> Open opened : Car opened
+        Open -> Closing close : after 100 closed
+        Closing -> Closed closed : Car closed
+        Closed -> Closed close : Car closed
+        Open -> Open open : Car opened
 end
 
 
 # ----------------------------------------------------------------
-# Motor. Uses the timer primitive for physical travel time. A
-# move-to event transitions Stopped -> Moving and schedules a
-# self-send of `arrived` after 500ms (the travel duration). If a
-# stop event arrives during travel, it preempts: Motor transitions
-# Moving -> Stopped. The late scheduled `arrived` is received while
-# already Stopped; no declared transition from Stopped under
-# `arrived` exists, so Axiom 4 input-rejects it harmlessly.
+# Motor. Travel time is the timer primitive (500ms). Normal arrival
+# signals Car upward. A stop that interrupts travel does not signal:
+# the parent issued the stop and therefore already knows the motor
+# is stopped.
 # ----------------------------------------------------------------
 
 system Motor
@@ -83,25 +91,29 @@ system Motor
     state MotorState
 
     on move-to -> ;
-        -> Moving
-
     on arrived -> ;
-        -> Stopped
-
     on stop -> ;
-        -> Stopped
 
     transitions
         Stopped -> Moving move-to : after 500 arrived
-        Moving -> Stopped arrived
+        Moving -> Stopped arrived : Car arrived
         Moving -> Stopped stop
 end
 
 
 # ----------------------------------------------------------------
-# Car. Owns Door and Motor. Full nine-state machine. Every
-# subsystem interaction is declared as a transition effect; the
-# handler bodies contain state markers only.
+# Car. Event-driven. Each step of an assign cycle is triggered by
+# a distinct event:
+#
+#   assign     -- command from Dispatcher, starts the cycle
+#   closed     -- upward signal from Door, after door has closed
+#   arrived    -- upward signal from Motor, after motor has stopped
+#   opened     -- upward signal from Door, after door has opened
+#   depart     -- self-timer, door-held-open duration expired
+#
+# Emergency transitions are triggered by trigger-emergency from
+# Dispatcher; clear-emergency opens the door and returns to idle
+# once the door reports open.
 # ----------------------------------------------------------------
 
 system Car
@@ -110,65 +122,58 @@ system Car
     children Door Motor
 
     on assign -> ;
-        -> PreparingToMove
-        -> Moving
-        -> Arriving
-        -> DoorOpening
-        -> Loading
-        -> DoorClosing
-        -> IdleAtFloor
-
+    on closed -> ;
+    on opened -> ;
+    on arrived -> ;
+    on depart -> ;
     on trigger-emergency -> ;
-        -> EmergencyStopped
-
     on clear-emergency -> ;
-        -> EmergencyDoorOpen
-        -> IdleAtFloor
 
     transitions
         IdleAtFloor -> PreparingToMove assign : Door close
-        PreparingToMove -> Moving assign : Motor move-to
-        Moving -> Arriving assign
-        Arriving -> DoorOpening assign : Door open
-        DoorOpening -> Loading assign
-        Loading -> DoorClosing assign : Door close
-        DoorClosing -> IdleAtFloor assign
+        PreparingToMove -> Moving closed : Motor move-to
+        Moving -> DoorOpening arrived : Door open
+        DoorOpening -> Loading opened : after 300 depart
+        Loading -> DoorClosing depart : Door close
+        DoorClosing -> IdleAtFloor closed
 
         IdleAtFloor -> EmergencyStopped trigger-emergency : Motor stop
         PreparingToMove -> EmergencyStopped trigger-emergency : Motor stop
         Moving -> EmergencyStopped trigger-emergency : Motor stop
-        Arriving -> EmergencyStopped trigger-emergency : Motor stop
         DoorOpening -> EmergencyStopped trigger-emergency : Motor stop
         Loading -> EmergencyStopped trigger-emergency : Motor stop
         DoorClosing -> EmergencyStopped trigger-emergency : Motor stop
 
         EmergencyStopped -> EmergencyDoorOpen clear-emergency : Door open
-        EmergencyDoorOpen -> IdleAtFloor clear-emergency : Door close
+        EmergencyDoorOpen -> IdleAtFloor opened
 end
 
 
 # ----------------------------------------------------------------
-# EmergencySource. Stateless router. Only talks upward to
-# BuildingSystem; has no reference to Dispatcher or Car.
+# EmergencySource. Stateful. On trigger, signals set-emergency
+# upward to BuildingSystem, which forwards the emergency down to
+# Dispatcher (and ultimately to Car). This is the declared path
+# for fire-alarm propagation.
 # ----------------------------------------------------------------
 
 system EmergencySource
     parent BuildingSystem
+    state EmergencyState
 
     on trigger -> ;
-        BuildingSystem drop
-
     on clear -> ;
-        BuildingSystem drop
+
+    transitions
+        Idle -> Active trigger : BuildingSystem set-emergency
+        Active -> Idle clear : BuildingSystem clear-emergency
 end
 
 
 # ----------------------------------------------------------------
-# Dispatcher. Owns Car. The `Normal -> Normal request` self-loop
-# carries Car.assign as a declared effect. This is a known smell
-# (see chapter): a state machine whose transition exists only to
-# carry an effect. A cleaner DSL construct ("in state S on event
-# E dispatch F") is future work.
+# Dispatcher. The `Normal -> Normal request` row is an internal
+# transition (Harel/UML terminology): state does not change, but
+# the effect dispatches Car assign. A dedicated internal-transition
+# syntax is future work.
 # ----------------------------------------------------------------
 
 system Dispatcher
@@ -177,13 +182,8 @@ system Dispatcher
     children Car
 
     on request -> ;
-        -> Normal
-
     on set-emergency -> ;
-        -> Emergency
-
     on clear-emergency -> ;
-        -> Normal
 
     transitions
         Normal -> Normal request : Car assign
@@ -193,21 +193,31 @@ end
 
 
 # ----------------------------------------------------------------
-# BuildingSystem. Stateless root. External inputs land here and
-# route down to the right child.
+# BuildingSystem. Stateful. Emergency has a declared path:
+# fire-alarm -> EmergencySource trigger -> (upward)
+# set-emergency -> Dispatcher set-emergency -> Car trigger-emergency.
+# Every step is one transition in one actor message cycle. An
+# emergency arriving while Car is mid-sequence preempts at Car by
+# firing Car's declared transition from the live state to
+# EmergencyStopped.
 # ----------------------------------------------------------------
 
 system BuildingSystem
+    state BuildingState
     children Dispatcher EmergencySource
 
     on floor-button-press -> ;
-        Dispatcher request
-
     on fire-alarm -> ;
-        EmergencySource trigger
-
     on fire-clear -> ;
-        EmergencySource clear
+    on set-emergency -> ;
+    on clear-emergency -> ;
+
+    transitions
+        Normal -> Normal floor-button-press : Dispatcher request
+        Normal -> Normal fire-alarm : EmergencySource trigger
+        Normal -> Emergency set-emergency : Dispatcher set-emergency
+        Emergency -> Normal clear-emergency : Dispatcher clear-emergency
+        Emergency -> Emergency fire-clear : EmergencySource clear
 end
 
 "=== Elevator spec compiled. All axioms satisfied. ===" print

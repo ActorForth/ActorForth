@@ -182,15 +182,64 @@ stop_children(#{child_map := ChildMap}) ->
 %% ---------------------------------------------------------------
 %% Event dispatch
 %% ---------------------------------------------------------------
+%%
+%% Two modes, selected by the system's state_type:
+%%
+%%   Stateful (state_type /= 'None'): the transitions table is
+%%   authoritative. On event E in current state S, look up the row
+%%   (S, _, E). If found, dispatch its effect and advance
+%%   current_state. If not found, the event is input-rejected
+%%   (no state change, no effect). One event fires at most one
+%%   transition; there is no cascade.
+%%
+%%   Stateless (state_type = 'None'): handler bodies drive routing.
+%%   The body's `Target Event` pairs dispatch {cast, Event, []} to
+%%   the named child or parent. Used for pass-through routers like
+%%   BuildingSystem in an early prototype.
+%%
+%% In both modes, an event arriving with no matching handler or
+%% transition is logged and ignored. Unexpected input is safe.
 
 dispatch(EventName, Args, State) ->
     EventStr = atom_to_list(EventName),
     State1 = log_event(EventStr, State),
-    case find_handler(EventName, maps:get(handlers, State)) of
-        {ok, Handler} ->
-            execute_handler_body(Handler, Args, State1);
+    case maps:get(state_type, State1) of
+        'None' ->
+            case find_handler(EventName, maps:get(handlers, State1)) of
+                {ok, Handler} ->
+                    execute_handler_body(Handler, Args, State1);
+                not_found ->
+                    State1
+            end;
+        _ ->
+            CurState = maps:get(current_state, State1),
+            dispatch_transition(CurState, EventName, State1)
+    end.
+
+%% Stateful dispatch: look up (current_state, _, EventName) in the
+%% transitions table. Fire it if found, input-reject otherwise.
+dispatch_transition(CurState, EventName, State) ->
+    Transitions = maps:get(transitions, State),
+    case find_transition_for_event(CurState, EventName, Transitions) of
         not_found ->
-            State1
+            State;
+        {'TransitionSpec', _F, To, _Trig, Target, EvtEff, Delay} ->
+            dispatch_effect(Target, EvtEff, Delay, State),
+            State#{current_state => To};
+        {'TransitionSpec', _F, To, _Trig, Target, EvtEff} ->
+            dispatch_effect(Target, EvtEff, 0, State),
+            State#{current_state => To};
+        {'TransitionSpec', _F, To, _Trig} ->
+            State#{current_state => To}
+    end.
+
+find_transition_for_event(_CurState, _Event, []) ->
+    not_found;
+find_transition_for_event(CurState, Event, [T | Rest]) ->
+    case element(2, T) =:= CurState andalso
+         element(4, T) =:= Event of
+        true  -> T;
+        false -> find_transition_for_event(CurState, Event, Rest)
     end.
 
 dispatch_call(EventName, Args, State) ->
@@ -214,23 +263,15 @@ find_handler(EventName, [_ | Rest], Acc) ->
     find_handler(EventName, Rest, Acc).
 
 
-%% Handler body interpreter.
+%% Handler body interpreter. Stateless systems only.
 %%
-%% Stateful systems (state_type /= 'None'): handler bodies contain
-%% only `-> State` markers. Each marker fires a declared transition;
-%% the transition's effect_target/effect_event (if present) is
-%% dispatched to the named subsystem. The current_state tracked in
-%% the actor is updated.
-%%
-%% Stateless systems: handler bodies route events via `Target Event`
-%% pairs (pass-through). No state machine.
-execute_handler_body({'HandlerSpec', EventName, _SigIn, _SigOut, Body},
+%% Stateful systems are driven by the transitions table; their
+%% handler bodies are forbidden by the checker. This function is
+%% only invoked in the stateless branch of `dispatch`.
+execute_handler_body({'HandlerSpec', _EventName, _SigIn, _SigOut, Body},
                      _Args, State) ->
     Tokens = [token_text(T) || T <- Body],
-    case maps:get(state_type, State) of
-        'None' -> process_tokens_stateless(Tokens, State);
-        _      -> process_tokens_stateful(Tokens, EventName, State)
-    end.
+    process_tokens_stateless(Tokens, State).
 
 token_text({'String', B}) -> binary_to_list(B);
 token_text(S) when is_list(S) -> S;
@@ -251,59 +292,6 @@ process_tokens_stateless([Target, EventName | Rest], State) ->
     end;
 process_tokens_stateless([_Single], State) ->
     State.
-
-%% Stateful: walk `-> State` markers, fire transitions, dispatch
-%% declared effects. Each `-> State` advances current_state and sends
-%% the declared effect (if any) to its target subsystem.
-%%
-%% Input rejection (Hamilton axiom 4): if a body's first transition
-%% is not declared from the current state, the handler becomes a
-%% no-op. The compiler proved some entry state reaches the target
-%% under this trigger; if the live state is not among them, the
-%% event does not apply. We stop processing the body rather than
-%% half-run it or crash. A Door already Closed that receives close
-%% falls into this branch.
-process_tokens_stateful([], _Event, State) ->
-    State;
-process_tokens_stateful(["->", NextStateStr | Rest], Event, State) ->
-    CurState = maps:get(current_state, State),
-    NextState = list_to_atom(NextStateStr),
-    case fire_transition(CurState, NextState, Event, State) of
-        {ok, NewState} ->
-            process_tokens_stateful(Rest, Event, NewState);
-        skip ->
-            State
-    end;
-process_tokens_stateful([_Passive | Rest], Event, State) ->
-    process_tokens_stateful(Rest, Event, State).
-
-%% Look up the transition (From, To, Trigger) in the declared table.
-%% Dispatch its effect if declared, then update current_state.
-%% Returns {ok, NewState} on a declared transition or `skip` when
-%% the transition is not declared from the live state.
-fire_transition(From, To, Event, State) ->
-    Transitions = maps:get(transitions, State),
-    case find_transition(From, To, Event, Transitions) of
-        not_found ->
-            skip;
-        {'TransitionSpec', _F, _T, _Trig, Target, EvtEff, Delay} ->
-            dispatch_effect(Target, EvtEff, Delay, State),
-            {ok, State#{current_state => To}};
-        {'TransitionSpec', _F, _T, _Trig, Target, EvtEff} ->
-            dispatch_effect(Target, EvtEff, 0, State),
-            {ok, State#{current_state => To}};
-        {'TransitionSpec', _F, _T, _Trig} ->
-            {ok, State#{current_state => To}}
-    end.
-
-find_transition(_From, _To, _Event, []) -> not_found;
-find_transition(From, To, Event, [T | Rest]) ->
-    case element(2, T) =:= From andalso
-         element(3, T) =:= To andalso
-         element(4, T) =:= Event of
-        true  -> T;
-        false -> find_transition(From, To, Event, Rest)
-    end.
 
 %% dispatch_effect/4 handles three cases:
 %%   * no target: effect is absent (ok).

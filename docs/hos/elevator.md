@@ -1,4 +1,4 @@
-# The Elevator: What the Compiler Rejects, What the Table Reveals
+# The Elevator: Structural Safety by Declared Events
 
 > "The way to build a system that cannot fail is to make the failing
 > versions unrepresentable."
@@ -7,34 +7,43 @@
 This chapter is about a small claim that turns out to be a big one.
 We take a textbook control problem (an elevator), list six
 well-known interface errors in the textbook implementations, and
-show for each one how the a4 HOS spec either rejects it at compile
-time or forces it to appear as a visible edit to the transitions
-table rather than as a hidden body bug.
+show that in the a4 HOS spec they are either rejected at compile
+time or structurally prevented by the runtime model. The chapter
+ends with an honest list of what is still scoped for v2.
 
-The headline is not line count. It is that the a4 HOS spec makes
-certain kinds of mistakes inexpressible, and moves the rest into
-the one place a reviewer is supposed to look (the transitions
-table). No tests cover the rejected cases because they do not
-compile; no tests cover the table-visible cases because the table
-IS the test.
+The structural claim now rests on four pieces, working together:
+
+- **Axiom 1 scope.** No system may reference a name outside its
+  parent, children, own events, transition states, or a4 builtins.
+  Effects and body tokens both go through this check.
+- **Effects-in-transitions.** A subsystem interaction is always a
+  declared row in the transitions table, never an inline body
+  token. Reorderings are visible in the table.
+- **One event fires one transition.** There is no cascade. Multi-
+  step sequences happen because multiple events arrive, each
+  driving one step. Child-to-parent signals (upward events) drive
+  parent steps; the parent cannot proceed until the signal arrives.
+  This is the structural replacement for "imperative body walks
+  the state machine."
+- **Axiom 4 input rejection.** An event whose declared transition
+  is not valid from the live state is a no-op. Unexpected input
+  is safe.
 
 ---
 
 ## 1. Why an elevator
 
-An elevator is the canonical introductory example for a reason. It
-has real parts that talk to each other (door, motor, car, emergency
-source, dispatcher, building), real ordering constraints (open door
-only while stopped, start motor only while closed), real concurrency
-(emergency events cutting across the normal assignment flow), and
-real consequences (people get crushed if you get it wrong).
+The canonical introductory control problem. Real parts (door,
+motor, car, emergency source, dispatcher, building), real ordering
+constraints (open door only while stopped, start motor only while
+closed), real concurrency (emergency events cutting across the
+normal flow), real consequences (people get crushed if you get it
+wrong).
 
-We wrote three "correct" reference implementations before the a4
-version: `comparison/elevator_correct.py`,
-`comparison/elevator_correct.ml`, and `comparison/elevator_correct.rs`.
-Each is 300 to 500 lines. Each has a suite of FAT (functional
-acceptance) tests checking that six specific bugs from the "naive"
-versions do not recur. The bugs are:
+Three "correct" reference implementations come with this repo:
+`comparison/elevator_correct.py`, `elevator_correct.ml`,
+`elevator_correct.rs`. Each runs 300 to 500 lines. Each has a
+suite of FAT tests checking that six specific bugs do not recur:
 
 1. **Door opens while motor is moving** (sibling trust).
 2. **Motor moves while door is open** (mirror of 1).
@@ -43,11 +52,8 @@ versions do not recur. The bugs are:
 5. **EmergencySource reaches a Car directly**, bypassing Dispatcher.
 6. **Duplicate assignment from a stale dispatcher snapshot**.
 
-Each correct implementation works by writing tests that would fail
-if the bug came back. The tests are the insurance. If the tests go
-away, the insurance goes away.
-
-In the a4 HOS spec, the insurance is structural.
+In the reference versions the tests are the insurance. In the a4
+HOS spec, the insurance is structural.
 
 ---
 
@@ -62,73 +68,107 @@ BuildingSystem
 `-- EmergencySource
 ```
 
-Read this carefully. `EmergencySource` has no connection to `Car`.
-Its only neighbour is `BuildingSystem`. `Dispatcher` has `Car` as
-its only child. `Door` and `Motor` are siblings under `Car` and
-have no connection to each other. Nothing in the tree crosses the
-hierarchy.
-
-This is Hamilton's Axiom 1: single-parent control, no sibling back
-channels. In HOS the tree is not a nice-to-have: it is the
-enforcement mechanism. What cannot be named cannot be called.
+`EmergencySource` has no connection to `Car`; its only neighbour
+is `BuildingSystem`. `Dispatcher` has `Car` as its only child.
+`Door` and `Motor` are siblings under `Car` and have no connection
+to each other. Nothing in the tree crosses the hierarchy. What
+cannot be named cannot be called.
 
 ---
 
-## 3. Effects in transitions, not in bodies
+## 3. Semantic model
 
 A stateful HOS system declares:
 
-- Its state type.
-- Its handler event names.
+- Its state type (e.g., `state CarState`).
+- Its expected events as empty `on X -> ;` declarations (optional
+  documentation; the real driver is the transitions table).
 - A transitions table whose rows are one of:
-  - `From -> To Trigger` (no effect)
-  - `From -> To Trigger : Target event` (immediate subsystem call)
-  - `From -> To Trigger : after <ms> event` (timer primitive)
+  - `From -> To Trigger`
+  - `From -> To Trigger : Target event` (downward command or
+    upward signal; target is a child name, parent name, or self)
+  - `From -> To Trigger : after <ms> event` (timer: scheduled
+    self-send)
 
-The `: Target event` clause is the **effect**. It declares the
-subsystem interaction that happens ON the transition, in the
-transition table, not inside a handler body.
+**One event fires one transition.** When an event E arrives at a
+stateful system in state S, the runtime looks up the single row
+`(S, _, E)` in the transitions table. If found, it fires the row:
+dispatches the effect (if any), advances current_state to the To
+column, and returns. There is no cascade; a second transition
+requires a second event.
 
-The `: after <ms> event` clause is the **timer primitive**: when
-the transition fires, a self-send of `event` is scheduled after
-`<ms>` milliseconds. The mailbox stays open during the wait, so
-other events arriving in that window are processed as they would
-be otherwise. A late scheduled event whose transition is not
-declared from the live state is input-rejected (Axiom 4).
+If no row matches `(S, _, E)`, the event is logged and ignored
+(Axiom 4 input rejection). This is the same contract as a4 itself:
+tokens that don't match operations become atoms on the stack; no
+syntax errors, only type errors. An unexpected event produces no
+state change and no behaviour.
 
-Handler bodies of stateful systems contain only `-> State` markers.
-There is no room inside a body for a subsystem call, a direct
-`erlang:send_after`, or any imperative statement; the language
-disallows it. Subsystem interactions live on transitions, and
-actuation time is declared there too.
+**Child-to-parent upward signals.** A child declares an effect on
+its parent using the parent's name as the target:
 
-The consequence: any reordering, retargeting, omission, or timing
-change of a subsystem call is a visible change to the transitions
-table. It is not a sequence inside an imperative body that a
-reviewer has to mentally simulate.
+```
+Stopped -> Moving move-to : after 500 arrived
+Moving -> Stopped arrived : Car arrived
+```
 
-Stateless systems (no `state` declared) are pure routers: they
-receive an event and fan it out to declared children or a parent.
-Their bodies can contain `Target Event` pairs directly, because the
-system has no state machine for transitions to drive.
+The second row reads: "when Motor transitions Moving to Stopped
+under trigger `arrived`, send event `arrived` to Car." Car's
+transitions table has `Moving -> DoorOpening arrived`, so Car
+proceeds only after receiving the upward signal from Motor. The
+synchronisation is structural: Car *cannot* transition past Moving
+until Motor has reported arrival.
 
-**Events in this DSL are pure signals.** Handler signatures carry
-no arguments in v1: `on move-to -> ;` rather than
-`on move-to Floor -> ;`. The motivating case ("which floor?") is
-real, but belongs to data propagation, which is a v2 concern to be
-handled via system state (e.g., each Car holds its current
-Assignment in CarState; transitions read state to populate effect
-context). Treating events as signals now keeps the structural
-story clean; adding a data channel later does not require revisiting
-the axioms.
+**Timer primitive.** `: after <ms> event` schedules a self-send.
+The mailbox stays open during the wait, so other events (stop,
+trigger-emergency) are processed as they arrive. A late self-send
+whose declared transition is not valid from the live state is
+input-rejected. This gives preemption for free: `stop` while Motor
+is in Moving fires `Moving -> Stopped stop`; the late `arrived`
+self-send hits Motor in Stopped, where no row `(Stopped, _, arrived)`
+is declared, and is dropped.
+
+The timer's fire-and-ignore-if-rejected semantics is a deliberate
+choice. Alternatives considered and not adopted:
+
+- *Cancellable timers.* A stop could cancel pending schedules.
+  Simpler systems do not need this; input rejection covers the
+  common case. Cancellation would help systems with many
+  concurrent timers.
+- *Retry-on-late-arrival.* Some actor frameworks re-fire a late
+  timer by applying it to the current state. For real-time
+  control this is almost never the right default.
+
+**Handler bodies.** Stateful systems have empty handler bodies.
+The transitions table is authoritative. Any content in a stateful
+handler body is an axiom violation. Stateless systems (no `state`
+declared) still use handler bodies for pass-through routing.
+
+**Events are pure signals.** Handler signatures carry no arguments
+in v1. Data propagation (which floor, which assignment) is a v2
+concern to be handled via system state fields. A sketch of v2:
+
+```
+# v2: data in state, reads in effects
+system Motor
+    state MotorState   # contains target_floor: Int
+    on move-to -> ;
+    on arrived -> ;
+
+    transitions
+        Stopped -> Moving move-to : after self.travel-time arrived
+        Moving -> Stopped arrived : Car arrived
+```
+
+where `self.travel-time` reads from Motor's state. Not implemented
+in v1; noted for future work.
 
 ---
 
 ## 4. The valid spec
 
 Here is `samples/hos/elevator/elevator.a4`, verbatim. It compiles.
-The axiom checker raises no violations. The last line prints a
-confirmation.
+Every handler body is empty. Every subsystem interaction is a
+declared effect.
 
 ```a4
 system Door
@@ -136,18 +176,17 @@ system Door
     state DoorState
 
     on open -> ;
-        -> Opening
-        -> Open
-
     on close -> ;
-        -> Closing
-        -> Closed
+    on opened -> ;
+    on closed -> ;
 
     transitions
-        Closed -> Opening open
-        Opening -> Open open
-        Open -> Closing close
-        Closing -> Closed close
+        Closed -> Opening open : after 100 opened
+        Opening -> Open opened : Car opened
+        Open -> Closing close : after 100 closed
+        Closing -> Closed closed : Car closed
+        Closed -> Closed close : Car closed
+        Open -> Open open : Car opened
 end
 
 system Motor
@@ -155,17 +194,12 @@ system Motor
     state MotorState
 
     on move-to -> ;
-        -> Moving
-
     on arrived -> ;
-        -> Stopped
-
     on stop -> ;
-        -> Stopped
 
     transitions
         Stopped -> Moving move-to : after 500 arrived
-        Moving -> Stopped arrived
+        Moving -> Stopped arrived : Car arrived
         Moving -> Stopped stop
 end
 
@@ -175,50 +209,42 @@ system Car
     children Door Motor
 
     on assign -> ;
-        -> PreparingToMove
-        -> Moving
-        -> Arriving
-        -> DoorOpening
-        -> Loading
-        -> DoorClosing
-        -> IdleAtFloor
-
+    on closed -> ;
+    on opened -> ;
+    on arrived -> ;
+    on depart -> ;
     on trigger-emergency -> ;
-        -> EmergencyStopped
-
     on clear-emergency -> ;
-        -> EmergencyDoorOpen
-        -> IdleAtFloor
 
     transitions
         IdleAtFloor -> PreparingToMove assign : Door close
-        PreparingToMove -> Moving assign : Motor move-to
-        Moving -> Arriving assign
-        Arriving -> DoorOpening assign : Door open
-        DoorOpening -> Loading assign
-        Loading -> DoorClosing assign : Door close
-        DoorClosing -> IdleAtFloor assign
+        PreparingToMove -> Moving closed : Motor move-to
+        Moving -> DoorOpening arrived : Door open
+        DoorOpening -> Loading opened : after 300 depart
+        Loading -> DoorClosing depart : Door close
+        DoorClosing -> IdleAtFloor closed
 
         IdleAtFloor -> EmergencyStopped trigger-emergency : Motor stop
         PreparingToMove -> EmergencyStopped trigger-emergency : Motor stop
         Moving -> EmergencyStopped trigger-emergency : Motor stop
-        Arriving -> EmergencyStopped trigger-emergency : Motor stop
         DoorOpening -> EmergencyStopped trigger-emergency : Motor stop
         Loading -> EmergencyStopped trigger-emergency : Motor stop
         DoorClosing -> EmergencyStopped trigger-emergency : Motor stop
 
         EmergencyStopped -> EmergencyDoorOpen clear-emergency : Door open
-        EmergencyDoorOpen -> IdleAtFloor clear-emergency : Door close
+        EmergencyDoorOpen -> IdleAtFloor opened
 end
 
 system EmergencySource
     parent BuildingSystem
+    state EmergencyState
 
     on trigger -> ;
-        BuildingSystem drop
-
     on clear -> ;
-        BuildingSystem drop
+
+    transitions
+        Idle -> Active trigger : BuildingSystem set-emergency
+        Active -> Idle clear : BuildingSystem clear-emergency
 end
 
 system Dispatcher
@@ -227,13 +253,8 @@ system Dispatcher
     children Car
 
     on request -> ;
-        -> Normal
-
     on set-emergency -> ;
-        -> Emergency
-
     on clear-emergency -> ;
-        -> Normal
 
     transitions
         Normal -> Normal request : Car assign
@@ -242,51 +263,54 @@ system Dispatcher
 end
 
 system BuildingSystem
+    state BuildingState
     children Dispatcher EmergencySource
 
     on floor-button-press -> ;
-        Dispatcher request
-
     on fire-alarm -> ;
-        EmergencySource trigger
-
     on fire-clear -> ;
-        EmergencySource clear
-end
+    on set-emergency -> ;
+    on clear-emergency -> ;
 
-"=== Elevator spec compiled. All axioms satisfied. ===" print
+    transitions
+        Normal -> Normal floor-button-press : Dispatcher request
+        Normal -> Normal fire-alarm : EmergencySource trigger
+        Normal -> Emergency set-emergency : Dispatcher set-emergency
+        Emergency -> Normal clear-emergency : Dispatcher clear-emergency
+        Emergency -> Emergency fire-clear : EmergencySource clear
+end
 ```
 
 Notes:
 
-- `Motor` uses the timer primitive. On `move-to`, Motor transitions
-  Stopped to Moving and schedules a self-send of `arrived` after
-  500ms. When `arrived` fires, Motor transitions Moving to Stopped.
-  If a `stop` event arrives during travel, Motor transitions to
-  Stopped immediately; the late `arrived` is input-rejected because
-  no declared transition exists from Stopped under `arrived`.
-- `Car` has nine states and sixteen transitions. Four of the normal
-  transitions carry declared effects (Door close, Motor move-to,
-  Door open, Door close). Seven emergency transitions carry Motor
-  stop. Two clear-emergency transitions carry Door open and Door
-  close.
-- `Car`'s handler bodies are pure state sequences. There is no
-  `Door close` or `Motor move-to` anywhere in a body; those live on
-  the transitions that produce them.
-- `Dispatcher` is stateful. `Normal -> Normal request` is a
-  self-loop carrying `Car assign` as an effect. The self-loop is a
-  known smell (see Section 7): a transition whose only purpose is
-  to carry an effect, not to change state.
-- `EmergencySource` and `BuildingSystem` are stateless pass-through
-  routers, so their bodies contain direct `Target Event` pairs.
+- **Door** has multi-step open/close with timers, plus two
+  idempotent self-loops (`Closed -> Closed close`,
+  `Open -> Open open`) so that Car's waiting transitions are
+  unblocked when Door is already in the target state.
+- **Motor** uses the timer for 500ms travel. Normal arrival signals
+  Car upward; interrupted stop does not (Car already knows, since
+  it issued the stop).
+- **Car**'s seven normal-flow transitions are each triggered by a
+  distinct event: `assign` from Dispatcher, `closed` from Door,
+  `arrived` from Motor, `opened` from Door, `depart` from self-
+  timer, `closed` from Door. Each transition is one actor message
+  cycle; any emergency in the mailbox interleaves.
+- **Dispatcher**'s `Normal -> Normal request` is an internal
+  transition (Harel/UML terminology): state does not change; the
+  effect dispatches `Car assign`. Dedicated internal-transition
+  syntax is future work.
+- **BuildingSystem** is stateful. The emergency path
+  `fire-alarm -> EmergencySource trigger -> (upward) set-emergency
+  -> Dispatcher set-emergency -> Car trigger-emergency -> Motor
+  stop` is a chain of single-step transitions through the tree.
 
 ---
 
 ## 5. What the compiler rejects
 
-Six attempts to express each classic flaw as an HOS spec. Each is
-rejected at compile time with a specific axiom citation. The FAT
-suite in `test/af_hos_elevator_tests.erl` asserts every rejection.
+Each classic flaw expressed as an HOS spec is rejected at compile
+time with a specific axiom citation. The FAT suite in
+`test/af_hos_elevator_tests.erl` asserts every rejection.
 
 ### Flaw 5: sibling back channel
 
@@ -304,9 +328,7 @@ axiom_1: system 'EmergencySource' handler 'trigger' references
 or a4 builtin
 ```
 
-### Flaw 1/2, form A: reach past child to grandchild
-
-A dispatcher tries to drive the motor directly:
+### Flaws 1/2, skip-level down: reach past child to grandchild
 
 ```a4
 system Dispatcher
@@ -318,62 +340,31 @@ end
 ```
 
 ```
-axiom_1: ... references 'Motor' -- not a parent / child / ...
+axiom_1: ... references 'Motor' -- not in scope
 ```
 
-### Flaw 1/2, form B: subsystem call inside a stateful handler body
+### Stateful body rejected
 
-The more interesting form. With effects declared on transitions,
-putting a subsystem call inline in a stateful handler body is
-forbidden outright:
+Any content in a stateful system's handler body is an axiom
+violation. This subsumes the older Flaw 1/2 "subsystem call inline"
+rejection: with event-driven semantics, bodies cannot exist on
+stateful systems at all.
 
 ```a4
-system Car
-    state CarState
-    children Door Motor
+system C
+    state CState
     on step -> ;
         -> Ready
-        Motor move-to
-        -> Done
     transitions
         Idle -> Ready step
-        Ready -> Done step
 end
 ```
 
 ```
-axiom_5: system 'Car' handler 'step' references subsystem 'Motor'
-in its body; stateful systems must declare subsystem interactions
-as transition effects (: Target event), not inline. Move this to
-the transitions table.
-```
-
-This is the structural prevention of Flaws 1 and 2. A body that
-says "close door, then move motor, then open door" in some order
-cannot exist; the only place that ordering lives is the transitions
-table.
-
-### Flaw 4: skip-state transition
-
-```a4
-on assign Assignment -> ;
-    -> PreparingToMove
-    -> Moving
-    -> DoorOpening
-transitions
-    IdleAtFloor -> PreparingToMove assign
-    PreparingToMove -> Moving assign
-    Moving -> Arriving assign
-    Arriving -> DoorOpening assign
-```
-
-The body jumps `Moving -> DoorOpening`, skipping `Arriving`. The
-table permits `Moving -> Arriving` under assign but not
-`Moving -> DoorOpening`.
-
-```
-axiom_5: system 'C' handler 'assign' attempts undeclared
-transition Moving -> DoorOpening
+axiom_5: system 'C' handler 'step' has a non-empty body; stateful
+systems are driven by the transitions table (one event fires one
+transition). Delete the body and declare transitions for this
+trigger instead.
 ```
 
 ### Flaw 3: forged event name
@@ -387,15 +378,12 @@ end
 ```
 
 ```
-axiom_1: ... references 'check-emergency-flag' -- not a parent /
-child / local / state / transition name or a4 builtin
+axiom_1: ... references 'check-emergency-flag' -- not in scope
 ```
 
 The polled-boolean pattern has no home in the tree.
 
 ### Parent/children consistency, either direction
-
-Forward:
 
 ```a4
 system Door parent Somewhere end
@@ -408,56 +396,15 @@ HOS parent/children consistency errors:
   parent='Somewhere' not 'Car'
 ```
 
-Reverse:
-
-```a4
-system Motor parent Dispatcher end
-system Car parent Dispatcher children Door Motor end
-```
-
-```
-HOS parent/children consistency errors:
-  system 'Car' lists child 'Motor', but 'Motor' declares
-  parent='Dispatcher' not 'Car'
-```
-
-The check runs bidirectionally on every registration.
-
-### Parallel-dispatcher sibling call
-
-The "duplicate assignment from a stale snapshot" bug comes from
-having a second dispatcher-like object that routes around the real
-one:
-
-```a4
-system ParallelDispatcher
-    parent BuildingSystem
-    children Car
-    on request R -> ;
-        OtherDispatcher request
-end
-```
-
-```
-axiom_1: ... references 'OtherDispatcher' -- not a parent /
-child / ...
-```
-
-A sibling cannot be named. The only way to reach another
-dispatcher is through their common parent, which serialises the
-path.
+Bidirectional on every registration.
 
 ### Effect target out of scope
-
-A transition cannot declare an effect on a system it could not
-otherwise name:
 
 ```a4
 system C
     parent P
     state CState
     on go -> ;
-        -> Done
     transitions
         Idle -> Done go : Stranger step
 end
@@ -469,20 +416,13 @@ trigger 'go' with effect on 'Stranger', but 'Stranger' is not in
 scope
 ```
 
-Effects are first-class references. The same scope rule that
-applies to handler bodies applies to effect targets.
-
 ### Timer scheduling an undeclared event
-
-A timer effect must schedule an event the system itself handles.
-Otherwise the self-send would be a silent dead-letter:
 
 ```a4
 system M
     parent P
     state MState
     on go -> ;
-        -> Running
     transitions
         Idle -> Running go : after 100 ghost
 end
@@ -496,120 +436,127 @@ declared handler on this system
 
 ---
 
-## 6. The happy path: effects reach the target
+## 6. The happy path
 
-The runtime spawns the tree as a hierarchy of Erlang actors
-(`af_hos_runtime:spawn_system/1`). Each actor holds only its
-parent PID and its direct children's PIDs; nothing else is
-reachable. When a stateful system's handler body walks a
-`-> State` marker, the runtime finds the matching transition in
-the table, dispatches the declared effect (if any) to the target
-subsystem, and updates the actor's current_state.
-
-The FAT suite asserts that a floor-button-press event at the root
-causes exactly this sequence at the leaves:
+One floor-button-press event at the root drives a full assign
+cycle through the tree in roughly one second of wall clock time.
 
 ```
-Door  received: ["close", "open", "close"]
-Motor received: ["move-to"]
+Time    Event                              State transitions
+----    -----                              -----------------
+0ms     floor-button-press at BuildingSystem
+        BuildingSystem -> Dispatcher request
+        Dispatcher -> Car assign
+        Car (IdleAtFloor -> PreparingToMove) -> Door close
+        Door idempotent self-loop on Closed -> Car closed
+        Car (PreparingToMove -> Moving) -> Motor move-to
+        Motor (Stopped -> Moving), schedule arrived @500ms
+
+500ms   Motor.arrived fires (self-timer)
+        Motor (Moving -> Stopped) -> Car arrived
+        Car (Moving -> DoorOpening) -> Door open
+        Door (Closed -> Opening), schedule opened @100ms
+
+600ms   Door.opened fires
+        Door (Opening -> Open) -> Car opened
+        Car (DoorOpening -> Loading), schedule depart @300ms
+
+900ms   Car.depart fires
+        Car (Loading -> DoorClosing) -> Door close
+        Door (Open -> Closing), schedule closed @100ms
+
+1000ms  Door.closed fires
+        Door (Closing -> Closed) -> Car closed
+        Car (DoorClosing -> IdleAtFloor) -- cycle complete
 ```
 
-This corresponds exactly to the four declared effects on Car's
-`on assign` transitions, in declared order. The order came from
-the transitions table, nothing else. Reordering the table would
-reorder what the leaves receive. A reviewer auditing the elevator
-for safety reads the transitions table.
+Each step is one event, one transition, one actor message cycle.
+The safety invariant (door does not open until motor has stopped)
+holds by construction: Car's `Moving -> DoorOpening` transition is
+triggered by `arrived`, which only arrives after Motor enters
+Stopped. An FAT test asserts this directly: at 400ms into the
+cycle, Door's log contains only `close` and Motor's contains only
+`move-to`; Door has not yet received `open` because Car has not
+yet received `arrived`.
 
-### Input rejection
+### Emergency preemption
 
-If a stateful system receives an event whose first transition is
-not declared from the live state, the handler is a no-op. A Door
-that receives `close` while already `Closed` sees no declared
-transition `Closed -> Closing close` and stays `Closed`. This is
-Hamilton's Axiom 4 (input rejection): an event that does not apply
-in the current state produces no change.
+A fire-alarm at any point in the cycle routes through
+`BuildingSystem -> EmergencySource trigger -> BuildingSystem
+set-emergency -> Dispatcher set-emergency -> Car trigger-emergency
+-> Motor stop`. Each hop is a declared transition in a separate
+actor. If Motor is mid-travel (scheduled arrived outstanding), the
+stop arrives first because Motor's mailbox is FIFO; Motor
+transitions `Moving -> Stopped stop` with no upward signal; the
+late scheduled `arrived` eventually reaches Motor in Stopped and
+is input-rejected. An FAT test asserts Motor's log in this
+scenario: `[move-to, stop, arrived]`, with Motor stopped at the end.
 
 ---
 
 ## 7. What this means, honestly
 
-Sound claims:
+Sound:
 
-- **Flaw 1/2 cannot appear as a hidden body bug.** Stateful handler
-  bodies are state-marker-only. Subsystem interactions are
-  declared effects on transitions. Any reordering shows up in the
-  transitions table, which is where a safety review is supposed to
-  land anyway. The runtime dispatches effects in the declared
-  order.
-- **Flaw 3 (forged events) and Flaw 5 (sibling back channels) are
-  Axiom 1 scope violations.** The scope check runs over both
-  handler bodies and declared effect targets.
-- **Flaw 4 (skipped states) is an Axiom 5 violation.** The step
-  check requires each `-> State` to be a declared edge from the
-  previous state under the handler's trigger. The trigger match is
-  strict: an edge declared under `open` does not serve a `shutdown`
-  handler.
-- **Parent/children consistency is bidirectional.** Any disagreement
-  between a child's declared parent and a parent's declared
-  children is rejected at registration time, in either direction.
+- **Flaw 1/2 cannot be hidden in a handler body** because stateful
+  systems have no handler bodies. Subsystem interactions are
+  declared on transitions. A door-before-motor reordering is a
+  visible edit of the transitions table, which is where a safety
+  review lands.
+- **Flaw 1/2 also cannot race past subsystems at runtime.** Car's
+  transition to DoorOpening is triggered by Motor's `arrived`
+  signal. Car cannot proceed until the signal arrives. Removing
+  the cascade eliminated the race that a synchronous multi-marker
+  body had introduced.
+- **Flaws 3 and 5 are Axiom 1 scope violations.** The scope check
+  runs on both handler body tokens (for stateless systems) and
+  effect targets (for all systems).
+- **Flaw 4** as "body declares a transition the table does not"
+  no longer applies because there are no bodies on stateful
+  systems. The analogous check is "every declared transition is
+  in the table by construction" which is trivially true.
+- **Parent/children consistency** runs bidirectionally on every
+  registration.
+- **Emergency routing is declared** via BuildingSystem and
+  EmergencySource stateful transitions, and preempts Car's work
+  because each Car step is its own message cycle.
 
-Scoped, not claimed:
+Scoped, honestly:
 
-- **Handler bodies are redundant with the transitions table.** A
-  stateful handler body like Car's `on assign` walks seven state
-  markers that the transitions table already declares edges for
-  under trigger `assign`. The body is a restatement of the table
-  that can desync if someone edits one and not the other. The clean
-  version eliminates the body entirely: "receive event E, walk
-  declared edges under E from current state until fixed point." The
-  v2 of this DSL will do that. For now the body is there and the
-  runtime walks it literally.
-- **Dispatcher self-loop is a smell.** `Normal -> Normal request :
-  Car assign` is a transition whose only job is to carry an effect,
-  not to change state. A cleaner construct ("in state S, on event
-  E, dispatch F, no transition") is future work.
-- **Multi-car dispatcher selection.** The spec has a single Car
-  under a single Dispatcher. A production dispatcher would hold N
-  cars and pick one (the classic "idle closest to request" rule)
-  inside the dispatch handler; that needs a collection primitive
-  (something like `children Car[]` with a query operator that
-  executes atomically as one FMap node). Flaw 6 (duplicate
-  assignment from a stale snapshot) is prevented for the single-car
-  case by the actor mailbox being serialised; the multi-car version
-  of Flaw 6 is not proven prevented until the collection primitive
-  exists.
-- **In-handler preemption.** When Car is driving a seven-step
-  assign sequence and an emergency arrives, the emergency is queued
-  and processed after the assign sequence completes. There is no
-  mid-sequence interrupt at the Car layer. (The Motor layer, by
-  contrast, *is* preemptable: `stop` during travel works because
-  the timer primitive decomposes travel into an `arrived`
-  self-send, so Motor's mailbox interleaves.) The missing piece at
-  Car is the same decomposition: each step becomes its own
-  self-send. That's the body-elimination work above.
+- **Dispatcher's self-loop is a smell.** `Normal -> Normal request
+  : Car assign` is a transition that exists only to carry an
+  effect. Dedicated "internal transition" syntax (Harel /UML) is
+  future work.
+- **Idempotent self-loops on Door** (`Closed -> Closed close`,
+  `Open -> Open open`) exist to unblock a waiting parent when the
+  child is already in the target state. A future version could
+  make this implicit via a "signal completion even on no-op"
+  rule, but for now the idempotent rows are explicit.
+- **Multi-car dispatcher selection.** The spec has one Car. A
+  production dispatcher would hold N cars and pick one atomically.
+  Needs a collection primitive.
 - **Cross-system preconditions.** A transition's effect target is
   scope-checked but not precondition-checked. If a transition
-  declares `: Door open` when the logical precondition is "Motor is
-  stopped", nothing in the current language enforces that
-  precondition. Full USL would let Motor declare "stopped is the
-  only state I accept the stop event in" and the checker would
-  verify Car's transitions satisfy it. Future work.
+  declares `: Door open` when the logical precondition is "Motor
+  is stopped", the language does not enforce that precondition
+  today. The event-driven synchronisation catches it at runtime
+  (Car can't reach the DoorOpening transition without the arrived
+  signal), but a compile-time check would be stronger.
 - **Data propagation.** Handler signatures carry no arguments.
-  Motor does not know which floor it's supposed to travel to; the
-  Floor arg is not passed in any form. Data propagation is future
-  work via system state (each Car holds its Assignment in CarState,
-  transitions read state to populate effect context).
+  Motor does not know which floor it's supposed to travel to. v2
+  will address this via state fields; the v1 spec demonstrates
+  control topology only.
 - **Physical actuation beyond time.** The timer primitive covers
   "this takes N milliseconds." More complex actuation (sensors,
   external I/O, physical feedback) needs additional primitives.
-  Only the time dimension is covered in this pass.
-- **Flaw 6 runtime dimension** (the stale-snapshot race) is
-  prevented by Erlang's serialised mailbox for the single-car case,
-  which is an actor-model standard guarantee rather than a
-  USL-specific one. The USL contribution is Axiom 1: Dispatcher is
-  the only reachable path to Car, so there is no concurrent reader
-  that could observe a stale snapshot. Both properties are needed;
-  only one is HOS.
+  Only the time dimension is covered.
+- **Axiom 1 for triggers.** Transition triggers are currently
+  permissive: any atom can be a trigger. Intentional: triggers
+  come from three places (self-declared handlers, parent commands,
+  child signals), and tracking all three at compile time adds
+  complexity. A typo in a trigger name produces a transition the
+  runtime never fires; Axiom 4 makes this harmless (no unexpected
+  behaviour), matching a4's "unknown tokens become atoms" spirit.
 
 ---
 
@@ -626,65 +573,63 @@ rebar3 shell
        af_interpreter:new_continuation()).
 ```
 
-The full FAT suite:
+The FAT suite:
 
 ```bash
 rebar3 eunit --module=af_hos_elevator_tests
 ```
 
-Nineteen tests. Four assert the happy path (compiles, all systems
-registered, tree spawns, an event routes). Ten assert compile-time
-rejections of flawed specs (including the new timer-scheduling-an-
-undeclared-event case). Two assert that the runtime dispatches
-declared subsystem effects to leaves in declared order. Three
-assert the timer primitive: the delay is honored, preemption via
-`stop` works through input rejection of the late scheduled event,
-and timer effects scheduling undeclared events are rejected at
-compile time.
+Twenty-one tests.
+Four happy-path (compiles, all systems registered, tree spawns,
+event routes). Ten compile-time rejections (sibling, skip-level,
+stateful body, forged event, consistency in two directions,
+parallel dispatcher, effect target out of scope, timer event
+undeclared, and one Flaw-4-legacy body rejection). Four
+event-dispatch and safety tests (full cycle ordering, safety
+invariant timing, fire-alarm to motor-stop, mid-assign emergency
+preemption). Three timer-specific tests (scheduled delay,
+preemption via stop, timer event undeclared).
 
 ---
 
 ## 9. Honest numbers
 
-The a4 HOS elevator spec is 194 lines including comments. The three
-reference correct implementations (Python, OCaml, Rust) run 300 to
-500 lines each. Stripping comments and blank lines the ratio is
-around 2.5x to 3x in a4's favour.
+The a4 HOS elevator spec is 216 lines including comments. The
+Rust reference runs ~406 code lines for single-car. Stripping
+comments and blanks from the a4 spec, roughly 110 code lines: a
+~3.7x reasoning-surface reduction, for the single-car case.
 
-But that is the single-car measurement. A multi-car production
-implementation in Rust stays at roughly 400 to 450 code lines (the
-dispatcher selection is small). The a4 multi-car version would
-need a collection primitive that does not exist yet. When it does,
-the a4 spec will grow, probably to 160 to 180 lines. The ratio
-stays 2.5x to 3x.
+Multi-car will add rows to the transitions table plus a collection
+primitive. I'd estimate 140 to 160 code lines when that lands.
+Rust stays at ~420 for multi-car. Ratio around 2.5x to 3x.
 
-The real claim is not the ratio. It is that the six classic flaws
-catalogued against the reference implementations are either
-compile-time rejections in a4 (Flaws 3, 4, 5, plus both forms of
-1/2, plus consistency in either direction) or visible as single
-lines in the transitions table rather than as interleavings inside
-an imperative body (Flaw 1/2's subsystem-ordering content). The
-sixth flaw (duplicate assignment) is prevented for the single-car
-case by serialised mailboxes plus the single-path-via-tree
-property, and the multi-car case is honest future work.
+The real claim is not the ratio. It is that:
+
+- The six classic flaws are either compile-time rejections or
+  structurally unrepresentable in the spec.
+- Runtime synchronisation between Car and its children is
+  structural, not asserted by runtime checks.
+- Emergency preemption works by construction, because each step
+  of the control flow is its own message cycle.
+
+Hamilton's Axiom 1 plus effects-in-transitions plus
+one-event-one-transition plus Axiom 4 input rejection compose to a
+system where the failure modes from the reference implementations
+either do not typecheck or cannot race. That is a real structural
+claim, earned incrementally over several passes.
 
 ---
 
 ## Appendix: files
 
 - `samples/hos/elevator/elevator.a4` - the valid spec.
-- `samples/hos/elevator/violations.a4` - the violations, each
-  guarded as a comment block. Uncomment to observe the rejection.
-- `src/af_hos_check.erl` - axiom checker (Axiom 1, Axiom 5,
-  consistency, effect scope, stateful body check).
-- `src/af_hos_dsl.erl` - the `system ... end` DSL surface, now
-  accepting `: Target event` effect clauses on transitions.
-- `src/af_hos_runtime.erl` - spawn a spec as an actor tree, route
-  events, dispatch declared effects, input-reject undeclared
-  transitions.
+- `samples/hos/elevator/violations.a4` - each violation guarded as
+  a comment block. Uncomment to observe the rejection.
+- `src/af_hos_check.erl` - axiom checker.
+- `src/af_hos_dsl.erl` - the `system ... end` DSL surface.
+- `src/af_hos_runtime.erl` - actor-tree runtime with one-event-
+  one-transition dispatch.
 - `lib/hos/system.a4` - `SystemNode`, `HandlerSpec`, and
-  `TransitionSpec` (now with `effect_target` / `effect_event`)
-  product types.
-- `test/af_hos_elevator_tests.erl` - FAT suite.
-- `test/af_hos_dsl_tests.erl` - DSL-surface tests and
-  axiom-enforcement tests.
+  `TransitionSpec` product types.
+- `test/af_hos_elevator_tests.erl` - 21-test FAT suite.
+- `test/af_hos_dsl_tests.erl` - DSL surface tests.

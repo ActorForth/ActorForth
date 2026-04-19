@@ -232,43 +232,27 @@ violation_test_() ->
             end
         end} end,
 
-        fun(_) -> {"Flaw 1/2 prevention: subsystem call inside stateful handler body rejected", fun() ->
-            %% A stateful system's handler body must contain state
-            %% markers only. Subsystem interactions (Door close,
-            %% Motor move-to) are declared as transition effects,
-            %% not as inline body operations. This is what
-            %% structurally prevents Flaw 1/2 (a handler body
-            %% reordering subsystem calls).
-            %% Pre-register Motor so its event `move-to` is known
-            %% and the violation is about the stateful-body rule,
-            %% not about an out-of-scope event name.
-            eval_new(
-                "system Motor "
-                "  parent C "
-                "  state MotorState "
-                "  on move-to -> ; "
-                "    -> Moving "
-                "  transitions "
-                "    Stopped -> Moving move-to "
-                "end"),
+        fun(_) -> {"Stateful body rejected: any content in a stateful handler body is an axiom violation", fun() ->
+            %% Stateful systems are driven by the transitions table,
+            %% one event fires one transition. Handler bodies on
+            %% stateful systems must be empty; anything in them is
+            %% rejected. This is the structural replacement for the
+            %% earlier Flaw 1/2 rule (no inline subsystem calls).
             try
                 eval_new(
                     "system C "
                     "  state CState "
-                    "  children Motor "
                     "  on step -> ; "
                     "    -> Ready "
-                    "    Motor move-to "
-                    "    -> Done "
                     "  transitions "
                     "    Idle -> Ready step "
-                    "    Ready -> Done step "
                     "end"),
                 ?assert(false)
             catch
                 error:{axiom_violation, Msg} ->
                     ?assertNotEqual(nomatch, string:find(Msg, "axiom_5")),
-                    ?assertNotEqual(nomatch, string:find(Msg, "subsystem"))
+                    ?assertNotEqual(nomatch,
+                                    string:find(Msg, "non-empty body"))
             end
         end} end,
 
@@ -283,7 +267,6 @@ violation_test_() ->
                     "  parent P "
                     "  state CState "
                     "  on go -> ; "
-                    "    -> Done "
                     "  transitions "
                     "    Idle -> Done go : Stranger step "
                     "end"),
@@ -307,7 +290,7 @@ violation_test_() ->
 
 effect_dispatch_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
-        fun(_) -> {"floor-button-press dispatches Door and Motor effects in declared order", fun() ->
+        fun(_) -> {"floor-button-press drives one full assign cycle with declared ordering", fun() ->
             load_valid_spec(),
             Root = af_hos_check:lookup_system("BuildingSystem"),
             RootPid = af_hos_runtime:spawn_system(Root),
@@ -318,36 +301,125 @@ effect_dispatch_test_() ->
 
             af_hos_runtime:send_event(RootPid,
                 'floor-button-press', []),
-            timer:sleep(200),
+            %% Full cycle time:
+            %%   Motor travel: 500ms
+            %%   Door open timer: 100ms
+            %%   Car loading dwell: 300ms
+            %%   Door close timer: 100ms
+            %% Total ~1000ms. Sleep 1200ms for margin.
+            timer:sleep(1200),
 
             DoorLog  = get_log(DoorPid),
             MotorLog = get_log(MotorPid),
 
-            %% Car's assign transitions carry effects:
-            %%   IdleAtFloor -> PreparingToMove : Door close
-            %%   PreparingToMove -> Moving : Motor move-to
-            %%   Arriving -> DoorOpening : Door open
-            %%   Loading -> DoorClosing : Door close
-            %% So Door should see close, open, close in that order,
-            %% and Motor should see move-to.
-            ?assertEqual(["close", "open", "close"], DoorLog),
-            ?assertEqual(["move-to"], MotorLog),
+            %% Door sequence is driven by Car's event-driven
+            %% transitions. Door starts Closed, gets `close` (idempotent
+            %% self-loop, signals Car immediately), then `open`
+            %% (opens over 100ms, signals opened), then `close`
+            %% (closes over 100ms, signals closed). Door log records
+            %% events as they are received: close, open, opened (self
+            %% timer), close, closed (self timer).
+            ?assertEqual(["close", "open", "opened", "close", "closed"],
+                         DoorLog),
+            %% Motor gets move-to (schedules arrived after 500ms),
+            %% then arrived (self-timer).
+            ?assertEqual(["move-to", "arrived"], MotorLog),
 
             af_hos_runtime:stop_system(RootPid),
             timer:sleep(50)
         end} end,
 
-        fun(_) -> {"fire-alarm propagates up through EmergencySource", fun() ->
+        fun(_) -> {"safety invariant: Door open arrives AFTER Motor arrived", fun() ->
+            %% Structural proof of Flaw 1/2 prevention at runtime.
+            %% Car cannot send Door open until it has received the
+            %% arrived signal from Motor, because the transition
+            %% Moving -> DoorOpening is triggered by arrived. The
+            %% mailbox timestamps on Motor's arrived and Door's open
+            %% must be ordered arrived-before-open.
             load_valid_spec(),
             Root = af_hos_check:lookup_system("BuildingSystem"),
             RootPid = af_hos_runtime:spawn_system(Root),
-            ESPid = introspect_child_pid(RootPid, "EmergencySource"),
+            DispPid = introspect_child_pid(RootPid, "Dispatcher"),
+            CarPid  = introspect_child_pid(DispPid, "Car"),
+            DoorPid = introspect_child_pid(CarPid, "Door"),
+            MotorPid = introspect_child_pid(CarPid, "Motor"),
+
+            af_hos_runtime:send_event(RootPid,
+                'floor-button-press', []),
+            timer:sleep(400),
+
+            %% 400ms: Motor is still moving (500ms travel), Car has
+            %% not yet received arrived, therefore Car has not sent
+            %% Door open. Door's log contains only the initial close.
+            DoorLogMid = get_log(DoorPid),
+            MotorLogMid = get_log(MotorPid),
+            ?assertEqual(["close"], DoorLogMid),
+            ?assertEqual(["move-to"], MotorLogMid),
+
+            timer:sleep(800),
+            %% 1200ms: full cycle complete.
+            DoorLogEnd = get_log(DoorPid),
+            MotorLogEnd = get_log(MotorPid),
+            ?assert(lists:member("open", DoorLogEnd)),
+            ?assert(lists:member("arrived", MotorLogEnd)),
+
+            af_hos_runtime:stop_system(RootPid),
+            timer:sleep(50)
+        end} end,
+
+        fun(_) -> {"fire-alarm propagates to Car and stops Motor", fun() ->
+            %% End-to-end emergency routing:
+            %%   fire-alarm -> BuildingSystem
+            %%     -> EmergencySource trigger
+            %%       -> (upward signal) BuildingSystem set-emergency
+            %%         -> Dispatcher set-emergency
+            %%           -> Car trigger-emergency
+            %%             -> Motor stop
+            load_valid_spec(),
+            Root = af_hos_check:lookup_system("BuildingSystem"),
+            RootPid = af_hos_runtime:spawn_system(Root),
+            DispPid = introspect_child_pid(RootPid, "Dispatcher"),
+            CarPid  = introspect_child_pid(DispPid, "Car"),
+            MotorPid = introspect_child_pid(CarPid, "Motor"),
 
             af_hos_runtime:send_event(RootPid, 'fire-alarm', []),
-            timer:sleep(100),
+            timer:sleep(200),
 
-            ESLog = get_log(ESPid),
-            ?assertEqual(["trigger"], ESLog),
+            %% Motor should have received `stop`.
+            MotorLog = get_log(MotorPid),
+            ?assert(lists:member("stop", MotorLog)),
+
+            af_hos_runtime:stop_system(RootPid),
+            timer:sleep(50)
+        end} end,
+
+        fun(_) -> {"emergency preempts mid-assign: Motor stop arrives during travel", fun() ->
+            %% Start an assign cycle (Motor begins moving), then
+            %% fire the emergency before Motor's 500ms travel
+            %% completes. Motor receives stop mid-travel, transitions
+            %% Moving -> Stopped. The late scheduled arrived hits
+            %% Motor in Stopped and is input-rejected (no declared
+            %% transition from Stopped under arrived).
+            load_valid_spec(),
+            Root = af_hos_check:lookup_system("BuildingSystem"),
+            RootPid = af_hos_runtime:spawn_system(Root),
+            DispPid = introspect_child_pid(RootPid, "Dispatcher"),
+            CarPid  = introspect_child_pid(DispPid, "Car"),
+            MotorPid = introspect_child_pid(CarPid, "Motor"),
+
+            af_hos_runtime:send_event(RootPid,
+                'floor-button-press', []),
+            timer:sleep(200),
+            %% Motor should be in Moving now (200ms into 500ms travel).
+            ?assertEqual(["move-to"], get_log(MotorPid)),
+
+            af_hos_runtime:send_event(RootPid, 'fire-alarm', []),
+            timer:sleep(600),
+
+            MotorLogFinal = get_log(MotorPid),
+            %% Motor sees: move-to, stop (from emergency),
+            %% arrived (late self-timer, input-rejected but logged).
+            ?assertEqual(["move-to", "stop", "arrived"], MotorLogFinal),
 
             af_hos_runtime:stop_system(RootPid),
             timer:sleep(50)
@@ -422,7 +494,6 @@ timer_test_() ->
                     "  parent P "
                     "  state MState "
                     "  on go -> ; "
-                    "    -> Running "
                     "  transitions "
                     "    Idle -> Running go : after 100 ghost "
                     "end"),
