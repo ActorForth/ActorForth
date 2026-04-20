@@ -45,14 +45,19 @@ Each script runs both the naive and correct versions sequentially,
 compiling as needed. Each demo issues two floor requests, sleeps a
 few seconds, and prints final car state.
 
-Or run the full proof walk from `..`:
+Or run the full narrated proof walk from `..`:
 
 ```
-bash ../run_hos_tests.sh
+bash ../run_hos_tests.sh              # straight through
+bash ../run_hos_tests.sh --pause      # pause between scenes (live demo)
+bash ../run_hos_tests.sh --quick      # skip the Python exploits
 ```
 
-That invokes the five a4 test modules (the actual correctness
-proof) and then calls each per-language script for context.
+That script runs the three Python adversarial exploits (see
+`exploits/README.md`) to show the naive flaws manifesting live,
+then runs the a4 checker against two minimal bad specs to show
+the equivalent bugs being rejected at compile time, then runs
+the five a4 test modules.
 
 ## A caveat, in bold
 
