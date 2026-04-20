@@ -86,10 +86,11 @@ say ""
 BEAM_RATE=""
 PY_RATE=""
 RS_RATE=""
+ML_RATE=""
 
 # ---------- Erlang / BEAM ----------
 
-section "1/3: Erlang HOS (elevator_nowait.a4)"
+section "1/4: Erlang HOS (elevator_nowait.a4)"
 say ""
 if ! command -v rebar3 >/dev/null 2>&1; then
     say "[skip] rebar3 not found on PATH"
@@ -100,7 +101,7 @@ fi
 
 # ---------- Python ----------
 
-section "2/3: Python correct (elevator_bench.py)"
+section "2/4: Python correct (elevator_bench.py)"
 say ""
 if ! command -v python3 >/dev/null 2>&1; then
     say "[skip] python3 not installed"
@@ -111,7 +112,7 @@ fi
 
 # ---------- Rust ----------
 
-section "3/3: Rust correct (elevator_bench.rs)"
+section "3/4: Rust correct (elevator_bench.rs)"
 say ""
 if ! command -v rustc >/dev/null 2>&1; then
     say "[skip] rustc not installed"
@@ -120,17 +121,15 @@ else
     RS_RATE="$(extract_rate "$RESULT_FILE")"
 fi
 
-# ---------- OCaml (skipped) ----------
+# ---------- OCaml ----------
 
-section "OCaml correct"
+section "4/4: OCaml correct (elevator_bench.ml)"
 say ""
-if command -v ocamlfind >/dev/null 2>&1; then
-    say "[skip] OCaml bench not implemented yet."
-    say "       The comparison reference exists at"
-    say "       samples/hos/elevator/comparison/elevator_correct.ml"
-    say "       but the bench harness has not been ported."
+if ! command -v ocamlfind >/dev/null 2>&1; then
+    say "[skip] ocamlfind not installed"
 else
-    say "[skip] ocamlfind not installed."
+    capture bash "$HERE/run_ocaml.sh" "$N"
+    ML_RATE="$(extract_rate "$RESULT_FILE")"
 fi
 
 # ---------- Table ----------
@@ -180,10 +179,12 @@ fmt_ratio() {
 say ""
 say "  Language         Events/sec    Ratio vs Python"
 say "  ---------------- ------------- ---------------"
-printf_row "Erlang HOS" "$(fmt_int "$BEAM_RATE")" \
-           "$(fmt_ratio "$BEAM_RATE" "$PY_RATE")"
 printf_row "Rust correct" "$(fmt_int "$RS_RATE")" \
            "$(fmt_ratio "$RS_RATE" "$PY_RATE")"
+printf_row "OCaml correct" "$(fmt_int "$ML_RATE")" \
+           "$(fmt_ratio "$ML_RATE" "$PY_RATE")"
+printf_row "Erlang HOS" "$(fmt_int "$BEAM_RATE")" \
+           "$(fmt_ratio "$BEAM_RATE" "$PY_RATE")"
 printf_row "Python correct" "$(fmt_int "$PY_RATE")" \
            "$(fmt_ratio "$PY_RATE" "$PY_RATE")"
 say ""
