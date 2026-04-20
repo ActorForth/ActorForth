@@ -16,6 +16,8 @@
 
 -module(af_r0_compiler).
 
+-include("af_type.hrl").
+
 -export([compile_tokens/1]).
 
 %%% === Public API ===
@@ -465,31 +467,48 @@ parse_product_type([NameTok | Rest]) ->
     TypeName = binary_to_atom(maps:get(value, NameTok), utf8),
     Constructor = string:lowercase(binary_to_list(maps:get(value, NameTok))),
     {Fields, Rest1} = parse_type_fields(Rest, []),
-    FieldNames = [F || {F, _} <- Fields],
-    FieldAtoms = [list_to_atom(binary_to_list(F)) || F <- FieldNames],
     FieldTypes = [T || {_, T} <- Fields],
-    %% Generate constructor word
+    NumFields = length(Fields),
+    %% Flat-tuple layout: field i (0-indexed) lives at tuple position
+    %% i+2 (position 1 is the type atom). Resolve field positions at
+    %% compile time so Ring 0 / Ring 1 opcodes carry integers, not
+    %% field names.
     SigIn = [binary_to_atom(T, utf8) || T <- lists:reverse(FieldTypes)],
     ConstructorDef = {Constructor, SigIn, [TypeName],
-                      [{product_new, TypeName, FieldAtoms}]},
-    %% Generate getter words (non-destructive)
-    Getters = [begin
+                      [{product_new, TypeName, NumFields}]},
+    {Getters, _} = lists:mapfoldl(fun({F, T}, Pos) ->
         FName = binary_to_list(F),
-        FAtom = list_to_atom(FName),
         FType = binary_to_atom(T, utf8),
-        {FName, [TypeName], [FType, TypeName],
-         [{product_get, FAtom}]}
-    end || {F, T} <- Fields],
-    %% Generate setter words (field! : NewVal Instance -> Instance)
-    Setters = [begin
+        Def = {FName, [TypeName], [FType, TypeName],
+               [{product_get, Pos}]},
+        {Def, Pos + 1}
+    end, 2, Fields),
+    {Setters, _} = lists:mapfoldl(fun({F, T}, Pos) ->
         FName = binary_to_list(F) ++ "!",
-        FAtom = list_to_atom(binary_to_list(F)),
         FType = binary_to_atom(T, utf8),
-        %% TOS-first: FType on TOS (new value), TypeName below (instance)
-        {FName, [FType, TypeName], [TypeName],
-         [{product_set, FAtom}]}
-    end || {F, T} <- Fields],
+        Def = {FName, [FType, TypeName], [TypeName],
+               [{product_set, Pos}]},
+        {Def, Pos + 1}
+    end, 2, Fields),
+    %% Register the type in the ETS registry so downstream stages
+    %% (Ring 1 head-pattern generation in particular) can recognise
+    %% it as a product type. Without this step the self-hosted
+    %% pipeline emits a 2-tuple pattern against a flat-tuple
+    %% instance and the generated BEAM module fails to match its
+    %% own product arguments.
+    register_product_type_meta(TypeName, Fields),
     {lists:reverse([ConstructorDef] ++ Getters ++ Setters), Rest1}.
+
+register_product_type_meta(TypeName, Fields) ->
+    FieldSpecs = [
+        {list_to_atom(binary_to_list(F)),
+         binary_to_atom(T, utf8)}
+        || {F, T} <- Fields
+    ],
+    af_type:init(),
+    af_type:register_type(
+        #af_type{name = TypeName, fields = FieldSpecs}),
+    ok.
 
 parse_type_fields([], Acc) -> {lists:reverse(Acc), []};
 parse_type_fields([Token | Rest], Acc) ->

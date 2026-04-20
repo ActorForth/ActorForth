@@ -1,6 +1,7 @@
 -module(af_ring1_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("af_type.hrl").
 
 %%% === Interpreted Mode Tests ===
 
@@ -208,54 +209,65 @@ multi_clause_native_test() ->
 
 %%% === Native Product Type Tests ===
 
+%% Register 'Point' in the type registry so Ring 1's
+%% is_product_type recognises it when generating head patterns.
+%% In production, af_r0_compiler registers types during compilation.
+register_point() ->
+    af_type:init(),
+    af_type:register_type(#af_type{
+        name = 'Point', fields = [{x, 'Int'}, {y, 'Int'}]}).
+
 product_new_native_test() ->
+    register_point(),
+    %% Flat-tuple layout: {TypeName, V1, V2}. Opcode takes field count.
     WordDefs = [
-        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', [x, y]}]}
+        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', 2}]}
     ],
     {ok, r1n_prod_new} = af_ring1:compile_module(r1n_prod_new, WordDefs, [{mode, native}]),
-    %% Stack is TOS-first: [y=20, x=10] — product_new pops N items, reverses for fields
-    [{'Point', Fields}] = r1n_prod_new:'make-pt'([{'Int', 20}, {'Int', 10}]),
-    ?assertEqual({'Int', 10}, maps:get(x, Fields)),
-    ?assertEqual({'Int', 20}, maps:get(y, Fields)).
+    [Instance] = r1n_prod_new:'make-pt'([{'Int', 20}, {'Int', 10}]),
+    ?assertEqual('Point', element(1, Instance)),
+    ?assertEqual({'Int', 10}, element(2, Instance)),
+    ?assertEqual({'Int', 20}, element(3, Instance)).
 
 product_get_native_test() ->
+    register_point(),
+    %% Pos 2 -> field x (first declared), Pos 3 -> y.
     WordDefs = [
-        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', [x, y]}]},
-        {"get-x", ['Point'], ['Int', 'Point'], [{product_get, x}]}
+        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', 2}]},
+        {"get-x", ['Point'], ['Int', 'Point'], [{product_get, 2}]}
     ],
     {ok, r1n_prod_get} = af_ring1:compile_module(r1n_prod_get, WordDefs, [{mode, native}]),
-    [{'Point', Fields}] = r1n_prod_get:'make-pt'([{'Int', 20}, {'Int', 10}]),
-    %% get-x is non-destructive: pushes field value on top, keeps instance
-    Result = r1n_prod_get:'get-x'([{'Point', Fields}]),
-    [{'Int', 10}, {'Point', _}] = Result.
+    [Instance] = r1n_prod_get:'make-pt'([{'Int', 20}, {'Int', 10}]),
+    Result = r1n_prod_get:'get-x'([Instance]),
+    [{'Int', 10}, Instance] = Result.
 
 product_set_native_test() ->
+    register_point(),
     WordDefs = [
-        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', [x, y]}]},
-        {"set-x", ['Int', 'Point'], ['Point'], [{product_set, x}]}
+        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', 2}]},
+        {"set-x", ['Int', 'Point'], ['Point'], [{product_set, 2}]}
     ],
     {ok, r1n_prod_set} = af_ring1:compile_module(r1n_prod_set, WordDefs, [{mode, native}]),
-    [{'Point', Fields}] = r1n_prod_set:'make-pt'([{'Int', 20}, {'Int', 10}]),
-    %% set-x: [NewVal, Instance] -> [UpdatedInstance]
-    [{'Point', NewFields}] = r1n_prod_set:'set-x'([{'Int', 99}, {'Point', Fields}]),
-    ?assertEqual({'Int', 99}, maps:get(x, NewFields)),
-    %% y should be unchanged
-    ?assertEqual({'Int', 20}, maps:get(y, NewFields)).
+    [Instance] = r1n_prod_set:'make-pt'([{'Int', 20}, {'Int', 10}]),
+    [Updated] = r1n_prod_set:'set-x'([{'Int', 99}, Instance]),
+    ?assertEqual('Point', element(1, Updated)),
+    ?assertEqual({'Int', 99}, element(2, Updated)),
+    ?assertEqual({'Int', 20}, element(3, Updated)).
 
 product_round_trip_native_test() ->
-    %% Construct, get, set, get — full round trip
+    register_point(),
     WordDefs = [
-        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', [x, y]}]},
-        {"get-x", ['Point'], ['Int', 'Point'], [{product_get, x}]},
-        {"get-y", ['Point'], ['Int', 'Point'], [{product_get, y}]},
-        {"set-x", ['Int', 'Point'], ['Point'], [{product_set, x}]},
-        {"set-y", ['Int', 'Point'], ['Point'], [{product_set, y}]}
+        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', 2}]},
+        {"get-x", ['Point'], ['Int', 'Point'], [{product_get, 2}]},
+        {"get-y", ['Point'], ['Int', 'Point'], [{product_get, 3}]},
+        {"set-x", ['Int', 'Point'], ['Point'], [{product_set, 2}]},
+        {"set-y", ['Int', 'Point'], ['Point'], [{product_set, 3}]}
     ],
     {ok, r1n_prod_rt} = af_ring1:compile_module(r1n_prod_rt, WordDefs, [{mode, native}]),
-    [{'Point', F0}] = r1n_prod_rt:'make-pt'([{'Int', 20}, {'Int', 10}]),
-    [{'Point', F1}] = r1n_prod_rt:'set-x'([{'Int', 50}, {'Point', F0}]),
-    [{'Int', 50}, {'Point', _}] = r1n_prod_rt:'get-x'([{'Point', F1}]),
-    [{'Int', 20}, {'Point', _}] = r1n_prod_rt:'get-y'([{'Point', F1}]).
+    [I0] = r1n_prod_rt:'make-pt'([{'Int', 20}, {'Int', 10}]),
+    [I1] = r1n_prod_rt:'set-x'([{'Int', 50}, I0]),
+    [{'Int', 50}, I1] = r1n_prod_rt:'get-x'([I1]),
+    [{'Int', 20}, I1] = r1n_prod_rt:'get-y'([I1]).
 
 %%% === Native Map Operation Tests ===
 
@@ -736,29 +748,15 @@ combined_arith_assert_native_test() ->
     ?assertEqual([], r1n_comb:'check-double'([{'Int', 5}])).
 
 combined_map_product_native_test() ->
-    %% Use map and product ops together
+    register_point(),
     WordDefs = [
-        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', [x, y]}]},
+        {"make-pt", ['Int', 'Int'], ['Point'], [{product_new, 'Point', 2}]},
         {"wrap", ['Point'], ['Map'],
          [map_new, {lit, {'String', <<"point">>}}, swap,
-          %% Now: [Point, "point", Map] — need to rearrange for map_put
-          %% map_put expects: [Value, Key, Map]
-          %% We have Point on top, need to get it as Value
-          %% Stack: Point, "point", Map
-          to_r, swap, from_r,
-          %% Stack: "point", Map, Point... wait, let's be explicit
-          %% Actually to_r puts Point on RS, swap flips "point" and Map,
-          %% from_r brings Point back. Stack: Point, Map, "point"
-          %% We need: Value, Key, Map = Point, "point", Map
-          %% So swap last two: Point, "point", Map ... that's not right
-          %% Let me just use a different approach
           map_put
          ]}
     ],
     {ok, r1n_mp} = af_ring1:compile_module(r1n_mp, WordDefs, [{mode, native}]),
-    [{'Point', Pt}] = r1n_mp:'make-pt'([{'Int', 20}, {'Int', 10}]),
-    %% map_put expects [Value, Key, {Map, M}] — so we have:
-    %% After make-pt: [Point]
-    %% After wrap body: map_new pushes Map, lit pushes "point", swap flips...
-    %% The actual stack manipulation is complex. Let's just verify make-pt works.
-    ?assertEqual({'Int', 10}, maps:get(x, Pt)).
+    [Pt] = r1n_mp:'make-pt'([{'Int', 20}, {'Int', 10}]),
+    ?assertEqual('Point', element(1, Pt)),
+    ?assertEqual({'Int', 10}, element(2, Pt)).

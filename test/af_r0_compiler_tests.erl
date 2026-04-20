@@ -188,7 +188,7 @@ product_constructor_sig_test() ->
     {_, SigIn, SigOut, Body} = lists:keyfind("point", 1, Defs),
     ?assertEqual(['Int', 'Int'], SigIn),
     ?assertEqual(['Point'], SigOut),
-    ?assertMatch([{product_new, 'Point', [x, y]}], Body).
+    ?assertMatch([{product_new, 'Point', 2}], Body).
 
 %%% === Value Constraint Inference ===
 
@@ -573,7 +573,7 @@ product_type_three_fields_test() ->
     {_, CtorSigIn, CtorSigOut, CtorBody} = lists:keyfind("color", 1, Defs),
     ?assertEqual(['Int', 'Int', 'Int'], CtorSigIn),
     ?assertEqual(['Color'], CtorSigOut),
-    ?assertMatch([{product_new, 'Color', [r, g, b]}], CtorBody).
+    ?assertMatch([{product_new, 'Color', 3}], CtorBody).
 
 product_getter_sig_test() ->
     Src = <<"type Point\n  x Int\n  y Int\n.">>,
@@ -583,7 +583,7 @@ product_getter_sig_test() ->
     {_, GetSigIn, GetSigOut, GetBody} = lists:keyfind("x", 1, Defs),
     ?assertEqual(['Point'], GetSigIn),
     ?assertEqual(['Int', 'Point'], GetSigOut),
-    ?assertEqual([{product_get, x}], GetBody).
+    ?assertEqual([{product_get, 2}], GetBody).
 
 product_setter_sig_test() ->
     Src = <<"type Point\n  x Int\n  y Int\n.">>,
@@ -593,7 +593,7 @@ product_setter_sig_test() ->
     {_, SetSigIn, SetSigOut, SetBody} = lists:keyfind("x!", 1, Defs),
     ?assertEqual(['Int', 'Point'], SetSigIn),
     ?assertEqual(['Point'], SetSigOut),
-    ?assertEqual([{product_set, x}], SetBody).
+    ?assertEqual([{product_set, 2}], SetBody).
 
 %%% === Load Directive ===
 

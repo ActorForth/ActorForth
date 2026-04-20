@@ -973,26 +973,26 @@ is_ok_false_test() ->
 %%% === Product Types ===
 
 product_new_test() ->
-    %% Stack: [y_val(TOS), x_val] — last field on top, first field deepest
+    %% Flat tuple layout: {TypeName, V1, V2}. Stack has last field on top.
     S0 = af_ring0:set_ds([{'Int', 20}, {'Int', 10}], af_ring0:new()),
-    S1 = af_ring0:exec({product_new, 'Point', [x, y]}, S0),
-    [{'Point', Fields}] = af_ring0:get_ds(S1),
-    ?assertEqual({'Int', 10}, maps:get(x, Fields)),
-    ?assertEqual({'Int', 20}, maps:get(y, Fields)).
+    S1 = af_ring0:exec({product_new, 'Point', 2}, S0),
+    [Instance] = af_ring0:get_ds(S1),
+    ?assertEqual('Point', element(1, Instance)),
+    ?assertEqual({'Int', 10}, element(2, Instance)),
+    ?assertEqual({'Int', 20}, element(3, Instance)).
 
 product_get_test() ->
-    Fields = #{x => {'Int', 10}, y => {'Int', 20}},
-    S0 = af_ring0:set_ds([{'Point', Fields}], af_ring0:new()),
-    S1 = af_ring0:exec({product_get, x}, S0),
-    %% Non-destructive: value on top, instance below
-    [{'Int', 10}, {'Point', _}] = af_ring0:get_ds(S1).
+    %% Pos 2 = first declared field (x).
+    Instance = {'Point', {'Int', 10}, {'Int', 20}},
+    S0 = af_ring0:set_ds([Instance], af_ring0:new()),
+    S1 = af_ring0:exec({product_get, 2}, S0),
+    [{'Int', 10}, Instance] = af_ring0:get_ds(S1).
 
 product_set_test() ->
-    Fields = #{x => {'Int', 10}, y => {'Int', 20}},
-    S0 = af_ring0:set_ds([{'Int', 99}, {'Point', Fields}], af_ring0:new()),
-    S1 = af_ring0:exec({product_set, x}, S0),
-    [{'Point', NewFields}] = af_ring0:get_ds(S1),
-    ?assertEqual({'Int', 99}, maps:get(x, NewFields)).
+    Instance = {'Point', {'Int', 10}, {'Int', 20}},
+    S0 = af_ring0:set_ds([{'Int', 99}, Instance], af_ring0:new()),
+    S1 = af_ring0:exec({product_set, 2}, S0),
+    [{'Point', {'Int', 99}, {'Int', 20}}] = af_ring0:get_ds(S1).
 
 %%% === Logic Ops ===
 
@@ -1192,13 +1192,15 @@ map_get_or_not_found_test() ->
     S1 = af_ring0:exec(map_get_or, S0),
     ?assertEqual([{'Int', 0}], af_ring0:get_ds(S1)).
 
-%% product_fields
+%% product_fields: field names are now static metadata the compiler
+%% bakes into the opcode (or, in the legacy bareword form, resolved
+%% via the type registry).
 product_fields_test() ->
-    FieldMap = #{x => {'Int', 10}, y => {'Int', 20}},
-    S0 = af_ring0:set_ds([{'Point', FieldMap}], af_ring0:new()),
-    S1 = af_ring0:exec(product_fields, S0),
-    [{'List', Fields}, {'Point', _}] = af_ring0:get_ds(S1),
-    ?assertEqual(lists:sort([x, y]), lists:sort(Fields)).
+    Instance = {'Point', {'Int', 10}, {'Int', 20}},
+    S0 = af_ring0:set_ds([Instance], af_ring0:new()),
+    S1 = af_ring0:exec({product_fields, [x, y]}, S0),
+    [{'List', Fields}, Instance] = af_ring0:get_ds(S1),
+    ?assertEqual([x, y], Fields).
 
 %% print_stack
 print_stack_test() ->

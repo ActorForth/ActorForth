@@ -441,7 +441,8 @@ selfhosted_compile_test_() ->
             Source = "type Point\n  x Int\n  y Int\n.\n"
                      ": get-x Point -> Int Point ; x .",
             {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_prod"),
-            Instance = {'Point', #{x => {'Int', 3}, y => {'Int', 4}}},
+            %% Flat tuple: {'Point', x_val, y_val}.
+            Instance = {'Point', {'Int', 3}, {'Int', 4}},
             Result = Mod:'get-x'([Instance]),
             ?assertEqual([{'Int', 3}, Instance], Result)
         end},
@@ -450,18 +451,20 @@ selfhosted_compile_test_() ->
             Source = "type Counter\n  count Int\n.\n"
                      ": set-count Int Counter -> Counter ; swap count! .",
             {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_set"),
-            Instance = {'Counter', #{count => {'Int', 0}}},
+            Instance = {'Counter', {'Int', 0}},
             %% Rightmost in source = TOS: Counter is TOS, Int below
-            [{'Counter', Fields}] = Mod:'set-count'([Instance, {'Int', 99}]),
-            ?assertEqual({'Int', 99}, maps:get(count, Fields))
+            [Updated] = Mod:'set-count'([Instance, {'Int', 99}]),
+            ?assertEqual('Counter', element(1, Updated)),
+            ?assertEqual({'Int', 99}, element(2, Updated))
         end},
 
         {"selfhosted product constructor", fun() ->
             Source = "type Counter\n  count Int\n.\n"
                      ": make-counter Int -> Counter ; counter .",
             {ok, Mod} = af_ring2:compile_selfhosted(Source, "test", "sh_ctor"),
-            [{'Counter', Fields}] = Mod:'make-counter'([{'Int', 0}]),
-            ?assertEqual({'Int', 0}, maps:get(count, Fields))
+            [Instance] = Mod:'make-counter'([{'Int', 0}]),
+            ?assertEqual('Counter', element(1, Instance)),
+            ?assertEqual({'Int', 0}, element(2, Instance))
         end},
 
         {"selfhosted sub-clause fib", fun() ->

@@ -14,7 +14,8 @@
     new/0, run/2, exec/2,
     get_ds/1, get_rs/1, get_types/1, get_words/1,
     get_output/1, set_input/2, set_ds/2, set_words/2, set_types/2,
-    compile_interp_module/1  %% xcall-able: compile defs to interpreted BEAM
+    compile_interp_module/1,  %% xcall-able: compile defs to interpreted BEAM
+    field_pos/2  %% called from Ring 1 native code for legacy product ops
 ]).
 
 -record(r0, {
@@ -547,25 +548,51 @@ exec(unwrap_error, #r0{ds = [{'Tuple', {error, Val}} | Rest]} = S) ->
     S#r0{ds = [auto_tag(Val) | Rest]};
 
 %%% === Product Type Primitives (4) ===
-%%% Product types: {TypeName, #{field => {Type, Val}}}
+%%% Instances use the flat-tuple layout that matches BEAM records:
+%%%   Instance = {TypeName, V1, V2, ..., Vn}
+%%% where field i (0-indexed) lives at tuple position i+2 (position
+%%% 1 is the type atom). Opcodes carry positions, not field names,
+%%% so each access is a single element/setelement call.
+%%%
+%%% Legacy opcode shapes (field-name forms emitted by bootstrap .a4
+%%% files pre-dating the conversion) are still accepted and resolve
+%%% field->position via the type registry.
 
-exec({product_new, TypeName, Fields}, #r0{ds = DS} = S) ->
-    %% Pop field values from stack (TOS = last field in source order)
-    %% Fields is source order [src, pos, len, ...], stack has last field on top
-    %% So reverse FieldVals to align with Fields
-    {FieldVals, Rest} = take_n(length(Fields), DS),
-    FieldMap = maps:from_list(lists:zip(Fields, lists:reverse(FieldVals))),
-    S#r0{ds = [{TypeName, FieldMap} | Rest]};
+exec({product_new, TypeName, NumFields}, #r0{ds = DS} = S)
+        when is_integer(NumFields) ->
+    {FieldVals, Rest} = take_n(NumFields, DS),
+    Ordered = lists:reverse(FieldVals),
+    Instance = list_to_tuple([TypeName | Ordered]),
+    S#r0{ds = [Instance | Rest]};
+exec({product_new, TypeName, FieldsList}, S) when is_list(FieldsList) ->
+    exec({product_new, TypeName, length(FieldsList)}, S);
 
-exec({product_get, Field}, #r0{ds = [{_TypeName, FieldMap} | _] = DS} = S) ->
-    Val = maps:get(Field, FieldMap),
-    S#r0{ds = [Val | DS]};  %% Non-destructive: instance stays on stack
+exec({product_get, Pos}, #r0{ds = [Instance | _] = DS} = S)
+        when is_integer(Pos) ->
+    Val = element(Pos, Instance),
+    S#r0{ds = [Val | DS]};
+exec({product_get, Field}, #r0{ds = [Instance | _]} = S)
+        when is_atom(Field) ->
+    Pos = field_pos(element(1, Instance), Field),
+    exec({product_get, Pos}, S);
 
-exec({product_set, Field}, #r0{ds = [Val, {TypeName, FieldMap} | Rest]} = S) ->
-    S#r0{ds = [{TypeName, FieldMap#{Field => Val}} | Rest]};
+exec({product_set, Pos}, #r0{ds = [Val, Instance | Rest]} = S)
+        when is_integer(Pos) ->
+    S#r0{ds = [setelement(Pos, Instance, Val) | Rest]};
+exec({product_set, Field}, #r0{ds = [_Val, Instance | _]} = S)
+        when is_atom(Field) ->
+    Pos = field_pos(element(1, Instance), Field),
+    exec({product_set, Pos}, S);
 
-exec(product_fields, #r0{ds = [{_TypeName, FieldMap} | _] = DS} = S) ->
-    S#r0{ds = [{'List', maps:keys(FieldMap)} | DS]};
+exec({product_fields, FieldNames}, #r0{ds = DS} = S) ->
+    S#r0{ds = [{'List', FieldNames} | DS]};
+exec(product_fields, #r0{ds = [Instance | _] = DS} = S) ->
+    Names = case catch af_type:get_type(element(1, Instance)) of
+        {ok, {af_type, _, _, _, Fields}} when Fields =/= [] ->
+            [Name || {Name, _} <- Fields];
+        _ -> []
+    end,
+    S#r0{ds = [{'List', Names} | DS]};
 
 %%% === I/O + Debug Primitives (4) ===
 
@@ -729,6 +756,23 @@ take_n(0, Stack) -> {[], Stack};
 take_n(N, [H | Rest]) ->
     {Items, Remaining} = take_n(N - 1, Rest),
     {[H | Items], Remaining}.
+
+%% Resolve field name to 1-based tuple position via the type
+%% registry. Only used for legacy field-name opcodes; the new
+%% format embeds the position directly.
+field_pos(TypeName, Field) ->
+    case catch af_type:get_type(TypeName) of
+        {ok, {af_type, _, _, _, Fields}} when is_list(Fields) ->
+            field_pos_loop(Field, Fields, 2);
+        _ ->
+            erlang:error({product_field_lookup_failed, TypeName, Field})
+    end.
+
+field_pos_loop(_Field, [], _Pos) ->
+    erlang:error(product_field_not_found);
+field_pos_loop(Field, [{Field, _} | _], Pos) -> Pos;
+field_pos_loop(Field, [_ | Rest], Pos) ->
+    field_pos_loop(Field, Rest, Pos + 1).
 
 %% Check if stack matches a type signature (TOS-first).
 %% SigIn entries: atom (type match) | {Type, Value} (value constraint) | 'Any'

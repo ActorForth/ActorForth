@@ -14,6 +14,8 @@
 
 -module(af_ring1).
 
+-include("af_type.hrl").
+
 -export([
     compile_module/2,
     compile_module/3,
@@ -332,46 +334,84 @@ translate_native(tail, StackExpr, L, _WM, Idx) ->
     ]},
     {inline, Expr, Idx+2};
 
-%% Product type operations
-translate_native({product_new, TypeName, Fields}, StackExpr, L, _WM, Idx) ->
-    %% Pop N values from stack, build #{field => value} map
-    N = length(Fields),
-    {VarList, Idx1} = make_var_list(N, L, Idx),
+%% Product type operations. Flat-tuple layout:
+%%   Instance = {TypeName, V1, V2, ..., Vn}
+%% matching the BEAM parasitic path in af_type_product. Opcodes
+%% carry positions (integers >= 2); legacy field-name shapes are
+%% resolved via the type registry.
+
+translate_native({product_new, TypeName, NumFields}, StackExpr, L, _WM, Idx)
+        when is_integer(NumFields) ->
+    {VarList, Idx1} = make_var_list(NumFields, L, Idx),
     R = var(L, Idx1),
-    %% Build pattern to match N items from stack
     MatchPat = lists:foldr(fun(V, Acc) -> {cons, L, V, Acc} end, R, VarList),
-    %% Build map from fields and vars (fields are in order, stack has them reversed)
     RevVars = lists:reverse(VarList),
-    MapPairs = lists:zipwith(fun(Field, V) ->
-        {map_field_assoc, L, {atom, L, Field}, V}
-    end, Fields, RevVars),
-    MapExpr = {map, L, MapPairs},
+    TupleElems = [{atom, L, TypeName} | RevVars],
     Expr = {block, L, [
         {match, L, MatchPat, StackExpr},
-        {cons, L, {tuple, L, [{atom, L, TypeName}, MapExpr]}, R}
+        {cons, L, {tuple, L, TupleElems}, R}
     ]},
     {inline, Expr, Idx1 + 1};
+translate_native({product_new, TypeName, FieldList}, StackExpr, L, WM, Idx)
+        when is_list(FieldList) ->
+    translate_native({product_new, TypeName, length(FieldList)},
+                     StackExpr, L, WM, Idx);
 
-translate_native({product_get, Field}, StackExpr, L, _WM, Idx) ->
-    %% Non-destructive: peek at TOS product, push field value on top
-    MapVar = var(L, Idx), Val = var(L, Idx+1),
+translate_native({product_get, Pos}, StackExpr, L, _WM, Idx)
+        when is_integer(Pos) ->
+    InstVar = var(L, Idx), Val = var(L, Idx+1),
     Expr = {block, L, [
-        {match, L, {cons, L, {tuple, L, [{var, L, '_'}, MapVar]}, {var, L, '_'}}, StackExpr},
-        {match, L, Val, rcall(L, maps, get, [{atom, L, Field}, MapVar])},
+        {match, L, {cons, L, InstVar, {var, L, '_'}}, StackExpr},
+        {match, L, Val, rcall(L, erlang, element,
+            [{integer, L, Pos}, InstVar])},
         {cons, L, Val, StackExpr}
     ]},
     {inline, Expr, Idx+2};
-
-translate_native({product_set, Field}, StackExpr, L, _WM, Idx) ->
-    %% Pop value and product instance, update field, push updated instance
-    NewVal = var(L, Idx), TypeVar = var(L, Idx+1), MapVar = var(L, Idx+2), R = var(L, Idx+3),
+translate_native({product_get, Field}, StackExpr, L, _WM, Idx)
+        when is_atom(Field) ->
+    %% Legacy field-name form. Emit a runtime af_ring0:field_pos
+    %% lookup. Slower than the position form but preserves the
+    %% bootstrap .a4 path.
+    InstVar = var(L, Idx), Val = var(L, Idx+1), PosVar = var(L, Idx+2),
     Expr = {block, L, [
-        {match, L, {cons, L, NewVal,
-                    {cons, L, {tuple, L, [TypeVar, MapVar]}, R}}, StackExpr},
-        {cons, L, {tuple, L, [TypeVar,
-            rcall(L, maps, put, [{atom, L, Field}, NewVal, MapVar])]}, R}
+        {match, L, {cons, L, InstVar, {var, L, '_'}}, StackExpr},
+        {match, L, PosVar, rcall(L, af_ring0, field_pos,
+            [rcall(L, erlang, element, [{integer, L, 1}, InstVar]),
+             {atom, L, Field}])},
+        {match, L, Val, rcall(L, erlang, element, [PosVar, InstVar])},
+        {cons, L, Val, StackExpr}
+    ]},
+    {inline, Expr, Idx+3};
+
+translate_native({product_set, Pos}, StackExpr, L, _WM, Idx)
+        when is_integer(Pos) ->
+    NewVal = var(L, Idx), InstVar = var(L, Idx+1), R = var(L, Idx+2),
+    Expr = {block, L, [
+        {match, L, {cons, L, NewVal, {cons, L, InstVar, R}}, StackExpr},
+        {cons, L, rcall(L, erlang, setelement,
+            [{integer, L, Pos}, InstVar, NewVal]), R}
+    ]},
+    {inline, Expr, Idx+3};
+translate_native({product_set, Field}, StackExpr, L, _WM, Idx)
+        when is_atom(Field) ->
+    NewVal = var(L, Idx), InstVar = var(L, Idx+1),
+    R = var(L, Idx+2), PosVar = var(L, Idx+3),
+    Expr = {block, L, [
+        {match, L, {cons, L, NewVal, {cons, L, InstVar, R}}, StackExpr},
+        {match, L, PosVar, rcall(L, af_ring0, field_pos,
+            [rcall(L, erlang, element, [{integer, L, 1}, InstVar]),
+             {atom, L, Field}])},
+        {cons, L, rcall(L, erlang, setelement,
+            [PosVar, InstVar, NewVal]), R}
     ]},
     {inline, Expr, Idx+4};
+
+translate_native({product_fields, FieldNames}, StackExpr, L, _WM, Idx) ->
+    ListExpr = lists:foldr(
+        fun(A, Acc) -> {cons, L, {atom, L, A}, Acc} end,
+        {nil, L}, FieldNames),
+    Tagged = {tuple, L, [{atom, L, 'List'}, ListExpr]},
+    {inline, {cons, L, Tagged, StackExpr}, Idx};
 
 %% Map operations
 translate_native(map_new, StackExpr, L, _WM, Idx) ->
@@ -562,13 +602,27 @@ build_head_pattern(SigIn, L) ->
             Type when is_atom(Type), Type =:= 'Any' ->
                 {var, L, '_'};
             Type when is_atom(Type) ->
-                {tuple, L, [{atom, L, Type}, {var, L, '_'}]}
+                case is_product_type(Type) of
+                    true ->
+                        %% Flat-tuple product instances vary in arity.
+                        %% Bind a bare variable; the body destructures
+                        %% as needed via element/setelement.
+                        {var, L, '_'};
+                    false ->
+                        {tuple, L, [{atom, L, Type}, {var, L, '_'}]}
+                end
         end
     end, SigIn),
     HeadPat = lists:foldr(fun(Pat, Acc) ->
         {cons, L, Pat, Acc}
     end, RestVar, Pats),
     {HeadPat, RestVar}.
+
+is_product_type(TypeName) ->
+    case catch af_type:get_type(TypeName) of
+        {ok, #af_type{fields = Fields}} when Fields =/= [] -> true;
+        _ -> false
+    end.
 
 %%% === Helpers ===
 
