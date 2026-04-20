@@ -113,6 +113,18 @@ init() ->
         impl = fun op_send/1
     }),
 
+    %% send-after: ( Any Int Actor -- ) schedule a message delivery
+    %% to an actor's mailbox after N milliseconds. Same message
+    %% envelope as send. Non-blocking; the mailbox of the scheduling
+    %% process stays open, which is what HOS timer preemption relies
+    %% on.
+    af_type:add_op('Actor', #operation{
+        name = "send-after",
+        sig_in = ['Actor', 'Int', 'Any'],
+        sig_out = [],
+        impl = fun op_send_after/1
+    }),
+
     %% receive: ( -- Any ) blocking receive from mailbox
     af_type:add_op('Any', #operation{
         name = "receive",
@@ -658,6 +670,14 @@ op_spawn(Cont) ->
 op_send(Cont) ->
     [{'Actor', #{pid := Pid}}, Value | Rest] = Cont#continuation.data_stack,
     Pid ! {af_msg, Value},
+    Cont#continuation{data_stack = Rest}.
+
+%%% --- send-after: schedule a mailbox delivery ---
+
+op_send_after(Cont) ->
+    [{'Actor', #{pid := Pid}}, {'Int', Ms}, Value | Rest]
+        = Cont#continuation.data_stack,
+    erlang:send_after(Ms, Pid, {af_msg, Value}),
     Cont#continuation{data_stack = Rest}.
 
 %%% --- receive: blocking receive from mailbox ---

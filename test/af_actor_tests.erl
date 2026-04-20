@@ -215,6 +215,69 @@ self_test_() ->
         end} end
     ]}.
 
+%% --- send-after: scheduled mailbox delivery ---
+
+send_after_test_() ->
+    {foreach, fun setup/0, fun(_) -> ok end, [
+        fun(_) -> {"send-after delivers a message after the given delay", fun() ->
+            Self = self(),
+            %% Spawn a tiny receiver that forwards whatever it gets.
+            Pid = spawn(fun() ->
+                receive {af_msg, V} -> Self ! {got, V} end
+            end),
+            ActorVal = #{pid => Pid, type_name => undefined, vocab => #{}},
+            C0 = #continuation{data_stack =
+                [{'Actor', ActorVal}, {'Int', 50}, {'Int', 42}]},
+            Token = #token{value = "send-after"},
+            C1 = af_interpreter:interpret_token(Token, C0),
+            %% Stack consumed.
+            ?assertEqual([], C1#continuation.data_stack),
+            %% Message should NOT arrive within 5ms.
+            receive
+                {got, _} -> ?assert(false)
+            after 5 -> ok
+            end,
+            %% But should arrive within 500ms.
+            receive
+                {got, {'Int', 42}} -> ok
+            after 500 ->
+                ?assert(false)
+            end
+        end} end,
+        fun(_) -> {"send-after does not block the scheduler", fun() ->
+            %% Schedule a send 10s out; verify the call returns fast.
+            Pid = spawn(fun() ->
+                receive {af_msg, _} -> ok after 15000 -> ok end
+            end),
+            ActorVal = #{pid => Pid, type_name => undefined, vocab => #{}},
+            C0 = #continuation{data_stack =
+                [{'Actor', ActorVal}, {'Int', 10000}, {'Int', 1}]},
+            Token = #token{value = "send-after"},
+            T0 = erlang:monotonic_time(millisecond),
+            C1 = af_interpreter:interpret_token(Token, C0),
+            T1 = erlang:monotonic_time(millisecond),
+            ?assertEqual([], C1#continuation.data_stack),
+            %% The call itself should be well under 100ms.
+            ?assert((T1 - T0) < 100),
+            exit(Pid, kill)
+        end} end,
+        fun(_) -> {"self + send-after schedules a message to the caller", fun() ->
+            %% self send-after should land a message in the caller's
+            %% mailbox after the delay. This is the HOS timer pattern.
+            %% Stack order: Msg below, Ms below, Actor on TOS.
+            C0 = eval("99 40 self",
+                      af_interpreter:new_continuation()),
+            %% Stack is now [Actor, 40, 99] with Actor on TOS.
+            C1 = eval("send-after", C0),
+            ?assertEqual([], C1#continuation.data_stack),
+            receive
+                {af_msg, {'Int', 99}} -> ok
+            after 500 ->
+                ?assert(false)
+            end
+        end} end
+    ]}.
+
 %% --- Milestone 7.3: spawn / send / receive ---
 
 spawn_send_receive_test_() ->
