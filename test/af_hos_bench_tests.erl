@@ -78,7 +78,10 @@ wait_for_car_growth(CarPid, Before, Target, Deadline, _Last) ->
             case Now >= Deadline of
                 true -> {stalled, Current};
                 false ->
-                    timer:sleep(1),
+                    %% Yield rather than sleep: timer:sleep(1) adds
+                    %% ~1 ms per cycle to the measurement even when
+                    %% the cycle itself is fast.
+                    erlang:yield(),
                     wait_for_car_growth(
                         CarPid, Before, Target, Deadline, Now)
             end

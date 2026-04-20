@@ -104,6 +104,10 @@ preflight(Node, ParentPid) ->
             Name = to_list(NameBin),
             Parent = to_list(ParentNameBin),
             Initial = initial_state(Transitions),
+            %% Build O(1) dispatch index keyed on (From, Trigger).
+            %% Replaces the linear scan of `transitions` per event,
+            %% which was ~14 comparisons per Car event at load.
+            TransIndex = build_trans_index(Transitions),
             loop(#{
                 name => Name,
                 parent_name => Parent,
@@ -112,10 +116,25 @@ preflight(Node, ParentPid) ->
                 handlers => Handlers,
                 state_type => StateType,
                 transitions => Transitions,
+                trans_index => TransIndex,
                 current_state => Initial,
                 log => []
             })
     end.
+
+%% Index transitions by (From, Trigger). The runtime looks up
+%% (current_state, event) per incoming message; an Erlang map gives
+%% ~O(1) access versus the old linear list scan.
+build_trans_index(Transitions) ->
+    lists:foldl(fun(T, Acc) ->
+        From = element(2, T),
+        Trigger = element(4, T),
+        %% If two rows share (From, Trigger) the later one wins
+        %% here; the axiom checker already rejects such overlaps at
+        %% spec-load time, so this branch is unreachable for valid
+        %% specs.
+        maps:put({From, Trigger}, T, Acc)
+    end, #{}, Transitions).
 
 %% First transition's From is the initial state by convention. For a
 %% stateless system with no transitions the value is unused; we set
@@ -216,23 +235,28 @@ dispatch(EventName, Args, State) ->
             dispatch_transition(CurState, EventName, State1)
     end.
 
-%% Stateful dispatch: look up (current_state, _, EventName) in the
-%% transitions table. Fire it if found, input-reject otherwise.
+%% Stateful dispatch: look up (current_state, event) in the index
+%% map. Fire it if found, input-reject otherwise. The old linear
+%% scan (find_transition_for_event) is kept below for callers that
+%% still hand in a raw transitions list, but the hot path uses the
+%% per-actor map built once at init.
 dispatch_transition(CurState, EventName, State) ->
-    Transitions = maps:get(transitions, State),
-    case find_transition_for_event(CurState, EventName, Transitions) of
-        not_found ->
+    Index = maps:get(trans_index, State),
+    case maps:find({CurState, EventName}, Index) of
+        error ->
             State;
-        {'TransitionSpec', _F, To, _Trig, Target, EvtEff, Delay} ->
+        {ok, {'TransitionSpec', _F, To, _Trig, Target, EvtEff, Delay}} ->
             dispatch_effect(Target, EvtEff, Delay, State),
             State#{current_state => To};
-        {'TransitionSpec', _F, To, _Trig, Target, EvtEff} ->
+        {ok, {'TransitionSpec', _F, To, _Trig, Target, EvtEff}} ->
             dispatch_effect(Target, EvtEff, 0, State),
             State#{current_state => To};
-        {'TransitionSpec', _F, To, _Trig} ->
+        {ok, {'TransitionSpec', _F, To, _Trig}} ->
             State#{current_state => To}
     end.
 
+%% Legacy: linear scan. Retained for tests and external callers
+%% that have not moved to the indexed path.
 find_transition_for_event(_CurState, _Event, []) ->
     not_found;
 find_transition_for_event(CurState, Event, [T | Rest]) ->
