@@ -1,0 +1,6 @@
+out/
+*.o
+*.cmi
+*.cmx
+*.cmo
+results.txt
