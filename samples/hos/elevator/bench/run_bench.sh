@@ -95,7 +95,7 @@ if ! command -v rebar3 >/dev/null 2>&1; then
     say "[skip] rebar3 not found on PATH"
 else
     capture rebar3 eunit --module=af_hos_bench_tests
-    BEAM_RATE="$(extract_rate "$RESULT_FILE")"
+    BEAM_RATE="$(extract_rate "$RESULT_FILE" "Erlang HOS (nowait)")"
 fi
 
 # ---------- Python ----------
