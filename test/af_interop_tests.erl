@@ -68,6 +68,29 @@ tuple_test_() ->
             C = eval("3 int 5 int 2 int make-tuple 1 int tuple-get", af_interpreter:new_continuation()),
             ?assertEqual([{'Int', 3}], C#continuation.data_stack)
         end} end,
+        fun(_) -> {"elt works on a4 Tuple values", fun() ->
+            %% elt accepts any stack item whose Erlang value is a
+            %% tuple, ignoring the type tag. Tuple values work.
+            C = eval("3 int 5 int 2 int make-tuple 2 int elt",
+                     af_interpreter:new_continuation()),
+            ?assertEqual([{'Int', 5}], C#continuation.data_stack)
+        end} end,
+        fun(_) -> {"elt works on tagged record-style values", fun() ->
+            %% A raw Erlang tuple like {'SystemNode', ...} appears on
+            %% the a4 stack with its own type tag; elt still accesses
+            %% positional fields.
+            C0 = #continuation{data_stack = [
+                {'SystemNode', <<"Car">>, <<"Dispatcher">>,
+                 'None', [], [], []}
+            ]},
+            C1 = af_interpreter:interpret_token(
+                #token{value = "2"}, C0),
+            C2 = af_interpreter:interpret_token(
+                #token{value = "int"}, C1),
+            C3 = af_interpreter:interpret_token(
+                #token{value = "elt"}, C2),
+            ?assertEqual([{'String', <<"Car">>}], C3#continuation.data_stack)
+        end} end,
         fun(_) -> {"ok-tuple", fun() ->
             ?assertEqual([{'Tuple', {ok, 42}}], eval("42 int ok-tuple"))
         end} end,

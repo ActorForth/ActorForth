@@ -42,6 +42,15 @@ init() ->
         impl = fun op_tuple_get/1
     }),
 
+    %% elt: Int Any -> Any  (get element at 1-based index of ANY stack
+    %% item whose Erlang value is a tuple). Used to access fields of
+    %% positional-tuple records like HOS SystemNode / HandlerSpec /
+    %% TransitionSpec without first reboxing them as a4 Tuples.
+    af_type:add_op('Any', #operation{
+        name = "elt", sig_in = ['Int', 'Any'], sig_out = ['Any'],
+        impl = fun op_elt/1
+    }),
+
     %% make-tuple: builds tuple from N stack items
     %% N make-tuple: ( Any... Int -> Tuple )
     af_type:add_op('Any', #operation{
@@ -101,6 +110,34 @@ op_tuple_get(Cont) ->
         false ->
             af_error:raise(index_error,
                 lists:flatten(io_lib:format("tuple index ~p out of range (size ~p)", [N, tuple_size(T)])),
+                Cont)
+    end.
+
+%% elt: extract the Nth element of any stack item whose value is a
+%% tuple. The stack item's type tag is ignored; only its value matters.
+%% Used to read positional fields of tuple records like the HOS
+%% SystemNode / HandlerSpec / TransitionSpec that the DSL builds as
+%% raw Erlang tuples rather than a4 product-type instances.
+op_elt(Cont) ->
+    [{'Int', N}, Item | Rest] = Cont#continuation.data_stack,
+    RawTuple = case Item of
+        {'Tuple', T} -> T;
+        Tup when is_tuple(Tup) -> Tup;
+        Other ->
+            af_error:raise(type_error,
+                lists:flatten(io_lib:format(
+                    "elt requires a tuple value, got ~p", [Other])),
+                Cont)
+    end,
+    case N >= 1 andalso N =< tuple_size(RawTuple) of
+        true ->
+            Result = af_term:to_stack_item(element(N, RawTuple)),
+            Cont#continuation{data_stack = [Result | Rest]};
+        false ->
+            af_error:raise(index_error,
+                lists:flatten(io_lib:format(
+                    "elt index ~p out of range (size ~p)",
+                    [N, tuple_size(RawTuple)])),
                 Cont)
     end.
 
