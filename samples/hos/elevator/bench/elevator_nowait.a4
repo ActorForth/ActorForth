@@ -1,0 +1,177 @@
+# samples/hos/elevator/bench/elevator_nowait.a4
+#
+# Benchmark variant of the elevator HOS spec. Identical to
+# samples/hos/elevator/elevator.a4 except every `after N event` timer
+# is zero: the self-send fires immediately (still one mailbox round
+# trip per cycle) rather than after the physical-time delay.
+#
+# The system names (Door, Motor, Car, EmergencySource, Dispatcher,
+# BuildingSystem) are unchanged. This matters because the HOS
+# registry is keyed by system name; any benchmark harness that loads
+# this file should not also load elevator.a4 in the same process.
+#
+# Purpose: measure a4-on-BEAM message-passing throughput against the
+# Python and Rust reference implementations with their `time.sleep`
+# / `thread::sleep` calls similarly stripped. Talk-demo infrastructure
+# for the 2026-04-30 session.
+#
+# Semantic model, axioms, and topology are unchanged from the canonical
+# spec. See samples/hos/elevator/elevator.a4 for the full writeup.
+#
+# Hierarchy (parent -> children):
+#
+#   BuildingSystem
+#   +-- Dispatcher
+#   |   +-- Car
+#   |       +-- Door
+#   |       +-- Motor
+#   +-- EmergencySource
+
+
+# ----------------------------------------------------------------
+# Door. Opening and closing normally take 100ms via the timer
+# primitive. With after-0 the self-send still incurs one mailbox
+# round trip but no wall-clock wait.
+# ----------------------------------------------------------------
+
+system Door
+    parent Car
+    state DoorState
+
+    on open -> ;
+    on close -> ;
+    on opened -> ;
+    on closed -> ;
+
+    transitions
+        Closed -> Opening open : after 0 opened
+        Opening -> Open opened : Car opened
+        Open -> Closing close : after 0 closed
+        Closing -> Closed closed : Car closed
+        Closed -> Closed close : Car closed
+        Open -> Open open : Car opened
+end
+
+
+# ----------------------------------------------------------------
+# Motor. Travel time collapses to zero; the `arrived` signal fires
+# on the next mailbox round trip.
+# ----------------------------------------------------------------
+
+system Motor
+    parent Car
+    state MotorState
+
+    on move-to -> ;
+    on arrived -> ;
+    on stop -> ;
+
+    transitions
+        Stopped -> Moving move-to : after 0 arrived
+        Moving -> Stopped arrived : Car arrived
+        Moving -> Stopped stop
+end
+
+
+# ----------------------------------------------------------------
+# Car. Event-driven, unchanged. `settled` and `depart` self-timers
+# are zero-delay to remove wall-clock waits; the ordering guarantee
+# remains structural (one event, one transition).
+# ----------------------------------------------------------------
+
+system Car
+    parent Dispatcher
+    state CarState
+    children Door Motor
+
+    on assign -> ;
+    on closed -> ;
+    on opened -> ;
+    on arrived -> ;
+    on settled -> ;
+    on depart -> ;
+    on trigger-emergency -> ;
+    on clear-emergency -> ;
+
+    transitions
+        IdleAtFloor -> PreparingToMove assign : Door close
+        PreparingToMove -> Moving closed : Motor move-to
+        Moving -> Arriving arrived : after 0 settled
+        Arriving -> DoorOpening settled : Door open
+        DoorOpening -> Loading opened : after 0 depart
+        Loading -> DoorClosing depart : Door close
+        DoorClosing -> IdleAtFloor closed
+
+        IdleAtFloor -> EmergencyStopped trigger-emergency : Motor stop
+        PreparingToMove -> EmergencyStopped trigger-emergency : Motor stop
+        Moving -> EmergencyStopped trigger-emergency : Motor stop
+        Arriving -> EmergencyStopped trigger-emergency : Motor stop
+        DoorOpening -> EmergencyStopped trigger-emergency : Motor stop
+        Loading -> EmergencyStopped trigger-emergency : Motor stop
+        DoorClosing -> EmergencyStopped trigger-emergency : Motor stop
+
+        EmergencyStopped -> EmergencyDoorOpen clear-emergency : Door open
+        EmergencyDoorOpen -> IdleAtFloor opened
+end
+
+
+# ----------------------------------------------------------------
+# EmergencySource. Unchanged (no timers).
+# ----------------------------------------------------------------
+
+system EmergencySource
+    parent BuildingSystem
+    state EmergencyState
+
+    on trigger -> ;
+    on clear -> ;
+
+    transitions
+        Idle -> Active trigger : BuildingSystem set-emergency
+        Active -> Idle clear : BuildingSystem clear-emergency
+end
+
+
+# ----------------------------------------------------------------
+# Dispatcher. Unchanged (no timers).
+# ----------------------------------------------------------------
+
+system Dispatcher
+    parent BuildingSystem
+    state DispatcherState
+    children Car
+
+    on request -> ;
+    on set-emergency -> ;
+    on clear-emergency -> ;
+
+    transitions
+        Normal -> Normal request : Car assign
+        Normal -> Emergency set-emergency : Car trigger-emergency
+        Emergency -> Normal clear-emergency : Car clear-emergency
+end
+
+
+# ----------------------------------------------------------------
+# BuildingSystem. Unchanged (no timers).
+# ----------------------------------------------------------------
+
+system BuildingSystem
+    state BuildingState
+    children Dispatcher EmergencySource
+
+    on floor-button-press -> ;
+    on fire-alarm -> ;
+    on fire-clear -> ;
+    on set-emergency -> ;
+    on clear-emergency -> ;
+
+    transitions
+        Normal -> Normal floor-button-press : Dispatcher request
+        Normal -> Normal fire-alarm : EmergencySource trigger
+        Normal -> Emergency set-emergency : Dispatcher set-emergency
+        Emergency -> Normal clear-emergency : Dispatcher clear-emergency
+        Emergency -> Emergency fire-clear : EmergencySource clear
+end
+
+"=== Elevator nowait spec compiled. All axioms satisfied. ===" print
