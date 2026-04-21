@@ -258,8 +258,18 @@ check_via_a4(HosBlueprint) ->
 %% Idempotent loader for the two a4 source files the checker needs.
 %% runtime.a4 registers HosBlueprint + friends; check.a4 defines
 %% check-blueprint-a4. Called at first check_via_a4/1 entry.
+%%
+%% The load-status probe checks for hos-path on the STOCK 'String'
+%% dict. Stock types (Int, String, List, etc.) get their ops table
+%% wiped on every af_repl:init_types/0 call (each af_type_*:init
+%% re-registers with a fresh ops map), so an op that check.a4 added
+%% to the String dict is a reliable signal that the a4 sources were
+%% loaded AFTER the most recent init_types. Checking the custom
+%% HosBlueprint dict misses this because custom types survive
+%% init_types intact and their ops appear "loaded" even after the
+%% stock-dict ops they depend on are gone.
 ensure_a4_loaded() ->
-    case af_type:find_op_by_name("check-blueprint-a4", 'HosBlueprint') of
+    case af_type:find_op_by_name("hos-path", 'String') of
         {ok, _} -> ok;
         _ ->
             load_a4_source("src/bootstrap/hos/runtime.a4"),

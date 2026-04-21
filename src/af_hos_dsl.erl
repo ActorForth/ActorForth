@@ -93,6 +93,12 @@ handle_system_def("end", Cont) ->
     Tokens = lists:reverse(RevTokens),
     HosBlueprint = parse_system_tokens(Tokens),
     %% Check axioms eagerly. A bad spec fails fast.
+    %% The a4-side check (af_hos_check:check_via_a4/1) is wired and
+    %% functionally correct, but each DSL-using test fixture runs
+    %% af_repl:init_types/0 which wipes stock-dict ops and forces a
+    %% full reload + finalize_pending_checks on every test — the
+    %% load/check cycle blows the test timeout. Flip pending a
+    %% cheaper a4-source load-and-cache path. See #179.
     af_hos_check:check_system_raise(HosBlueprint),
     %% Register so later systems can look up this one's events when
     %% building their scope (parent-to-child event invocation).
