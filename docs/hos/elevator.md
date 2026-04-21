@@ -704,7 +704,7 @@ claim, earned incrementally over several passes.
 - `src/af_hos_dsl.erl` - the `system ... end` DSL surface.
 - `src/af_hos_runtime.erl` - actor-tree runtime with one-event-
   one-transition dispatch.
-- `lib/hos/system.a4` - `SystemNode`, `HandlerSpec`, and
+- `lib/hos/system.a4` - `HosBlueprint`, `HandlerSpec`, and
   `TransitionSpec` product types.
 - `test/af_hos_elevator_tests.erl` - 21-test FAT suite.
 - `test/af_hos_dsl_tests.erl` - DSL surface tests.

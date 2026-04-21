@@ -1,7 +1,7 @@
-# lib/hos/system.a4  -  SystemNode foundation for the HOS DSL.
+# lib/hos/system.a4  -  HosBlueprint foundation for the HOS DSL.
 #
-# A SystemNode is the axiom-checkable description of one system in
-# the HOS control hierarchy. The tree of SystemNodes IS the control
+# A HosBlueprint is the axiom-checkable description of one system in
+# the HOS control hierarchy. The tree of HosBlueprints IS the control
 # graph Hamilton's axioms constrain:
 #
 #   Axiom 1 (immediate-only control). A system may reference names
@@ -19,7 +19,7 @@
 #           must be defined in a TMap reachable through the
 #           ancestor chain of this system.
 #
-# SystemNode carries only the description  -  no live state, no
+# HosBlueprint carries only the description  -  no live state, no
 # spawned actors. Instantiating a system spawns an actor tree whose
 # topology mirrors this tree exactly.
 
@@ -69,16 +69,16 @@ type TransitionSpec
 
 
 # -----------------------------------------------------------------
-# SystemNode  -  one system in the HOS control tree.
+# HosBlueprint  -  one system in the HOS control tree.
 # -----------------------------------------------------------------
 # name          identifier of this system
 # parent_name   name of the parent system ("" for the root)
 # state_type    type of the system's state (atom 'None for stateless)
-# children      list of SystemNode  -  direct children only
+# children      list of HosBlueprint  -  direct children only
 # handlers      list of HandlerSpec   -  declared event handlers
 # transitions   list of TransitionSpec  -  the entire allowed table
 
-type SystemNode
+type HosBlueprint
     name         String
     parent_name  String
     state_type   Atom
@@ -112,11 +112,11 @@ type SystemNode
 : make-transition-after Atom Atom Atom Atom Int -> TransitionSpec ;
     swap "after" swap rot transitionspec .
 
-# SystemNode. Stack: name parent_name state_type children handlers transitions -> SystemNode
-: make-system String String Atom List List List -> SystemNode ;
-    systemnode .
+# HosBlueprint. Stack: name parent_name state_type children handlers transitions -> HosBlueprint
+: make-system String String Atom List List List -> HosBlueprint ;
+    hosblueprint .
 
 # Leaf system  -  no children, no handlers, no transitions, no state.
 # Useful for testing the scope check without the rest of the spec.
-: leaf-system String String -> SystemNode ;
-    None [ ] [ ] [ ] systemnode .
+: leaf-system String String -> HosBlueprint ;
+    None [ ] [ ] [ ] hosblueprint .

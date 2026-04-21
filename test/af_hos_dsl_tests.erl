@@ -26,7 +26,7 @@ parse_test_() ->
         fun(_) -> {"minimal system compiles", fun() ->
             C = eval_new("system Foo end \"Foo\" find-system"),
             [Node | _] = C#continuation.data_stack,
-            ?assertMatch({'SystemNode', <<"Foo">>, _, _, _, _, _}, Node)
+            ?assertMatch({'HosBlueprint', <<"Foo">>, _, _, _, _, _}, Node)
         end} end,
 
         fun(_) -> {"parent section populates parent_name", fun() ->

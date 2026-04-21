@@ -50,7 +50,7 @@ valid_spec_test_() ->
             Systems = ["Door", "Motor", "Car", "EmergencySource",
                        "Dispatcher", "BuildingSystem"],
             lists:foreach(fun(Name) ->
-                ?assertMatch({'SystemNode', _, _, _, _, _, _},
+                ?assertMatch({'HosBlueprint', _, _, _, _, _, _},
                              af_hos_check:lookup_system(Name))
             end, Systems)
         end} end,

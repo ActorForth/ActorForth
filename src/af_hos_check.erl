@@ -45,9 +45,9 @@ reg_clear() ->
     ets:delete_all_objects(?REG_ETS),
     ok.
 
-%% Axiom checker for HOS SystemNode trees.
+%% Axiom checker for HOS HosBlueprint trees.
 %%
-%% Walks a SystemNode tree and verifies Hamilton's control axioms
+%% Walks a HosBlueprint tree and verifies Hamilton's control axioms
 %% by construction:
 %%
 %%   Axiom 1 (immediate-only control). Every identifier referenced in
@@ -69,7 +69,7 @@ init() ->
     clear_registry(),
     af_type:add_op('Any', #operation{
         name = "check-system",
-        sig_in = ['SystemNode'],
+        sig_in = ['HosBlueprint'],
         sig_out = ['List'],
         impl = fun op_check_system/1
     }).
@@ -85,7 +85,7 @@ init() ->
 %% already registered must list THIS system in its children. A
 %% mismatch raises {axiom_violation, _} so the inconsistency
 %% surfaces at definition time rather than as a silent drift.
-register_system({'SystemNode', NameBin, _, _, _, _, _} = Sys) ->
+register_system({'HosBlueprint', NameBin, _, _, _, _, _} = Sys) ->
     check_parent_children_consistency(Sys),
     Name = binary_to_list(NameBin),
     reg_put(Name, Sys),
@@ -95,7 +95,7 @@ register_system({'SystemNode', NameBin, _, _, _, _, _} = Sys) ->
 %% system currently in the registry. Runs BEFORE this system is
 %% added, so any already-registered system whose claims conflict
 %% with ours surfaces now.
-check_parent_children_consistency({'SystemNode', NameBin, ParentNameBin,
+check_parent_children_consistency({'HosBlueprint', NameBin, ParentNameBin,
                                    _, Children, _, _}) ->
     Name = binary_to_list(NameBin),
     Parent = binary_to_list(ParentNameBin),
@@ -198,7 +198,7 @@ clear_registry() ->
 registered_child_events(ChildName) ->
     case lookup_system(ChildName) of
         not_found -> [];
-        {'SystemNode', _, _, _, _, Handlers, _} ->
+        {'HosBlueprint', _, _, _, _, Handlers, _} ->
             [atom_to_list(element(2, H)) || H <- Handlers]
     end.
 
@@ -234,7 +234,7 @@ check_system_raise(SystemInstance) ->
 violations(Instance) ->
     walk(Instance, "").
 
-walk({'SystemNode', NameRaw, ParentRaw, StateType,
+walk({'HosBlueprint', NameRaw, ParentRaw, StateType,
       Children, Handlers, Transitions}, PathPrefix) ->
     Name = to_list(NameRaw),
     Path = path(PathPrefix, Name),

@@ -41,13 +41,13 @@ load_a4_runtime() ->
 %% Helpers
 %% ---------------------------------------------------------------
 
-%% Build a fresh HosState. Field values are RAW per af_type_product
+%% Build a fresh HosSelf. Field values are RAW per af_type_product
 %% convention. Fields past the type tag: name, parent, child-map, log,
 %% trans-index, current-state, state-type, handlers. Defaults for
 %% direct-spawn tests.
 make_state(Name) ->
     SentinelActor = #{pid => self(), type_name => undefined, vocab => #{}},
-    {'HosState', list_to_binary(Name), SentinelActor, #{}, [], #{}, 'None',
+    {'HosSelf', list_to_binary(Name), SentinelActor, #{}, [], #{}, 'None',
      'None', []}.
 
 %% Spawn a process that runs the a4 `hos-loop` word with InitialState
@@ -119,26 +119,26 @@ lookup_resolves() ->
     Full = leaf_system("Probe", ""),
     af_hos_check:register_system(Full),
     %% Direct Erlang sanity-check.
-    ?assertMatch({'SystemNode', <<"Probe">>, _, _, _, _, _},
+    ?assertMatch({'HosBlueprint', <<"Probe">>, _, _, _, _, _},
                  af_hos_check:lookup_system(<<"Probe">>)),
     %% Then via the a4 word (FFI path).
     Cont0 = (af_interpreter:new_continuation())#continuation{
         data_stack = [{'String', <<"Probe">>}]
     },
     Cont1 = af_interpreter:interpret_token(#token{value = "lookup-full-system"}, Cont0),
-    ?assertMatch([{'Tuple', {'SystemNode', <<"Probe">>, _, _, _, _, _}}],
+    ?assertMatch([{'HosBlueprint', <<"Probe">>, _, _, _, _, _}],
                  Cont1#continuation.data_stack).
 
-a4_spawn_system(SystemNode) ->
+a4_spawn_system(HosBlueprint) ->
     Cont0 = (af_interpreter:new_continuation())#continuation{
-        data_stack = [{'Tuple', SystemNode}]
+        data_stack = [HosBlueprint]
     },
     Cont1 = af_interpreter:interpret_token(#token{value = "spawn-system"}, Cont0),
     [{'Actor', #{pid := Pid}}] = Cont1#continuation.data_stack,
     Pid.
 
 leaf_system(Name, Parent) ->
-    {'SystemNode', list_to_binary(Name), list_to_binary(Parent),
+    {'HosBlueprint', list_to_binary(Name), list_to_binary(Parent),
      'None', [], [], []}.
 
 a4_spawn_leaf() ->
@@ -156,7 +156,7 @@ a4_spawn_parent_with_children() ->
     process_flag(trap_exit, true),
     C1 = leaf_system("C1", "Root"),
     C2 = leaf_system("C2", "Root"),
-    Root = {'SystemNode', <<"Root">>, <<"">>, 'None', [C1, C2], [], []},
+    Root = {'HosBlueprint', <<"Root">>, <<"">>, 'None', [C1, C2], [], []},
     af_hos_check:register_system(C1),
     af_hos_check:register_system(C2),
     af_hos_check:register_system(Root),
@@ -189,7 +189,7 @@ stop_propagates_to_children() ->
     process_flag(trap_exit, true),
     C1 = leaf_system("C1b", "Rootb"),
     C2 = leaf_system("C2b", "Rootb"),
-    Root = {'SystemNode', <<"Rootb">>, <<"">>, 'None', [C1, C2], [], []},
+    Root = {'HosBlueprint', <<"Rootb">>, <<"">>, 'None', [C1, C2], [], []},
     af_hos_check:register_system(C1),
     af_hos_check:register_system(C2),
     af_hos_check:register_system(Root),
@@ -255,7 +255,7 @@ introspect_child_pid() ->
     af_hos_check:clear_registry(),
     process_flag(trap_exit, true),
     C1 = leaf_system("IC1", "IRoot"),
-    Root = {'SystemNode', <<"IRoot">>, <<"">>, 'None', [C1], [], []},
+    Root = {'HosBlueprint', <<"IRoot">>, <<"">>, 'None', [C1], [], []},
     af_hos_check:register_system(C1),
     af_hos_check:register_system(Root),
     RootPid = a4_spawn_system(Root),
@@ -286,14 +286,14 @@ introspect_child_unknown() ->
 
 %% --- Phase 1d: stateful transitions --------------------------------
 
-%% Build a SystemNode with a list of transitions. Each transition is
+%% Build a HosBlueprint with a list of transitions. Each transition is
 %% {'TransitionSpec', From, To, Trigger, Target, Effect, Delay}. We use
 %% no effects for the Phase 1d state-machine unit tests.
 transition(From, To, Trigger) ->
     {'TransitionSpec', From, To, Trigger, <<>>, 'none', 0}.
 
 stateful_system(Name, Transitions) ->
-    {'SystemNode', list_to_binary(Name), <<"">>,
+    {'HosBlueprint', list_to_binary(Name), <<"">>,
      'Mode', [], [], Transitions}.
 
 %% Query the a4 runtime's current-state via HosGetState.
@@ -376,12 +376,12 @@ effect_to_child() ->
     af_hos_check:clear_registry(),
     process_flag(trap_exit, true),
     %% Child accepts the `ring` event via a self-loop transition.
-    Child = {'SystemNode', <<"ChildEC">>, <<"ParentEC">>, 'Mode',
+    Child = {'HosBlueprint', <<"ChildEC">>, <<"ParentEC">>, 'Mode',
              [], [],
              [transition('Wait', 'Wait', ring)]},
     ParentT = transition_with_effect('Idle', 'Idle', trigger,
                                      <<"ChildEC">>, ring, 0),
-    Parent = {'SystemNode', <<"ParentEC">>, <<"">>, 'Mode',
+    Parent = {'HosBlueprint', <<"ParentEC">>, <<"">>, 'Mode',
               [Child], [], [ParentT]},
     af_hos_check:register_system(Child),
     af_hos_check:register_system(Parent),
@@ -415,15 +415,15 @@ stateless_router_dispatches() ->
     af_hos_check:clear_registry(),
     process_flag(trap_exit, true),
     %% Two children, each accepting a distinct event.
-    A = {'SystemNode', <<"Alpha">>, <<"Router">>, 'Mode', [], [],
+    A = {'HosBlueprint', <<"Alpha">>, <<"Router">>, 'Mode', [], [],
          [transition('Idle', 'Idle', ping)]},
-    B = {'SystemNode', <<"Beta">>, <<"Router">>, 'Mode', [], [],
+    B = {'HosBlueprint', <<"Beta">>, <<"Router">>, 'Mode', [], [],
          [transition('Idle', 'Idle', pong)]},
     %% Router handler 'fanout' routes: Alpha ping Beta pong.
     BodyTokens = [{'String', <<"Alpha">>}, {'String', <<"ping">>},
                   {'String', <<"Beta">>},  {'String', <<"pong">>}],
     Handler = {'HandlerSpec', fanout, [], [], BodyTokens},
-    Router = {'SystemNode', <<"Router">>, <<"">>, 'None',
+    Router = {'HosBlueprint', <<"Router">>, <<"">>, 'None',
               [A, B], [Handler], []},
     af_hos_check:register_system(A),
     af_hos_check:register_system(B),
@@ -466,7 +466,7 @@ effect_after_zero() ->
     %% event in state Idle (without it the after-event is input-rejected
     %% after arriving self-scheduled).
     T2 = transition('Idle', 'Idle', followup),
-    Node = {'SystemNode', <<"Timer">>, <<"">>, 'Mode',
+    Node = {'HosBlueprint', <<"Timer">>, <<"">>, 'Mode',
             [], [], [T, T2]},
     af_hos_check:register_system(Node),
     Pid = a4_spawn_system(Node),
@@ -506,7 +506,7 @@ bool_true_dispatch() ->
 
 step_false_exits() ->
     State = make_state("root"),
-    %% hos-loop-step expects (HosState Bool) on stack. Bool=false -> exit.
+    %% hos-loop-step expects (HosSelf Bool) on stack. Bool=false -> exit.
     Cont0 = (af_interpreter:new_continuation())#continuation{
         data_stack = [{'Bool', false}, State]
     },
@@ -528,7 +528,7 @@ handle_cast_sync() ->
     %% normalises atom raw values to their string form (list),
     %% matching what af_term:to_stack_item produces.
     ?assertMatch([{'Bool', true},
-                  {'HosState', _, _, _, [{'Atom', "my_event"}], _, _, _, _}],
+                  {'HosSelf', _, _, _, [{'Atom', "my_event"}], _, _, _, _}],
                  Cont1#continuation.data_stack).
 
 handle_stop_sync() ->
@@ -540,7 +540,7 @@ handle_stop_sync() ->
     Token = #token{value = "handle-message"},
     Cont1 = af_interpreter:interpret_token(Token, Cont0),
     %% Stop handler returns (State' False). Log unchanged (empty).
-    ?assertMatch([{'Bool', false}, {'HosState', _, _, _, [], _, _, _, _}],
+    ?assertMatch([{'Bool', false}, {'HosSelf', _, _, _, [], _, _, _, _}],
                  Cont1#continuation.data_stack).
 
 spawn_then_stop() ->

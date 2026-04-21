@@ -44,7 +44,7 @@ init() ->
 
     %% elt: Int Any -> Any  (get element at 1-based index of ANY stack
     %% item whose Erlang value is a tuple). Used to access fields of
-    %% positional-tuple records like HOS SystemNode / HandlerSpec /
+    %% positional-tuple records like HOS HosBlueprint / HandlerSpec /
     %% TransitionSpec without first reboxing them as a4 Tuples.
     af_type:add_op('Any', #operation{
         name = "elt", sig_in = ['Int', 'Any'], sig_out = ['Any'],
@@ -116,7 +116,7 @@ op_tuple_get(Cont) ->
 %% elt: extract the Nth element of any stack item whose value is a
 %% tuple. The stack item's type tag is ignored; only its value matters.
 %% Used to read positional fields of tuple records like the HOS
-%% SystemNode / HandlerSpec / TransitionSpec that the DSL builds as
+%% HosBlueprint / HandlerSpec / TransitionSpec that the DSL builds as
 %% raw Erlang tuples rather than a4 product-type instances.
 op_elt(Cont) ->
     [{'Int', N}, Item | Rest] = Cont#continuation.data_stack,

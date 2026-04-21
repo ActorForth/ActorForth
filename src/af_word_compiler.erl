@@ -619,7 +619,7 @@ simulate_body(Ops, Stack, L, Ctx) ->
 
 simulate_body([], Stack, _L, _Ctx, SideEffects) ->
     {ok, Stack, lists:reverse(SideEffects)};
-%% Sub-clause dispatch (`: HosState True -> ; body1 : HosState False -> ; body2 .`)
+%% Sub-clause dispatch (`: HosSelf True -> ; body1 : HosSelf False -> ; body2 .`)
 %% is encoded in the body as an op with source = {select_clause, ClauseRecs}.
 %% Compile it to an Erlang case expression on the live stack: each clause's
 %% sig_in becomes a pattern, each clause's body gets translated into a case

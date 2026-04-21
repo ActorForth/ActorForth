@@ -151,7 +151,7 @@ scenarios_test_() ->
         fun(_) -> {"FLAW 5: sibling back-channel is structurally absent", fun() ->
             load_valid_spec(),
             Emergency = af_hos_check:lookup_system("EmergencySource"),
-            {'SystemNode', _, Parent, _, Children, _, _} = Emergency,
+            {'HosBlueprint', _, Parent, _, Children, _, _} = Emergency,
             ?assertEqual(<<"BuildingSystem">>, Parent),
             ?assertEqual([], Children)
         end} end,

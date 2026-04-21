@@ -33,10 +33,23 @@ type HosCast
 type HosStop
   reason Atom .
 
-# Initialisation packet passed caller-side to build-hos-state.  node
-# is typed Tuple so `elt` reads raw SystemNode positions directly.
+# HosBlueprint — declarative system spec built by the `system ... end`
+# DSL. Must mirror the flat-tuple layout produced by af_hos_dsl:
+# element(1)='HosBlueprint' (the tag), element(2..7) = the six fields
+# below. Registering the type here lets spawn-system sig_in typecheck
+# on HosBlueprint instead of bare Tuple, removing one Any/Tuple-at-TOS
+# hole.
+type HosBlueprint
+  name         String
+  parent-name  String
+  state-type   Atom
+  children     List
+  handlers     List
+  transitions  List .
+
+# Initialisation packet passed caller-side to build-hos-state.
 type HosInit
-  node   Tuple
+  node   HosBlueprint
   parent Actor .
 
 # Synchronous call with reply address.
@@ -67,12 +80,12 @@ type HosGetState
 
 
 # === Runtime state ====================================================
-# state-type is the SystemNode's declared state-machine type atom; the
+# state-type is the blueprint's declared state-machine type atom; the
 # sentinel `None` marks a stateless router whose events are dispatched
 # via handler bodies instead of the trans-index.
 # handlers is a List of HandlerSpec tuples (raw Erlang shape from
 # af_hos_dsl). Used only by the stateless path.
-type HosState
+type HosSelf
   name          String
   parent        Actor
   child-map     Map
@@ -121,7 +134,7 @@ type HosState
   swap cons .                     # ([first, second])
 
 # Prepend an atom to the per-actor event log.
-: log-event HosState Atom -> HosState ;
+: log-event HosSelf Atom -> HosSelf ;
   log swap cons log! .
 
 # Build an HosCast from (event, args). Matching constructor layout:
@@ -143,7 +156,7 @@ type HosState
 
 # Send HosCast(event, []) to a child named by the target binary; no-op
 # when the target isn't in child-map. Runs inside a word whose sig_in
-# includes HosState, so child-map is bound. Stack at entry (bottom→top):
+# includes HosSelf, so child-map is bound. Stack at entry (bottom→top):
 # (event, delay, target). Delay sits BELOW target, so bring it to the
 # top before dropping.
 : send-to-child Any Int Any -> ;
@@ -164,7 +177,7 @@ type HosState
         send-to-parent .
 
 # Send HosCast(event, []) to the parent Actor (parent binding from
-# the enclosing HosState frame). The axiom checker pre-validates
+# the enclosing HosSelf frame). The axiom checker pre-validates
 # targets as either child or parent, so on a child-map miss the
 # target must be the parent's name; we trust that and send. For a
 # root system whose parent binding points at the spawner, this
@@ -237,11 +250,11 @@ type HosState
 # without list pattern matching or a return stack — the Erlang
 # helper is ~15 lines and keeps the idiomatic HOT path in a4 while
 # scoping one awkward iteration to Erlang.
-: dispatch-stateless HosState Atom -> HosState ;
+: dispatch-stateless HosSelf Atom -> HosSelf ;
   # stack: (state, event).
   # The Erlang helper does side-effect sends but cannot return a
   # product-type instance cleanly (from_stack_item/to_stack_item
-  # converts HosState through a map form and loses its identity).
+  # converts HosSelf through a map form and loses its identity).
   # So we dup the state, pass a copy to the helper, drop the helper's
   # return, and keep the original state on the stack.
   over                            # (state, event, state-copy)
@@ -253,16 +266,16 @@ type HosState
   erlang-apply                    # (state, result)
   drop .                          # (state)
 
-: dispatch-stateful-apply HosState Any Bool -> HosState ;
-    : HosState Any True -> HosState ;
+: dispatch-stateful-apply HosSelf Any Bool -> HosSelf ;
+    : HosSelf Any True -> HosSelf ;
         drop                      # drop bool
         dup fire-effect           # side-effect: may send messages
         3 elt                     # extract To from TransitionSpec
         current-state!
-    : HosState Any False -> HosState ;
+    : HosSelf Any False -> HosSelf ;
         drop drop .
 
-: dispatch-stateful HosState Atom -> HosState ;
+: dispatch-stateful HosSelf Atom -> HosSelf ;
   # (state, event). Build key [cur, event] matching insert order.
   current-state swap
   trans-key-pair
@@ -279,7 +292,7 @@ type HosState
 : send-stop-to-actor Actor -> ;
   normal hosstop swap send .
 
-: stop-children HosState -> HosState ;
+: stop-children HosSelf -> HosSelf ;
   child-map
   map-values
   "send-stop-to-actor" to-atom
@@ -290,38 +303,38 @@ type HosState
 # Message handlers (per HosMsg product type)
 # =====================================================================
 
-: handle-message HosState HosCast -> HosState Bool ;
+: handle-message HosSelf HosCast -> HosSelf Bool ;
   drop
   event log-event
   event dispatch-cast
   True .
 
 # Branch on state-type: 'None' → stateless router; else stateful.
-# state-type binding is non-destructive (HosState in sig_in).
-: dispatch-cast HosState Atom -> HosState ;
+# state-type binding is non-destructive (HosSelf in sig_in).
+: dispatch-cast HosSelf Atom -> HosSelf ;
   state-type None ==              # (state, event, bool)
   dispatch-cast-step .
 
-: dispatch-cast-step HosState Atom Bool -> HosState ;
-    : HosState Atom True -> HosState ;
+: dispatch-cast-step HosSelf Atom Bool -> HosSelf ;
+    : HosSelf Atom True -> HosSelf ;
         drop dispatch-stateless
-    : HosState Atom False -> HosState ;
+    : HosSelf Atom False -> HosSelf ;
         drop dispatch-stateful .
 
-: handle-message HosState HosCall -> HosState Bool ;
+: handle-message HosSelf HosCall -> HosSelf Bool ;
   drop
   event log-event
   ref ok 2 make-tuple
   from send
   True .
 
-: handle-message HosState HosGetLog -> HosState Bool ;
+: handle-message HosSelf HosGetLog -> HosSelf Bool ;
   drop
   ref log 2 make-tuple
   from send
   True .
 
-: handle-message HosState HosIntrospectChild -> HosState Bool ;
+: handle-message HosSelf HosIntrospectChild -> HosSelf Bool ;
   drop
   child-map child-name
   map-get-or-not-found
@@ -329,13 +342,13 @@ type HosState
   from send
   True .
 
-: handle-message HosState HosGetState -> HosState Bool ;
+: handle-message HosSelf HosGetState -> HosSelf Bool ;
   drop
   ref current-state 2 make-tuple
   from send
   True .
 
-: handle-message HosState HosStop -> HosState Bool ;
+: handle-message HosSelf HosStop -> HosSelf Bool ;
   drop
   stop-children
   False .
@@ -345,15 +358,15 @@ type HosState
 # Main receive-dispatch loop
 # =====================================================================
 
-: hos-loop HosState -> ;
+: hos-loop HosSelf -> ;
   receive
   handle-message
   hos-loop-step .
 
-: hos-loop-step HosState Bool -> ;
-    : HosState True -> ;
+: hos-loop-step HosSelf Bool -> ;
+    : HosSelf True -> ;
         drop hos-loop
-    : HosState False -> ;
+    : HosSelf False -> ;
         drop drop .
 
 
@@ -363,7 +376,7 @@ type HosState
 
 : hos-bootstrap -> ;
   receive                         # ( HosInit )
-  build-hos-state                 # ( HosState )  — spawns children here,
+  build-hos-state                 # ( HosSelf )  — spawns children here,
                                   #                so self() == this actor
                                   #                is the children's parent
   hos-loop .
@@ -413,7 +426,7 @@ type HosState
   "spawn-one-child" to-atom
   reduce .
 
-: build-hos-state HosInit -> HosState ;
+: build-hos-state HosInit -> HosSelf ;
   drop
   node 2 elt                         # ( name )
   parent                             # ( name parent )
@@ -426,9 +439,9 @@ type HosState
   initial-state                      # ( ... trans-index current-state )
   node 4 elt                         # ( ... trans-index cur state-type )
   node 6 elt                         # ( ... trans-index cur state-type handlers )
-  hosstate .                         # ( HosState )
+  hosself .                          # ( HosSelf )
 
-: spawn-system-with-parent Tuple Actor -> Actor ;
+: spawn-system-with-parent HosBlueprint Actor -> Actor ;
   # (node, parent).  Build HosInit; spawn the actor; send HosInit.
   # The bootstrap word runs inside the actor's own process, so when
   # it spawns its children, `self()` is correctly this actor.
@@ -439,5 +452,5 @@ type HosState
   over                          # ( actor HosInit actor )
   send .                        # ( actor )
 
-: spawn-system Tuple -> Actor ;
+: spawn-system HosBlueprint -> Actor ;
   self spawn-system-with-parent .

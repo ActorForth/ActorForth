@@ -19,6 +19,25 @@ to_stack_item(M) when is_map(M) ->
     {'Map', maps:from_list(
         [{to_stack_item(K), to_stack_item(V)} || {K, V} <- maps:to_list(M)]
     )};
+to_stack_item(T) when is_tuple(T), tuple_size(T) >= 2 ->
+    %% Flat-tuple product type: element(1) is the type tag. If that
+    %% atom names a registered product type with declared fields whose
+    %% arity matches, return the tuple directly as its own stack item
+    %% (element(1) = type tag). Otherwise wrap as a generic Tuple.
+    %% Keeps the find-system vs lookup-full-system paths consistent —
+    %% a HosBlueprint that crosses the erlang-apply boundary stays a
+    %% HosBlueprint, not a Tuple containing one.
+    Head = element(1, T),
+    case is_atom(Head) of
+        true ->
+            case catch af_type:get_type(Head) of
+                {ok, #af_type{fields = Fs}}
+                    when Fs =/= [], length(Fs) =:= tuple_size(T) - 1 ->
+                    T;
+                _ -> {'Tuple', T}
+            end;
+        false -> {'Tuple', T}
+    end;
 to_stack_item(T) when is_tuple(T) ->
     {'Tuple', T};
 to_stack_item(P) when is_pid(P) ->

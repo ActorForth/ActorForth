@@ -41,7 +41,7 @@ load_a4_runtime() ->
     %% Idempotent: skip if the `spawn-system` word is still in the
     %% Tuple dict.  Each call to af_repl:init_types/0 re-registers
     %% the stock types (clearing their dicts), so check for the
-    %% runtime word directly rather than the HosState type which
+    %% runtime word directly rather than the HosSelf type which
     %% lives under its own (unaffected) ETS row.
     case spawn_system_word_loaded() of
         true  -> ok;
@@ -67,7 +67,15 @@ load_a4_runtime() ->
     end.
 
 spawn_system_word_loaded() ->
-    case af_type:find_op_by_name("spawn-system", 'Tuple') of
+    %% Check the Actor dict because Actor gets cleared on every
+    %% af_repl:init_types/0 call (stock type), whereas HosBlueprint —
+    %% declared in runtime.a4 — survives re-init and would give us a
+    %% stale "already loaded" reading after a test-fixture reset.
+    %% spawn-system-with-parent is the canonical HOS word registered
+    %% on Actor (TOS-first sig_in [Actor, HosBlueprint]); if it's
+    %% absent, the runtime's hot-loop words are gone and we must
+    %% reload.
+    case af_type:find_op_by_name("spawn-system-with-parent", 'Actor') of
         {ok, _} -> true;
         _       -> false
     end.
@@ -199,12 +207,13 @@ locate_runtime_a4() ->
 %% ---------------------------------------------------------------
 
 %% spawn_system/1 drives the a4 `spawn-system` word via the
-%% interpreter. The SystemNode tuple is pushed as {'Tuple', Node}
-%% so elt can address its fields.
-spawn_system(SystemNode) ->
+%% interpreter. The HosBlueprint is pushed as-is — the DSL already
+%% builds it as a flat-tuple product-type instance whose element(1)
+%% is the 'HosBlueprint' type tag, so no extra wrapping is needed.
+spawn_system(HosBlueprint) ->
     load_a4_runtime(),
     Cont0 = (af_interpreter:new_continuation())#continuation{
-        data_stack = [{'Tuple', SystemNode}]
+        data_stack = [HosBlueprint]
     },
     Cont1 = af_interpreter:interpret_token(
         #token{value = "spawn-system"}, Cont0),
@@ -286,30 +295,30 @@ introspect_child(Pid, ChildName) ->
 %% For the given event, finds the matching handler and iterates its
 %% body in (Target, EventName) pairs. For each pair whose target
 %% resolves to a child's Actor, sends {af_msg, HosCast(event, [])}.
-%% Returns HosState unchanged.
+%% Returns HosSelf unchanged.
 %%
 %% Scoped-to-Erlang rationale: pair-wise iteration over a List in
 %% pure a4 hits a stack-management wall without list pattern matching
 %% or a return stack. The rest of the HOS runtime remains a4.
 
-a4_exec_stateless_body(#{type := 'HosState'} = HosState, Event) ->
-    Handlers = maps:get(handlers, HosState),
-    ChildMap = maps:get('child-map', HosState),
+a4_exec_stateless_body(#{type := 'HosSelf'} = HosSelf, Event) ->
+    Handlers = maps:get(handlers, HosSelf),
+    ChildMap = maps:get('child-map', HosSelf),
     case find_body_for_event(Event, Handlers) of
-        not_found -> HosState;
+        not_found -> HosSelf;
         Body ->
             exec_body_pairs(Body, ChildMap),
-            HosState
+            HosSelf
     end;
-a4_exec_stateless_body(HosState, Event)
-  when is_tuple(HosState), element(1, HosState) =:= 'HosState' ->
-    Handlers = element(9, HosState),
-    ChildMap = element(4, HosState),
+a4_exec_stateless_body(HosSelf, Event)
+  when is_tuple(HosSelf), element(1, HosSelf) =:= 'HosSelf' ->
+    Handlers = element(9, HosSelf),
+    ChildMap = element(4, HosSelf),
     case find_body_for_event(Event, Handlers) of
-        not_found -> HosState;
+        not_found -> HosSelf;
         Body ->
             exec_body_pairs(Body, ChildMap),
-            HosState
+            HosSelf
     end.
 
 %% List elements may arrive raw or wrapped as {'Tuple', Inner}

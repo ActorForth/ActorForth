@@ -76,11 +76,11 @@ tuple_test_() ->
             ?assertEqual([{'Int', 5}], C#continuation.data_stack)
         end} end,
         fun(_) -> {"elt works on tagged record-style values", fun() ->
-            %% A raw Erlang tuple like {'SystemNode', ...} appears on
+            %% A raw Erlang tuple like {'HosBlueprint', ...} appears on
             %% the a4 stack with its own type tag; elt still accesses
             %% positional fields.
             C0 = #continuation{data_stack = [
-                {'SystemNode', <<"Car">>, <<"Dispatcher">>,
+                {'HosBlueprint', <<"Car">>, <<"Dispatcher">>,
                  'None', [], [], []}
             ]},
             C1 = af_interpreter:interpret_token(

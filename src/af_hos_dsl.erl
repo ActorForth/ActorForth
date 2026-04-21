@@ -33,7 +33,7 @@
 %% {Value, IsQuoted} pairs. `end` finalises the collection  -  it
 %% unambiguously closes the system definition, leaving `;` free as
 %% the handler-header terminator. The accumulated tokens are parsed
-%% into a SystemNode product instance and the axiom checker runs
+%% into a HosBlueprint product instance and the axiom checker runs
 %% eagerly  -  a spec that violates Axiom 1 raises immediately.
 
 init() ->
@@ -51,7 +51,7 @@ init() ->
     af_type:add_op('Any', #operation{
         name = "find-system",
         sig_in = ['String'],
-        sig_out = ['SystemNode'],
+        sig_out = ['HosBlueprint'],
         impl = fun op_find_system/1
     }).
 
@@ -66,8 +66,8 @@ op_system_start(Cont) ->
         data_stack = [{'SystemDef', State} | Cont#continuation.data_stack]
     }.
 
-%% find-system "Name" -> SystemNode. Pulls a previously-defined
-%% SystemNode out of the registry. Raises if no such system is
+%% find-system "Name" -> HosBlueprint. Pulls a previously-defined
+%% HosBlueprint out of the registry. Raises if no such system is
 %% defined.
 op_find_system(Cont) ->
     [{'String', NameBin} | Rest] = Cont#continuation.data_stack,
@@ -77,27 +77,27 @@ op_find_system(Cont) ->
             af_error:raise(system_not_found,
                 "No HOS system named '" ++ Name ++ "' is defined.",
                 Cont);
-        SystemNode ->
-            Cont#continuation{data_stack = [SystemNode | Rest]}
+        HosBlueprint ->
+            Cont#continuation{data_stack = [HosBlueprint | Rest]}
     end.
 
 
 %% ---------------------------------------------------------------
 %% Token interceptor: every token between `system` and `;` routes
-%% here. `;` finalises the collection and produces a SystemNode.
+%% here. `;` finalises the collection and produces a HosBlueprint.
 %% ---------------------------------------------------------------
 
 handle_system_def("end", Cont) ->
     [{'SystemDef', State} | Rest] = Cont#continuation.data_stack,
     #{tokens := RevTokens} = State,
     Tokens = lists:reverse(RevTokens),
-    SystemNode = parse_system_tokens(Tokens),
+    HosBlueprint = parse_system_tokens(Tokens),
     %% Check axioms eagerly. A bad spec fails fast.
-    af_hos_check:check_system_raise(SystemNode),
+    af_hos_check:check_system_raise(HosBlueprint),
     %% Register so later systems can look up this one's events when
     %% building their scope (parent-to-child event invocation).
-    af_hos_check:register_system(SystemNode),
-    %% Do NOT push the SystemNode back onto the stack. `end` is a
+    af_hos_check:register_system(HosBlueprint),
+    %% Do NOT push the HosBlueprint back onto the stack. `end` is a
     %% definition boundary, not a value producer. Callers that need
     %% the value should use `find-system "Name"` to pull it from the
     %% registry, which keeps the sample code free of trailing `drop`s.
@@ -271,7 +271,7 @@ parse_effect_clause(Rest) ->
 
 
 %% ---------------------------------------------------------------
-%% Final SystemNode construction
+%% Final HosBlueprint construction
 %% ---------------------------------------------------------------
 
 build_system_node(Acc) ->
@@ -280,14 +280,14 @@ build_system_node(Acc) ->
       transitions := Transitions} = Acc,
     %% Children declared in a system are NAME references. The actual
     %% child systems are defined elsewhere; at check time we just need
-    %% the names in scope. Represent each as a stub SystemNode so the
+    %% the names in scope. Represent each as a stub HosBlueprint so the
     %% checker's tree-walk skips them cleanly.
     Children = [
-        {'SystemNode', list_to_binary(Cn), list_to_binary(Name),
+        {'HosBlueprint', list_to_binary(Cn), list_to_binary(Name),
          'None', [], [], []}
         || Cn <- ChildNames
     ],
-    {'SystemNode',
+    {'HosBlueprint',
      list_to_binary(Name),
      list_to_binary(Parent),
      StateType,

@@ -4,7 +4,7 @@
 
 %% Unit tests for the HOS axiom checker.
 %%
-%% Each test constructs a SystemNode tree manually (as the raw tuples
+%% Each test constructs a HosBlueprint tree manually (as the raw tuples
 %% a4 product-type instances are stored as) and verifies that the
 %% checker either accepts it or reports the expected axiom violation.
 
@@ -19,14 +19,14 @@ setup() ->
 positive_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
         fun(_) -> {"empty root system with no handlers or children", fun() ->
-            Root = {'SystemNode', <<"Root">>, <<>>, 'None', [], [], []},
+            Root = {'HosBlueprint', <<"Root">>, <<>>, 'None', [], [], []},
             ?assertEqual({ok, []}, af_hos_check:check_system(Root))
         end} end,
 
         fun(_) -> {"handler body uses only a4 builtins (dup + drop)", fun() ->
             Handler = {'HandlerSpec', add_one, [], [],
                        [<<"dup">>, <<"1">>, <<"+">>]},
-            Sys = {'SystemNode', <<"Calc">>, <<"">>, 'None',
+            Sys = {'HosBlueprint', <<"Calc">>, <<"">>, 'None',
                     [], [Handler], []},
             ?assertEqual({ok, []}, af_hos_check:check_system(Sys))
         end} end,
@@ -34,17 +34,17 @@ positive_test_() ->
         fun(_) -> {"handler body references parent and self legally", fun() ->
             Handler = {'HandlerSpec', notify, [], [],
                        [<<"Parent">>, <<"Self">>]},
-            Sys = {'SystemNode', <<"Self">>, <<"Parent">>, 'None',
+            Sys = {'HosBlueprint', <<"Self">>, <<"Parent">>, 'None',
                     [], [Handler], []},
             ?assertEqual({ok, []}, af_hos_check:check_system(Sys))
         end} end,
 
         fun(_) -> {"handler body references declared child", fun() ->
-            Child = {'SystemNode', <<"ChildA">>, <<"Owner">>, 'None',
+            Child = {'HosBlueprint', <<"ChildA">>, <<"Owner">>, 'None',
                      [], [], []},
             Handler = {'HandlerSpec', dispatch, [], [],
                        [<<"ChildA">>]},
-            Sys = {'SystemNode', <<"Owner">>, <<>>, 'None',
+            Sys = {'HosBlueprint', <<"Owner">>, <<>>, 'None',
                     [Child], [Handler], []},
             ?assertEqual({ok, []}, af_hos_check:check_system(Sys))
         end} end,
@@ -53,7 +53,7 @@ positive_test_() ->
             H1 = {'HandlerSpec', callout, [], [],
                   [<<"sibling-event">>]},
             H2 = {'HandlerSpec', 'sibling-event', [], [], []},
-            Sys = {'SystemNode', <<"X">>, <<>>, 'None',
+            Sys = {'HosBlueprint', <<"X">>, <<>>, 'None',
                     [], [H1, H2], []},
             ?assertEqual({ok, []}, af_hos_check:check_system(Sys))
         end} end,
@@ -61,9 +61,9 @@ positive_test_() ->
         fun(_) -> {"nested child's handler references its parent name", fun() ->
             ChildHandler = {'HandlerSpec', up, [], [],
                             [<<"Owner">>]},
-            Child = {'SystemNode', <<"ChildB">>, <<"Owner">>, 'None',
+            Child = {'HosBlueprint', <<"ChildB">>, <<"Owner">>, 'None',
                      [], [ChildHandler], []},
-            Sys = {'SystemNode', <<"Owner">>, <<>>, 'None',
+            Sys = {'HosBlueprint', <<"Owner">>, <<>>, 'None',
                     [Child], [], []},
             ?assertEqual({ok, []}, af_hos_check:check_system(Sys))
         end} end
@@ -79,7 +79,7 @@ negative_test_() ->
         fun(_) -> {"handler references an out-of-scope name", fun() ->
             Handler = {'HandlerSpec', boom, [], [],
                        [<<"SomeExternalThing">>]},
-            Sys = {'SystemNode', <<"S">>, <<>>, 'None',
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'None',
                     [], [Handler], []},
             ?assertMatch({violations, [_]},
                          af_hos_check:check_system(Sys))
@@ -88,7 +88,7 @@ negative_test_() ->
         fun(_) -> {"violation message cites axiom, system, handler, token", fun() ->
             Handler = {'HandlerSpec', boom, [], [],
                        [<<"ForbiddenName">>]},
-            Sys = {'SystemNode', <<"MySystem">>, <<>>, 'None',
+            Sys = {'HosBlueprint', <<"MySystem">>, <<>>, 'None',
                     [], [Handler], []},
             {violations, [Msg]} = af_hos_check:check_system(Sys),
             ?assertNotEqual(nomatch, string:find(Msg, "axiom_1")),
@@ -103,7 +103,7 @@ negative_test_() ->
             %% scope  -  only BuildingSystem (the parent) is.
             EmergencyHandler = {'HandlerSpec', trigger, [], [],
                                 [<<"Dispatcher">>, <<"fire-at-motor">>]},
-            Emergency = {'SystemNode', <<"EmergencySource">>,
+            Emergency = {'HosBlueprint', <<"EmergencySource">>,
                          <<"BuildingSystem">>, 'None',
                          [], [EmergencyHandler], []},
             {violations, Vs} = af_hos_check:check_system(Emergency),
@@ -113,12 +113,12 @@ negative_test_() ->
         fun(_) -> {"nested child violation is found under correct path", fun() ->
             BadChildHandler = {'HandlerSpec', go, [], [],
                                [<<"great-aunt">>]},
-            BadChild = {'SystemNode', <<"DeepChild">>,
+            BadChild = {'HosBlueprint', <<"DeepChild">>,
                         <<"MidLevel">>, 'None',
                         [], [BadChildHandler], []},
-            Mid = {'SystemNode', <<"MidLevel">>, <<"Root">>, 'None',
+            Mid = {'HosBlueprint', <<"MidLevel">>, <<"Root">>, 'None',
                     [BadChild], [], []},
-            Root = {'SystemNode', <<"Root">>, <<>>, 'None',
+            Root = {'HosBlueprint', <<"Root">>, <<>>, 'None',
                      [Mid], [], []},
             {violations, [Msg]} = af_hos_check:check_system(Root),
             ?assertNotEqual(nomatch, string:find(Msg, "Root.MidLevel.DeepChild"))
@@ -133,14 +133,14 @@ negative_test_() ->
 raise_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
         fun(_) -> {"ok system does not raise", fun() ->
-            Sys = {'SystemNode', <<"S">>, <<>>, 'None', [], [], []},
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'None', [], [], []},
             ?assertEqual(ok, af_hos_check:check_system_raise(Sys))
         end} end,
 
         fun(_) -> {"violating system raises axiom_violation", fun() ->
             Handler = {'HandlerSpec', boom, [], [],
                        [<<"NotInScope">>]},
-            Sys = {'SystemNode', <<"S">>, <<>>, 'None',
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'None',
                     [], [Handler], []},
             ?assertError({axiom_violation, _},
                          af_hos_check:check_system_raise(Sys))
@@ -160,7 +160,7 @@ trigger_scope_test_() ->
         fun(_) -> {"trigger with declared handler is accepted", fun() ->
             H = {'HandlerSpec', go, [], [], []},
             T = {'TransitionSpec', 'Idle', 'Ready', go, <<>>, 'none', 0},
-            Sys = {'SystemNode', <<"S">>, <<>>, 'SState', [], [H], [T]},
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'SState', [], [H], [T]},
             ?assertEqual({ok, []}, af_hos_check:check_system(Sys))
         end} end,
 
@@ -169,7 +169,7 @@ trigger_scope_test_() ->
             %% handler; the spec compiles silently today and the
             %% runtime drops the event. This check surfaces the typo.
             T = {'TransitionSpec', 'Idle', 'Ready', start, <<>>, 'none', 0},
-            Sys = {'SystemNode', <<"S">>, <<>>, 'SState', [], [], [T]},
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'SState', [], [], [T]},
             {violations, Vs} = af_hos_check:check_system(Sys),
             ?assert(lists:any(fun(M) ->
                 string:find(M, "axiom_1") =/= nomatch andalso
@@ -196,7 +196,7 @@ reachability_test_() ->
                 {'TransitionSpec', 'Ready',   'Working', go,    <<>>, 'none', 0},
                 {'TransitionSpec', 'Working', 'Idle',    reset, <<>>, 'none', 0}
             ],
-            Sys = {'SystemNode', <<"S">>, <<>>, 'SState',
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'SState',
                     [], [H1, H2], Ts},
             ?assertEqual({ok, []}, af_hos_check:check_system(Sys))
         end} end,
@@ -210,7 +210,7 @@ reachability_test_() ->
                 {'TransitionSpec', 'Idle',   'Ready',  go, <<>>, 'none', 0},
                 {'TransitionSpec', 'Orphan', 'Ready',  go, <<>>, 'none', 0}
             ],
-            Sys = {'SystemNode', <<"S">>, <<>>, 'SState',
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'SState',
                     [], [H], Ts},
             {violations, Vs} = af_hos_check:check_system(Sys),
             ?assert(lists:any(fun(M) ->
@@ -245,7 +245,7 @@ exhaustive_emergency_test_() ->
                 {'TransitionSpec', 'Running', 'Halted',  stop,  <<>>, 'none', 0},
                 {'TransitionSpec', 'Halted',  'Idle',    clear, <<>>, 'none', 0}
             ],
-            Sys = {'SystemNode', <<"S">>, <<>>, 'SState',
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'SState',
                     [], [H1, H2, H3], Ts},
             ?assertEqual({ok, []}, af_hos_check:check_system(Sys))
         end} end,
@@ -266,7 +266,7 @@ exhaustive_emergency_test_() ->
                 {'TransitionSpec', 'Running',  'Halted',   stop,  <<>>, 'none', 0},
                 {'TransitionSpec', 'Halted',   'Idle',     clear, <<>>, 'none', 0}
             ],
-            Sys = {'SystemNode', <<"S">>, <<>>, 'SState',
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'SState',
                     [], [H1, H2, H3, H4], Ts},
             {violations, Vs} = af_hos_check:check_system(Sys),
             ?assert(lists:any(fun(M) ->
@@ -297,7 +297,7 @@ exhaustive_emergency_test_() ->
                 {'TransitionSpec', 'Halted',     'Recovering', clear, <<>>, 'none', 0},
                 {'TransitionSpec', 'Recovering', 'Idle',       done,  <<>>, 'none', 0}
             ],
-            Sys = {'SystemNode', <<"S">>, <<>>, 'SState',
+            Sys = {'HosBlueprint', <<"S">>, <<>>, 'SState',
                     [], [H1, H2, H3, H4], Ts},
             ?assertEqual({ok, []}, af_hos_check:check_system(Sys))
         end} end

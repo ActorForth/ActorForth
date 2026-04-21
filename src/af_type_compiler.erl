@@ -1103,7 +1103,24 @@ build_frame(ProductSlots, N, DataStack) ->
 %% make-tuple them don't hit a list_to_atom crash on an atom value.
 normalize_binding('Atom', A) when is_atom(A) -> {'Atom', atom_to_list(A)};
 normalize_binding('Atom', B) when is_binary(B) -> {'Atom', binary_to_list(B)};
+normalize_binding(FType, RawVal) when is_tuple(RawVal), tuple_size(RawVal) >= 2 ->
+    %% A raw tuple field whose first element names a registered product
+    %% type is itself a flat-tuple product instance — push as-is so
+    %% body tokens see it with its real TOS type, not as a doubly-
+    %% tagged {FType, {FType, ...}} pair.
+    Head = element(1, RawVal),
+    case is_atom(Head) andalso is_flat_product_tuple(Head, RawVal) of
+        true  -> RawVal;
+        false -> {FType, RawVal}
+    end;
 normalize_binding(FType, RawVal) -> {FType, RawVal}.
+
+is_flat_product_tuple(Head, Tuple) ->
+    case catch af_type:get_type(Head) of
+        {ok, #af_type{fields = Fs}}
+            when Fs =/= [], length(Fs) =:= tuple_size(Tuple) - 1 -> true;
+        _ -> false
+    end.
 
 push_trace(undefined, Cont) -> Cont;
 push_trace(WordName, Cont) ->
