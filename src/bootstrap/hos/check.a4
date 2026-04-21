@@ -307,12 +307,28 @@ type HandlersWalk
 # Inputs: HosBlueprint.
 # Output: List of violation Strings.
 : check-blueprint-a4 HosBlueprint -> List ;
-  dup 2 elt                            # ( bp name-bin )
-  ""                                   # ( bp name-bin "" )
-  swap                                 # ( bp "" name-bin )
-  hos-path                             # ( bp path )
-  over 4 elt                           # ( bp path state-type )
-  rot 6 elt                            # ( path state-type handlers )
-  swap                                 # ( path handlers state-type )
-  rot                                  # ( handlers state-type path )
-  check-handlers-stateful .            # ( violations-list )
+  # Relies on HosBlueprint being a registered product type so that
+  # the auto-field-bindings (name, parent-name, state-type, children,
+  # handlers, transitions) are live inside the body. Callers must
+  # load runtime.a4 (which declares HosBlueprint) BEFORE calling
+  # this word. Drop the bp from the stack first since bindings are
+  # captured at word entry and persist.
+  drop                                 # drop bp; bindings persist
+  "" name hos-path                     # ( path )
+
+  # --- Axiom 5: stateful-body ---
+  dup                                  # ( path path )
+  handlers                             # ( path path handlers )
+  state-type                           # ( path path handlers st )
+  rot                                  # ( path handlers st path )
+  check-handlers-stateful              # ( path v1 )
+
+  # --- Axiom 1: trigger scope ---
+  over                                 # ( path v1 path )
+  transitions                          # ( path v1 path transitions )
+  handlers                             # ( path v1 path transitions handlers )
+  rot                                  # ( path v1 transitions handlers path )
+  check-transition-triggers            # ( path v1 v2 )
+
+  append                               # ( path v1++v2 )
+  swap drop .                          # ( violations )
