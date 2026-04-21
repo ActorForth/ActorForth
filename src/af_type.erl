@@ -48,6 +48,20 @@ init() ->
     ensure_type('Any'),
     ensure_type('Atom'),
     ensure_type('Ref'),
+    %% Invalidate any per-process apply_impl caches: a test fixture
+    %% that reruns af_repl:init_types/0 clears the ETS type registry
+    %% but leaves process-dict cache entries from the prior test
+    %% pointing at now-stale op impls, and in particular `atom_fallback`
+    %% entries that would silently atomize previously-unknown names
+    %% even after they're re-registered.
+    erase_apply_caches(),
+    ok.
+
+erase_apply_caches() ->
+    erlang:erase(af_native_dict_snapshot),
+    erlang:erase(af_native_dispatch_cache),
+    Keys = erlang:get_keys(),
+    [erlang:erase(K) || K <- Keys, is_tuple(K), element(1, K) =:= af_native_cache],
     ok.
 
 reset() ->

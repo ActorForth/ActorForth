@@ -13,6 +13,11 @@
 %% back to BEAM while its own implementation catches up.
 -export([a4_unreachable_states/1, a4_initial_state_str/1,
          a4_extra_violations/1]).
+%% Flip of #179: the DSL now calls check_via_a4/1 in place of
+%% check_system_raise/1 so a4-side `check-blueprint-a4` owns the
+%% axiom checking. The Erlang-side axiom functions remain available
+%% as an FFI service to the a4 checker.
+-export([check_via_a4/1, ensure_a4_loaded/0]).
 
 -define(REG_KEY, hos_system_registry).
 -define(REG_ETS, hos_system_registry_ets).
@@ -224,6 +229,55 @@ a4_unreachable_states(Transitions) when is_list(Transitions) ->
 a4_initial_state_str([]) -> <<>>;
 a4_initial_state_str([First | _]) ->
     list_to_binary(atom_to_list(element(2, First))).
+
+%% Run check-blueprint-a4 through the a4 interpreter and raise if
+%% any violation string comes back. Drop-in replacement for
+%% check_system_raise/1.
+check_via_a4(HosBlueprint) ->
+    ensure_a4_loaded(),
+    C0 = (af_interpreter:new_continuation())#continuation{
+        data_stack = [HosBlueprint]
+    },
+    C1 = af_interpreter:interpret_token(
+        #token{value = "check-blueprint-a4"}, C0),
+    case C1#continuation.data_stack of
+        [{'List', []}] -> ok;
+        [{'List', Items}] ->
+            Msgs = [binary_to_list(S) || {'String', S} <- Items],
+            case Msgs of
+                [] -> ok;
+                _ ->
+                    Msg = "HOS axiom violations:\n  " ++
+                          lists:flatten(lists:join("\n  ", Msgs)),
+                    error({axiom_violation, Msg})
+            end;
+        Other ->
+            error({hos_a4_check_unexpected, Other})
+    end.
+
+%% Idempotent loader for the two a4 source files the checker needs.
+%% runtime.a4 registers HosBlueprint + friends; check.a4 defines
+%% check-blueprint-a4. Called at first check_via_a4/1 entry.
+ensure_a4_loaded() ->
+    case af_type:find_op_by_name("check-blueprint-a4", 'HosBlueprint') of
+        {ok, _} -> ok;
+        _ ->
+            load_a4_source("src/bootstrap/hos/runtime.a4"),
+            load_a4_source("src/bootstrap/hos/check.a4"),
+            af_type_compiler:finalize_pending_checks(),
+            ok
+    end.
+
+load_a4_source(Path) ->
+    case file:read_file(Path) of
+        {ok, Content} ->
+            Tokens = af_parser:parse(binary_to_list(Content), Path),
+            af_interpreter:interpret_tokens(
+                Tokens, af_interpreter:new_continuation()),
+            ok;
+        {error, _} ->
+            error({a4_source_missing, Path})
+    end.
 
 %% a4-checker bridge: run every axiom check that the pure-a4 checker
 %% has NOT yet re-implemented locally. Takes the same HosBlueprint
