@@ -42,13 +42,13 @@
 # ===================================================================
 
 : atom->string Atom -> String ;
-  utf8                                 # ( atom utf8 )
-  swap                                 # ( utf8 atom )
-  nil swap cons                        # ( utf8 [atom] )
-  utf8 swap cons                       # ( [atom utf8] )
-  atom_to_binary
-  erlang
-  erlang-apply .
+  # ( arg ). Build args list [arg, utf8] for erlang:atom_to_binary/2.
+  nil                                  # ( arg [] )
+  utf8 cons                            # ( arg [utf8] )
+  swap cons                            # ( [arg, utf8] )
+  atom_to_binary                       # TOS atom 'atom_to_binary'
+  erlang                               # TOS atom 'erlang'
+  erlang-apply .                       # ( <<"arg">> )
 
 
 # ===================================================================
@@ -181,6 +181,58 @@
 
 
 # ===================================================================
+# Handler-walk accumulator.
+# ===================================================================
+#
+# Threaded across a reduce over a blueprint's handlers list. Captures
+# the (state-type, path) constants plus the growing violations list.
+
+type HandlersWalk
+  state-type  Atom
+  path        String
+  violations  List .
+
+
+# Reduce step for stateful-body axiom: given (acc, handler), run
+# check-stateful-body and append its result to acc.violations.
+# Returns updated acc.
+: reduce-stateful-body HandlersWalk Any -> HandlersWalk ;
+  # Stack: (acc, handler). Auto-field-bindings expose state-type,
+  # path, violations from acc.
+  dup                                  # ( acc handler handler )
+  state-type                           # ( acc handler handler st )
+  path                                 # ( acc handler handler st path )
+  check-stateful-body                  # ( acc handler viol-list-for-this-handler )
+  violations                           # ( acc handler new-viols cur-viols )
+  swap                                 # ( acc handler cur-viols new-viols )
+  append                               # ( acc handler combined )
+  # Stack: (acc, handler, combined). Need (handler, acc, combined)
+  # so that `violations!` ( new-val acc -> acc ) can fire - its
+  # sig_in TOS-first is [HandlersWalk, List] meaning TOS=acc, below=list.
+  rot                                  # ( handler combined acc )
+  swap                                 # ( handler acc combined )
+  violations!                          # ( handler acc' )
+  swap drop .                          # drop handler, keep acc'
+
+
+# Check all handlers for stateful-body-axiom violations. Takes
+# (handlers-list, state-type, path) and returns a List of violation
+# Strings. Uses the HandlersWalk accumulator through reduce.
+: check-handlers-stateful List Atom String -> List ;
+  # Entering stack (TOS-right): ( list st path ).
+  # handlerswalk constructor sig_in TOS-first is [List String Atom],
+  # so it expects TOS=List(violations), below=String(path),
+  # below=Atom(state-type). We already have (st path) in that order
+  # under path; just push the initial empty violations list as TOS.
+  nil                                  # ( list st path viol-init )
+  handlerswalk                         # ( list acc )
+  "reduce-stateful-body" to-atom       # ( list acc atom )
+  reduce                               # ( acc' )
+  violations                           # ( acc' viols )
+  swap drop .                          # ( viols )
+
+
+# ===================================================================
 # Top-level driver: check-blueprint-a4
 # ===================================================================
 #
@@ -193,39 +245,9 @@
   dup 2 elt                            # ( bp name-bin )
   ""                                   # ( bp name-bin "" )
   swap                                 # ( bp "" name-bin )
-  # binary is already a String in a4, concat-safe; hos-path takes String+String.
   hos-path                             # ( bp path )
   over 4 elt                           # ( bp path state-type )
   rot 6 elt                            # ( path state-type handlers )
   swap                                 # ( path handlers state-type )
   rot                                  # ( handlers state-type path )
-  # Map check-stateful-body across handlers with the shared st+path.
-  # For a quick first pass, iterate explicitly via a reducer word
-  # that threads (state-type, path) as outer constants.
-  check-handlers-stateful-simple .
-
-# Reducer stand-in: walks the handlers list, calling check-stateful-body
-# on each element. Collects results by concatenation.
-: check-handlers-stateful-simple List Atom String -> List ;
-  # ( handlers state-type path )
-  rot                                  # ( state-type path handlers )
-  swap                                 # ( state-type handlers path )
-  check-handlers-stateful-go .
-
-: check-handlers-stateful-go Atom List String -> List ;
-  # ( state-type handlers path )
-  over empty?                          # ( state-type handlers path empty? )
-  check-handlers-stateful-go-step .
-
-: check-handlers-stateful-go-step Atom List String Bool -> List ;
-    : Atom List String True -> List ;
-        drop drop drop drop
-        nil
-    : Atom List String False -> List ;
-        drop                           # drop bool
-        # ( state-type handlers path )
-        over                           # ( state-type handlers path handlers )
-        head                           # ( state-type handlers path handler )
-        rot rot                        # ( state-type handler handlers path )  - need care
-        # Simpler: restructure manually.
-        drop drop drop drop nil .      # stub: emit empty for now; wired in next pass
+  check-handlers-stateful .            # ( violations-list )
