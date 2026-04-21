@@ -239,10 +239,83 @@ type TriggersWalk
 # table must be reachable from the initial state.
 # ===================================================================
 #
-# Deferred - requires graph walk in a4. Empty-list stub so later
-# passes can call this without breaking the sig.
+# Graph walk is delegated to Erlang helpers exported from
+# af_hos_check (a4_unreachable_states/1, a4_initial_state_str/1).
+# The a4 side formats the violation message and walks the returned
+# list of state names. Stateless systems (state-type = 'None') have
+# no state graph and are skipped.
+
+# FFI wrappers.
+: a4-unreachable-states List -> List ;
+  nil swap cons
+  a4_unreachable_states
+  af_hos_check
+  erlang-apply .
+
+: a4-initial-state-str List -> String ;
+  nil swap cons
+  a4_initial_state_str
+  af_hos_check
+  erlang-apply .
+
+# Accumulator for the reduce over the unreachable-names list.
+type ReachabilityWalk
+  initial     String
+  path        String
+  violations  List .
+
+# One violation per unreachable name.
+: reduce-reachability ReachabilityWalk Any -> ReachabilityWalk ;
+  # ( acc name-str ). Use auto-field bindings (initial, path, violations).
+  dup                                  # ( acc name name )   - keep copy for "into '~s'" near end
+  path                                 # ( acc name name path )
+  "axiom_5: system '" swap concat      # ( acc name name prefix1 )
+  "' state '" concat                   # ( acc name name part2 )
+  swap concat                          # ( acc name part3 )
+  "' is unreachable from initial state '" concat
+                                       # ( acc name part4 )
+  initial concat                       # ( acc name part5 )
+  "'. Either declare a transition into '" concat
+                                       # ( acc name part6 )
+  swap concat                          # ( acc part7 )
+  "' or delete it." concat             # ( acc full-msg )
+  violations                           # ( acc msg viols )
+  swap                                 # ( acc viols msg )
+  nil swap cons                        # ( acc viols [msg] )
+  append                               # ( acc viols' )
+  violations! .                        # ( acc' )
+
+# Top-level reachability check.
 : check-state-reachability List Atom String -> List ;
-  drop drop drop nil .
+  # ( transitions state-type path )
+  over None ==                         # ( transitions st path stateless? )
+  check-state-reachability-step .
+
+: check-state-reachability-step List Atom String Bool -> List ;
+    : List Atom String True -> List ;
+        # stateless: no check
+        drop drop drop drop
+        nil
+    : List Atom String False -> List ;
+        drop                           # drop bool
+        # ( transitions state-type path )
+        swap drop                      # drop state-type -> ( transitions path )
+        # Pull initial + unreachable names from Erlang.
+        over                           # ( transitions path transitions )
+        a4-initial-state-str           # ( transitions path initial )
+        rot                            # ( path initial transitions )
+        a4-unreachable-states          # ( path initial names )
+        # Rearrange to ( names initial path [] ) so the constructor's
+        # reverse mapping yields element(2)=initial, element(3)=path,
+        # element(4)=violations=[].
+        swap                           # ( path names initial )
+        rot                            # ( names initial path )
+        nil                            # ( names initial path [] )
+        reachabilitywalk               # ( names acc )
+        "reduce-reachability" to-atom
+        reduce                         # ( acc' )
+        violations
+        swap drop .                    # ( violations-list )
 
 
 # ===================================================================
@@ -309,10 +382,7 @@ type HandlersWalk
 : check-blueprint-a4 HosBlueprint -> List ;
   # Relies on HosBlueprint being a registered product type so that
   # the auto-field-bindings (name, parent-name, state-type, children,
-  # handlers, transitions) are live inside the body. Callers must
-  # load runtime.a4 (which declares HosBlueprint) BEFORE calling
-  # this word. Drop the bp from the stack first since bindings are
-  # captured at word entry and persist.
+  # handlers, transitions) are live inside the body.
   drop                                 # drop bp; bindings persist
   "" name hos-path                     # ( path )
 
@@ -329,6 +399,14 @@ type HandlersWalk
   handlers                             # ( path v1 path transitions handlers )
   rot                                  # ( path v1 transitions handlers path )
   check-transition-triggers            # ( path v1 v2 )
+  append                               # ( path v1v2 )
 
-  append                               # ( path v1++v2 )
+  # --- Axiom 5: state reachability ---
+  over                                 # ( path v1v2 path )
+  state-type                           # ( path v1v2 path st )
+  transitions                          # ( path v1v2 path st transitions )
+  swap rot                             # ( path v1v2 transitions st path )
+  check-state-reachability             # ( path v1v2 v3 )
+  append                               # ( path all-viols )
+
   swap drop .                          # ( violations )

@@ -8,6 +8,10 @@
 -export([check_system/1, check_system_raise/1, init/0]).
 -export([register_system/1, lookup_system/1, clear_registry/0,
          registered_child_events/1]).
+%% Helpers exposed so the in-progress a4 checker
+%% (src/bootstrap/hos/check.a4) can delegate complex graph walks
+%% back to BEAM while its own implementation catches up.
+-export([a4_unreachable_states/1, a4_initial_state_str/1]).
 
 -define(REG_KEY, hos_system_registry).
 -define(REG_ETS, hos_system_registry_ets).
@@ -201,6 +205,24 @@ registered_child_events(ChildName) ->
         {'HosBlueprint', _, _, _, _, Handlers, _} ->
             [atom_to_list(element(2, H)) || H <- Handlers]
     end.
+
+%% a4-checker bridge: given a transitions list, return the list of
+%% state names that are NOT reachable from the initial state (= From
+%% of the first transition). Result is a list of binaries so it
+%% round-trips through the a4 String type.
+a4_unreachable_states([]) -> [];
+a4_unreachable_states(Transitions) when is_list(Transitions) ->
+    [First | _] = Transitions,
+    Initial = atom_to_list(element(2, First)),
+    All = all_declared_states(Transitions),
+    Reachable = reachable_from(Initial, Transitions, [Initial]),
+    [list_to_binary(S) || S <- All, not lists:member(S, Reachable)].
+
+%% a4-checker bridge: initial state of a transitions list, as a
+%% binary; returns <<>> when transitions is empty.
+a4_initial_state_str([]) -> <<>>;
+a4_initial_state_str([First | _]) ->
+    list_to_binary(atom_to_list(element(2, First))).
 
 op_check_system(Cont) ->
     [Instance | Rest] = Cont#continuation.data_stack,
