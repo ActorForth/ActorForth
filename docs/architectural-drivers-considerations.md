@@ -49,11 +49,51 @@ A language is always standing on prior work. These are the figures whose ideas s
 
 **Evan Czaplicki (Elm, 2012 onward).** The idea that a small, opinionated, *friendly* language can still be enough to build serious things, and that language design is in part an ergonomic exercise: keeping the error messages kind, the mental model small, and the tooling helpful. ActorForth's live-pid dashboard, the diagnostic engine categories, and the deliberate choice of Atom identifiers for short names are all in this spirit.
 
+**Alan Kay (Smalltalk, 1972 onward).** The original object-oriented vision — which Kay has since clarified was never about classes, inheritance, or `.`-access-to-fields. In his own words, "OOP to me means only messaging, local retention and protection and hiding of state-process, and extreme late-binding of all things." That is a description of an actor: a process with private state that responds only to messages, whose dispatch is resolved at the moment the message arrives. The languages that came to be called "object-oriented" in the mainstream — Java, C#, most of C++, JavaScript's prototype chain — are more accurately *class-oriented*: inheritance hierarchies and shared-state method tables, with direct field access and synchronous method calls. Kay has said repeatedly that he regrets the term being attached to those languages. ActorForth's actor model *is* Kay's proposal taken literally: every `server` is a BEAM process, every `<<` / `>>` crosses a real process boundary, every dispatch is late-bound through the receiving type's dictionary, and state never escapes the owning actor. In Kay's technical sense, the best a4 programs are more object-oriented than the programs most people write in OO languages. See *On the Phrase "Object-Oriented"* below for the argument expanded.
+
+**Trygve Reenskaug & James O. Coplien (DCI, 2009 onward; *Working with Objects* drafts).** Data–Context–Interaction revisits Kay's OO from a different angle: separate what an object *is* (its data, its identity) from what an object *does in a given use case* (its role), and recognise the use case itself as a first-class architectural element (its context). Reenskaug (also the inventor of MVC) and Coplien argue that mainstream "OO" languages collapse these three into the class, losing the algorithmic clarity of the use case and scattering its logic across methods on data classes. ActorForth does not yet ship explicit roles, but the programme is compatible by construction: a word body *is* a context, a type's op dictionary *supplies* role behaviour, and the token stream *is* the use case's narrative. The Reenskaug / Coplien body of work is cited in full in the foundational DCI materials (Reenskaug's 2015 DCI Metamodel; Coplien & Reenskaug's 2012 *DCI Paradigm* in Annals of Software Architecture; the 2014 *Working with Objects — In Computer and Mind* draft). A related landmark in the responsibility-driven / object-oriented-design tradition is **Rebecca Wirfs-Brock's *Designing Object-Oriented Software* (1990)** — the "Purple Book" — whose emphasis on what objects are *responsible for* (rather than what they inherit from) anticipates DCI's role framing and aligns naturally with a4's type-owns-its-dispatch model.
+
 **Margaret Hamilton (Apollo, 1969; Higher Order Software, 1976).** The concrete proof that formal discipline scales to life-critical systems — *when the cost is justifiable.* After Apollo, Hamilton formalised the methods she had developed into **Higher Order Software (HOS)**: a system-design discipline where a program is a hierarchy of subsystems communicating only through declared events, whose inter-system references obey a small set of structural axioms, and where unsafe compositions are unrepresentable rather than runtime-guarded. HOS's value proposition is narrow but sharp: explicit, checked, hierarchical state machines where safety properties emerge from the axiom set. That is exactly what you want for lifts, payment terminals, signalling, medical devices, and protocol state. It is not what you want for CRUD, aggregation, ML inference, games, or most web backends. System-of-Systems is more universal in the sense that the generic actor model covers far more ground — but HOS is not the actor model; it is a discipline on top of it. The discipline earns its keep where safety matters and costs attention where it doesn't. ActorForth provides HOS as an optional type-backed DSL (see `docs/hos/`), not as a tax on the entire type vocabulary. Hamilton's work defines the upper boundary of what proof buys you, and why reliability-through-simplicity is the pragmatic answer below that boundary.
 
 **Edsger Dijkstra (EWD249 and *passim*).** The foundational claim that the programmer's job is to *demonstrate* correctness, not merely achieve it. ActorForth's type-driven dispatch, its preference for small understandable primitives, and its insistence on structured word composition all derive from this demand.
 
 A compact bibliography is in **Appendix A**.
+
+---
+
+## Part 0.6: On the Phrase "Object-Oriented"
+
+A short clarification, because it matters for how ActorForth positions itself against the languages a reader will already know.
+
+The phrase "object-oriented" was coined by Alan Kay in the early 1970s to describe the programming model he was building with Smalltalk. Kay's definition, stated many times since and most concisely in a 2003 message-board reply:
+
+> *"OOP to me means only messaging, local retention and protection and hiding of state-process, and extreme late-binding of all things."*
+
+Unpack the three clauses:
+
+1. **Messaging.** An object is reached by sending it a message, not by calling a method on it. Messages cross some kind of boundary — ideally a real process boundary, at minimum a dispatch layer that could be one. The sender does not directly manipulate the receiver's state; it asks.
+
+2. **Local retention and protection and hiding of state-process.** The object owns its own state and its own thread of control. Nothing outside the object can reach in and change it. The object's state is as private as its implementation.
+
+3. **Extreme late-binding of all things.** The method that handles a message is resolved at the moment the message arrives, based on what the object is at that moment — not at compile time, not at link time, not at instance-creation time. The binding is as late as the language permits.
+
+Now compare to the languages that inherited the "object-oriented" label in industry:
+
+- **Java, C#, mainstream C++.** Objects are instances of classes. Methods are called, not messaged — the call site resolves the method through a vtable at roughly the speed of a direct call, with no boundary crossed. Field access is direct: `obj.field` is a memory load. State is only as private as the `private` keyword enforces, which is a compile-time contract against the source reader, not a runtime guarantee against a determined caller. Late binding exists for virtual methods, but everything else is bound at compile time.
+
+- **JavaScript, Python, Ruby.** Late-binding is stronger — methods can be added at runtime, objects have prototype chains or dictionaries. But the call is still synchronous, state is still reachable through direct field access, and "private" is either a naming convention or a language feature that enforces compile-time rules.
+
+Kay has said in several interviews that he regrets the phrase being attached to the C++ / Java lineage. On occasion he has suggested "messaging-oriented" or "process-oriented" would have described his intent more clearly.
+
+**ActorForth takes Kay's definition as written.** Every `server` spawns a BEAM process, which is a real OS-isolated unit of concurrent execution. The `<<` / `>>` protocol sends messages, not calls method pointers. The actor's state is physically unreachable from outside its process — there is no syntactic form in the language that reaches past a pid to read a field, because there is no field on a pid; the pid is a handle, not a pointer. Dispatch is resolved at message receipt through the type dictionary, which is an ETS table that can change between the send and the receive. This is extreme late-binding, literally.
+
+The claim that falls out of this is not rhetorical.
+
+> ActorForth, running on BEAM, implements Kay's definition of "object-oriented" more completely than the languages that are commonly labelled object-oriented.
+
+That claim is not a marketing line. It is a recognition that the words drifted and the thing they originally named — processes, messages, late-binding — already has a home in the Erlang / BEAM tradition that ActorForth now builds on. Joe Armstrong made the same observation about Erlang; the claim for a4 is the same observation with types and a concatenative surface added on top.
+
+A consequence worth naming: most "OO design advice" from the mainstream literature is advice for managing class hierarchies and method-dispatch tables in a shared-memory language. Some of it transfers; much of it does not. DCI (Reenskaug / Coplien), responsibility-driven design (Wirfs-Brock), and the original Smalltalk / Actor tradition are the lineage a4 programmers should read first. The GoF patterns are solutions to problems a4 does not have.
 
 ---
 

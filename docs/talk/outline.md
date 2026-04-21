@@ -26,10 +26,17 @@ Scaffolding only. The narration around each slide is yours.
   > *"The best ActorForth programs rarely use ActorForth primitives."*
 
 ### Slide 4 — The giants
-- Moore (Forth), Hewitt (Actors), Steele (Growing a Language),
-  Stroustrup (zero-overhead abstractions), Czaplicki (friendly small languages),
-  Hamilton / Dijkstra (proof at scale — where it buys you something, and where it stops)
+- Moore (Forth), Hewitt (Actors), Kay (the original OO —
+  *messaging, hidden state-process, extreme late-binding*),
+  Reenskaug & Coplien (DCI — data vs role vs context),
+  Steele (Growing a Language), Stroustrup (zero-overhead abstractions),
+  Czaplicki (friendly small languages),
+  Hamilton / Dijkstra (proof at scale — where it buys you something,
+  and where it stops).
 - One sentence each. Don't linger; this is context for what follows.
+- When you hit Kay, pause: "Kay's definition of OO is the actor
+  model, and he's said many times it was never the thing Java
+  inherited. Hold that thought for slide 7."
 
 ---
 
@@ -50,6 +57,15 @@ Scaffolding only. The narration around each slide is yours.
 - `server`, `<<`, `>>`, `spawn`, `send`, `receive`
 - Unbounded non-determinism as the default, not a library pattern
 - BEAM pid = a4 Actor. One-to-one.
+- Call back to Kay: every `server` is a process; every `<<` crosses
+  a real process boundary; dispatch is resolved at message receipt
+  through the type's dictionary. *Messaging, hidden state-process,
+  extreme late-binding* — the three clauses of Kay's definition,
+  implemented literally. "By Kay's own words, a4 is more
+  object-oriented than the languages that inherited the label."
+- This is the anchor moment of the talk's intellectual claim.
+  Don't rush past it. If you get one big Q&A question out of the
+  talk, it will probably come from this slide.
 
 ### Slide 8 — DSL-first example, live
 - Small DSL built at the REPL in front of the audience (pick something short: a budget allocator, a state machine, whatever you'd enjoy).

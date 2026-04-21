@@ -681,6 +681,16 @@ Most languages bolt concurrency on as an afterthought — threads, locks, mutexe
 
 An actor is a process with its own stack, its own state, and a mailbox. Actors communicate by sending messages. There is no shared state. No locks. No races. If you need another actor to do something, you send it a message.
 
+> **Aside — what Alan Kay actually meant by "object-oriented."**
+>
+> Kay coined the phrase for Smalltalk and has spent forty years pointing out that it did *not* mean classes, inheritance, or `obj.field`-style direct access. His definition:
+>
+> > *"OOP to me means only messaging, local retention and protection and hiding of state-process, and extreme late-binding of all things."*
+>
+> That is a description of an actor. A process with private state that responds only to messages, whose dispatch is resolved at the moment the message arrives. Most languages people call "object-oriented" — Java, C#, mainstream C++ — are class-oriented: methods called through vtables, state reached by direct memory access, dispatch resolved mostly at compile time. Kay has said more than once that he regrets the label being attached to that lineage.
+>
+> When you write `<< withdraw 50 >>` against a Counter or a BankAccount actor later in this chapter, you are doing the thing Kay was describing. The `server` you just built is a real BEAM process; the message crosses a real process boundary; the dispatch is resolved on receipt through the type's dictionary. Nothing else in mainstream industry programming reaches Kay's definition this literally. See *Part 0.6* in `architectural-drivers-considerations.md` for the argument in full.
+
 ### The `server` Pattern
 
 The `server` word takes any typed instance from the stack and spawns an Erlang process to hold it. That process becomes a stateful actor — it holds the instance as its state, and accepts messages that correspond to user-defined words operating on that type.
