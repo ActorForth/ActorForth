@@ -108,7 +108,7 @@ interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1) ->
             case get_tos_handler(Stack, Dict) of
                 {ok, Handler} ->
                     debug_trace(Debug, Value, Stack, handler),
-                    Handler(Value, Cont1);
+                    dispatch_handler(Handler, Value, Cont1);
                 none ->
                     StringVal = {'String', list_to_binary(Value)},
                     debug_trace(Debug, Value, Stack, {literal, StringVal}),
@@ -161,7 +161,7 @@ full_dispatch_and_cache(Value, Stack, Dict, Debug, Cont1, Key) ->
                 {ok, Handler} ->
                     %% Handler dispatch is stateful — never cache.
                     debug_trace(Debug, Value, Stack, handler),
-                    Handler(Value, Cont1);
+                    dispatch_handler(Handler, Value, Cont1);
                 none ->
                     case af_type:dict_find_op_in_any(Value, Stack, Dict) of
                         {ok, #operation{impl = Impl, sig_in = SigIn, guard = Guard} = Op} ->
@@ -302,7 +302,7 @@ interpret_token_ets(Value, Token, Stack, Debug, Cont1) ->
             case get_tos_handler(Stack) of
                 {ok, Handler} ->
                     debug_trace(Debug, Value, Stack, handler),
-                    Handler(Value, Cont1);
+                    dispatch_handler(Handler, Value, Cont1);
                 none ->
                     StringVal = {'String', list_to_binary(Value)},
                     debug_trace(Debug, Value, Stack, {literal, StringVal}),
@@ -321,7 +321,7 @@ interpret_unquoted(Value, Stack, Debug, Cont1) ->
             case get_tos_handler(Stack) of
                 {ok, Handler} ->
                     debug_trace(Debug, Value, Stack, handler),
-                    Handler(Value, Cont1);
+                    dispatch_handler(Handler, Value, Cont1);
                 none ->
                     case af_type:find_op_in_any(Value, Stack) of
                         {ok, #operation{impl = Impl} = Op} ->
@@ -368,7 +368,7 @@ interpret_token_dict_traced(Value, Token, Stack, Dict, Debug, Cont1) ->
             case get_tos_handler(Stack, Dict) of
                 {ok, Handler} ->
                     debug_trace(Debug, Value, Stack, handler),
-                    Result = Handler(Value, Cont1),
+                    Result = dispatch_handler(Handler, Value, Cont1),
                     record_event(Token, handler, Result);
                 none ->
                     StringVal = {'String', list_to_binary(Value)},
@@ -412,7 +412,7 @@ full_dispatch_and_cache_traced(Value, Token, Stack, Dict, Debug, Cont1, Key) ->
             case get_tos_handler(Stack, Dict) of
                 {ok, Handler} ->
                     debug_trace(Debug, Value, Stack, handler),
-                    Result = Handler(Value, Cont1),
+                    Result = dispatch_handler(Handler, Value, Cont1),
                     record_event(Token, handler, Result);
                 none ->
                     case af_type:dict_find_op_in_any(Value, Stack, Dict) of
@@ -444,7 +444,7 @@ interpret_token_ets_traced(Value, Token, Stack, Debug, Cont1) ->
             case get_tos_handler(Stack) of
                 {ok, Handler} ->
                     debug_trace(Debug, Value, Stack, handler),
-                    Result = Handler(Value, Cont1),
+                    Result = dispatch_handler(Handler, Value, Cont1),
                     record_event(Token, handler, Result);
                 none ->
                     StringVal = {'String', list_to_binary(Value)},
@@ -466,7 +466,7 @@ interpret_unquoted_traced(Value, Token, Stack, Debug, Cont1) ->
             case get_tos_handler(Stack) of
                 {ok, Handler} ->
                     debug_trace(Debug, Value, Stack, handler),
-                    Result = Handler(Value, Cont1),
+                    Result = dispatch_handler(Handler, Value, Cont1),
                     record_event(Token, handler, Result);
                 none ->
                     case af_type:find_op_in_any(Value, Stack) of
@@ -612,3 +612,17 @@ get_tos_handler([TosItem | _], Dict) when is_tuple(TosItem), tuple_size(TosItem)
         false -> none
     end;
 get_tos_handler(_, _) -> none.
+
+%% Dispatch a TOS-type handler (either an Erlang fun or an atom
+%% naming an a4 word). Ext-1 / #180: when the handler is an atom,
+%% the raw token value is pushed onto the data_stack as a String
+%% and the named word is invoked through the normal interpret_token
+%% path — lets #af_type{handler = @a4-word} behave exactly like the
+%% old fun hook from user code's point of view.
+dispatch_handler(Handler, Value, Cont) when is_function(Handler) ->
+    Handler(Value, Cont);
+dispatch_handler(WordName, Value, Cont) when is_atom(WordName) ->
+    StringItem = {'String', list_to_binary(Value)},
+    NewStack = [StringItem | Cont#continuation.data_stack],
+    Cont2 = Cont#continuation{data_stack = NewStack},
+    interpret_token(#token{value = atom_to_list(WordName)}, Cont2).
