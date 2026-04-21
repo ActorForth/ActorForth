@@ -559,3 +559,36 @@ type HandlersWalk
   a4_extra_violations
   af_hos_check
   erlang-apply .
+
+
+# ===================================================================
+# Recursive tree walk (#178): run check-blueprint-a4 on each child
+# in a blueprint's children list and append the violations.
+# ===================================================================
+#
+# Children in a DSL-built blueprint are name-stub blueprints
+# (parent=me, state=None, no handlers/transitions/nested children),
+# so their own axiom outputs are typically empty. The walk becomes
+# meaningful when callers pass a full tree (e.g. the Erlang bridge
+# supplies the registered version for each named child). Keeping the
+# walk as a standalone word gives callers that choice.
+
+type ChildWalk
+  violations  List .
+
+: walk-child-step ChildWalk Any -> ChildWalk ;
+  # ( acc child-bp )
+  check-blueprint-a4                     # ( acc child-viols )
+  violations                             # ( acc child-viols acc-viols )
+  swap                                   # ( acc acc-viols child-viols )
+  append                                 # ( acc combined )
+  violations! .                          # ( acc' )
+
+: walk-children List -> List ;
+  # ( children )
+  nil                                    # ( children viol-init )
+  childwalk                              # ( children acc )
+  "walk-child-step" to-atom              # ( children acc atom )
+  reduce                                 # ( acc' )
+  violations
+  swap drop .                            # ( violations )

@@ -91,5 +91,23 @@ a4_checker_test_() ->
             ?assert(lists:any(fun(M) ->
                 string:find(M, "is unreachable from initial state") =/= nomatch
             end, Msgs))
+        end} end,
+
+        fun(_) -> {"walk-children recurses into child blueprints (#178)", fun() ->
+            %% Child blueprint with a stateful-body violation of its own.
+            ChildHandler = {'HandlerSpec', do, [], [],
+                            [{'String', <<"junk">>}]},
+            Child = {'HosBlueprint', <<"Child">>, <<"Parent">>,
+                     'Counting', [], [ChildHandler], []},
+            C0 = (af_interpreter:new_continuation())#continuation{
+                data_stack = [{'List', [Child]}]
+            },
+            C1 = af_interpreter:interpret_token(
+                #token{value = "walk-children"}, C0),
+            [{'List', Items}] = C1#continuation.data_stack,
+            Msgs = [binary_to_list(S) || {'String', S} <- Items],
+            ?assert(lists:any(fun(M) ->
+                string:find(M, "has a non-empty body") =/= nomatch
+            end, Msgs))
         end} end
     ]}.
