@@ -382,31 +382,49 @@ type HandlersWalk
 : check-blueprint-a4 HosBlueprint -> List ;
   # Relies on HosBlueprint being a registered product type so that
   # the auto-field-bindings (name, parent-name, state-type, children,
-  # handlers, transitions) are live inside the body.
-  drop                                 # drop bp; bindings persist
-  "" name hos-path                     # ( path )
+  # handlers, transitions) are live inside the body. Bindings are
+  # captured at word entry and survive subsequent stack ops, so we
+  # leave the original bp on the stack for the final FFI call to
+  # the Erlang extra-violations bridge.
+  "" name hos-path                     # ( bp path )
 
   # --- Axiom 5: stateful-body ---
-  dup                                  # ( path path )
-  handlers                             # ( path path handlers )
-  state-type                           # ( path path handlers st )
-  rot                                  # ( path handlers st path )
-  check-handlers-stateful              # ( path v1 )
+  dup                                  # ( bp path path )
+  handlers                             # ( bp path path handlers )
+  state-type                           # ( bp path path handlers st )
+  rot                                  # ( bp path handlers st path )
+  check-handlers-stateful              # ( bp path v1 )
 
   # --- Axiom 1: trigger scope ---
-  over                                 # ( path v1 path )
-  transitions                          # ( path v1 path transitions )
-  handlers                             # ( path v1 path transitions handlers )
-  rot                                  # ( path v1 transitions handlers path )
-  check-transition-triggers            # ( path v1 v2 )
-  append                               # ( path v1v2 )
+  over                                 # ( bp path v1 path )
+  transitions                          # ( bp path v1 path transitions )
+  handlers                             # ( bp path v1 path transitions handlers )
+  rot                                  # ( bp path v1 transitions handlers path )
+  check-transition-triggers            # ( bp path v1 v2 )
+  append                               # ( bp path v1v2 )
 
   # --- Axiom 5: state reachability ---
-  over                                 # ( path v1v2 path )
-  state-type                           # ( path v1v2 path st )
-  transitions                          # ( path v1v2 path st transitions )
-  swap rot                             # ( path v1v2 transitions st path )
-  check-state-reachability             # ( path v1v2 v3 )
-  append                               # ( path all-viols )
+  over                                 # ( bp path v1v2 path )
+  state-type                           # ( bp path v1v2 path st )
+  transitions                          # ( bp path v1v2 path st transitions )
+  swap rot                             # ( bp path v1v2 transitions st path )
+  check-state-reachability             # ( bp path v1v2 v3 )
+  append                               # ( bp path v-a4 )
 
+  # --- Remaining axioms via Erlang bridge ---
+  # Transition-effect scope, exhaustive emergencies, per-handler
+  # scope / transition walks, and the children tree walk are still
+  # on the Erlang side. a4_extra_violations/1 filters out the
+  # axioms the a4 checker already owns, so no duplicates.
+  rot                                  # ( path v-a4 bp )
+  blueprint-extra-violations           # ( path v-a4 v-extra )
+  append                               # ( path all-viols )
   swap drop .                          # ( violations )
+
+# FFI wrapper: call af_hos_check:a4_extra_violations/1 on a HosBlueprint
+# and get the violations the a4-side has not itself produced.
+: blueprint-extra-violations HosBlueprint -> List ;
+  nil swap cons
+  a4_extra_violations
+  af_hos_check
+  erlang-apply .

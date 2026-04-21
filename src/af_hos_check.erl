@@ -11,7 +11,8 @@
 %% Helpers exposed so the in-progress a4 checker
 %% (src/bootstrap/hos/check.a4) can delegate complex graph walks
 %% back to BEAM while its own implementation catches up.
--export([a4_unreachable_states/1, a4_initial_state_str/1]).
+-export([a4_unreachable_states/1, a4_initial_state_str/1,
+         a4_extra_violations/1]).
 
 -define(REG_KEY, hos_system_registry).
 -define(REG_ETS, hos_system_registry_ets).
@@ -223,6 +224,61 @@ a4_unreachable_states(Transitions) when is_list(Transitions) ->
 a4_initial_state_str([]) -> <<>>;
 a4_initial_state_str([First | _]) ->
     list_to_binary(atom_to_list(element(2, First))).
+
+%% a4-checker bridge: run every axiom check that the pure-a4 checker
+%% has NOT yet re-implemented locally. Takes the same HosBlueprint
+%% the a4 checker was handed, returns a list of violation binaries.
+%%
+%% This covers:
+%%   - transition-effect scope (axiom 1 for declared effects)
+%%   - exhaustive emergency coverage (axiom 5)
+%%   - per-handler body scope walk (axiom 1 for body tokens)
+%%   - per-handler transition walk (axiom 5 for -> markers)
+%%   - recursive tree walk into children
+%%
+%% The a4-owned axioms (stateful-body, trigger-scope, state-
+%% reachability) are EXCLUDED here so check-blueprint-a4 does not
+%% double-count them.
+a4_extra_violations({'HosBlueprint', _, _, _, _, _, _} = Sys) ->
+    All = violations(Sys),
+    Owned = a4_owned_violation_prefixes(),
+    Remaining = [V || V <- All, not starts_with_any(V, Owned)],
+    [list_to_binary(V) || V <- Remaining];
+a4_extra_violations(_) -> [].
+
+a4_owned_violation_prefixes() ->
+    %% Violations produced by the pure-a4 checker. Used to filter
+    %% them out of the Erlang side's output so the two don't double
+    %% up when check-blueprint-a4 appends both.
+    %%
+    %% Match by the structural shape of the message, not by its
+    %% exact text, so wording changes on either side don't create
+    %% accidental duplicates. Each predicate returns true iff the
+    %% violation belongs to an a4-owned axiom.
+    [fun stateful_body_violation/1,
+     fun trigger_scope_violation/1,
+     fun state_reachability_violation/1].
+
+stateful_body_violation(Msg) ->
+    %% "axiom_5: system '...' handler '...' has a non-empty body; ..."
+    has_substring(Msg, "has a non-empty body").
+
+trigger_scope_violation(Msg) ->
+    %% "axiom_1: system '...' transition X -> Y uses trigger '...'
+    %%  but '...' is not a declared handler..."
+    has_substring(Msg, "is not a declared handler on this system")
+        andalso has_substring(Msg, "axiom_1").
+
+state_reachability_violation(Msg) ->
+    %% "axiom_5: system '...' state '...' is unreachable from initial
+    %% state '...'. Either declare a transition into '...' or delete it."
+    has_substring(Msg, "is unreachable from initial state").
+
+starts_with_any(Msg, Preds) ->
+    lists:any(fun(P) -> P(Msg) end, Preds).
+
+has_substring(String, Needle) ->
+    string:find(String, Needle) =/= nomatch.
 
 op_check_system(Cont) ->
     [Instance | Rest] = Cont#continuation.data_stack,
