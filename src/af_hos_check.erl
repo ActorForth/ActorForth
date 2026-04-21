@@ -13,7 +13,9 @@
 %% back to BEAM while its own implementation catches up.
 -export([a4_unreachable_states/1, a4_initial_state_str/1,
          a4_extra_violations/1,
-         a4_emergency_violations/2]).
+         a4_emergency_violations/2,
+         a4_handler_scope_violations/2,
+         a4_handler_transition_violations/2]).
 %% Flip of #179: the DSL now calls check_via_a4/1 in place of
 %% check_system_raise/1 so a4-side `check-blueprint-a4` owns the
 %% axiom checking. The Erlang-side axiom functions remain available
@@ -310,6 +312,58 @@ a4_emergency_violations(Transitions, Path)
     end, Emerges);
 a4_emergency_violations(_, _) -> [].
 
+%% Pre-formatted axiom_1 body-scope violations for every handler
+%% in a HosBlueprint. Returns binaries. Accepts the blueprint in
+%% either raw-tuple form or in the field-map form af_term produces
+%% when a product-type value is passed through erlang-apply.
+a4_handler_scope_violations({'HosBlueprint', _, _, _, _, _, _} = BP,
+                            Path) when is_binary(Path) ->
+    a4_handler_scope_violations_tuple(BP, Path);
+a4_handler_scope_violations(#{type := 'HosBlueprint'} = M, Path)
+  when is_binary(Path) ->
+    a4_handler_scope_violations_tuple(a4_bp_map_to_tuple(M), Path);
+a4_handler_scope_violations(_, _) -> [].
+
+a4_handler_scope_violations_tuple({'HosBlueprint', _, ParentRaw,
+                                   StateType, Children, Handlers,
+                                   Transitions},
+                                  Path) ->
+    PathStr = binary_to_list(Path),
+    Scope = build_scope(PathStr, ParentRaw, StateType, Children,
+                        Handlers, Transitions),
+    Msgs = lists:flatmap(
+             fun(H) -> check_handler(H, Scope, PathStr) end, Handlers),
+    [list_to_binary(M) || M <- Msgs].
+
+%% Pre-formatted axiom_5 handler-transition violations.
+a4_handler_transition_violations({'HosBlueprint', _, _, _, _, _, _} = BP,
+                                 Path) when is_binary(Path) ->
+    a4_handler_transition_violations_tuple(BP, Path);
+a4_handler_transition_violations(#{type := 'HosBlueprint'} = M, Path)
+  when is_binary(Path) ->
+    a4_handler_transition_violations_tuple(a4_bp_map_to_tuple(M), Path);
+a4_handler_transition_violations(_, _) -> [].
+
+a4_handler_transition_violations_tuple({'HosBlueprint', _, _, _, _,
+                                        Handlers, Transitions},
+                                       Path) ->
+    PathStr = binary_to_list(Path),
+    Msgs = lists:flatmap(
+             fun(H) -> check_handler_transitions(H, Transitions, PathStr) end,
+             Handlers),
+    [list_to_binary(M) || M <- Msgs].
+
+%% Undo the field-map conversion af_term:from_stack_item does on
+%% product types so our tuple-pattern clauses can match.
+a4_bp_map_to_tuple(M) ->
+    {'HosBlueprint',
+     maps:get(name, M, <<>>),
+     maps:get('parent-name', M, <<>>),
+     maps:get('state-type', M, 'None'),
+     maps:get(children, M, []),
+     maps:get(handlers, M, []),
+     maps:get(transitions, M, [])}.
+
 %% a4-checker bridge: run every axiom check that the pure-a4 checker
 %% has NOT yet re-implemented locally. Takes the same HosBlueprint
 %% the a4 checker was handed, returns a list of violation binaries.
@@ -344,7 +398,9 @@ a4_owned_violation_prefixes() ->
      fun trigger_scope_violation/1,
      fun state_reachability_violation/1,
      fun transition_effect_violation/1,
-     fun exhaustive_emergency_violation/1].
+     fun exhaustive_emergency_violation/1,
+     fun handler_scope_violation/1,
+     fun handler_transition_violation/1].
 
 stateful_body_violation(Msg) ->
     %% "axiom_5: system '...' handler '...' has a non-empty body; ..."
@@ -376,6 +432,24 @@ exhaustive_emergency_violation(Msg) ->
     %% on state '...', but state '...' has no declared transition
     %% under '...'."
     has_substring(Msg, "has emergency trigger").
+
+handler_scope_violation(Msg) ->
+    %% "axiom_1: system '<path>' handler '<event>' references '<token>'
+    %% -- not a parent / child / local / state / transition name or a4
+    %% builtin"
+    has_substring(Msg, "axiom_1")
+        andalso has_substring(Msg, "handler")
+        andalso has_substring(Msg, "references").
+
+handler_transition_violation(Msg) ->
+    %% Two shapes from check_handler_transitions:
+    %%  - entry: "handler '<event>' starts with transition to '<target>'
+    %%    but no declared entry state ..."
+    %%  - step:  "handler '<event>' attempts undeclared transition
+    %%    <from> -> <to>"
+    has_substring(Msg, "axiom_5")
+        andalso (has_substring(Msg, "starts with transition")
+                 orelse has_substring(Msg, "attempts undeclared transition")).
 
 starts_with_any(Msg, Preds) ->
     lists:any(fun(P) -> P(Msg) end, Preds).

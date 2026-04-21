@@ -391,6 +391,32 @@ type EffectWalk
   af_hos_check
   erlang-apply .
 
+# Pre-formatted axiom_1 body-scope violations for every handler in
+# a blueprint. Erlang side builds the full scope set and walks each
+# handler body.
+: a4-handler-scope-violations HosBlueprint String -> List ;
+  nil swap cons
+  swap cons
+  a4_handler_scope_violations
+  af_hos_check
+  erlang-apply .
+
+# Pre-formatted axiom_5 handler-transition violations.
+: a4-handler-transition-violations HosBlueprint String -> List ;
+  nil swap cons
+  swap cons
+  a4_handler_transition_violations
+  af_hos_check
+  erlang-apply .
+
+# Top-level wrappers that callers can invoke against a HosBlueprint +
+# path to get each per-handler axiom's violations.
+: check-handler-scope HosBlueprint String -> List ;
+  a4-handler-scope-violations .
+
+: check-handler-transitions HosBlueprint String -> List ;
+  a4-handler-transition-violations .
+
 # Accumulator for the reduce over the unreachable-names list.
 type ReachabilityWalk
   initial     String

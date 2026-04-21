@@ -149,6 +149,42 @@ a4_checker_test_() ->
             end, Msgs))
         end} end,
 
+        fun(_) -> {"handler body with out-of-scope token triggers axiom 1 (#174)", fun() ->
+            %% Body token "mystery" isn't a parent/child/state/handler/builtin.
+            Handler = {'HandlerSpec', ping, [], [],
+                       [{'String', <<"mystery">>}]},
+            BP = {'HosBlueprint', <<"Sys">>, <<>>, 'None',
+                  [], [Handler], []},
+            C0 = (af_interpreter:new_continuation())#continuation{
+                data_stack = [{'String', <<"Sys">>}, BP]
+            },
+            C1 = af_interpreter:interpret_token(
+                #token{value = "check-handler-scope"}, C0),
+            [{'List', Items}] = C1#continuation.data_stack,
+            Msgs = [binary_to_list(S) || {'String', S} <- Items],
+            ?assert(lists:any(fun(M) ->
+                string:find(M, "references 'mystery'") =/= nomatch
+            end, Msgs))
+        end} end,
+
+        fun(_) -> {"handler body with undeclared transition triggers axiom 5 (#175)", fun() ->
+            %% Body has `-> Busy` but no transition idle -> Busy under 'go'.
+            Handler = {'HandlerSpec', go, [], [],
+                       [{'String', <<"->">>}, {'String', <<"Busy">>}]},
+            BP = {'HosBlueprint', <<"Sys">>, <<>>, 'Mode',
+                  [], [Handler], []},
+            C0 = (af_interpreter:new_continuation())#continuation{
+                data_stack = [{'String', <<"Sys">>}, BP]
+            },
+            C1 = af_interpreter:interpret_token(
+                #token{value = "check-handler-transitions"}, C0),
+            [{'List', Items}] = C1#continuation.data_stack,
+            Msgs = [binary_to_list(S) || {'String', S} <- Items],
+            ?assert(lists:any(fun(M) ->
+                string:find(M, "axiom_5") =/= nomatch
+            end, Msgs))
+        end} end,
+
         fun(_) -> {"uncovered emergency state triggers axiom 5 (#173)", fun() ->
             %% Two transitions converge on 'stopped' under 'emergency'
             %% but state 'busy' has no transition under 'emergency'.
