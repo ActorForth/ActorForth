@@ -282,7 +282,7 @@ type EffectWalk
         # ( acc trans )
         dup 5 elt                        # ( acc trans target )
         "after" ==                       # ( acc trans is-after? )
-        effect-after-step .
+        effect-after-step .              # last sub-clause — period ends word
 
 : effect-after-step EffectWalk Any Bool -> EffectWalk ;
     : EffectWalk Any True -> EffectWalk ;
@@ -293,7 +293,7 @@ type EffectWalk
         handler-names                    # ( acc trans event-str [handlers] )
         over                             # ( acc trans event-str [handlers] event-str )
         in-list?                         # ( acc trans event-str in? )
-        effect-after-emit .
+        effect-after-emit
     : EffectWalk Any False -> EffectWalk ;
         drop                             # drop bool
         # Non-timer target: must be a child-name.
@@ -301,23 +301,23 @@ type EffectWalk
         child-names                      # ( acc trans target [child-names] )
         over                             # ( acc trans target [children] target )
         in-list?                         # ( acc trans target in? )
-        effect-child-emit .
+        effect-child-emit .              # last sub-clause — period ends word
 
 : effect-after-emit EffectWalk Any String Bool -> EffectWalk ;
     : EffectWalk Any String True -> EffectWalk ;
         drop drop drop                   # bool, event-str, trans; keep acc
     : EffectWalk Any String False -> EffectWalk ;
-        drop                             # drop bool
-        # ( acc trans event-str )
-        path                             # ( acc trans event-str path )
-        "axiom_1: system '" swap concat
+        drop                             # drop bool; stack: (acc trans event-str)
+        dup                              # (acc trans event-str event-str) — spare copy
+        path                             # (acc trans event-str event-str path)
+        "axiom_1: system '" swap concat  # (acc trans event-str event-str prefix+path)
         "' timer effect schedules event '" concat
-        swap concat
-        "' but '" concat
-        over concat
+        swap concat                      # (acc trans event-str msg-with-path-event)
+        "' but '" concat                 # (acc trans event-str msg+"' but '")
+        swap concat                      # (acc trans full-after-event)
         "' is not a declared handler on this system" concat
-                                         # ( acc trans full-msg )
-        swap drop                        # ( acc full-msg )
+                                         # (acc trans full-msg)
+        swap drop                        # (acc full-msg)
         violations
         swap
         nil swap cons

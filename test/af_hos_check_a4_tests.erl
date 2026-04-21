@@ -109,5 +109,43 @@ a4_checker_test_() ->
             ?assert(lists:any(fun(M) ->
                 string:find(M, "has a non-empty body") =/= nomatch
             end, Msgs))
+        end} end,
+
+        fun(_) -> {"effect target not a child triggers axiom 1 (#176)", fun() ->
+            T = {'TransitionSpec', idle, busy, start,
+                 <<"Stranger">>, go, 0},
+            Handlers = [{'HandlerSpec', start, [], [], []}],
+            C0 = (af_interpreter:new_continuation())#continuation{
+                data_stack = [{'String', <<"Mysys">>},
+                              {'List', []},
+                              {'List', [{'Tuple', H} || H <- Handlers]},
+                              {'List', [{'Tuple', T}]}]
+            },
+            C1 = af_interpreter:interpret_token(
+                #token{value = "check-transition-effects"}, C0),
+            [{'List', Items}] = C1#continuation.data_stack,
+            Msgs = [binary_to_list(S) || {'String', S} <- Items],
+            ?assert(lists:any(fun(M) ->
+                string:find(M, "transition effect target") =/= nomatch
+            end, Msgs))
+        end} end,
+
+        fun(_) -> {"timer effect scheduling undeclared event triggers axiom 1 (#176)", fun() ->
+            T = {'TransitionSpec', idle, busy, start,
+                 <<"after">>, zap, 100},
+            Handlers = [{'HandlerSpec', start, [], [], []}],
+            C0 = (af_interpreter:new_continuation())#continuation{
+                data_stack = [{'String', <<"Mysys">>},
+                              {'List', []},
+                              {'List', [{'Tuple', H} || H <- Handlers]},
+                              {'List', [{'Tuple', T}]}]
+            },
+            C1 = af_interpreter:interpret_token(
+                #token{value = "check-transition-effects"}, C0),
+            [{'List', Items}] = C1#continuation.data_stack,
+            Msgs = [binary_to_list(S) || {'String', S} <- Items],
+            ?assert(lists:any(fun(M) ->
+                string:find(M, "timer effect schedules event") =/= nomatch
+            end, Msgs))
         end} end
     ]}.
