@@ -276,16 +276,20 @@ ensure_a4_loaded() ->
     case af_type:find_op_by_name("hos-path", 'String') of
         {ok, _} -> ok;
         _ ->
-            load_a4_source("src/bootstrap/hos/runtime.a4"),
-            load_a4_source("src/bootstrap/hos/check.a4"),
-            %% Deliberately NOT running finalize_pending_checks/0
-            %% here. That call retries every deferred check in the
-            %% queue and blows the per-test eunit timeout when
-            %% DSL fixtures trigger a reload on every system-end.
-            %% The axiom-checker words themselves are registered at
-            %% add_op time (synchronous), so the deferred checks
-            %% are warnings about unresolved references in words
-            %% we don't invoke — safe to skip here.
+            case persistent_term:get(af_hos_a4_cache, undefined) of
+                undefined ->
+                    %% First load in this VM: interpret the sources,
+                    %% then snapshot the types they touched so future
+                    %% reloads can skip the interpreter.
+                    load_a4_source("src/bootstrap/hos/runtime.a4"),
+                    load_a4_source("src/bootstrap/hos/check.a4"),
+                    cache_a4_types();
+                Cached ->
+                    %% Stock-dict wipe after init_types. Replay the
+                    %% cached type snapshots directly — no interpreter,
+                    %% no deferred-check queue.
+                    replay_a4_cache(Cached)
+            end,
             ok
     end.
 
@@ -298,6 +302,54 @@ load_a4_source(Path) ->
             ok;
         {error, _} ->
             error({a4_source_missing, Path})
+    end.
+
+%% Capture the ops on every type the a4 sources registered against.
+%% Stored as [{TypeName, #af_type{}}] in a persistent_term entry so
+%% subsequent ensure_a4_loaded/0 calls can replay without going back
+%% through the interpreter.
+cache_a4_types() ->
+    Types = ['Any', 'String', 'List', 'Map', 'Atom', 'Bool', 'Int',
+             'Actor', 'HosBlueprint', 'HosSelf', 'HosInit', 'HosCast',
+             'HosStop', 'HosCall', 'HosGetLog', 'HosIntrospectChild',
+             'HosGetState', 'HandlersWalk', 'TriggersWalk',
+             'ReachabilityWalk', 'EffectWalk', 'ChildWalk'],
+    Snapshot = [{T, snapshot_type(T)} || T <- Types],
+    persistent_term:put(af_hos_a4_cache, Snapshot).
+
+snapshot_type(Name) ->
+    case af_type:get_type(Name) of
+        {ok, Type} -> Type;
+        _ -> undefined
+    end.
+
+%% Replay a cached snapshot into ETS. For stock types we only
+%% re-add the ops the a4 sources contributed, not the type record
+%% itself (init_types already re-registered the type with built-in
+%% ops; we'd clobber those if we replaced the whole record).
+replay_a4_cache(Cached) ->
+    lists:foreach(fun({Name, Type}) -> replay_one(Name, Type) end, Cached).
+
+replay_one(_Name, undefined) -> ok;
+replay_one(Name, CachedType) ->
+    case af_type:get_type(Name) of
+        {ok, CurrentType} ->
+            CurrentOps = CurrentType#af_type.ops,
+            CachedOps = CachedType#af_type.ops,
+            %% Merge: cached ops that aren't in current go into current.
+            %% A cached op present in current means the built-in
+            %% already re-registered it — leave current alone.
+            maps:foreach(fun(OpName, OpList) ->
+                case maps:is_key(OpName, CurrentOps) of
+                    true -> ok;
+                    false ->
+                        [af_type:add_op(Name, Op) || Op <- OpList]
+                end
+            end, CachedOps);
+        _ ->
+            %% Type isn't registered (custom type wiped); register
+            %% the cached record wholesale.
+            af_type:register_type(CachedType)
     end.
 
 %% a4-checker bridge: pre-formatted axiom_5 exhaustive-emergency
@@ -408,11 +460,16 @@ a4_parent_children_violations_tuple({'HosBlueprint', NameBin, ParentNameBin,
 %% reachability) are EXCLUDED here so check-blueprint-a4 does not
 %% double-count them.
 a4_extra_violations({'HosBlueprint', _, _, _, _, _, _} = Sys) ->
+    a4_extra_violations_tuple(Sys);
+a4_extra_violations(#{type := 'HosBlueprint'} = M) ->
+    a4_extra_violations_tuple(a4_bp_map_to_tuple(M));
+a4_extra_violations(_) -> [].
+
+a4_extra_violations_tuple(Sys) ->
     All = violations(Sys),
     Owned = a4_owned_violation_prefixes(),
     Remaining = [V || V <- All, not starts_with_any(V, Owned)],
-    [list_to_binary(V) || V <- Remaining];
-a4_extra_violations(_) -> [].
+    [list_to_binary(V) || V <- Remaining].
 
 a4_owned_violation_prefixes() ->
     %% Violations produced by the pure-a4 checker. Used to filter
@@ -423,13 +480,16 @@ a4_owned_violation_prefixes() ->
     %% exact text, so wording changes on either side don't create
     %% accidental duplicates. Each predicate returns true iff the
     %% violation belongs to an a4-owned axiom.
+    %% Only the axioms check-blueprint-a4 actually runs inside its
+    %% own body are filtered out here. Other a4-wrapper words
+    %% (check-transition-effects, check-emergency-coverage,
+    %% check-handler-scope, check-handler-transitions) exist as
+    %% callable wrappers but aren't wired into the top driver, so
+    %% the Erlang bridge must still produce those violations for
+    %% parity with the old path.
     [fun stateful_body_violation/1,
      fun trigger_scope_violation/1,
-     fun state_reachability_violation/1,
-     fun transition_effect_violation/1,
-     fun exhaustive_emergency_violation/1,
-     fun handler_scope_violation/1,
-     fun handler_transition_violation/1].
+     fun state_reachability_violation/1].
 
 stateful_body_violation(Msg) ->
     %% "axiom_5: system '...' handler '...' has a non-empty body; ..."
@@ -438,8 +498,12 @@ stateful_body_violation(Msg) ->
 trigger_scope_violation(Msg) ->
     %% "axiom_1: system '...' transition X -> Y uses trigger '...'
     %%  but '...' is not a declared handler..."
-    has_substring(Msg, "is not a declared handler on this system")
-        andalso has_substring(Msg, "axiom_1").
+    %% Tightened so it doesn't swallow the timer-effect violation
+    %% (which also says "is not a declared handler..." but starts
+    %% with "declares timer effect").
+    has_substring(Msg, "axiom_1")
+        andalso has_substring(Msg, "uses trigger")
+        andalso has_substring(Msg, "is not a declared handler on this system").
 
 state_reachability_violation(Msg) ->
     %% "axiom_5: system '...' state '...' is unreachable from initial

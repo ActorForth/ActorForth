@@ -92,11 +92,12 @@ handle_system_def("end", Cont) ->
     #{tokens := RevTokens} = State,
     Tokens = lists:reverse(RevTokens),
     HosBlueprint = parse_system_tokens(Tokens),
-    %% Check axioms eagerly. a4 checker (check_via_a4/1) is wired
-    %% and functionally correct; the flip is pending a cheaper
-    %% load path because the a4-source reload after every
-    %% af_repl:init_types/0 blows eunit per-test timeouts. See #179.
-    af_hos_check:check_system_raise(HosBlueprint),
+    %% #179 flip: axiom checks run through the a4 checker
+    %% (src/bootstrap/hos/check.a4). check_via_a4/1 does a one-time
+    %% full interpreter load of runtime.a4 + check.a4, caches the
+    %% resulting op snapshots in persistent_term, and on any later
+    %% af_repl:init_types/0 wipe just re-applies the cache.
+    af_hos_check:check_via_a4(HosBlueprint),
     %% Register so later systems can look up this one's events when
     %% building their scope (parent-to-child event invocation).
     af_hos_check:register_system(HosBlueprint),

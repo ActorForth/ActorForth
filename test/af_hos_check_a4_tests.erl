@@ -60,9 +60,11 @@ a4_checker_test_() ->
                        [{'String', <<"junk">>}]},
             BP = {'HosBlueprint', <<"Calc">>, <<>>, 'Counting',
                   [], [Handler], []},
-            [Msg] = check(BP),
-            ?assert(string:find(Msg, "axiom_5") =/= nomatch),
-            ?assert(string:find(Msg, "has a non-empty body") =/= nomatch)
+            Msgs = check(BP),
+            ?assert(lists:any(fun(M) ->
+                string:find(M, "axiom_5") =/= nomatch
+                    andalso string:find(M, "has a non-empty body") =/= nomatch
+            end, Msgs))
         end} end,
 
         fun(_) -> {"undeclared trigger triggers axiom 1", fun() ->
