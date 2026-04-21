@@ -1,0 +1,108 @@
+# src/bootstrap/hos/check.a4  -  HOS axiom checker in a4.
+#
+# Incremental rewrite of src/af_hos_check.erl. The Erlang checker is
+# still the authoritative path invoked by af_hos_dsl at `end`; this
+# file grows toward parity until the DSL can flip to calling
+# `check-blueprint` and the Erlang module can retire.
+#
+# Registry access: reuse the existing ETS-backed Erlang registry via
+# erlang-apply. The registry itself does not need to be re-implemented
+# in a4 - only the checking logic does.
+#
+# First cut: path-building helpers + the cheapest axiom
+# (stateful-body emptiness on a single handler). Later passes add
+# trigger scope, state reachability, exhaustive-emergency, and the
+# per-handler scope / transition walks.
+
+
+# ===================================================================
+# Helper: path-building for nested error messages.
+# ===================================================================
+
+# Prefix a child path with its parent. "" + name -> name;
+# prefix + name -> prefix ++ "." ++ name.  Sig: ( prefix name -> path ).
+: hos-path String String -> String ;
+  over                                 # ( prefix name prefix )
+  "" ==                                # ( prefix name is-root )
+  hos-path-step .
+
+: hos-path-step String String Bool -> String ;
+    : String String True -> String ;
+        drop                           # drop bool
+        swap drop                      # drop prefix, keep name
+    : String String False -> String ;
+        drop                           # drop bool
+        swap                           # ( name prefix )
+        "." concat                     # ( name prefix-dot )
+        swap concat .                  # ( path )
+
+
+# ===================================================================
+# Helper: atom -> String via erlang-apply.
+# ===================================================================
+
+: atom->string Atom -> String ;
+  utf8                                 # ( atom utf8 )
+  swap                                 # ( utf8 atom )
+  nil swap cons                        # ( utf8 [atom] )
+  utf8 swap cons                       # ( [atom utf8] )
+  atom_to_binary
+  erlang
+  erlang-apply .
+
+
+# ===================================================================
+# Axiom 5: stateful handler body must be empty.
+# ===================================================================
+#
+# Stateful systems (state-type =/= 'None') are driven by their
+# transitions table. `on X -> ;` declarations are optional
+# documentation of received events, but their bodies must be EMPTY:
+# a stateful handler body cannot declare state markers, cannot
+# contain subsystem calls, and cannot contain arbitrary code.
+# One event fires at most one transition.
+#
+# Inputs: handler HandlerSpec, state-type Atom, path String.
+# Output: List (empty on success; singleton on violation).
+: check-stateful-body Any Atom String -> List ;
+  # ( handler state-type path )
+  over                                 # ( handler st path st )
+  None ==                              # ( handler st path stateless? )
+  check-stateful-body-step .
+
+: check-stateful-body-step Any Atom String Bool -> List ;
+    : Any Atom String True -> List ;
+        # stateless: no check.
+        drop drop drop drop
+        nil
+    : Any Atom String False -> List ;
+        # stateful: inspect handler.body for non-emptiness.
+        drop                           # drop bool
+        # ( handler st path )
+        swap drop                      # ( handler path )
+        over 5 elt                     # ( handler path body )
+        empty?                         # ( handler path empty? )
+        check-stateful-body-emit .
+
+# Emit the axiom_5 message iff the body was non-empty.
+: check-stateful-body-emit Any String Bool -> List ;
+    : Any String True -> List ;
+        # body empty; nothing to report.
+        drop drop drop
+        nil
+    : Any String False -> List ;
+        drop                           # drop bool
+        # ( handler path )
+        swap                           # ( path handler )
+        2 elt                          # ( path event-atom )
+        atom->string                   # ( path event-str )
+        stateful-body-msg              # ( violation-str )
+        nil swap cons .                # ( [violation-str] )
+
+# Build the axiom_5 violation message. Inputs: path event-str.
+: stateful-body-msg String String -> String ;
+  swap                                 # ( event path )
+  "axiom_5: system '" swap concat      # ( event prefix+path )
+  "' handler '" concat                 # ( event partial )
+  swap concat                          # ( concat )
+  "' has a non-empty body; stateful systems are driven by the transitions table (one event fires one transition). Delete the body and declare transitions for this trigger instead." concat .
