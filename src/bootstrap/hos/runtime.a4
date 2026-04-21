@@ -252,11 +252,13 @@ type HosSelf
 # scoping one awkward iteration to Erlang.
 : dispatch-stateless HosSelf Atom -> HosSelf ;
   # stack: (state, event).
-  # The Erlang helper does side-effect sends but cannot return a
-  # product-type instance cleanly (from_stack_item/to_stack_item
-  # converts HosSelf through a map form and loses its identity).
-  # So we dup the state, pass a copy to the helper, drop the helper's
-  # return, and keep the original state on the stack.
+  # Erlang helper does side-effect sends but cannot return HosSelf
+  # cleanly — af_term:from_stack_item converts the flat tuple into a
+  # field-map on the way in, and the helper returns that map, which
+  # to_stack_item can only tag as a Map on the way out (no reverse
+  # path from map to flat product). So we dup the original HosSelf,
+  # pass a copy through the FFI, drop the returned Map, and keep
+  # the original flat tuple on the stack.
   over                            # (state, event, state-copy)
   swap                            # (state, state-copy, event)
   nil swap cons                   # (state, state-copy, [event])
