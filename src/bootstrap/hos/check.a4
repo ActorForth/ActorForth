@@ -417,6 +417,15 @@ type EffectWalk
 : check-handler-transitions HosBlueprint String -> List ;
   a4-handler-transition-violations .
 
+# Parent/children 4-way consistency check (#177). Runs against the
+# current HOS-registry state. Returns violations as a List of
+# Strings.
+: check-parent-children HosBlueprint -> List ;
+  nil swap cons
+  a4_parent_children_violations
+  af_hos_check
+  erlang-apply .
+
 # Accumulator for the reduce over the unreachable-names list.
 type ReachabilityWalk
   initial     String

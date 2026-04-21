@@ -185,6 +185,25 @@ a4_checker_test_() ->
             end, Msgs))
         end} end,
 
+        fun(_) -> {"parent/children inconsistency detected (#177)", fun() ->
+            %% Register Parent that claims child 'Child', then check
+            %% another blueprint 'Child' that declares a DIFFERENT parent.
+            Parent = {'HosBlueprint', <<"Parent">>, <<>>, 'None',
+                      [{'HosBlueprint', <<"Child">>, <<"Parent">>, 'None',
+                        [], [], []}], [], []},
+            af_hos_check:register_system(Parent),
+            BadChild = {'HosBlueprint', <<"Child">>, <<"Elsewhere">>,
+                        'None', [], [], []},
+            C0 = (af_interpreter:new_continuation())#continuation{
+                data_stack = [BadChild]
+            },
+            C1 = af_interpreter:interpret_token(
+                #token{value = "check-parent-children"}, C0),
+            [{'List', Items}] = C1#continuation.data_stack,
+            Msgs = [binary_to_list(S) || {'String', S} <- Items],
+            ?assert(length(Msgs) >= 1)
+        end} end,
+
         fun(_) -> {"uncovered emergency state triggers axiom 5 (#173)", fun() ->
             %% Two transitions converge on 'stopped' under 'emergency'
             %% but state 'busy' has no transition under 'emergency'.

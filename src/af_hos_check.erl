@@ -15,7 +15,8 @@
          a4_extra_violations/1,
          a4_emergency_violations/2,
          a4_handler_scope_violations/2,
-         a4_handler_transition_violations/2]).
+         a4_handler_transition_violations/2,
+         a4_parent_children_violations/1]).
 %% Flip of #179: the DSL now calls check_via_a4/1 in place of
 %% check_system_raise/1 so a4-side `check-blueprint-a4` owns the
 %% axiom checking. The Erlang-side axiom functions remain available
@@ -363,6 +364,27 @@ a4_bp_map_to_tuple(M) ->
      maps:get(children, M, []),
      maps:get(handlers, M, []),
      maps:get(transitions, M, [])}.
+
+%% Pre-formatted parent/children 4-way symmetry violations. Runs the
+%% same check_parent_children_consistency logic but returns binaries
+%% instead of raising, so the a4 caller can collect and report.
+a4_parent_children_violations({'HosBlueprint', _, _, _, _, _, _} = BP) ->
+    a4_parent_children_violations_tuple(BP);
+a4_parent_children_violations(#{type := 'HosBlueprint'} = M) ->
+    a4_parent_children_violations_tuple(a4_bp_map_to_tuple(M));
+a4_parent_children_violations(_) -> [].
+
+a4_parent_children_violations_tuple({'HosBlueprint', NameBin, ParentNameBin,
+                                     _, Children, _, _}) ->
+    Name = binary_to_list(NameBin),
+    Parent = binary_to_list(ParentNameBin),
+    MyChildNames = [binary_to_list(element(2, C)) || C <- Children],
+    Reg = maps:from_list(reg_all_entries()),
+    V1 = children_i_declare_check(Name, MyChildNames, Reg),
+    V2 = my_parent_check(Name, Parent, Reg),
+    V3 = others_who_list_me_check(Name, Parent, Reg),
+    V4 = others_who_claim_me_as_parent_check(Name, MyChildNames, Reg),
+    [list_to_binary(V) || V <- V1 ++ V2 ++ V3 ++ V4].
 
 %% a4-checker bridge: run every axiom check that the pure-a4 checker
 %% has NOT yet re-implemented locally. Takes the same HosBlueprint
