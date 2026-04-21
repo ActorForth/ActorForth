@@ -6,6 +6,9 @@
 -include("af_type.hrl").
 
 -export([init/0]).
+%% Exposed for src/bootstrap/hos/dsl.a4's parse-system-tokens word,
+%% which wraps this function via erlang-apply.
+-export([parse_system_tokens_a4/1]).
 
 %% HOS `system ... end` DSL surface.
 %%
@@ -115,6 +118,27 @@ handle_system_def(TokenValue, Cont) ->
     end,
     NewState = State#{tokens => [{TokenValue, IsQuoted} | RevTokens]},
     Cont#continuation{data_stack = [{'SystemDef', NewState} | Rest]}.
+
+
+%% a4-DSL bridge (#144): accepts the accumulated List of raw
+%% {token, quoted} pairs from the handler and returns the HosBlueprint
+%% product instance. Wrapper for parse_system_tokens/1 that the a4
+%% `parse-system-tokens` word calls via erlang-apply.
+parse_system_tokens_a4(Pairs) when is_list(Pairs) ->
+    %% Each element may arrive as {String, binary()} or as a tuple
+    %% from stack form; normalize to the {Value::string(), Quoted::bool()}
+    %% shape parse_system_tokens expects.
+    Normalized = lists:map(fun normalize_pair/1, Pairs),
+    parse_system_tokens(Normalized).
+
+normalize_pair({V, Q}) when is_list(V), is_boolean(Q) -> {V, Q};
+normalize_pair({V, Q}) when is_binary(V), is_boolean(Q) ->
+    {binary_to_list(V), Q};
+normalize_pair({V, Q}) when is_atom(V), is_boolean(Q) ->
+    {atom_to_list(V), Q};
+normalize_pair(V) when is_list(V) -> {V, false};
+normalize_pair(V) when is_binary(V) -> {binary_to_list(V), false};
+normalize_pair(V) when is_atom(V) -> {atom_to_list(V), false}.
 
 
 %% ---------------------------------------------------------------

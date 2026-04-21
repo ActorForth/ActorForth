@@ -1,0 +1,24 @@
+# src/bootstrap/hos/dsl.a4  -  HOS DSL surface in a4.
+#
+# The `system ... end` DSL's token interceptor stays in Erlang
+# (af_hos_dsl:handle_system_def/2) because a4 type handlers are
+# still Erlang functions in this build. The PARSE step — converting
+# accumulated {token, quoted} pairs into a HosBlueprint — is now
+# an a4 word that delegates to the Erlang parser via erlang-apply.
+#
+# This closes #144 at the DSL surface: every step of the pipeline
+# has an a4 entry point. A later session can replace the Erlang
+# parser body with a pure-a4 implementation without changing the
+# call site.
+
+
+# parse-system-tokens List -> HosBlueprint
+# Input: a List of accumulated raw pairs (each a {String, Bool}-
+# shaped stack item built by af_hos_dsl:handle_system_def as it
+# intercepted source tokens between `system` and `end`).
+# Output: a HosBlueprint product instance (flat tuple).
+: parse-system-tokens List -> HosBlueprint ;
+  nil swap cons                          # ( [tokens] )
+  parse_system_tokens_a4
+  af_hos_dsl
+  erlang-apply .
