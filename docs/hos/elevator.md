@@ -11,6 +11,20 @@ show that in the a4 HOS spec they are either rejected at compile
 time or structurally prevented by the runtime model. The chapter
 ends with an honest list of what is still scoped for v2.
 
+### Is HOS the right tool for your problem?
+
+Before going further, a sanity check. HOS's value proposition is
+narrow but sharp: explicit, checked, hierarchical state machines
+where safety properties emerge from the axiom set. That is exactly
+what you want for lifts (this chapter), payment terminals,
+signalling, medical devices, protocol state. It is not what you
+want for CRUD, aggregation, ML inference, games, or most web
+backends. System-of-Systems is more universal in the sense that
+the generic actor model covers far more ground — but HOS is not the
+actor model; it is a discipline on top of it. The discipline earns
+its keep where safety matters and costs attention where it doesn't.
+An elevator is a textbook fit.
+
 The structural claim now rests on four pieces, working together:
 
 - **Axiom 1 scope.** No system may reference a name outside its

@@ -1,0 +1,443 @@
+# src/bootstrap/hos/runtime.a4
+#
+# HOS runtime, a4-native.
+#
+# Scope covered through phase 1e:
+#   1a  receive + HosCast + HosStop (exit)
+#   1b  children spawned in caller; stop propagates down
+#   1c  HosCall (sync reply), HosGetLog, HosIntrospectChild
+#   1d  stateful transitions via trans-index
+#   1e  effect dispatch (child-target, after-timer, parent fallthrough)
+#
+# Locals-frame caveat:
+#   A word with a product-type arg gets a locals frame computed at
+#   entry time. Bindings are frozen snapshots, so field-setters inside
+#   a body don't update that body's bindings. Keep mutation-then-read
+#   flows inside narrow words whose entry time IS the read time.
+#
+# Build order note:
+#   Definitions are in dependency order (leaves first) so the static
+#   type checker can resolve every inner word's stack effect against
+#   already-registered signatures. Mutually-recursive pairs (hos-loop
+#   / hos-loop-step) still rely on forward refs + deferred re-check,
+#   but that path works when the unresolved name would land on the
+#   final inferred stack as an Atom fallthrough.
+
+
+# === Wire-format messages =============================================
+
+type HosCast
+  event Atom
+  args  List .
+
+type HosStop
+  reason Atom .
+
+# Initialisation packet passed caller-side to build-hos-state.  node
+# is typed Tuple so `elt` reads raw SystemNode positions directly.
+type HosInit
+  node   Tuple
+  parent Actor .
+
+# Synchronous call with reply address.
+# `ref` is an Erlang reference (Ref type) used to correlate reply to
+# request. Using Ref not Atom keeps correlation IDs off the atom table
+# (which isn't GC'd) so actors can service arbitrary call volume.
+type HosCall
+  event Atom
+  args  List
+  from  Actor
+  ref   Ref .
+
+# Test-only: retrieve per-actor event log.
+type HosGetLog
+  from Actor
+  ref  Ref .
+
+# Test-only: look up a child PID by name.
+type HosIntrospectChild
+  child-name String
+  from       Actor
+  ref        Ref .
+
+# Test-only: retrieve current-state atom.
+type HosGetState
+  from Actor
+  ref  Ref .
+
+
+# === Runtime state ====================================================
+# state-type is the SystemNode's declared state-machine type atom; the
+# sentinel `None` marks a stateless router whose events are dispatched
+# via handler bodies instead of the trans-index.
+# handlers is a List of HandlerSpec tuples (raw Erlang shape from
+# af_hos_dsl). Used only by the stateless path.
+type HosState
+  name          String
+  parent        Actor
+  child-map     Map
+  log           List
+  trans-index   Map
+  current-state Atom
+  state-type    Atom
+  handlers      List .
+
+
+# =====================================================================
+# Leaf helpers (no dependencies on other runtime words)
+# =====================================================================
+
+# Lookup: ( map key -- value-or-nil bool ). Returns (value, true) on
+# hit; (nil, false) on miss, without raising on a missing key.
+: map-lookup-flag Map Any -> Any Bool ;
+  over over                       # (map, key, map, key)
+  map-has?                        # (map, key, bool)
+  map-lookup-flag-step .
+
+: map-lookup-flag-step Map Any Bool -> Any Bool ;
+    : Map Any True -> Any Bool ;
+        drop map-get True
+    : Map Any False -> Any Bool ;
+        drop drop drop
+        nil False .
+
+# Safe map-get: returns `not_found` atom when key is absent.
+: map-get-or-not-found Map Any -> Any ;
+  over over
+  map-has?
+  map-get-or-not-found-step .
+
+: map-get-or-not-found-step Map Any Bool -> Any ;
+    : Map Any True -> Any ;
+        drop map-get
+    : Map Any False -> Any ;
+        drop drop drop not_found .
+
+# Build a 2-element List key from two values. sig_in declared Any Any
+# so the word registers under the Any dict (values from `elt` land as
+# Any at check time and wouldn't resolve through Atom's dict).
+: trans-key-pair Any Any -> List ;
+  nil swap cons                   # (first, [second])
+  swap cons .                     # ([first, second])
+
+# Prepend an atom to the per-actor event log.
+: log-event HosState Atom -> HosState ;
+  log swap cons log! .
+
+# Build an HosCast from (event, args). Matching constructor layout:
+# Atom below, List on top.
+: make-hoscast Atom List -> HosCast ;
+  hoscast .
+
+# Dispatch-helper predicates for the effect target binary.
+: empty-target? Any -> Bool ;
+  "" == .
+
+: after-target? Any -> Bool ;
+  "after" == .
+
+
+# =====================================================================
+# Effect dispatch
+# =====================================================================
+
+# Send HosCast(event, []) to a child named by the target binary; no-op
+# when the target isn't in child-map. Runs inside a word whose sig_in
+# includes HosState, so child-map is bound. Stack at entry (bottom→top):
+# (event, delay, target). Delay sits BELOW target, so bring it to the
+# top before dropping.
+: send-to-child Any Int Any -> ;
+  swap drop                       # (event, target)
+  child-map swap                  # (event, map, target)
+  map-lookup-flag                 # (event, value-or-nil, bool)
+  send-to-child-step .
+
+: send-to-child-step Any Any Bool -> ;
+    : Any Any True -> ;
+        drop                      # drop True
+        swap                      # (child-actor, event)
+        nil make-hoscast          # (child-actor, cast)
+        swap                      # (cast, child-actor)
+        send
+    : Any Any False -> ;
+        drop drop                 # drop bool + nil sentinel
+        send-to-parent .
+
+# Send HosCast(event, []) to the parent Actor (parent binding from
+# the enclosing HosState frame). The axiom checker pre-validates
+# targets as either child or parent, so on a child-map miss the
+# target must be the parent's name; we trust that and send. For a
+# root system whose parent binding points at the spawner, this
+# delivers a harmless {af_msg, HosCast} to the spawner's mailbox
+# where it's silently discarded if nobody's waiting on it.
+: send-to-parent Any -> ;
+  parent                          # (event, parent)
+  swap                            # (parent, event)
+  nil make-hoscast                # (parent, cast)
+  swap                            # (cast, parent)
+  send .
+
+# After-branch of the effect dispatch. Stack at entry is
+# (event, delay, target, after?-Bool). On True: target is the
+# "after" sentinel → self-schedule via send-after. On False:
+# target is a child name → try child-map lookup.
+# send-after signature is `( value delay actor -- )` with Actor on TOS
+# and value deepest — so we need to put the HosCast below the Int delay.
+: dispatch-after-step Any Int Any Bool -> ;
+    : Any Int Any True -> ;
+        drop drop                 # drop Bool + target → (event, delay)
+        swap nil make-hoscast     # (delay, cast)
+        swap                      # (cast, delay)
+        self                      # (cast, delay, self)
+        send-after                # ( )
+    : Any Int Any False -> ;
+        drop send-to-child .
+
+# Outer branch: is target empty? (no effect declared).
+: dispatch-empty-step Any Int Any Bool -> ;
+    : Any Int Any True -> ;
+        drop drop drop drop
+    : Any Int Any False -> ;
+        drop dup after-target?
+        dispatch-after-step .
+
+# Dispatch on effect. Stack: (target, event, delay).
+# We use nested Bool sub-clauses because a4 sub-clause value
+# constraints only recognise Int / Float / Bool / String literals,
+# not arbitrary atom tags.
+: dispatch-effect Any Any Int -> ;
+  rot                             # (event, delay, target)
+  dup empty-target?               # (event, delay, target, empty?)
+  dispatch-empty-step .
+
+# Unpack Target / Event / Delay from a TransitionSpec tuple.
+: trans-effect-fields Any -> Any Any Int ;
+  dup 5 elt                       # (trans, target)
+  over 6 elt                      # (trans, target, event)
+  rot 7 elt .                     # (target, event, delay)
+
+# Fire the declared effect on a TransitionSpec. Consumes the tuple.
+: fire-effect Any -> ;
+  trans-effect-fields
+  dispatch-effect .
+
+
+# =====================================================================
+# Stateless handler-body dispatch
+# =====================================================================
+#
+# Router systems (state-type = 'None') dispatch events through
+# handler bodies rather than a transition table. Each handler body
+# is a list of {'String', Binary} tokens in (target, event) pair
+# form:  Child1 evt1  Child2 evt2  ...
+#
+# Iteration lives in a small Erlang helper
+# (af_hos_runtime:a4_exec_stateless_body/2). Rationale: pair-wise
+# iteration over a List in pure a4 hits a stack-management wall
+# without list pattern matching or a return stack — the Erlang
+# helper is ~15 lines and keeps the idiomatic HOT path in a4 while
+# scoping one awkward iteration to Erlang.
+: dispatch-stateless HosState Atom -> HosState ;
+  # stack: (state, event).
+  # The Erlang helper does side-effect sends but cannot return a
+  # product-type instance cleanly (from_stack_item/to_stack_item
+  # converts HosState through a map form and loses its identity).
+  # So we dup the state, pass a copy to the helper, drop the helper's
+  # return, and keep the original state on the stack.
+  over                            # (state, event, state-copy)
+  swap                            # (state, state-copy, event)
+  nil swap cons                   # (state, state-copy, [event])
+  swap cons                       # (state, [state-copy, event])
+  a4_exec_stateless_body
+  af_hos_runtime
+  erlang-apply                    # (state, result)
+  drop .                          # (state)
+
+: dispatch-stateful-apply HosState Any Bool -> HosState ;
+    : HosState Any True -> HosState ;
+        drop                      # drop bool
+        dup fire-effect           # side-effect: may send messages
+        3 elt                     # extract To from TransitionSpec
+        current-state!
+    : HosState Any False -> HosState ;
+        drop drop .
+
+: dispatch-stateful HosState Atom -> HosState ;
+  # (state, event). Build key [cur, event] matching insert order.
+  current-state swap
+  trans-key-pair
+  trans-index
+  swap
+  map-lookup-flag
+  dispatch-stateful-apply .
+
+
+# =====================================================================
+# Child-stop propagation
+# =====================================================================
+
+: send-stop-to-actor Actor -> ;
+  normal hosstop swap send .
+
+: stop-children HosState -> HosState ;
+  child-map
+  map-values
+  "send-stop-to-actor" to-atom
+  each .
+
+
+# =====================================================================
+# Message handlers (per HosMsg product type)
+# =====================================================================
+
+: handle-message HosState HosCast -> HosState Bool ;
+  drop
+  event log-event
+  event dispatch-cast
+  True .
+
+# Branch on state-type: 'None' → stateless router; else stateful.
+# state-type binding is non-destructive (HosState in sig_in).
+: dispatch-cast HosState Atom -> HosState ;
+  state-type None ==              # (state, event, bool)
+  dispatch-cast-step .
+
+: dispatch-cast-step HosState Atom Bool -> HosState ;
+    : HosState Atom True -> HosState ;
+        drop dispatch-stateless
+    : HosState Atom False -> HosState ;
+        drop dispatch-stateful .
+
+: handle-message HosState HosCall -> HosState Bool ;
+  drop
+  event log-event
+  ref ok 2 make-tuple
+  from send
+  True .
+
+: handle-message HosState HosGetLog -> HosState Bool ;
+  drop
+  ref log 2 make-tuple
+  from send
+  True .
+
+: handle-message HosState HosIntrospectChild -> HosState Bool ;
+  drop
+  child-map child-name
+  map-get-or-not-found
+  ref swap 2 make-tuple
+  from send
+  True .
+
+: handle-message HosState HosGetState -> HosState Bool ;
+  drop
+  ref current-state 2 make-tuple
+  from send
+  True .
+
+: handle-message HosState HosStop -> HosState Bool ;
+  drop
+  stop-children
+  False .
+
+
+# =====================================================================
+# Main receive-dispatch loop
+# =====================================================================
+
+: hos-loop HosState -> ;
+  receive
+  handle-message
+  hos-loop-step .
+
+: hos-loop-step HosState Bool -> ;
+    : HosState True -> ;
+        drop hos-loop
+    : HosState False -> ;
+        drop drop .
+
+
+# =====================================================================
+# Bootstrap / spawn-system (caller-side recursion)
+# =====================================================================
+
+: hos-bootstrap -> ;
+  receive                         # ( HosInit )
+  build-hos-state                 # ( HosState )  — spawns children here,
+                                  #                so self() == this actor
+                                  #                is the children's parent
+  hos-loop .
+
+: lookup-full-system String -> Any ;
+  nil swap cons
+  lookup_system
+  af_hos_check
+  erlang-apply .
+
+: initial-state-step List Bool -> Atom ;
+    : List True -> Atom ;
+        drop drop None
+    : List False -> Atom ;
+        drop head 2 elt .
+
+: initial-state List -> Atom ;
+  dup empty?
+  initial-state-step .
+
+: trans-insert Map Any -> Map ;
+  dup 2 elt
+  over 4 elt
+  trans-key-pair
+  map-put .
+
+: build-trans-index List -> Map ;
+  map-new
+  "trans-insert" to-atom
+  reduce .
+
+# spawn-one-child needs spawn-system-with-parent (defined below —
+# forward reference that defers).  The type checker is fine with this
+# specific pair because the fallthrough atom remains on the final
+# inferred stack.
+: spawn-one-child Map Any -> Map ;
+  2 elt
+  dup
+  lookup-full-system
+  self
+  spawn-system-with-parent
+  swap
+  map-put .
+
+: spawn-children-list List -> Map ;
+  map-new
+  "spawn-one-child" to-atom
+  reduce .
+
+: build-hos-state HosInit -> HosState ;
+  drop
+  node 2 elt                         # ( name )
+  parent                             # ( name parent )
+  node 5 elt                         # ( name parent children-list )
+  spawn-children-list                # ( name parent child-map )
+  nil                                # ( name parent child-map log )
+  node 7 elt                         # ( name parent child-map log transitions )
+  dup build-trans-index              # ( ... trans trans-index )
+  swap                               # ( ... trans-index trans )
+  initial-state                      # ( ... trans-index current-state )
+  node 4 elt                         # ( ... trans-index cur state-type )
+  node 6 elt                         # ( ... trans-index cur state-type handlers )
+  hosstate .                         # ( HosState )
+
+: spawn-system-with-parent Tuple Actor -> Actor ;
+  # (node, parent).  Build HosInit; spawn the actor; send HosInit.
+  # The bootstrap word runs inside the actor's own process, so when
+  # it spawns its children, `self()` is correctly this actor.
+  hosinit                       # ( HosInit )
+  "hos-bootstrap" to-atom       # ( HosInit atom )
+  spawn                         # ( HosInit actor )
+  swap                          # ( actor HosInit )
+  over                          # ( actor HosInit actor )
+  send .                        # ( actor )
+
+: spawn-system Tuple -> Actor ;
+  self spawn-system-with-parent .

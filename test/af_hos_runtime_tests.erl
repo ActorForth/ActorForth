@@ -21,13 +21,7 @@ eval_new(Input) ->
     eval(Input, af_interpreter:new_continuation()).
 
 get_log(Pid) ->
-    Ref = make_ref(),
-    Pid ! {get_log, self(), Ref},
-    receive
-        {reply, Ref, Log} -> Log
-    after 1000 ->
-        {error, timeout}
-    end.
+    af_hos_runtime:get_log(Pid).
 
 
 %% -------------------------------------------------------------------
@@ -97,13 +91,7 @@ routing_test_() ->
     ]}.
 
 introspect_child_pid(ParentPid, ChildName) ->
-    Ref = make_ref(),
-    ParentPid ! {introspect_child, ChildName, self(), Ref},
-    receive
-        {reply, Ref, Pid} -> Pid
-    after 1000 ->
-        erlang:error(introspect_timeout)
-    end.
+    af_hos_runtime:introspect_child(ParentPid, ChildName).
 
 
 %% -------------------------------------------------------------------
@@ -145,10 +133,4 @@ topology_test_() ->
     ]}.
 
 introspect_child_pid_raw(Pid, ChildName) ->
-    Ref = make_ref(),
-    Pid ! {introspect_child, ChildName, self(), Ref},
-    receive
-        {reply, Ref, Result} -> Result
-    after 1000 ->
-        erlang:error(introspect_timeout)
-    end.
+    af_hos_runtime:introspect_child(Pid, ChildName).

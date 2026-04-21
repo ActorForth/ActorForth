@@ -24,7 +24,11 @@ to_stack_item(T) when is_tuple(T) ->
 to_stack_item(P) when is_pid(P) ->
     {'Actor', #{pid => P, type_name => undefined, vocab => #{}}};
 to_stack_item(R) when is_reference(R) ->
-    {'Atom', lists:flatten(io_lib:format("~p", [R]))};
+    %% Refs flow as a first-class 'Ref' tag so they're never converted
+    %% through `list_to_atom`. That would leak into the atom table
+    %% (never GC'd) on every correlation round-trip and eventually
+    %% crash the VM with atom-table exhaustion.
+    {'Ref', R};
 to_stack_item(Other) ->
     error({unsupported_term, Other}).
 
@@ -34,7 +38,10 @@ from_stack_item({'Int', N}) -> N;
 from_stack_item({'Float', F}) -> F;
 from_stack_item({'Bool', B}) -> B;
 from_stack_item({'String', B}) -> B;
-from_stack_item({'Atom', S}) -> list_to_atom(S);
+from_stack_item({'Atom', S}) when is_list(S)   -> list_to_atom(S);
+from_stack_item({'Atom', A}) when is_atom(A)    -> A;
+from_stack_item({'Atom', B}) when is_binary(B)  -> binary_to_atom(B, utf8);
+from_stack_item({'Ref', R}) -> R;
 from_stack_item({'Tuple', T}) -> T;
 from_stack_item({'List', Items}) ->
     [from_stack_item(I) || I <- Items];

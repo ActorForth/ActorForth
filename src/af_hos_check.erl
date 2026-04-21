@@ -10,6 +10,40 @@
          registered_child_events/1]).
 
 -define(REG_KEY, hos_system_registry).
+-define(REG_ETS, hos_system_registry_ets).
+
+%% Registry access: now ETS-backed so the system table is visible from
+%% every Erlang process (previously process-dict-scoped, which broke
+%% once spawn_system delegated to the a4 runtime where child actors
+%% want to look up their own sub-systems from the spawned process).
+reg_ensure() ->
+    case ets:info(?REG_ETS) of
+        undefined ->
+            ets:new(?REG_ETS, [named_table, set, public]),
+            ok;
+        _ -> ok
+    end.
+
+reg_lookup_raw(NameStr) ->
+    reg_ensure(),
+    case ets:lookup(?REG_ETS, NameStr) of
+        [{_, Sys}] -> {ok, Sys};
+        []         -> not_found
+    end.
+
+reg_all_entries() ->
+    reg_ensure(),
+    ets:tab2list(?REG_ETS).
+
+reg_put(NameStr, Sys) ->
+    reg_ensure(),
+    ets:insert(?REG_ETS, {NameStr, Sys}),
+    ok.
+
+reg_clear() ->
+    reg_ensure(),
+    ets:delete_all_objects(?REG_ETS),
+    ok.
 
 %% Axiom checker for HOS SystemNode trees.
 %%
@@ -54,11 +88,7 @@ init() ->
 register_system({'SystemNode', NameBin, _, _, _, _, _} = Sys) ->
     check_parent_children_consistency(Sys),
     Name = binary_to_list(NameBin),
-    Reg = case get(?REG_KEY) of
-        undefined -> #{};
-        R -> R
-    end,
-    put(?REG_KEY, Reg#{Name => Sys}),
+    reg_put(Name, Sys),
     ok.
 
 %% Check parent/children symmetry in BOTH directions against every
@@ -70,10 +100,7 @@ check_parent_children_consistency({'SystemNode', NameBin, ParentNameBin,
     Name = binary_to_list(NameBin),
     Parent = binary_to_list(ParentNameBin),
     MyChildNames = [binary_to_list(element(2, C)) || C <- Children],
-    Reg = case get(?REG_KEY) of
-        undefined -> #{};
-        R -> R
-    end,
+    Reg = maps:from_list(reg_all_entries()),
     V1 = children_i_declare_check(Name, MyChildNames, Reg),
     V2 = my_parent_check(Name, Parent, Reg),
     V3 = others_who_list_me_check(Name, Parent, Reg),
@@ -152,15 +179,17 @@ others_who_claim_me_as_parent_check(Name, MyChildNames, Reg) ->
     end, [], Reg).
 
 lookup_system(Name) ->
-    Reg = case get(?REG_KEY) of
-        undefined -> #{};
-        R -> R
+    Key = case Name of
+        B when is_binary(B) -> binary_to_list(B);
+        L when is_list(L)   -> L
     end,
-    maps:get(Name, Reg, not_found).
+    case reg_lookup_raw(Key) of
+        {ok, Sys}   -> Sys;
+        not_found   -> not_found
+    end.
 
 clear_registry() ->
-    put(?REG_KEY, #{}),
-    ok.
+    reg_clear().
 
 %% Given a child name, return the list of event-name strings declared
 %% on it. Returns [] if the child isn't in the registry yet (which is

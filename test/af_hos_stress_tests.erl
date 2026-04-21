@@ -40,22 +40,10 @@ load_valid_spec() ->
         Tokens, af_interpreter:new_continuation()).
 
 get_log(Pid) ->
-    Ref = make_ref(),
-    Pid ! {get_log, self(), Ref},
-    receive
-        {reply, Ref, Log} -> Log
-    after 2000 ->
-        {error, timeout}
-    end.
+    af_hos_runtime:get_log(Pid).
 
 introspect_child_pid(ParentPid, ChildName) ->
-    Ref = make_ref(),
-    ParentPid ! {introspect_child, ChildName, self(), Ref},
-    receive
-        {reply, Ref, Pid} -> Pid
-    after 2000 ->
-        {error, timeout}
-    end.
+    af_hos_runtime:introspect_child(ParentPid, ChildName).
 
 
 %% -------------------------------------------------------------------

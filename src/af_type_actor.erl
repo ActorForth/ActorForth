@@ -657,8 +657,17 @@ validate_actor_args(_WordName, _, _) -> ok.
 
 op_spawn(Cont) ->
     [{'Atom', WordName} | Rest] = Cont#continuation.data_stack,
+    %% Propagate the caller's dictionary snapshot into the spawned
+    %% process. Without this the new process starts with
+    %% dictionary=undefined, which forces every token dispatch
+    %% through a fresh ETS lookup — catastrophic for HOS-style
+    %% receive loops (profile showed ets:lookup + match_object at
+    %% ~47% of runtime before this fix). The caller's snapshot is
+    %% already a self-contained map of all registered types+ops,
+    %% so there's no additional synchronization to do.
+    Dict = Cont#continuation.dictionary,
     Pid = erlang:spawn_link(fun() ->
-        SpawnCont = #continuation{},
+        SpawnCont = #continuation{dictionary = Dict},
         Token = #token{value = WordName},
         af_interpreter:interpret_token(Token, SpawnCont)
     end),

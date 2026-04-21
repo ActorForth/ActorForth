@@ -6,7 +6,7 @@
 -include("continuation.hrl").
 
 -export([init/0, reset/0]).
--export([register_type/1, add_op/2, replace_ops/3]).
+-export([register_type/1, add_op/2, replace_ops/3, any_op_with_name/1]).
 -export([find_op/2, find_op_in_tos/2, find_op_in_any/2, find_op_by_name/2, match_sig/2, match_guard/2]).
 -export([get_type/1, all_types/0]).
 -export([snapshot/0]).
@@ -47,6 +47,7 @@ init() ->
     end,
     ensure_type('Any'),
     ensure_type('Atom'),
+    ensure_type('Ref'),
     ok.
 
 reset() ->
@@ -138,6 +139,16 @@ find_op_by_name(TokenName, TypeName) ->
             end;
         [] -> not_found
     end.
+
+%% True if any type's dictionary has a registered op with this name.
+%% Used by apply_impl to decide whether a "push as atom" fallback is
+%% safe to cache (a later registration of the same name would make
+%% the atom cache incorrect).
+any_op_with_name(Name) ->
+    Types = ets:tab2list(?TABLE),
+    lists:any(fun(#af_type{ops = Ops}) ->
+        maps:is_key(Name, Ops)
+    end, Types).
 
 %% Match a signature against the top of the stack.
 %% Type variables ('_', '_a', '_b', etc.) and 'Any' match any stack item.

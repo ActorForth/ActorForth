@@ -58,20 +58,38 @@ interpret_token(#token{value = Value, quoted = Quoted} = Token, Cont) ->
     Debug = Cont#continuation.debug,
     Cont1 = Cont#continuation{current_token = Token},
     %% Auto-field bindings: unless quoted, check the top locals frame
-    %% for a matching name. Locals win over dictionary dispatch.
-    case Quoted =:= false andalso lookup_local(Value, Cont#continuation.locals) of
-        {ok, LocalVal} ->
-            Cont1#continuation{data_stack = [LocalVal | Stack]};
-        _ ->
-            case Cont#continuation.dictionary of
-                undefined ->
-                    interpret_token_ets(Value, Token, Stack, Debug, Cont1);
-                Dict ->
-                    interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1)
+    %% for a matching name. Locals win over dictionary dispatch. Inline
+    %% the common case (empty locals) to skip a function call per token.
+    Locals = Cont#continuation.locals,
+    case Quoted of
+        true ->
+            dispatch_no_local(Value, Token, Stack, Debug, Cont1, Cont);
+        false ->
+            case Locals of
+                [] ->
+                    dispatch_no_local(Value, Token, Stack, Debug, Cont1, Cont);
+                [Frame | _] when is_map(Frame) ->
+                    case maps:find(Value, Frame) of
+                        {ok, LocalVal} ->
+                            Cont1#continuation{data_stack = [LocalVal | Stack]};
+                        error ->
+                            dispatch_no_local(Value, Token, Stack, Debug, Cont1, Cont)
+                    end;
+                _ ->
+                    dispatch_no_local(Value, Token, Stack, Debug, Cont1, Cont)
             end
     end.
 
+dispatch_no_local(Value, Token, Stack, Debug, Cont1, Cont) ->
+    case Cont#continuation.dictionary of
+        undefined ->
+            interpret_token_ets(Value, Token, Stack, Debug, Cont1);
+        Dict ->
+            interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1)
+    end.
+
 %% Look up Name in the top locals frame. Returns {ok, Value} or false.
+%% Kept for callers that still need a fun-form check.
 lookup_local(_Name, []) -> false;
 lookup_local(Name, [Frame | _]) when is_map(Frame) ->
     case maps:find(Name, Frame) of
@@ -107,10 +125,17 @@ interpret_token_dict(Value, Token, Stack, Dict, Debug, Cont1) ->
 %%
 %% Cache is invalidated by clearing `dispatch_cache` whenever the continuation
 %% dictionary is updated (word definition, compile, type definition).
+%% Hottest path in the interpreter. Inlines stack_key + the maps:find
+%% + the three cache-entry cases so each per-token dispatch is a
+%% single function call plus one maps:find + one Impl call on a hit.
 dispatch_unquoted(Value, Stack, Dict, Debug, Cont1) ->
-    Key = stack_key(Value, Stack),
-    Cache = Cont1#continuation.dispatch_cache,
-    case maps:find(Key, Cache) of
+    Key = case Stack of
+        [A, B, C | _] -> {Value, tag(A), tag(B), tag(C)};
+        [A, B]        -> {Value, tag(A), tag(B), none};
+        [A]           -> {Value, tag(A), none, none};
+        []            -> {Value, none, none, none}
+    end,
+    case maps:find(Key, Cont1#continuation.dispatch_cache) of
         {ok, {op, Impl}} ->
             debug_trace(Debug, Value, Stack, cache_op),
             Impl(Cont1);
@@ -162,20 +187,40 @@ full_dispatch_and_cache(Value, Stack, Dict, Debug, Cont1, Key) ->
 %% Positions below the stack depth use 'none'. Non-atom-tagged stack items
 %% force the whole key to be skipped (we return a sentinel that never hits
 %% the cache) so legacy raw stack items don't corrupt the cache.
+%% Hot path. Inline type_tag for each of the top-3 stack items so
+%% dispatch_unquoted does one function call (stack_key) and the
+%% body avoids three more. Bool values are folded into the tag so
+%% Bool-value-constrained sub-clauses cache independently.
 stack_key(Value, [A, B, C | _]) ->
-    {Value, type_tag(A), type_tag(B), type_tag(C)};
+    {Value, tag(A), tag(B), tag(C)};
 stack_key(Value, [A, B]) ->
-    {Value, type_tag(A), type_tag(B), none};
+    {Value, tag(A), tag(B), none};
 stack_key(Value, [A]) ->
-    {Value, type_tag(A), none, none};
+    {Value, tag(A), none, none};
 stack_key(Value, []) ->
     {Value, none, none, none}.
 
+%% Inlinable version of type_tag; keep the exported name too for
+%% callers that use it directly (stats tooling etc.).
+tag({'Bool', V})                                    -> {'Bool', V};
+tag(T) when is_tuple(T), tuple_size(T) >= 2 ->
+    case element(1, T) of
+        First when is_atom(First) -> First;
+        _                         -> '$uncacheable'
+    end;
+tag(_)                                              -> '$uncacheable'.
+
+%% Cache-key type tag. For Bool/Atom-tagged stack items we fold the
+%% value into the tag so sub-clauses that dispatch on a value
+%% constraint (hos-loop-step / dispatch-*-step, keyed on True/False)
+%% cache each branch independently.  The value is only in the key,
+%% it's not compared at dispatch — full_dispatch_and_cache still
+%% runs its normal match_sig for the initial miss.
 type_tag(Item) when is_tuple(Item), tuple_size(Item) >= 2 ->
-    First = element(1, Item),
-    case is_atom(First) of
-        true -> First;
-        false -> '$uncacheable'
+    case element(1, Item) of
+        'Bool' -> {'Bool', element(2, Item)};
+        First when is_atom(First) -> First;
+        _ -> '$uncacheable'
     end;
 type_tag(_) -> '$uncacheable'.
 
@@ -220,12 +265,19 @@ should_cache(_Key, _SigIn, _Guard, ClauseCount, _Cont) when ClauseCount > 1 ->
     false;
 should_cache({_, T0, _, _}, SigIn, _Guard, _ClauseCount, Cont) ->
     length(SigIn) =< 3
-        andalso not has_value_constraint(SigIn)
+        andalso not has_uncacheable_value_constraint(SigIn)
         andalso not tos_has_handler(T0, Cont#continuation.dictionary).
 
-has_value_constraint([]) -> false;
-has_value_constraint([{_, _} | _]) -> true;
-has_value_constraint([_ | Rest]) -> has_value_constraint(Rest).
+%% Value constraints that the cache key fully distinguishes (Bool
+%% values are folded into the type_tag above) are safe to cache —
+%% different literals produce different keys. Int/String/other
+%% value constraints still disable caching for now.
+has_uncacheable_value_constraint([]) -> false;
+has_uncacheable_value_constraint([{'Bool', _} | Rest]) ->
+    has_uncacheable_value_constraint(Rest);
+has_uncacheable_value_constraint([{_, _} | _]) -> true;
+has_uncacheable_value_constraint([_ | Rest]) ->
+    has_uncacheable_value_constraint(Rest).
 
 any_op_named(Name, Dict) when is_map(Dict) ->
     maps:fold(fun(_, #af_type{ops = Ops}, Acc) ->

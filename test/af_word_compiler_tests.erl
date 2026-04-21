@@ -385,7 +385,9 @@ inter_word_complex_test() ->
 
 runtime_dispatch_test() ->
     setup_types(),
-    Def = word_def("show", ['Int'], ['Int'], ["print"]),
+    %% Body is `dup print` — dup so that print has something to consume
+    %% while the signature can still return the original Int.
+    Def = word_def("show", ['Int'], ['Int'], ["dup", "print"]),
     {ok, af_wc_test_rt} = af_word_compiler:compile_words_to_module(af_wc_test_rt, [Def]),
     Result = af_wc_test_rt:show([{'Int', 42}]),
     ?assertEqual([{'Int', 42}], Result).
@@ -1603,11 +1605,13 @@ find_word_sig_edge_test() ->
 %% is preserved and the next op continues on it.
 side_effect_test() ->
     setup_full(),
-    %% "print" produces a side effect but doesn't change the stack
-    Def = word_def("print_and_dup", ['Int'], ['Int', 'Int'], ["dup", "print"]),
+    %% `print` consumes one item (sig `Any -> `). Duplicate the Int
+    %% three times so that after print eats one the sig_out is still
+    %% satisfied with two Ints.
+    Def = word_def("print_and_dup", ['Int'], ['Int', 'Int'],
+                   ["dup", "dup", "print"]),
     {ok, af_wc_test_se} = af_word_compiler:compile_words_to_module(af_wc_test_se, [Def]),
     Result = af_wc_test_se:print_and_dup([{'Int', 5}]),
-    %% print is a side-effect, stack stays as [5, 5] from the dup
     ?assertEqual([{'Int', 5}, {'Int', 5}], Result).
 
 %% --- compile_words_to_binary warnings path (line 79-80) ---

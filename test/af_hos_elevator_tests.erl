@@ -29,13 +29,7 @@ load_valid_spec() ->
     eval(binary_to_list(Content), af_interpreter:new_continuation()).
 
 get_log(Pid) ->
-    Ref = make_ref(),
-    Pid ! {get_log, self(), Ref},
-    receive
-        {reply, Ref, Log} -> Log
-    after 1000 ->
-        {error, timeout}
-    end.
+    af_hos_runtime:get_log(Pid).
 
 %% -------------------------------------------------------------------
 %% Valid spec compiles and spawns
@@ -516,10 +510,4 @@ timer_test_() ->
 %% into the tree by name. This is a test-only hook provided by the
 %% runtime's introspect_child message.
 introspect_child_pid(ParentPid, ChildName) ->
-    Ref = make_ref(),
-    ParentPid ! {introspect_child, ChildName, self(), Ref},
-    receive
-        {reply, Ref, Pid} -> Pid
-    after 1000 ->
-        erlang:error(introspect_timeout)
-    end.
+    af_hos_runtime:introspect_child(ParentPid, ChildName).

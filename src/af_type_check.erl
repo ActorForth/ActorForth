@@ -39,7 +39,38 @@ infer_stack(Body, Stack) ->
     infer_stack(Body, Stack, #{}).
 
 infer_stack([], Stack, _Locals) -> {ok, Stack};
+%% Special case: a literal integer literal operation followed by
+%% `make-tuple` has a known stack effect — it pops N items from below
+%% the literal plus the literal itself, and pushes a single Tuple.
+%% Without this, the checker uses make-tuple's declared sig [Int] ->
+%% [Tuple] which only consumes the Int, leaving phantom items on the
+%% type stack and false-positive type errors at the sig_out.
+infer_stack([#operation{name = NName}, #operation{name = "make-tuple"} | Rest],
+            Stack, Locals) ->
+    case catch list_to_integer(NName) of
+        N when is_integer(N), N >= 0 ->
+            %% The literal N pushes an Int first — we must then pop
+            %% N tuple elements below it.
+            IntStack = ['Int' | Stack],
+            case length(IntStack) >= N + 1 of
+                true ->
+                    {_Consumed, Rest0} = lists:split(N + 1, IntStack),
+                    infer_stack(Rest, ['Tuple' | Rest0], Locals);
+                false ->
+                    {error, {stack_underflow, "make-tuple",
+                             {expected_depth, N + 1,
+                              got_depth, length(IntStack)}}}
+            end;
+        _ ->
+            infer_stack_step(NName, undefined,
+                             #operation{name = NName},
+                             [#operation{name = "make-tuple"} | Rest],
+                             Stack, Locals)
+    end;
 infer_stack([#operation{name = Name, source = Source} | Rest], Stack, Locals) ->
+    infer_stack_step(Name, Source, undefined, Rest, Stack, Locals).
+
+infer_stack_step(Name, Source, _Op, Rest, Stack, Locals) ->
     case resolve_stack_effect(Name, Source, Stack, Locals) of
         {ok, NewStack} ->
             infer_stack(Rest, NewStack, Locals);

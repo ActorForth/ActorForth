@@ -27,6 +27,8 @@ You may not love the RPN notation. You don't have to. The aesthetic is a means, 
 
 Not Hoare exactly — but the spirit runs through his Turing lecture too, and through De Millo, Lipton, and Perlis on *Social Processes and Proofs*, and through Einstein's "as simple as possible, but no simpler." The architectural-drivers document (`docs/architectural-drivers-considerations.md`) carries the formal version of this argument. What follows here is the practical one.
 
+**A note on HOS.** Some later chapters use Hamilton's *Higher Order Software* (HOS) vocabulary: subsystems, transitions, axioms, effects. HOS is a design discipline for hierarchies of state machines with formally checked composition — the methodology Hamilton developed after Apollo. Its value proposition is narrow but sharp: explicit, checked, hierarchical state machines where safety properties emerge from the axiom set. That is what you want for lifts, payment terminals, signalling, medical devices, protocol state. It is not what you want for CRUD, aggregation, ML inference, games, or most web backends. System-of-Systems is more universal in the sense that the generic actor model covers far more ground — but HOS is not the actor model; it is a discipline on top of it. ActorForth provides HOS as an optional type-backed DSL, not a tax on every program you write. If your problem isn't state-machine-heavy, you can skip the HOS chapters.
+
 Now — the stack.
 
 ---

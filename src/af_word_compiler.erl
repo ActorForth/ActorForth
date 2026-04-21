@@ -139,9 +139,11 @@ compile_word_group(Name, Defs, L, Ctx) ->
 compile_single_word(Name, SigIn, SigOut, Body, Guard, L, Ctx) ->
     FunAtom = list_to_atom(Name),
     {HeadPat, InitExprStack, RestVar} = build_head_pattern(SigIn, L),
+    Ctx2 = Ctx#{rest_var => RestVar,
+                bindings => build_binding_map(SigIn, InitExprStack, L)},
     case guard_or_empty(Guard, InitExprStack, L) of
         {ok, GuardExprs} ->
-            case simulate_body(Body, InitExprStack, L, Ctx#{rest_var => RestVar}) of
+            case simulate_body(Body, InitExprStack, L, Ctx2) of
                 {ok, ResultStack, SideEffects} ->
                     ReturnExpr = build_tagged_return(ResultStack, SigOut, RestVar, L),
                     BodyExprs = SideEffects ++ [ReturnExpr],
@@ -158,9 +160,11 @@ compile_single_word(Name, SigIn, SigOut, Body, Guard, L, Ctx) ->
 %% Compile a single clause for a multi-clause function.
 compile_clause(SigIn, SigOut, Body, Guard, L, Ctx) ->
     {HeadPat, InitExprStack, RestVar} = build_head_pattern(SigIn, L),
+    Ctx2 = Ctx#{rest_var => RestVar,
+                bindings => build_binding_map(SigIn, InitExprStack, L)},
     case guard_or_empty(Guard, InitExprStack, L) of
         {ok, GuardExprs} ->
-            case simulate_body(Body, InitExprStack, L, Ctx#{rest_var => RestVar}) of
+            case simulate_body(Body, InitExprStack, L, Ctx2) of
                 {ok, ResultStack, SideEffects} ->
                     ReturnExpr = build_tagged_return(ResultStack, SigOut, RestVar, L),
                     BodyExprs = SideEffects ++ [ReturnExpr],
@@ -171,6 +175,80 @@ compile_clause(SigIn, SigOut, Body, Guard, L, Ctx) ->
             end;
         {error, Reason} ->
             {error, Reason}
+    end.
+
+%% Build a map from binding name -> generator fun(L) -> {Expr, FType}
+%% representing the Erlang expression to push when the binding is
+%% referenced in the body. Each binding is an `element(Idx+2, Pat)`
+%% extraction from the corresponding product-type head pattern,
+%% wrapped by af_type_compiler:normalize_binding to match the
+%% interpreter's bindings-frame convention (atoms normalise to
+%% string form).
+%%
+%% Bare names are only included when unambiguous across all product
+%% slots. Dot-prefixed positional forms (`.x`, `..x`, ...) are
+%% always included.
+build_binding_map(SigIn, InitExprStack, _L) ->
+    N = length(SigIn),
+    ProductSlots = product_slots_from_sig(SigIn),
+    AllEntries =
+        lists:flatmap(fun({StoredPos, _Type, Fields}) ->
+            %% The stored position is 0-indexed from TOS; the head
+            %% pattern / InitExprStack is in TOS-first order, so
+            %% lookup by the same index.
+            {PatExpr, _Type2} = lists:nth(StoredPos + 1, InitExprStack),
+            SourcePos = N - StoredPos,
+            DotPrefix = lists:duplicate(SourcePos, $.),
+            [{DotPrefix ++ FName, FName, PatExpr, FIdx, FType}
+             || {FName, FIdx, FType} <- Fields]
+        end, ProductSlots),
+    BareCounts =
+        lists:foldl(fun({_D, Bare, _P, _I, _T}, Acc) ->
+            maps:update_with(Bare, fun(C) -> C + 1 end, 1, Acc)
+        end, #{}, AllEntries),
+    lists:foldl(fun({Dotted, Bare, PatExpr, FIdx, FType}, Acc) ->
+        Gen = fun(LL) ->
+            ElementExpr =
+                {call, LL, {remote, LL, {atom, LL, erlang}, {atom, LL, element}},
+                 [{integer, LL, FIdx + 2}, PatExpr]},
+            NormExpr =
+                {call, LL,
+                 {remote, LL, {atom, LL, af_type_compiler},
+                              {atom, LL, normalize_binding}},
+                 [{atom, LL, FType}, ElementExpr]},
+            {NormExpr, FType}
+        end,
+        Acc1 = Acc#{Dotted => Gen},
+        case maps:get(Bare, BareCounts) of
+            1 -> Acc1#{Bare => Gen};
+            _ -> Acc1
+        end
+    end, #{}, AllEntries).
+
+%% Collect product-type entries in SigIn with their stored position
+%% (0-indexed from TOS) plus fields: [{Pos, Type, [{Name, Idx, FType}]}].
+%% Value-constrained entries are skipped (can't bind on them). Safe to
+%% call before the ETS registry is set up (compiler unit tests): returns
+%% [] on any error.
+product_slots_from_sig(SigIn) ->
+    Indexed = lists:zip(lists:seq(0, length(SigIn) - 1), SigIn),
+    lists:filtermap(fun
+        ({Pos, Type}) when is_atom(Type) ->
+            case safe_get_type(Type) of
+                {ok, #af_type{fields = Fields}} when Fields =/= [] ->
+                    FieldInfo = lists:zip3(
+                        [atom_to_list(FN) || {FN, _FT} <- Fields],
+                        lists:seq(0, length(Fields) - 1),
+                        [FT || {_FN, FT} <- Fields]),
+                    {true, {Pos, Type, FieldInfo}};
+                _ -> false
+            end;
+        (_) -> false
+    end, Indexed).
+
+safe_get_type(Type) ->
+    try af_type:get_type(Type)
+    catch _:_ -> not_found
     end.
 
 %% Translate an operation's `guard` field into Erlang function-head guard
@@ -449,15 +527,35 @@ build_head_pattern(SigIn, L) ->
                 {Pats ++ [TuplePat], Exps ++ [{TuplePat, Type}], I + 1};
             Type when is_atom(Type) ->
                 Var = {var, L, arg_name(I)},
-                Pat = case is_product_type(Type) of
-                    true ->
-                        %% Product: match any tuple whose first elem is Type.
-                        %% We use a bound var only — type discrimination is
-                        %% handled by the caller (match_sig).
+                Pat = case Type of
+                    'Any' ->
+                        %% Any: bind a var only; accepts any stack shape.
+                        %% match_sig in the dispatch path still guards
+                        %% against mismatched types.
                         Var;
-                    false ->
-                        %% Regular tagged {Type, Val} 2-tuple.
-                        {tuple, L, [{atom, L, Type}, Var]}
+                    _ ->
+                        case product_field_count(Type) of
+                            {ok, NFields} ->
+                                %% Product: match {Type, _F1, _F2, ..., _Fn}
+                                %% so multi-clause dispatch selects by
+                                %% product-type tag (e.g. HosCast vs
+                                %% HosCall clauses of handle-message).
+                                %% Leading-underscore names tell BEAM
+                                %% the fields aren't used — the body
+                                %% accesses them via element/setelement
+                                %% on the whole ProdVar.
+                                FieldVars = [{var, L,
+                                              list_to_atom("_"
+                                                 ++ atom_to_list(arg_field_name(I, J)))}
+                                             || J <- lists:seq(1, NFields)],
+                                ProdVar = {var, L, arg_name(I)},
+                                InnerTuple = {tuple, L,
+                                              [{atom, L, Type} | FieldVars]},
+                                {match, L, ProdVar, InnerTuple};
+                            not_product ->
+                                %% Regular tagged {Type, Val} 2-tuple.
+                                {tuple, L, [{atom, L, Type}, Var]}
+                        end
                 end,
                 {Pats ++ [Pat], Exps ++ [{Pat, Type}], I + 1}
         end
@@ -474,6 +572,18 @@ is_product_type(TypeName) ->
         {ok, #af_type{fields = Fields}} when Fields =/= [] -> true;
         _ -> false
     end.
+
+%% Return the number of fields for a product type, or not_product.
+product_field_count(TypeName) ->
+    case catch af_type:get_type(TypeName) of
+        {ok, #af_type{fields = Fields}} when Fields =/= [] ->
+            {ok, length(Fields)};
+        _ -> not_product
+    end.
+
+arg_field_name(ArgI, FieldJ) ->
+    list_to_atom("Arg" ++ integer_to_list(ArgI)
+                 ++ "F" ++ integer_to_list(FieldJ)).
 
 %% Build an ActorForth wrapper operation that calls a native BEAM function.
 %% The wrapper pops tagged items, passes the tagged stack to the native function,
@@ -509,6 +619,19 @@ simulate_body(Ops, Stack, L, Ctx) ->
 
 simulate_body([], Stack, _L, _Ctx, SideEffects) ->
     {ok, Stack, lists:reverse(SideEffects)};
+%% Sub-clause dispatch (`: HosState True -> ; body1 : HosState False -> ; body2 .`)
+%% is encoded in the body as an op with source = {select_clause, ClauseRecs}.
+%% Compile it to an Erlang case expression on the live stack: each clause's
+%% sig_in becomes a pattern, each clause's body gets translated into a case
+%% branch body. Falls back to runtime dispatch if any branch can't be
+%% compiled.
+simulate_body([#operation{source = {select_clause, ClauseRecs}} | Rest], Stack, L, Ctx, SideEffects) ->
+    case compile_select_clause(ClauseRecs, Stack, L, Ctx) of
+        {ok, NewStack, NewSideEffects} ->
+            simulate_body(Rest, NewStack, L, Ctx,
+                          lists:reverse(NewSideEffects) ++ SideEffects);
+        {error, _Reason} = Err -> Err
+    end;
 %% Detect << ... >> send blocks and compile them directly
 simulate_body([#operation{name = "<<"} | Rest], Stack, L, Ctx, SideEffects) ->
     {SendOps, AfterSend} = collect_send_block(Rest),
@@ -534,47 +657,63 @@ simulate_body([#operation{name = OpName, source = quoted_string} | Rest], [{Stac
 %%
 %% Only the fourth path is slow. The others are a single call instruction.
 simulate_body([#operation{name = OpName} | Rest], [{StackExpr, stack}], L, Ctx, SideEffects) ->
-    Words = maps:get(words, Ctx, #{}),
-    NewExpr = case maps:get(OpName, Words, undefined) of
-        {_Arity, _NumOut} ->
-            %% Same-module word: call locally
-            {call, L, {atom, L, list_to_atom(OpName)}, [StackExpr]};
-        undefined ->
-            case find_native_word(OpName) of
-                {ok, NativeMod, _Arity, _NumOut} ->
-                    %% Already-compiled cross-module word: direct remote call
-                    {call, L,
-                     {remote, L, {atom, L, NativeMod},
-                                 {atom, L, list_to_atom(OpName)}},
-                     [StackExpr]};
-                not_found ->
-                    case af_compile:primitive_fast_fun(OpName) of
-                        {ok, FunAtom} ->
-                            %% Primitive fast path: call af_compile:prim_*/1
+    case maps:find(OpName, maps:get(bindings, Ctx, #{})) of
+        {ok, Gen} ->
+            %% Auto-field binding in opaque mode: cons the typed field
+            %% expression onto the opaque StackExpr. The resulting stack
+            %% is still opaque (one variable holding everything), so the
+            %% binding's type info is lost but semantics are preserved.
+            {BindingExpr, _BindingType} = Gen(L),
+            NewStackExpr = {cons, L, BindingExpr, StackExpr},
+            simulate_body(Rest, [{NewStackExpr, stack}], L, Ctx, SideEffects);
+        error ->
+            Words = maps:get(words, Ctx, #{}),
+            NewExpr = case maps:get(OpName, Words, undefined) of
+                {_Arity, _NumOut} ->
+                    %% Same-module word: call locally
+                    {call, L, {atom, L, list_to_atom(OpName)}, [StackExpr]};
+                undefined ->
+                    case find_native_word(OpName) of
+                        {ok, NativeMod, _Arity, _NumOut} ->
+                            %% Already-compiled cross-module word: direct remote call
                             {call, L,
-                             {remote, L, {atom, L, af_compile},
-                                         {atom, L, FunAtom}},
+                             {remote, L, {atom, L, NativeMod},
+                                         {atom, L, list_to_atom(OpName)}},
                              [StackExpr]};
                         not_found ->
-                            {call, L,
-                             {remote, L, {atom, L, af_compile},
-                                         {atom, L, apply_impl}},
-                             [{string, L, OpName}, StackExpr]}
+                            case af_compile:primitive_fast_fun(OpName) of
+                                {ok, FunAtom} ->
+                                    %% Primitive fast path: call af_compile:prim_*/1
+                                    {call, L,
+                                     {remote, L, {atom, L, af_compile},
+                                                 {atom, L, FunAtom}},
+                                     [StackExpr]};
+                                not_found ->
+                                    opaque_literal_or_apply(OpName, StackExpr, L)
+                            end
                     end
-            end
-    end,
-    simulate_body(Rest, [{NewExpr, stack}], L, Ctx, SideEffects);
+            end,
+            simulate_body(Rest, [{NewExpr, stack}], L, Ctx, SideEffects)
+    end;
 %% Quoted string literals: push as tagged {String, Binary}
 simulate_body([#operation{name = OpName, source = quoted_string} | Rest], Stack, L, Ctx, SideEffects) ->
     BinExpr = {bin, L, [{bin_element, L, {string, L, OpName}, default, default}]},
     simulate_body(Rest, [make_tagged('String', BinExpr, L) | Stack], L, Ctx, SideEffects);
 simulate_body([#operation{name = OpName} | Rest], Stack, L, Ctx, SideEffects) ->
-    case translate_op(OpName, Stack, L, Ctx) of
-        {ok, NewStack} ->
-            simulate_body(Rest, NewStack, L, Ctx, SideEffects);
-        {side_effect, Expr, NewStack} ->
-            simulate_body(Rest, NewStack, L, Ctx, [Expr | SideEffects]);
-        {error, _} = Err -> Err
+    case maps:find(OpName, maps:get(bindings, Ctx, #{})) of
+        {ok, Gen} ->
+            %% Auto-field binding: push the extracted+normalised field
+            %% value onto the stack. No dispatch; direct element/2.
+            Entry = Gen(L),
+            simulate_body(Rest, [Entry | Stack], L, Ctx, SideEffects);
+        error ->
+            case translate_op(OpName, Stack, L, Ctx) of
+                {ok, NewStack} ->
+                    simulate_body(Rest, NewStack, L, Ctx, SideEffects);
+                {side_effect, Expr, NewStack} ->
+                    simulate_body(Rest, NewStack, L, Ctx, [Expr | SideEffects]);
+                {error, _} = Err -> Err
+            end
     end.
 
 %% Helper: extract raw value from a typed expression
@@ -871,6 +1010,72 @@ translate_op("substring", [{_ExprLen, 'Int'} = Len, {_ExprStart, 'Int'} = Start,
     ResultExpr = {call, L, {remote, L, {atom, L, binary}, {atom, L, part}}, [ValS, ValStart, ValLen]},
     {ok, [make_tagged('String', ResultExpr, L) | Rest]};
 
+%% Actor / mailbox primitives — native translations.
+%%
+%% `receive` inlines an Erlang receive expression that matches the
+%% runtime wire format {af_msg, V} and binds V. The matched value
+%% is pushed as TOS with type 'Any'. Subsequent multi-clause
+%% dispatch (e.g. handle-message) pattern-matches V in its function
+%% head, so the interpreter's dispatch-cache isn't needed.
+translate_op("receive", Stack, L, _Ctx) ->
+    {OuterVar, InnerVar} = fresh_recv_vars(L),
+    RecvExpr = {'receive', L,
+        [{clause, L,
+          [{tuple, L, [{atom, L, af_msg}, InnerVar]}],
+          [],
+          [InnerVar]}]},
+    MatchExpr = {match, L, OuterVar, RecvExpr},
+    %% Stack TOS becomes the received value (as a variable reference
+    %% so side-effects aren't duplicated by later `dup`/`over`).
+    {side_effect, MatchExpr, [{OuterVar, 'Any'} | Stack]};
+
+%% `send`: Pid ! {af_msg, Value}. Side effect; stack drops Actor + value.
+translate_op("send", [{ActorExpr, 'Actor'} = _A, {ValueExpr, _VT} = _V | Rest], L, _Ctx) ->
+    PidExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, get}},
+               [{atom, L, pid}, extract_val({ActorExpr, any}, L)]},
+    Msg = {tuple, L, [{atom, L, af_msg}, ValueExpr]},
+    SendExpr = {op, L, '!', PidExpr, Msg},
+    {side_effect, SendExpr, Rest};
+translate_op("!", Stack, L, Ctx) ->
+    translate_op("send", Stack, L, Ctx);
+
+%% `send-after`: erlang:send_after(Ms, Pid, {af_msg, Value}). Stack
+%% on entry (TOS first): Actor, Int delay, Any value. All three pop.
+translate_op("send-after",
+             [{ActorExpr, 'Actor'}, {MsExpr, 'Int'} = MsT,
+              {ValueExpr, _VT} | Rest], L, _Ctx) ->
+    PidExpr = {call, L, {remote, L, {atom, L, maps}, {atom, L, get}},
+               [{atom, L, pid}, extract_val({ActorExpr, any}, L)]},
+    MsVal = extract_val(MsT, L),
+    Msg = {tuple, L, [{atom, L, af_msg}, ValueExpr]},
+    SaExpr = {call, L, {remote, L, {atom, L, erlang}, {atom, L, send_after}},
+              [MsVal, PidExpr, Msg]},
+    {side_effect, SaExpr, Rest};
+
+%% `elt` — element access on a tuple-shaped stack item. Delegates to
+%% af_compile:elt_native/2 which mirrors op_elt's semantics (unwrap
+%% {'Tuple', T}, element(N, T), re-wrap via af_term:to_stack_item).
+translate_op("elt",
+             [{_NExpr, 'Int'} = NT, {ItemExpr, _ItemType} | Rest],
+             L, _Ctx) ->
+    NVal = extract_val(NT, L),
+    CallExpr = {call, L,
+        {remote, L, {atom, L, af_compile}, {atom, L, elt_native}},
+        [NVal, ItemExpr]},
+    {ok, [{CallExpr, 'Any'} | Rest]};
+
+%% `make-tuple` with an integer-literal arity folded into the preceding
+%% op. Matches the runtime's op_make_tuple: pop Int arity, pop N stack
+%% items, raws in reverse order, wrap as {'Tuple', tuple}.
+translate_op("make-tuple",
+             [{{integer, _, N}, 'Int'} | Rest], L, _Ctx)
+  when is_integer(N), N >= 0, length(Rest) >= N ->
+    {Items, RestAfter} = lists:split(N, Rest),
+    RawValues = [extract_val(I, L) || I <- lists:reverse(Items)],
+    TupleExpr = {tuple, L, RawValues},
+    WrappedExpr = {tuple, L, [{atom, L, 'Tuple'}, TupleExpr]},
+    {ok, [{WrappedExpr, 'Tuple'} | RestAfter]};
+
 %% Product type getters: generates maps:get(FieldName, FieldMap)
 %% Product type setters: generates maps:put(FieldName, NewValue, FieldMap)
 translate_op(Name, Stack, L, Ctx) when length(Stack) >= 1 ->
@@ -882,6 +1087,99 @@ translate_op(Name, Stack, L, Ctx) when length(Stack) >= 1 ->
 %% Literals and word calls
 translate_op(Name, Stack, L, Ctx) ->
     translate_op_fallback(Name, Stack, L, Ctx).
+
+fresh_recv_vars(L) ->
+    Id = integer_to_list(erlang:unique_integer([positive])),
+    OuterVar = {var, L, list_to_atom("__R" ++ Id)},
+    InnerVar = {var, L, list_to_atom("__RI" ++ Id)},
+    {OuterVar, InnerVar}.
+
+fresh_var(L, Prefix) ->
+    Id = integer_to_list(erlang:unique_integer([positive])),
+    {var, L, list_to_atom(Prefix ++ Id)}.
+
+%% Compile a select_clause (sub-clause dispatch) to a case expression on
+%% the live stack list. Each clause's sig_in becomes a cons-list pattern
+%% that must match the stack top; the clause body becomes the branch body.
+%% All branches return a list (the new stack), which we bind to a fresh
+%% variable and wrap the remaining simulate_body path as opaque.
+compile_select_clause(ClauseRecs, Stack, L, Ctx) ->
+    RestVar = maps:get(rest_var, Ctx, {nil, L}),
+    StackExpr = build_stack_list(Stack, L, RestVar),
+    StackVar = fresh_var(L, "__SC"),
+    ResultVar = fresh_var(L, "__SR"),
+    case compile_clauses(ClauseRecs, StackVar, L, Ctx) of
+        {ok, Branches} ->
+            %% Final clause: unmatched → raise (shouldn't happen in
+            %% well-typed code; the checker enforces total coverage
+            %% when compiling interpreted words).
+            FallbackClause = {clause, L, [{var, L, '_'}], [],
+                [{call, L, {remote, L, {atom, L, erlang}, {atom, L, error}},
+                  [{atom, L, no_clause_match}]}]},
+            AllBranches = Branches ++ [FallbackClause],
+            Case = {'case', L, StackVar, AllBranches},
+            %% Materialise the current stack expression into StackVar so
+            %% the case has something to pattern-match. Then bind the
+            %% case result to ResultVar, which becomes the new opaque
+            %% stack.
+            BindStack = {match, L, StackVar, StackExpr},
+            BindResult = {match, L, ResultVar, Case},
+            SideEffects = [BindStack, BindResult],
+            {ok, [{ResultVar, stack}], SideEffects};
+        {error, _} = Err -> Err
+    end.
+
+compile_clauses(ClauseRecs, StackVar, L, Ctx) ->
+    compile_clauses(ClauseRecs, StackVar, L, Ctx, []).
+
+compile_clauses([], _StackVar, _L, _Ctx, Acc) ->
+    {ok, lists:reverse(Acc)};
+compile_clauses([#{sig_in := SIn, body := CBody} | Rest], StackVar, L, Ctx, Acc) ->
+    {HeadPat, InitExprStack, ClauseRestVar} = build_head_pattern(SIn, L),
+    Ctx2 = Ctx#{rest_var => ClauseRestVar,
+                bindings => build_binding_map(SIn, InitExprStack, L)},
+    case simulate_body(CBody, InitExprStack, L, Ctx2) of
+        {ok, ResultStack, SideEffects} ->
+            %% The sub-clause body's result is whatever ResultStack
+            %% says. Materialise it as a cons list so the branch
+            %% returns a uniform list shape.
+            ResultExpr = build_stack_list(ResultStack, L, ClauseRestVar),
+            Branch = {clause, L, [HeadPat], [],
+                      SideEffects ++ [ResultExpr]},
+            compile_clauses(Rest, StackVar, L, Ctx, [Branch | Acc]);
+        {error, _} = Err -> Err
+    end.
+
+%% Opaque-stack fallback: recognize literal tokens (True/False/integers)
+%% BEFORE falling through to apply_impl, since apply_impl can't look up
+%% literals (they're not registered ops). Returns a cons expression that
+%% prepends the tagged literal to the existing StackExpr, or defaults to
+%% apply_impl for unknown names.
+opaque_literal_or_apply(Name, StackExpr, L) ->
+    case opaque_literal_expr(Name, L) of
+        {ok, LitExpr} ->
+            {cons, L, LitExpr, StackExpr};
+        not_literal ->
+            {call, L,
+             {remote, L, {atom, L, af_compile}, {atom, L, apply_impl}},
+             [{string, L, Name}, StackExpr]}
+    end.
+
+opaque_literal_expr("True",  L) -> {ok, {tuple, L, [{atom, L, 'Bool'}, {atom, L, true}]}};
+opaque_literal_expr("False", L) -> {ok, {tuple, L, [{atom, L, 'Bool'}, {atom, L, false}]}};
+opaque_literal_expr("true",  L) -> {ok, {tuple, L, [{atom, L, 'Bool'}, {atom, L, true}]}};
+opaque_literal_expr("false", L) -> {ok, {tuple, L, [{atom, L, 'Bool'}, {atom, L, false}]}};
+opaque_literal_expr(Name, L) ->
+    case catch list_to_integer(Name) of
+        N when is_integer(N) ->
+            {ok, {tuple, L, [{atom, L, 'Int'}, {integer, L, N}]}};
+        _ ->
+            case catch list_to_float(Name) of
+                F when is_float(F) ->
+                    {ok, {tuple, L, [{atom, L, 'Float'}, {float, L, F}]}};
+                _ -> not_literal
+            end
+    end.
 
 translate_op_fallback(Name, Stack, L, Ctx) ->
     %% Try integer literal
@@ -897,7 +1195,11 @@ translate_op_fallback(Name, Stack, L, Ctx) ->
                     case Name of
                         "true" ->
                             {ok, [make_tagged('Bool', {atom, L, true}, L) | Stack]};
+                        "True" ->
+                            {ok, [make_tagged('Bool', {atom, L, true}, L) | Stack]};
                         "false" ->
+                            {ok, [make_tagged('Bool', {atom, L, false}, L) | Stack]};
+                        "False" ->
                             {ok, [make_tagged('Bool', {atom, L, false}, L) | Stack]};
                         _ ->
                             %% Try inter-word call or runtime fallback
@@ -920,11 +1222,18 @@ runtime_dispatch(Name, Stack, L, Ctx) ->
         {remote, L, {atom, L, af_compile}, {atom, L, apply_impl}},
         [{string, L, Name}, StackExpr]},
     case lookup_op_effect(Name) of
-        {ok, _NumIn, 0, _OutTypes} ->
-            %% Side-effect only (like print) — execute and keep current stack
-            {side_effect, CallExpr, Stack};
+        {ok, NumIn, 0, _OutTypes} when is_integer(NumIn),
+                                       NumIn >= 0,
+                                       length(Stack) >= NumIn ->
+            %% Side-effect op consumes NumIn items and produces none.
+            %% Drop NumIn items from the compile-time stack picture so
+            %% later ops' stack references (and final return shape)
+            %% line up with the runtime stack after apply_impl consumes.
+            {_Consumed, Remaining} = lists:split(NumIn, Stack),
+            {side_effect, CallExpr, Remaining};
         _ ->
-            %% Has outputs or unknown — result is opaque stack
+            %% Op has outputs, or we can't determine its arity: go
+            %% opaque. The typed stack can't be reconstructed.
             {ok, [{CallExpr, stack}]}
     end.
 

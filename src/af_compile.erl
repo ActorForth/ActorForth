@@ -17,6 +17,15 @@
          prim_le/1, prim_ge/1, prim_not/1, prim_and/1, prim_or/1,
          prim_abs/1, prim_neg/1]).
 -export([primitive_fast_fun/1]).
+-export([elt_native/2]).
+
+%% elt_native(N, Item) mirrors af_type_tuple:op_elt — accepts either
+%% a {'Tuple', T} stack item or a bare tuple, returns the Nth element
+%% wrapped via af_term:to_stack_item.
+elt_native(N, {'Tuple', T}) when is_tuple(T), N >= 1, N =< tuple_size(T) ->
+    af_term:to_stack_item(element(N, T));
+elt_native(N, T) when is_tuple(T), N >= 1, N =< tuple_size(T) ->
+    af_term:to_stack_item(element(N, T)).
 
 %% Compile a word body into a direct-call chain, bypassing interpreter dispatch.
 %% Returns a compiled #operation{} that can replace the interpreted version.
@@ -124,16 +133,107 @@ build_op_call(#operation{name = Name}, StackVar, L) ->
         [{string, L, Name}, StackVar]}.
 
 %% Called by generated BEAM code to execute an operation on a stack.
+%%
+%% Fast path: resolve Name+TosType to an Impl closure via a per-process
+%% cache kept in the process dictionary. The cache key includes the
+%% TOS type tag (and the next-2 types for deeper sig_ins) so ops with
+%% different dispatch targets stay distinct. Cache reads are a single
+%% erlang:get/1 which is much cheaper than the ets:lookup + match_sig
+%% chain that af_type:find_op walks.
+%%
+%% Falls back to a full af_type:find_op when the cache misses or when
+%% the op is non-cacheable (multi-clause value constraints, guards, or
+%% TOS type with a handler — same rules the interpreter uses for its
+%% dispatch_cache).
 apply_impl(Name, Stack) ->
-    case af_type:find_op(Name, Stack) of
-        {ok, #operation{impl = Impl}} ->
-            Cont = #continuation{data_stack = Stack},
-            Result = Impl(Cont),
-            Result#continuation.data_stack;
-        not_found ->
-            %% Push as atom
+    Key = cache_key(Name, Stack),
+    case erlang:get({af_native_cache, Key}) of
+        undefined ->
+            apply_impl_miss(Name, Stack, Key);
+        Impl when is_function(Impl) ->
+            Cont = new_apply_cont(Stack),
+            save_apply_cont_cache(Impl(Cont));
+        atom_fallback ->
             [{'Atom', Name} | Stack]
     end.
+
+apply_impl_miss(Name, Stack, Key) ->
+    case af_type:find_op(Name, Stack) of
+        {ok, #operation{impl = Impl} = Op} ->
+            maybe_cache_impl(Key, Op, Stack, Impl),
+            Cont = new_apply_cont(Stack),
+            save_apply_cont_cache(Impl(Cont));
+        not_found ->
+            [{'Atom', Name} | Stack]
+    end.
+
+%% Build a continuation for executing an Impl called from native code.
+%% Three process-local things are cached per-process:
+%%   1. The type-dict snapshot (else the Impl's body dispatches via
+%%      ETS — expensive, no caching).
+%%   2. The dispatch_cache map (else every apply_impl call starts
+%%      with an empty cache, re-resolving callees every time).
+%% Both are kept in the process dictionary so they persist across
+%% the stream of apply_impl calls the same actor makes.
+new_apply_cont(Stack) ->
+    Dict = case erlang:get(af_native_dict_snapshot) of
+        undefined ->
+            Snap = af_type:snapshot(),
+            erlang:put(af_native_dict_snapshot, Snap),
+            Snap;
+        Existing -> Existing
+    end,
+    DispatchCache = erlang:get(af_native_dispatch_cache),
+    Cache = case DispatchCache of
+        undefined -> #{};
+        C         -> C
+    end,
+    #continuation{data_stack = Stack, dictionary = Dict,
+                  dispatch_cache = Cache}.
+
+%% After an Impl returns, save the updated dispatch_cache back into
+%% the process dict so the next apply_impl call reuses it.
+save_apply_cont_cache(Cont) ->
+    erlang:put(af_native_dispatch_cache, Cont#continuation.dispatch_cache),
+    Cont#continuation.data_stack.
+
+%% 3-deep key: TOS + next-2 types. Mirrors the interpreter's dispatch
+%% cache. Uncacheable stack items (non-atom-tagged) short-circuit to a
+%% never-hitting sentinel so we don't pollute the cache with bogus keys.
+cache_key(Name, Stack) ->
+    case Stack of
+        [A, B, C | _] -> {Name, tag(A), tag(B), tag(C)};
+        [A, B]        -> {Name, tag(A), tag(B), none};
+        [A]           -> {Name, tag(A), none, none};
+        []            -> {Name, none, none, none}
+    end.
+
+tag({'Bool', V}) -> {'Bool', V};
+tag(T) when is_tuple(T), tuple_size(T) >= 2 ->
+    case element(1, T) of
+        First when is_atom(First) -> First;
+        _                         -> '$u'
+    end;
+tag(_) -> '$u'.
+
+%% Cache an Impl only when the dispatch is stable: no multi-clause on
+%% value constraints beyond Bool (folded into the key), no guard (runtime
+%% check), and TOS type has no handler (stateful redirect).
+maybe_cache_impl({_, '$u', _, _}, _Op, _Stack, _Impl) -> ok;
+maybe_cache_impl({_, _, '$u', _}, _Op, _Stack, _Impl) -> ok;
+maybe_cache_impl({_, _, _, '$u'}, _Op, _Stack, _Impl) -> ok;
+maybe_cache_impl(_Key, #operation{guard = G}, _Stack, _Impl) when G =/= undefined, G =/= [] ->
+    ok;
+maybe_cache_impl(Key, #operation{sig_in = SigIn}, _Stack, Impl) ->
+    case length(SigIn) =< 3 andalso safe_sig_in(SigIn) of
+        true  -> erlang:put({af_native_cache, Key}, Impl);
+        false -> ok
+    end.
+
+safe_sig_in([]) -> true;
+safe_sig_in([{'Bool', _} | Rest]) -> safe_sig_in(Rest);
+safe_sig_in([{_, _} | _]) -> false;
+safe_sig_in([_ | Rest]) -> safe_sig_in(Rest).
 
 %% Map from primitive op name to the fast-path function atom exported here.
 %% Used by af_word_compiler's opaque-stack path to emit direct calls instead

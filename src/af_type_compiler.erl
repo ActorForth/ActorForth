@@ -8,6 +8,7 @@
 -export([init/0]).
 -export([list_pending_checks/0, finalize_pending_checks/0,
          clear_pending_checks/0]).
+-export([normalize_binding/2]).
 
 %% Compiler state stored on data_stack as tagged tuples:
 %%   {'WordDefinition', #{name => ..., sig_in => ..., sig_out => ..., body => ...}}
@@ -359,6 +360,8 @@ try_literal_for_type(TokenValue, TypeName) ->
     end.
 
 %% Compile a token as a late-binding thunk, preserving quoted flag.
+%% Pre-build the #token{} record once at compile time and close over it
+%% so each runtime call avoids rebuilding the record.
 resolve_compile_token(TokenValue, OrigToken) ->
     IsQuoted = case OrigToken of
         #token{quoted = Q} -> Q;
@@ -368,14 +371,14 @@ resolve_compile_token(TokenValue, OrigToken) ->
         true -> quoted_string;
         false -> undefined
     end,
+    PrebuiltToken = #token{value = TokenValue, quoted = IsQuoted},
     #operation{
         name = TokenValue,
         sig_in = [],
         sig_out = [],
         source = Source,
         impl = fun(Cont) ->
-            Token = #token{value = TokenValue, quoted = IsQuoted},
-            af_interpreter:interpret_token(Token, Cont)
+            af_interpreter:interpret_token(PrebuiltToken, Cont)
         end
     }.
 
@@ -819,7 +822,8 @@ build_virtual_frame(ProductSlots, N) ->
 %% error; we return `false` so the caller raises.
 has_unknown_types(Types, Expected) ->
     Builtins = ['Any', '_', 'Int', 'Float', 'Bool', 'String', 'Atom',
-                'List', 'Map', 'Tuple', 'Actor', 'Message', 'ListBuilder'],
+                'List', 'Map', 'Tuple', 'Actor', 'Message', 'ListBuilder',
+                'Ref'],
     HasAtomFallback = lists:any(fun
         ('Atom') -> true;
         (_) -> false
@@ -886,8 +890,131 @@ make_word_impl(Body, WordName, SigIn) ->
     end,
     case ProductSlots of
         []    -> Base;
-        Slots -> wrap_with_locals(Base, Slots, length(SigIn))
+        Slots ->
+            case body_uses_bindings(Body, Slots) of
+                true ->
+                    %% Compute the frame plan ONCE at registration
+                    %% and hand a flat plan to a fast call-time
+                    %% builder. Saves four list traversals per word
+                    %% entry (was ~5% of hot-loop runtime).
+                    Plan = make_frame_plan(Slots, length(SigIn)),
+                    wrap_with_locals_planned(Base, Plan);
+                false -> Base
+            end
     end.
+
+
+%% Pre-compute the frame entries at registration time. Group entries
+%% by product position so runtime does one lists:nth per product rather
+%% than per field. Shape: [{StoredPos, [{[Key,...], Idx, FType}, ...]}].
+make_frame_plan(ProductSlots, N) ->
+    AllEntries =
+        lists:flatmap(fun({StoredPos, _Type, Fields}) ->
+            SourcePos = N - StoredPos,
+            DotPrefix = lists:duplicate(SourcePos, $.),
+            [{DotPrefix ++ FName, FName, StoredPos, FIdx, FType}
+             || {FName, FIdx, FType} <- Fields]
+        end, ProductSlots),
+    BareCounts =
+        lists:foldl(fun({_D, Bare, _P, _I, _T}, Acc) ->
+            maps:update_with(Bare, fun(C) -> C + 1 end, 1, Acc)
+        end, #{}, AllEntries),
+    Flat =
+        [begin
+            %% When bare name is globally unambiguous, the dotted
+            %% positional form is functionally equivalent and almost
+            %% never referenced — skip it to halve the frame size.
+            %% When ambiguous, only the dotted form survives.
+            Keys = case maps:get(Bare, BareCounts) of
+                1 -> [Bare];
+                _ -> [Dotted]
+            end,
+            {Pos, Keys, Idx, FType}
+         end || {Dotted, Bare, Pos, Idx, FType} <- AllEntries],
+    %% Group by Pos, preserving order within each group.
+    Grouped = lists:foldl(fun({Pos, Keys, Idx, FType}, Acc) ->
+        Existing = maps:get(Pos, Acc, []),
+        maps:put(Pos, Existing ++ [{Keys, Idx, FType}], Acc)
+    end, #{}, Flat),
+    [{Pos, Fields} || {Pos, Fields} <- maps:to_list(Grouped)].
+
+%% Wrap with pre-computed frame plan. Compile the plan to a flat list
+%% of {Key, Pos, Idx, FType} tuples and drive it with a tight loop —
+%% avoids the per-field nested lists:foldl and the add_keys walk that
+%% dominated ~20% of the hot loop in profiling.
+wrap_with_locals_planned(BaseImpl, Plan) ->
+    FlatEntries = flatten_plan(Plan),
+    fun(Cont) ->
+        Frame = build_frame_flat(FlatEntries,
+                                 Cont#continuation.data_stack, #{}),
+        Cont1 = Cont#continuation{locals = [Frame | Cont#continuation.locals]},
+        try
+            Cont2 = BaseImpl(Cont1),
+            [_PoppedFrame | LocalsRest] = Cont2#continuation.locals,
+            Cont2#continuation{locals = LocalsRest}
+        catch
+            Class:Reason:CallStack ->
+                erlang:raise(Class, Reason, CallStack)
+        end
+    end.
+
+%% Flatten a grouped plan ([{Pos, [{Keys, Idx, FType}, ...]}]) into a
+%% flat list ([{Key, Pos, Idx, FType}, ...]) so the runtime does one
+%% put per (key, value) instead of nested folds + add_keys.
+flatten_plan(Plan) ->
+    lists:flatmap(fun({Pos, Fields}) ->
+        lists:flatmap(fun({Keys, Idx, FType}) ->
+            [{K, Pos, Idx, FType} || K <- Keys]
+        end, Fields)
+    end, Plan).
+
+build_frame_flat([], _DataStack, Frame) ->
+    Frame;
+build_frame_flat([{Key, Pos, Idx, FType} | Rest], DataStack, Frame) ->
+    Product = nth_opt(Pos, DataStack),
+    RawVal = element(Idx + 2, Product),
+    Tagged = normalize_binding(FType, RawVal),
+    build_frame_flat(Rest, DataStack, Frame#{Key => Tagged}).
+
+%% lists:nth with 0-indexed fast path for Pos 0/1/2 (the only values
+%% produced in practice — sig_in rarely exceeds 3 products).
+nth_opt(0, [H | _]) -> H;
+nth_opt(1, [_, H | _]) -> H;
+nth_opt(2, [_, _, H | _]) -> H;
+nth_opt(N, L) -> lists:nth(N + 1, L).
+
+%% Kept for any external callers still referencing the old shape.
+build_frame_from_plan(Plan, DataStack) ->
+    build_frame_flat(flatten_plan(Plan), DataStack, #{}).
+
+add_keys([], _V, Frame)   -> Frame;
+add_keys([K | Ks], V, Frame) -> add_keys(Ks, V, Frame#{K => V}).
+
+%% Return true iff any body token is one of the bound names
+%% (bare field name OR dot-prefixed positional form).
+body_uses_bindings(Body, ProductSlots) ->
+    Names = binding_names(ProductSlots),
+    case Names of
+        []   -> false;
+        _    ->
+            NameSet = sets:from_list(Names),
+            lists:any(fun(Op) ->
+                case Op of
+                    #operation{name = N} -> sets:is_element(N, NameSet);
+                    _ -> false
+                end
+            end, Body)
+    end.
+
+binding_names(ProductSlots) ->
+    %% Collect bare + dotted forms as a flat list. lists:flatten over
+    %% strings (list of chars) would over-flatten; use append instead.
+    lists:append(
+      [ [FName | [dot_prefix(DotLen) ++ FName || DotLen <- lists:seq(1, 9)]]
+        || {_StoredPos, _Type, Fields} <- ProductSlots,
+           {FName, _FIdx, _FType} <- Fields ]).
+
+dot_prefix(N) -> lists:duplicate(N, $.).
 
 %% Scan a sig_in list and return [{StoredPos, TypeName, Fields}] for each
 %% product type, where Fields = [{FieldName::string, FieldIdx::non_neg, FieldType::atom}].
@@ -947,7 +1074,7 @@ build_frame(ProductSlots, N, DataStack) ->
         Product = lists:nth(StoredPos + 1, DataStack),
         [begin
             RawVal = element(FIdx + 2, Product),
-            Tagged = {FType, RawVal},
+            Tagged = normalize_binding(FType, RawVal),
             {DotPrefix ++ FName, FName, Tagged}
          end || {FName, FIdx, FType} <- Fields]
     end, ProductSlots),
@@ -966,6 +1093,17 @@ build_frame(ProductSlots, N, DataStack) ->
             _ -> Acc
         end
     end, DottedFrame, AllEntries).
+
+%% Normalise a field value for binding so the resulting stack item
+%% follows the same convention as af_term:to_stack_item: Atom values
+%% are stored as strings (lists). Product instances constructed from
+%% Erlang code (e.g. the HOS wire format) may carry raw atoms in an
+%% 'Atom'-typed field; bindings should present them in the same shape
+%% that `elt` / `to-stack-item` produce so consumers that compare or
+%% make-tuple them don't hit a list_to_atom crash on an atom value.
+normalize_binding('Atom', A) when is_atom(A) -> {'Atom', atom_to_list(A)};
+normalize_binding('Atom', B) when is_binary(B) -> {'Atom', binary_to_list(B)};
+normalize_binding(FType, RawVal) -> {FType, RawVal}.
 
 push_trace(undefined, Cont) -> Cont;
 push_trace(WordName, Cont) ->
