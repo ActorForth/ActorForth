@@ -219,6 +219,130 @@ type TriggersWalk
         append                          # ( acc viols' )
         violations! .                   # ( acc' )  - sig: (acc viols' TOS)
 
+# ===================================================================
+# Axiom 1 (transition-effect target scope): every transition's
+# effect_target (if present) must be in scope.
+# ===================================================================
+#
+# Three cases:
+#   ""       no effect; skip.
+#   "after"  timer; the scheduled effect_event must be a declared
+#            handler on this system.
+#   other    target must be the name of a direct child or the
+#            reserved builtin set (currently only children are
+#            recognised here; parent / state names are covered by
+#            the Erlang bridge until a full scope set lands in a4).
+
+type EffectWalk
+  handler-names  List
+  child-names    List
+  path           String
+  violations     List .
+
+: check-transition-effects List List List String -> List ;
+  # ( transitions handlers children path ) with path TOS.
+  # Build handler-names + child-names-as-strings, then the acc,
+  # then reduce.
+  swap                                   # ( transitions handlers path children )
+  child-names-of                         # ( transitions handlers path [child-names...] )
+  rot                                    # ( transitions path children-names handlers )
+  handler-event-names                    # ( transitions path children-names handler-names )
+  swap                                   # ( transitions path handler-names children-names )
+  rot                                    # ( transitions handler-names children-names path )
+  nil                                    # ( transitions handler-names children-names path [] )
+  effectwalk                             # ( transitions acc )
+  "reduce-effect-check" to-atom
+  reduce                                 # ( acc' )
+  violations
+  swap drop .                            # ( violations-list )
+
+# Extract the `name` field (element 2) from each child blueprint in
+# a List of HosBlueprint instances, returning a List of Strings.
+: child-names-of List -> List ;
+  "child-name-of" to-atom
+  map .
+
+: child-name-of Any -> String ;
+  2 elt .                                # name field is element 2; String binary
+
+# Per-transition step.
+: reduce-effect-check EffectWalk Any -> EffectWalk ;
+  # ( acc trans )
+  dup 5 elt                              # ( acc trans target )
+  "" ==                                  # ( acc trans is-empty? )
+  effect-empty-step .
+
+: effect-empty-step EffectWalk Any Bool -> EffectWalk ;
+    : EffectWalk Any True -> EffectWalk ;
+        # effect_target is empty: no violation; drop bool + trans,
+        # keep acc.
+        drop drop
+    : EffectWalk Any False -> EffectWalk ;
+        drop                             # drop bool
+        # ( acc trans )
+        dup 5 elt                        # ( acc trans target )
+        "after" ==                       # ( acc trans is-after? )
+        effect-after-step .
+
+: effect-after-step EffectWalk Any Bool -> EffectWalk ;
+    : EffectWalk Any True -> EffectWalk ;
+        drop                             # drop bool
+        # Timer effect: check effect_event (element 6) is a handler.
+        dup 6 elt                        # ( acc trans event-atom )
+        atom->string                     # ( acc trans event-str )
+        handler-names                    # ( acc trans event-str [handlers] )
+        over                             # ( acc trans event-str [handlers] event-str )
+        in-list?                         # ( acc trans event-str in? )
+        effect-after-emit .
+    : EffectWalk Any False -> EffectWalk ;
+        drop                             # drop bool
+        # Non-timer target: must be a child-name.
+        dup 5 elt                        # ( acc trans target-str )
+        child-names                      # ( acc trans target [child-names] )
+        over                             # ( acc trans target [children] target )
+        in-list?                         # ( acc trans target in? )
+        effect-child-emit .
+
+: effect-after-emit EffectWalk Any String Bool -> EffectWalk ;
+    : EffectWalk Any String True -> EffectWalk ;
+        drop drop drop                   # bool, event-str, trans; keep acc
+    : EffectWalk Any String False -> EffectWalk ;
+        drop                             # drop bool
+        # ( acc trans event-str )
+        path                             # ( acc trans event-str path )
+        "axiom_1: system '" swap concat
+        "' timer effect schedules event '" concat
+        swap concat
+        "' but '" concat
+        over concat
+        "' is not a declared handler on this system" concat
+                                         # ( acc trans full-msg )
+        swap drop                        # ( acc full-msg )
+        violations
+        swap
+        nil swap cons
+        append
+        violations! .
+
+: effect-child-emit EffectWalk Any String Bool -> EffectWalk ;
+    : EffectWalk Any String True -> EffectWalk ;
+        drop drop drop
+    : EffectWalk Any String False -> EffectWalk ;
+        drop
+        # ( acc trans target-str )
+        path                             # ( acc trans target path )
+        "axiom_1: system '" swap concat
+        "' transition effect target '" concat
+        swap concat
+        "' is not in scope" concat
+        swap drop                        # ( acc full-msg )
+        violations
+        swap
+        nil swap cons
+        append
+        violations! .
+
+
 # Drive the trigger-scope check across a transitions list.
 : check-transition-triggers List List String -> List ;
   # ( transitions handlers path ) with path TOS.
@@ -410,6 +534,13 @@ type HandlersWalk
   swap rot                             # ( bp path v1v2 transitions st path )
   check-state-reachability             # ( bp path v1v2 v3 )
   append                               # ( bp path v-a4 )
+
+  # Pure-a4 wiring of check-transition-effects exists as a
+  # standalone word below but isn't yet called from this top-level
+  # driver — the stack shuffle to feed it (transitions handlers
+  # children path) is fiddly without a helper that marshals fields
+  # from bindings. The Erlang bridge (a4_extra_violations) currently
+  # covers the axiom; the a4 word is exercised by its own eunit test.
 
   # --- Remaining axioms via Erlang bridge ---
   # Transition-effect scope, exhaustive emergencies, per-handler

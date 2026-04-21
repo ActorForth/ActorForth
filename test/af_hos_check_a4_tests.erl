@@ -33,6 +33,20 @@ check(Blueprint) ->
     [{'List', Items}] = C1#continuation.data_stack,
     [binary_to_list(S) || {'String', S} <- Items].
 
+%% Direct call of check-transition-effects against a transitions list,
+%% handlers list, children list, and path. Returns plain strings.
+check_effects(Transitions, Handlers, Children, PathBin) ->
+    C0 = (af_interpreter:new_continuation())#continuation{
+        data_stack = [{'String', PathBin},
+                      {'List', [{'Tuple', C} || C <- Children]},
+                      {'List', [{'Tuple', H} || H <- Handlers]},
+                      {'List', [{'Tuple', T} || T <- Transitions]}]
+    },
+    C1 = af_interpreter:interpret_token(
+        #token{value = "check-transition-effects"}, C0),
+    [{'List', Items}] = C1#continuation.data_stack,
+    [binary_to_list(S) || {'String', S} <- Items].
+
 a4_checker_test_() ->
     {foreach, fun setup/0, fun(_) -> ok end, [
         fun(_) -> {"stateless leaf produces no violations", fun() ->

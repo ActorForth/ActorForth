@@ -257,7 +257,8 @@ a4_owned_violation_prefixes() ->
     %% violation belongs to an a4-owned axiom.
     [fun stateful_body_violation/1,
      fun trigger_scope_violation/1,
-     fun state_reachability_violation/1].
+     fun state_reachability_violation/1,
+     fun transition_effect_violation/1].
 
 stateful_body_violation(Msg) ->
     %% "axiom_5: system '...' handler '...' has a non-empty body; ..."
@@ -273,6 +274,16 @@ state_reachability_violation(Msg) ->
     %% "axiom_5: system '...' state '...' is unreachable from initial
     %% state '...'. Either declare a transition into '...' or delete it."
     has_substring(Msg, "is unreachable from initial state").
+
+transition_effect_violation(Msg) ->
+    %% Two shapes from check.a4 for axiom_1 transition-effect target:
+    %%  - timer: "...timer effect schedules event '...' but '...' is
+    %%    not a declared handler..."
+    %%  - non-timer: "...transition effect target '...' is not in scope"
+    has_substring(Msg, "axiom_1")
+        andalso (has_substring(Msg, "timer effect schedules event")
+                 orelse has_substring(Msg, "transition effect target")
+                 orelse has_substring(Msg, "with effect on")).
 
 starts_with_any(Msg, Preds) ->
     lists:any(fun(P) -> P(Msg) end, Preds).
