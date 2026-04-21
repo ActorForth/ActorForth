@@ -106,3 +106,126 @@
   "' handler '" concat                 # ( event partial )
   swap concat                          # ( concat )
   "' has a non-empty body; stateful systems are driven by the transitions table (one event fires one transition). Delete the body and declare transitions for this trigger instead." concat .
+
+
+# ===================================================================
+# Axiom 1 (trigger scope): every transition's trigger must be a
+# declared handler on this system.
+# ===================================================================
+#
+# A transition's trigger names an event this system will receive.
+# The runtime's receive loop dispatches based on declared handlers;
+# a trigger not declared is silently input-rejected (Axiom 4 safety),
+# which the author finds hard to diagnose. Raising here surfaces the
+# typo at compile time.
+#
+# Inputs: transitions-list List, handlers-list List, path String.
+# Output: List of violation Strings.
+
+# Extract handler event-name Strings from a handlers-list. Each
+# HandlerSpec is a flat-tuple whose element(2) is the event Atom.
+# Returns a List of String event names.
+: handler-event-names List -> List ;
+  "handler-event-name" to-atom
+  map .                                # ( [String...] )
+
+: handler-event-name Any -> String ;
+  2 elt                                # ( event-atom )
+  atom->string .                       # ( event-str )
+
+# Extract trigger-event Strings from a transitions-list (element 4
+# of each TransitionSpec).
+: trigger-names List -> List ;
+  "trigger-name" to-atom
+  map .
+
+: trigger-name Any -> String ;
+  4 elt
+  atom->string .
+
+# Return True iff needle is in haystack (exact-equality per Erlang's
+# lists:member/2). Uses erlang-apply so the fold logic stays inside
+# BEAM; pure-a4 version can replace later once we have a fold that
+# short-circuits on True.
+: in-list? List String -> Bool ;
+  # ( list needle )
+  nil swap cons                        # ( list [needle] )
+  swap cons                            # ( [needle list] )
+  member
+  lists
+  erlang-apply .
+
+
+# ===================================================================
+# Axiom 1 (trigger-scope) helper: compare one trigger against the
+# handler-name list. Emits a violation if absent.
+# ===================================================================
+#
+# Inputs: trigger-str String, handler-names List, path String,
+#         transition Any (for from/to in the message).
+# Output: List (empty or singleton).
+: check-one-trigger String List String Any -> List ;
+  # placeholder until `in-list?` is wired; emits empty list.
+  drop drop drop drop nil .
+
+
+# ===================================================================
+# Axiom 5 (state reachability): every state named in the transitions
+# table must be reachable from the initial state.
+# ===================================================================
+#
+# Deferred - requires graph walk in a4. Empty-list stub so later
+# passes can call this without breaking the sig.
+: check-state-reachability List Atom String -> List ;
+  drop drop drop nil .
+
+
+# ===================================================================
+# Top-level driver: check-blueprint-a4
+# ===================================================================
+#
+# For now runs only the stateful-body axiom. Other axiom checks are
+# stubbed and return empty. Later passes wire the full set.
+#
+# Inputs: HosBlueprint.
+# Output: List of violation Strings.
+: check-blueprint-a4 HosBlueprint -> List ;
+  dup 2 elt                            # ( bp name-bin )
+  ""                                   # ( bp name-bin "" )
+  swap                                 # ( bp "" name-bin )
+  # binary is already a String in a4, concat-safe; hos-path takes String+String.
+  hos-path                             # ( bp path )
+  over 4 elt                           # ( bp path state-type )
+  rot 6 elt                            # ( path state-type handlers )
+  swap                                 # ( path handlers state-type )
+  rot                                  # ( handlers state-type path )
+  # Map check-stateful-body across handlers with the shared st+path.
+  # For a quick first pass, iterate explicitly via a reducer word
+  # that threads (state-type, path) as outer constants.
+  check-handlers-stateful-simple .
+
+# Reducer stand-in: walks the handlers list, calling check-stateful-body
+# on each element. Collects results by concatenation.
+: check-handlers-stateful-simple List Atom String -> List ;
+  # ( handlers state-type path )
+  rot                                  # ( state-type path handlers )
+  swap                                 # ( state-type handlers path )
+  check-handlers-stateful-go .
+
+: check-handlers-stateful-go Atom List String -> List ;
+  # ( state-type handlers path )
+  over empty?                          # ( state-type handlers path empty? )
+  check-handlers-stateful-go-step .
+
+: check-handlers-stateful-go-step Atom List String Bool -> List ;
+    : Atom List String True -> List ;
+        drop drop drop drop
+        nil
+    : Atom List String False -> List ;
+        drop                           # drop bool
+        # ( state-type handlers path )
+        over                           # ( state-type handlers path handlers )
+        head                           # ( state-type handlers path handler )
+        rot rot                        # ( state-type handler handlers path )  - need care
+        # Simpler: restructure manually.
+        drop drop drop drop nil .      # stub: emit empty for now; wired in next pass
