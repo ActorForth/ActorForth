@@ -148,25 +148,90 @@
 # BEAM; pure-a4 version can replace later once we have a fold that
 # short-circuits on True.
 : in-list? List String -> Bool ;
-  # ( list needle )
-  nil swap cons                        # ( list [needle] )
-  swap cons                            # ( [needle list] )
+  # ( list needle ). Build args list [needle, list] for
+  # lists:member(Elem, List). a4 cons signature is (List Any -> List)
+  # so we stage the deeper element first.
+  nil                                  # ( list needle [] )
+  rot                                  # ( needle [] list )
+  cons                                 # ( needle [list] )
+  swap                                 # ( [list] needle )
+  cons                                 # ( [needle, list] )
   member
   lists
   erlang-apply .
 
 
 # ===================================================================
-# Axiom 1 (trigger-scope) helper: compare one trigger against the
-# handler-name list. Emits a violation if absent.
+# Axiom 1 (trigger scope): every transition's trigger must be a
+# declared handler on this system.
 # ===================================================================
 #
-# Inputs: trigger-str String, handler-names List, path String,
-#         transition Any (for from/to in the message).
-# Output: List (empty or singleton).
-: check-one-trigger String List String Any -> List ;
-  # placeholder until `in-list?` is wired; emits empty list.
-  drop drop drop drop nil .
+# A transition's trigger names an event this system will receive.
+# The runtime's receive loop dispatches based on declared handlers;
+# a trigger not declared is silently input-rejected (Axiom 4),
+# which the author finds hard to diagnose. Raising here surfaces
+# the typo at compile time.
+
+type TriggersWalk
+  handler-names  List
+  path           String
+  violations     List .
+
+# Unused: violation message is built inline in reduce-trigger-check-step.
+# Kept as a signature hook for future expansion (from/to context
+# in the message) without breaking callers.
+: trigger-scope-msg String String String String -> String ;
+  drop drop drop
+  "axiom_1: trigger violation" concat .
+
+# One-transition trigger check. Builds a violation if the transition's
+# trigger is not in handler-names.
+: reduce-trigger-check TriggersWalk Any -> TriggersWalk ;
+  # ( acc trans )
+  dup                                   # ( acc trans trans )
+  4 elt                                 # ( acc trans trigger-atom )
+  atom->string                          # ( acc trans trigger-str )
+  handler-names                         # ( acc trans trigger-str handler-names )
+  over                                  # ( acc trans trigger-str handler-names trigger-str )
+  in-list?                              # ( acc trans trigger-str in? )
+  reduce-trigger-check-step .
+
+: reduce-trigger-check-step TriggersWalk Any String Bool -> TriggersWalk ;
+    : TriggersWalk Any String True -> TriggersWalk ;
+        # Trigger is declared; nothing to emit.
+        drop drop drop                  # drop bool, trigger-str, trans; keep acc
+    : TriggersWalk Any String False -> TriggersWalk ;
+        drop                            # drop bool
+        # ( acc trans trigger-str )
+        path                            # ( acc trans trigger-str path )
+        # Build minimal violation message via concat chain.
+        "axiom_1: system '" swap concat # ( acc trans trigger-str partial )
+        "' trigger '" concat            # ( acc trans trigger-str partial2 )
+        swap                            # ( acc trans partial2 trigger-str )
+        concat                          # ( acc trans partial3 )
+        "' is not a declared handler on this system" concat
+                                        # ( acc trans full-msg )
+        swap drop                       # drop trans; keep ( acc full-msg )
+        # Append full-msg to violations list:
+        violations                      # ( acc full-msg viols )
+        swap                            # ( acc viols full-msg )
+        nil swap cons                   # ( acc viols [full-msg] )
+        append                          # ( acc viols' )
+        violations! .                   # ( acc' )  - sig: (acc viols' TOS)
+
+# Drive the trigger-scope check across a transitions list.
+: check-transition-triggers List List String -> List ;
+  # ( transitions handlers path ) with path TOS.
+  # Build handler-names, then the TriggersWalk acc, then reduce.
+  swap                                  # ( transitions path handlers )
+  handler-event-names                   # ( transitions path handler-names )
+  swap                                  # ( transitions handler-names path )
+  nil                                   # ( transitions handler-names path nil )
+  triggerswalk                          # ( transitions acc )
+  "reduce-trigger-check" to-atom        # ( transitions acc atom )
+  reduce                                # ( acc' )
+  violations
+  swap drop .                           # ( violations-list )
 
 
 # ===================================================================
