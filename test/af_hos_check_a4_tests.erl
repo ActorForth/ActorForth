@@ -147,5 +147,32 @@ a4_checker_test_() ->
             ?assert(lists:any(fun(M) ->
                 string:find(M, "timer effect schedules event") =/= nomatch
             end, Msgs))
+        end} end,
+
+        fun(_) -> {"uncovered emergency state triggers axiom 5 (#173)", fun() ->
+            %% Two transitions converge on 'stopped' under 'emergency'
+            %% but state 'busy' has no transition under 'emergency'.
+            T1 = {'TransitionSpec', idle, stopped, emergency,
+                  <<>>, none, 0},
+            T2 = {'TransitionSpec', running, stopped, emergency,
+                  <<>>, none, 0},
+            T3 = {'TransitionSpec', idle, running, start,
+                  <<>>, none, 0},
+            T4 = {'TransitionSpec', running, busy, work,
+                  <<>>, none, 0},
+            C0 = (af_interpreter:new_continuation())#continuation{
+                data_stack = [{'String', <<"Lift">>},
+                              {'Atom', "Mode"},
+                              {'List', [{'Tuple', T}
+                                        || T <- [T1, T2, T3, T4]]}]
+            },
+            C1 = af_interpreter:interpret_token(
+                #token{value = "check-emergency-coverage"}, C0),
+            [{'List', Items}] = C1#continuation.data_stack,
+            Msgs = [binary_to_list(S) || {'String', S} <- Items],
+            ?assert(lists:any(fun(M) ->
+                string:find(M, "has emergency trigger") =/= nomatch
+                    andalso string:find(M, "busy") =/= nomatch
+            end, Msgs))
         end} end
     ]}.

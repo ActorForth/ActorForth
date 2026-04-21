@@ -12,7 +12,8 @@
 %% (src/bootstrap/hos/check.a4) can delegate complex graph walks
 %% back to BEAM while its own implementation catches up.
 -export([a4_unreachable_states/1, a4_initial_state_str/1,
-         a4_extra_violations/1]).
+         a4_extra_violations/1,
+         a4_emergency_violations/2]).
 %% Flip of #179: the DSL now calls check_via_a4/1 in place of
 %% check_system_raise/1 so a4-side `check-blueprint-a4` owns the
 %% axiom checking. The Erlang-side axiom functions remain available
@@ -289,6 +290,26 @@ load_a4_source(Path) ->
             error({a4_source_missing, Path})
     end.
 
+%% a4-checker bridge: pre-formatted axiom_5 exhaustive-emergency
+%% violations for a given transitions list + path. Returns a list of
+%% binaries that the a4 checker can wrap as Strings and return.
+a4_emergency_violations([], _Path) -> [];
+a4_emergency_violations(Transitions, Path)
+  when is_list(Transitions), is_binary(Path) ->
+    PathStr = binary_to_list(Path),
+    ByTrigger = group_by_trigger(Transitions),
+    Emerges = [
+        {Trigger, SingleTarget}
+        || {Trigger, Trans} <- maps:to_list(ByTrigger),
+           length(Trans) >= 2,
+           [SingleTarget] <- [lists:usort([element(3, T) || T <- Trans])]
+    ],
+    lists:flatmap(fun({Trigger, Target}) ->
+        Msgs = check_one_emergency(Trigger, Target, Transitions, PathStr),
+        [list_to_binary(M) || M <- Msgs]
+    end, Emerges);
+a4_emergency_violations(_, _) -> [].
+
 %% a4-checker bridge: run every axiom check that the pure-a4 checker
 %% has NOT yet re-implemented locally. Takes the same HosBlueprint
 %% the a4 checker was handed, returns a list of violation binaries.
@@ -322,7 +343,8 @@ a4_owned_violation_prefixes() ->
     [fun stateful_body_violation/1,
      fun trigger_scope_violation/1,
      fun state_reachability_violation/1,
-     fun transition_effect_violation/1].
+     fun transition_effect_violation/1,
+     fun exhaustive_emergency_violation/1].
 
 stateful_body_violation(Msg) ->
     %% "axiom_5: system '...' handler '...' has a non-empty body; ..."
@@ -348,6 +370,12 @@ transition_effect_violation(Msg) ->
         andalso (has_substring(Msg, "timer effect schedules event")
                  orelse has_substring(Msg, "transition effect target")
                  orelse has_substring(Msg, "with effect on")).
+
+exhaustive_emergency_violation(Msg) ->
+    %% "axiom_5: system '...' has emergency trigger '...' converging
+    %% on state '...', but state '...' has no declared transition
+    %% under '...'."
+    has_substring(Msg, "has emergency trigger").
 
 starts_with_any(Msg, Preds) ->
     lists:any(fun(P) -> P(Msg) end, Preds).

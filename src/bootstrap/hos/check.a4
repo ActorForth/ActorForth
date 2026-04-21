@@ -382,6 +382,15 @@ type EffectWalk
   af_hos_check
   erlang-apply .
 
+# Pre-formatted emergency-coverage violations from the Erlang bridge.
+: a4-emergency-violations List String -> List ;
+  # ( transitions path )
+  nil swap cons                       # ( transitions [path] )
+  swap cons                           # ( [transitions path] )
+  a4_emergency_violations
+  af_hos_check
+  erlang-apply .
+
 # Accumulator for the reduce over the unreachable-names list.
 type ReachabilityWalk
   initial     String
@@ -408,6 +417,28 @@ type ReachabilityWalk
   nil swap cons                        # ( acc viols [msg] )
   append                               # ( acc viols' )
   violations! .                        # ( acc' )
+
+# ===================================================================
+# Axiom 5 (exhaustive emergency coverage): every live state must
+# declare a transition under an emergency trigger that converges on
+# a single target. Graph walk is delegated to the Erlang helper
+# a4_emergency_violations/2, which returns pre-formatted strings.
+# ===================================================================
+
+: check-emergency-coverage List Atom String -> List ;
+  # ( transitions state-type path )
+  over None ==
+  check-emergency-coverage-step .
+
+: check-emergency-coverage-step List Atom String Bool -> List ;
+    : List Atom String True -> List ;
+        drop drop drop drop
+        nil
+    : List Atom String False -> List ;
+        drop                           # drop bool
+        swap drop                      # drop state-type -> ( transitions path )
+        a4-emergency-violations .      # ( violations-list )
+
 
 # Top-level reachability check.
 : check-state-reachability List Atom String -> List ;
