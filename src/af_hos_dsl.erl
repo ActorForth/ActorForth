@@ -64,12 +64,16 @@ init() ->
 %% ---------------------------------------------------------------
 register_trans_clauses() ->
     Trans = [
-        %% Order: more specific (longer sigs) first so match_first_op
-        %% tries them before the basic 4-arity clause. sig_in is
-        %% TOS-first; rightmost in source = TOS.
+        %% Order: longer sigs first; within same arity the strictest
+        %% (all-Event) clause first so it wins when the cross-system
+        %% event has been declared as an Event pusher already.
         {['Event', 'Subsystem', 'Event', 'State', 'State',
           'TransitionsBlock'], fun trans_subsystem/1},
+        {['Atom',  'Subsystem', 'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_subsystem/1},
         {['Event', 'Timer', 'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_timer/1},
+        {['Atom',  'Timer', 'Event', 'State', 'State',
           'TransitionsBlock'], fun trans_timer/1},
         {['Event', 'State', 'State',
           'TransitionsBlock'], fun trans_basic/1}
@@ -89,22 +93,29 @@ trans_basic(Cont) ->
     NewTB = prepend_row(TB, Row),
     Cont#continuation{data_stack = [NewTB | Rest]}.
 
+%% TOS slot may be Event (target system declared its handler already)
+%% or Atom (cross-system reference whose handler hasn't been declared
+%% yet — the axiom checker validates at register time).
 trans_subsystem(Cont) ->
-    [{'Event', EvName2}, {'Subsystem', TgtName}, {'Event', EvName1},
+    [Top, {'Subsystem', TgtName}, {'Event', EvName1},
      {'State', ToName}, {'State', FromName}, TB | Rest] =
         Cont#continuation.data_stack,
+    EvName2 = name_of(Top),
     Row = {'Row', FromName, ToName, EvName1, TgtName, EvName2, 0},
     NewTB = prepend_row(TB, Row),
     Cont#continuation{data_stack = [NewTB | Rest]}.
 
 trans_timer(Cont) ->
-    [{'Event', EvName2}, Timer, {'Event', EvName1},
+    [Top, {'Timer', DelayMs}, {'Event', EvName1},
      {'State', ToName}, {'State', FromName}, TB | Rest] =
         Cont#continuation.data_stack,
-    {'Timer', DelayMs} = Timer,
+    EvName2 = name_of(Top),
     Row = {'Row', FromName, ToName, EvName1, "after", EvName2, DelayMs},
     NewTB = prepend_row(TB, Row),
     Cont#continuation{data_stack = [NewTB | Rest]}.
+
+name_of({'Event', N}) -> N;
+name_of({'Atom',  N}) -> N.
 
 prepend_row(TB, Row) ->
     {'TransitionsBlock', Sys, Rows} = TB,

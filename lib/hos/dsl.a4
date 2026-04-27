@@ -90,43 +90,70 @@ type TransitionsBlock
 
 
 # =====================================================================
-# `system` : entry point on Any
+# `system` : entry point. Multi-clause to handle the case where the
+# system name is already registered as a Subsystem pusher (because a
+# previously-loaded system declared it as a parent / child).
 # =====================================================================
 
 : system Atom -> SystemDef ;
     empty-systemdef .
 
+: system Subsystem -> SystemDef ;
+    tag-name empty-systemdef .
+
 
 # =====================================================================
-# Ops on SystemDef : declarations + per-name dispatcher registration
+# Ops on SystemDef : declarations
 # =====================================================================
+# Each declaration word is multi-clause so it can accept either a raw
+# Atom (first time the name is declared in this interpreter) or the
+# already-tagged form (the name is a registered pusher from a previous
+# system loaded earlier in this same VM). The tagged-form clause uses
+# `tag-name` to recover the atom and then proceeds identically.
 
-# parent : set parent name AND register the atom as a Subsystem pusher
-# on Any (so it dispatches in transitions).
-# ( SystemDef Atom -> SystemDef )
+# parent : set parent name AND register Subsystem pusher on Any.
 : parent SystemDef Atom -> SystemDef ;
     dup
     "Any" to-atom swap "Subsystem" to-atom register-pusher
     parent-name! .
 
-# child : append a child name AND register it as a Subsystem pusher.
+: parent SystemDef Subsystem -> SystemDef ;
+    tag-name
+    dup
+    "Any" to-atom swap "Subsystem" to-atom register-pusher
+    parent-name! .
+
+# child : append a child name AND register Subsystem pusher.
 : child SystemDef Atom -> SystemDef ;
     dup
     "Any" to-atom swap "Subsystem" to-atom register-pusher
     children-list swap cons children-list! .
 
-# fsm : set the state-machine type name.
+: child SystemDef Subsystem -> SystemDef ;
+    tag-name
+    dup
+    "Any" to-atom swap "Subsystem" to-atom register-pusher
+    children-list swap cons children-list! .
+
+# fsm : set the state-machine type name (no pusher needed).
 : fsm SystemDef Atom -> SystemDef ;
     state-name! .
 
-# state : declare an FSM state value AND register an Atom-named pusher
-# on Any that pushes a tagged State value when invoked.
+# state : register Atom-named pusher that pushes a tagged State value.
 : state SystemDef Atom -> SystemDef ;
     "Any" to-atom swap "State" to-atom register-pusher .
 
-# event : append the event name to the system's events-list AND
-# register a pusher that yields a tagged Event value.
+: state SystemDef State -> SystemDef ;
+    tag-name "Any" to-atom swap "State" to-atom register-pusher .
+
+# event : append event name to events-list AND register Event pusher.
 : event SystemDef Atom -> SystemDef ;
+    dup
+    "Any" to-atom swap "Event" to-atom register-pusher
+    events-list swap cons events-list! .
+
+: event SystemDef Event -> SystemDef ;
+    tag-name
     dup
     "Any" to-atom swap "Event" to-atom register-pusher
     events-list swap cons events-list! .

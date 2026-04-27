@@ -222,6 +222,19 @@ init() ->
         impl = fun op_set_type_handler/1
     }),
 
+    %% tag-name : Tagged -> Atom
+    %% Pops a tagged 2-tuple `{Tag, NameStr}` and pushes the name as
+    %% an Atom item `{Atom, NameStr}`. Used by HOS DSL multi-clause
+    %% declaration words to handle re-declarations across systems
+    %% (when a name is already a registered pusher, dispatch fires
+    %% the pusher and the decl word receives the tagged form).
+    af_type:add_op('Any', #operation{
+        name = "tag-name",
+        sig_in = ['Any'],
+        sig_out = ['Atom'],
+        impl = fun op_tag_name/1
+    }),
+
     %% register-pusher : Atom-tag Atom-opname Atom-typename -> ()
     %% Registers a no-arg op named OpName on TypeName whose impl pushes
     %% the tagged value `{Tag, OpNameStr}`. Lets a DSL (e.g. lib/hos/dsl.a4)
@@ -285,6 +298,27 @@ atom_value_to_atom(V) when is_atom(V)   -> V;
 atom_value_to_atom(V) when is_list(V)   -> list_to_atom(V);
 atom_value_to_atom(V) when is_binary(V) -> binary_to_atom(V, utf8).
 
+%% tag-name : Tagged -> Atom
+op_tag_name(Cont) ->
+    [Tagged | Rest] = Cont#continuation.data_stack,
+    Name = case Tagged of
+        {_Tag, V} when is_list(V)   -> V;
+        {_Tag, V} when is_atom(V)   -> atom_to_list(V);
+        {_Tag, V} when is_binary(V) -> binary_to_list(V);
+        Tup when is_tuple(Tup), tuple_size(Tup) >= 2 ->
+            %% Flat-tuple product instance — treat element(2) as the
+            %% canonical name field if it's a string/atom/binary.
+            case element(2, Tup) of
+                S when is_list(S)   -> S;
+                A when is_atom(A)   -> atom_to_list(A);
+                B when is_binary(B) -> binary_to_list(B);
+                _ -> error({tag_name_no_string_field, Tup})
+            end;
+        _ ->
+            error({tag_name_invalid, Tagged})
+    end,
+    Cont#continuation{data_stack = [{'Atom', Name} | Rest]}.
+
 %% register-pusher : Atom-tag Atom-opname Atom-typename ->
 op_register_pusher(Cont) ->
     [{'Atom', TagV}, {'Atom', OpNameV}, {'Atom', TypeNameV} | Rest] =
@@ -297,6 +331,11 @@ op_register_pusher(Cont) ->
         name = OpNameStr,
         sig_in = [],
         sig_out = [TagAtom],
+        %% source={compiled, []} marks this op as user-defined so
+        %% af_hos_check:is_a4_builtin returns false for it. Without
+        %% this, dynamically registered DSL pushers would be treated
+        %% as built-in and short-circuit axiom-1 scope checks.
+        source = {compiled, []},
         impl = fun(C) ->
             C#continuation{
                 data_stack = [PushValue | C#continuation.data_stack]

@@ -68,7 +68,7 @@ tb_clean_dispatch_test_() ->
             ?assertEqual(undefined, TB#af_type.handler),
             {ok, AnyEts} = af_type:get_type('Any'),
             TransOps = maps:get("trans", AnyEts#af_type.ops, []),
-            ?assertEqual(3, length(TransOps))
+            ?assertEqual(5, length(TransOps))
         end
      end}.
 
@@ -97,6 +97,76 @@ single_basic_transition_test_() ->
             ?assertMatch({'HosBlueprint', <<"Door">>, _, 'DoorState', _, _,
                           [{'TransitionSpec', 'Closed', 'Opening', 'open',
                             <<>>, 'none', 0}]}, Sys)
+        end
+     end}.
+
+%% Load just Door + Motor from elevator (uses 'load' to bring in dsl.a4).
+two_systems_test_() ->
+    {setup, fun setup/0, fun(_) -> ok end,
+     fun(_BootCont) ->
+        fun() ->
+            af_hos_check:clear_registry(),
+            Src =
+                "\"lib/hos/dsl.a4\" load "
+                "Door system "
+                "  Car parent "
+                "  DoorState fsm "
+                "  Closed state Opening state Open state Closing state "
+                "  open event close event opened event closed event "
+                "  transitions "
+                "    Closed Opening open 100 after opened trans "
+                "    Opening Open opened Car opened trans "
+                "  ; "
+                ". "
+                "Motor system "
+                "  Car parent "
+                "  MotorState fsm "
+                "  Stopped state Moving state "
+                "  move-to event arrived event stop event "
+                "  transitions "
+                "    Stopped Moving move-to 500 after arrived trans "
+                "    Moving Stopped arrived Car arrived trans "
+                "    Moving Stopped stop trans "
+                "  ; "
+                ".",
+            Tokens = af_parser:parse(Src, "two_systems"),
+            Cont = af_interpreter:new_continuation(),
+            try
+                af_interpreter:interpret_tokens(Tokens, Cont)
+            catch C:R:S ->
+                erlang:error({two_systems_failed, C, R, hd(S)})
+            end,
+            ?assertNotEqual(not_found, af_hos_check:lookup_system("Door")),
+            ?assertNotEqual(not_found, af_hos_check:lookup_system("Motor"))
+        end
+     end}.
+
+%% Load the talk-demo file (samples/hos/elevator/talk/elevator_a4_native.a4)
+%% which uses the values-first a4-native DSL via lib/hos/dsl.a4. Verifies
+%% all 6 systems register cleanly through the new dispatch path.
+elevator_a4_native_loads_test_() ->
+    {setup,
+     fun() ->
+        af_type:reset(),
+        af_type_compiler:clear_pending_checks(),
+        af_hos_check:clear_registry()
+     end,
+     fun(_) -> ok end,
+     fun(_) ->
+        fun() ->
+            Cont = af_interpreter:new_continuation(),
+            Path = "samples/hos/elevator/talk/elevator_a4_native.a4",
+            {ok, Bin} = file:read_file(Path),
+            Tokens = af_parser:parse(binary_to_list(Bin), Path),
+            try
+                af_interpreter:interpret_tokens(Tokens, Cont)
+            catch C:R:S ->
+                erlang:error({elevator_failed, C, R, hd(S)})
+            end,
+            Names = ["Door","Motor","Car","EmergencySource",
+                     "Dispatcher","BuildingSystem"],
+            [?assertNotEqual(not_found, af_hos_check:lookup_system(N))
+             || N <- Names]
         end
      end}.
 
