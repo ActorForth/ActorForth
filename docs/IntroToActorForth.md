@@ -1463,6 +1463,184 @@ This spawns the actor under a `simple_one_for_one` supervisor. The actor is impl
 | Stop behavior | Process exits | `{stop, normal, State}` |
 
 
+## Chapter 17: HOS — Structured State Machines
+
+Actors are general; they accept any sequence of events and let the
+programmer decide what each one means. That generality is exactly right
+for most software. It is exactly wrong for software where the cost of an
+unexpected event is measured in lives or money.
+
+For that narrower problem, ActorForth ships an optional layer on top of
+the actor model: HOS, Margaret Hamilton's design discipline for
+hierarchies of state machines with axiomatic correctness checks. HOS came
+out of Apollo. Its value proposition is sharp: explicit, declared
+hierarchical state machines where safety properties emerge from structure
+rather than from programmer vigilance. Lifts, payment terminals,
+signalling, medical devices, protocol state. Not CRUD, not aggregation,
+not games, not most web backends. If your problem is a state machine
+that has to be right, HOS earns its keep. If it is not, you can skip
+this chapter with no loss.
+
+### A First System
+
+The smallest interesting state machine is a turnstile. Two states
+(Locked, Unlocked), two events (coin inserted, person pushes the bar):
+
+```
+system Turnstile
+  state TurnstileState
+  on coin -> ;
+  on push -> ;
+  transitions
+    Locked   -> Unlocked coin
+    Unlocked -> Locked   push
+end
+```
+
+Read this top to bottom. The system is named `Turnstile`. It is
+**stateful** (it carries a `TurnstileState`, an atom that names the
+current state). It declares two events it knows about: `coin` and
+`push`. The transitions table is the law: from `Locked`, a `coin` event
+moves to `Unlocked`; from `Unlocked`, a `push` event moves to `Locked`.
+
+Three things follow from this declaration that you should notice.
+
+First, what is **not** there. There is no body code on either handler.
+The `on coin -> ;` and `on push -> ;` declarations have empty bodies.
+On a stateful HOS system, that is the rule, not an oversight. The
+transitions table decides what happens; the handler bodies cannot.
+
+Second, what is **silently safe**. A `push` event arriving in the
+`Locked` state is not in the transitions table for that state. The
+runtime input-rejects it. No state change. No exception. No error
+buried in a handler that forgot to check. The structural shape of the
+table is the safety property.
+
+Third, what the checker has already done before this code ran. It
+verified that every state name on the right-hand side of a transition
+appears as a `from` somewhere (so the state graph is connected from the
+initial state), that every trigger event was declared in an `on` line,
+and that no body referenced a name outside this system's scope.
+
+### What the Checker Enforces
+
+HOS is a discipline; the checker is what makes it stick. There are four
+rules worth understanding before you write your second system.
+
+**Axiom 1: immediate-only control.** A system may reference its own
+direct children, its own parent, its own state names, its own handler
+events, and a4 builtins. It may not reach into siblings, cousins, or
+arbitrary helper functions defined elsewhere. If you accidentally write
+a handler body that calls a sibling system, the checker rejects the
+declaration at definition time. The structural payoff: you can read one
+system in isolation and know its full surface. There are no hidden
+dependencies.
+
+**Axiom 5: input rejection.** The transitions table is exhaustive for
+the states it declares. An event arriving in a state that has no row
+for that trigger is rejected (no state change). The handler body cannot
+sneak in a state change that is not in the table. The payoff: every
+state change is visible in one place. Reorderings, renames, and missing
+edges show up as table rows, not as scattered conditionals.
+
+**One event fires one transition.** There is no cascade. A handler
+cannot run, look at conditions, and then fire another event in the
+same step. If a multi-step sequence is needed (open the door, then
+start the motor, then announce the floor), each step is a separate
+event arriving at the system. This is structural, not stylistic. It
+makes interleaving and concurrency tractable to reason about.
+
+**Stateful handler bodies are empty.** If a system declares a state
+type, its `on X -> ;` handler bodies must be empty. The declaration
+documents which events the system knows about; the transitions table
+decides what they do. (Stateless systems, declared with `state None`,
+are routers, not state machines, and may have body code that dispatches
+to children.)
+
+### Effects Live in Transitions
+
+Real systems do more than change their own state; they tell other
+systems to do things. In HOS, those "tell other systems" calls are
+declared as part of the transition that triggers them, not buried in
+handler body code. The shape:
+
+```
+transitions
+    Locked -> Unlocked coin
+    Unlocked -> Locked push : LightStrip flash-green
+```
+
+The trailing `: LightStrip flash-green` declares: when this transition
+fires, also send the `flash-green` event to the `LightStrip` child.
+That subsystem call is now visible in the table. If somebody later
+changes the target system or the event name, the diff is one line in
+this file, not one line buried in body code somewhere.
+
+For physical actuation that takes time (a motor that needs three
+seconds to reach the next floor), the timer primitive lives here too:
+
+```
+transitions
+    Idle -> Moving go : after 3000 arrived
+```
+
+After this transition fires, the runtime schedules an `arrived` event
+to itself in 3000 milliseconds. The mailbox stays open during the
+wait, so events arriving in the meantime are handled normally (and may
+even pre-empt the timer, if their transitions are declared from the
+live state). This is the structural replacement for "hold a lock and
+sleep" or "run a worker thread."
+
+### The Hierarchy
+
+Systems compose into trees. A parent declares its children by name in
+a `children` section; the children declare their parent. The Axiom 1
+scope check uses both directions: a parent may reference its declared
+children, a child may reference its declared parent, but neither may
+reach across the tree to a sibling.
+
+Child-to-parent signals (the child has finished its work and the
+parent should advance) are modelled as effects targeting the parent
+by name. There is no special "send to parent" primitive. The parent
+is declared, named, and addressed exactly like any other subsystem.
+This is the same idea that makes Erlang supervision trees work: the
+hierarchy is the data structure that owns the policy.
+
+The full elevator example, which uses a four-level hierarchy
+(Building → Floor → Elevator → Motor) to coordinate physical
+actuation, child-to-parent signals, and structural prevention of
+classic textbook bugs, lives in `docs/hos/elevator.md`. Read that
+chapter when you are ready to see HOS work at scale.
+
+### When NOT to Reach for HOS
+
+The discipline costs attention. Every system declaration is a
+type-checked artifact; every event needs an `on` line; every state
+change needs a row in the table. For state-machine code that has to
+be right, that cost is the point. For code that does not have to be
+right in that way (an aggregation pipeline, a UI form, a
+recommendation model, a CRUD endpoint), the cost is friction without
+payoff.
+
+A useful rule of thumb: if you can describe your problem as a list of
+states and a list of allowed transitions between them, and getting the
+list wrong has consequences you would not want to debug at 3am, HOS
+is probably the right tool. If you are reaching for HOS to model "the
+shape of my data flowing through stages," you probably want the actor
+model directly, or even just plain words and product types.
+
+### Beyond v1
+
+The current HOS surface ships the four checks above plus the timer
+primitive and the hierarchy. Several pieces are scoped for future
+work: multi-instance children (a building with N elevators where each
+is its own actor), preconditions on transitions (only allow `coin`
+when the cash drawer is not full), and structured data on events
+(today an event is just an atom with no payload). The
+`docs/hos/elevator.md` chapter discusses the v2 boundaries in more
+detail.
+
+
 ## Chapter 18: Compile-Time Type Checking
 
 ActorForth checks word definitions at compile time by inferring the stack effect of each body token and comparing the result against the declared output signature.

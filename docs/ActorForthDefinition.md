@@ -4,8 +4,9 @@
 
 ActorForth is an environment, compiler, interpreter, and program combined into one.
 
-Outside of a small number of primitives, two stacks, and its interpreter,
-there is no inherent syntax for ActorForth.
+Outside of a small number of primitives, the data stack, and its interpreter,
+there is no inherent syntax for ActorForth. (ActorForth has no return stack —
+see the appendix in `docs/IntroToActorForth.md` for why.)
 
 The execution environment is a concatenative, stack based, strongly typed language
 that can be safely extended to build domain specific languages (DSLs). It targets
@@ -360,6 +361,20 @@ ok: nil 1 cons 2 cons length    # -> 2
 ok: nil 1 cons head              # -> 1
 ```
 
+**Bracket literals.** Lists may also be written with `[ ... ]` syntax,
+which collects items in source order rather than the reverse-cons order
+above. Internally `[` pushes a `ListBuilder` sentinel and `]` collects
+back to the nearest sentinel. Nesting works automatically.
+
+```
+ok: [ 1 2 3 ]                     # -> [1, 2, 3]   (source order)
+ok: [ "a" "b" "c" ] length        # -> 3
+ok: [ [ 1 2 ] [ 3 4 ] ]            # -> nested list
+```
+
+The bracket form is sugar; the underlying list value is identical to the
+`nil`/`cons` form.
+
 #### Map
 
 Operations: `map-new`, `map-put`, `map-get`, `map-delete`, `map-has?`,
@@ -375,13 +390,19 @@ ok: map-size        # -> 2
 #### Tuple
 
 Operations: `make-tuple`, `tuple-size`, `tuple-get`, `ok-tuple`, `error-tuple`,
-`is-ok`, `unwrap-ok`, `to-tuple` (List -> Tuple), `from-tuple` (Tuple -> List).
+`is-ok`, `unwrap-ok`, `to-tuple` (List -> Tuple), `from-tuple` (Tuple -> List),
+`elt` (1-based positional access on any tuple, including product instances).
 
 ```
 ok: 42 ok-tuple           # -> {ok, 42}
 ok: 42 ok-tuple is-ok     # -> true
 ok: 42 ok-tuple unwrap-ok # -> 42
+ok: 1 2 3 3 make-tuple 2 elt   # -> 2  (extracts position 2 of {1,2,3})
 ```
+
+`elt` is non-destructive: it leaves the source tuple on the stack and
+pushes the extracted element on top. Useful for reading product-type
+fields by position when the field-name getter isn't appropriate.
 
 ### Erlang FFI
 
@@ -498,6 +519,46 @@ Auto-generates:
 - Non-destructive getters (`x`, `y`) — push field value, leave instance on stack
 - Setters (`x!`, `y!`) — update field value
 
+#### Auto-Field Bindings
+
+Inside the body of a word whose `sig_in` includes a product type, every
+field of that input is automatically scoped as a local binding. References
+to a field name inside the body push the field's value without consuming
+the input from the stack.
+
+```
+type Point x Int y Int .
+
+: distance-squared Point -> Int ;
+  x x *                       # x squared
+  y y *                       # y squared
+  + .                         # sum
+
+10 20 point distance-squared  # -> 500
+```
+
+Bindings are **frozen at entry**: each name resolves to the field value
+captured when the word was called. A subsequent setter on the same input
+inside the body produces a new instance on the stack but does not update
+the existing binding.
+
+When two inputs share a field name, the rightmost (TOS-side) input wins.
+Use the dot-prefix disambiguator for the others: `.x` is the field of the
+input one step deeper than TOS, `..x` two steps deeper, and so on. The
+parser tokenises any sequence of leading dots followed by an identifier.
+
+```
+type Vec a Int b Int .
+: dot Vec Vec -> Int ;          # second Vec is TOS
+  a .a *                        # `a` from TOS Vec, `.a` from deeper one
+  b .b * + .
+```
+
+This subsumes most cases where Forth-style `pick`/`nip`/`tuck` would
+otherwise be reached for. If you find yourself wanting heavy stack
+manipulation on a word with product-type inputs, the autobind is usually
+what you want.
+
 ### Actor Primitives
 
 ActorForth leverages BEAM's native process model. Each actor is an Erlang process
@@ -528,6 +589,9 @@ actor primitives mapped directly to Erlang processes:
 
 - `spawn` : Atom -> Actor — spawn a new process running a named word
 - `send` / `!` : Any Actor -> — send a typed value to an actor's mailbox
+- `send-after` : Any Int Actor -> — schedule a message after N milliseconds
+  (timer primitive; the mailbox stays open during the wait, so concurrent
+  events arriving before the timer fires are handled normally)
 - `receive` : -> Any — blocking receive from own mailbox
 - `receive-timeout` : Int -> Any Bool — receive with timeout (ms)
 - `self` : -> Actor — push current process as Actor
@@ -742,6 +806,81 @@ Editor-side configuration lives under `editor/`. The Sublime Text setup
 config. The server runs as a subprocess the editor launches on `.a4`
 files. A VS Code extension is planned; see `editor/EDITOR_SUPPORT_PLAN.md`
 for the roadmap.
+
+### HOS DSL (Higher Order Software)
+
+ActorForth ships an optional domain-specific surface for **HOS**, Margaret
+Hamilton's design discipline for hierarchical state machines with formally
+checked composition. HOS is appropriate where safety properties must emerge
+from structure: lifts, payment terminals, signalling, medical devices,
+protocol state. It is not appropriate for CRUD, aggregation, or most web
+backends. The DSL is opt-in; nothing about an a4 program needs HOS.
+
+A system is declared with the `system ... end` block, intercepted at parse
+time and compiled into a `HosBlueprint` instance. Every block is checked
+against Hamilton's axioms before registration:
+
+```
+system Counter
+  state Counting
+  on increment -> ;
+  on reset -> ;
+  transitions
+    Counting -> Counting increment
+    Counting -> Counting reset
+end
+```
+
+The checker enforces (selected axioms):
+
+- **Axiom 1 (immediate-only control)** — every name a system references
+  must resolve in its own scope: parent, declared children, declared
+  state names, handler events, or an a4 builtin. Sibling references and
+  arbitrary helper calls are rejected at compile time.
+- **Axiom 5 (input rejection / declared transitions)** — the transitions
+  table is the authoritative state graph. A handler body that would
+  cause an undeclared transition is a compile error.
+- **One event fires one transition.** There is no cascade. Multi-step
+  sequences happen because multiple events arrive, each driving one step.
+  Child-to-parent signals are modelled as effects targeting the parent.
+- **Stateful body emptiness.** Stateful systems are driven by the
+  transitions table, not by handler body code. `on X -> ;` declarations
+  on a stateful system must have empty bodies.
+
+Words: `system`, `end`, `find-system "Name"`, `spawn-system`, `send-after`
+(for the timer primitive used by `: after N event` transitions).
+
+The full elevator example, including a discussion of which textbook
+errors HOS structurally prevents, is in `docs/hos/elevator.md`.
+
+### Test DSL
+
+`lib/testing/*.test.a4` files are written in an a4-native test DSL with a
+parallel runner, group scopes, per-test fixtures, tags, coverage gates,
+and TAP / JUnit / JSON output. Migrated suites are on average 41% smaller
+than the EUnit equivalents.
+
+```
+list_ops group
+  setup : nil ;
+  "cons prepends" test :
+    1 cons 2 cons
+    [ 2 1 ] assert-eq ;
+  "head/tail decompose" test :
+    [ 1 2 3 ] dup head 1 assert-eq
+    tail [ 2 3 ] assert-eq ;
+.
+```
+
+Run from a shell:
+
+```
+rebar3 shell --eval 'af_test_runner:run(["lib/testing"]).'
+```
+
+`rebar3 eunit` also runs the suite via `test/a4_suite_tests.erl`. The
+runner accepts filter / coverage / tap / junit flags; full vocabulary
+and runner options are documented in `lib/testing/README.md`.
 
 ### Cross-Language Compilation Targets
 
