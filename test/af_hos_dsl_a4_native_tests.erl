@@ -68,7 +68,7 @@ tb_clean_dispatch_test_() ->
             ?assertEqual(undefined, TB#af_type.handler),
             {ok, AnyEts} = af_type:get_type('Any'),
             TransOps = maps:get("trans", AnyEts#af_type.ops, []),
-            ?assertEqual(5, length(TransOps))
+            ?assertEqual(7, length(TransOps))
         end
      end}.
 

@@ -164,15 +164,13 @@ type TransitionsBlock
     nil
     transitionsblock .
 
-# . (period) : finalise the system. Wraps SystemDef in a single-element
-# list and FFIs to af_hos_dsl:systemdef_finalise/1, then drops the
-# returned ok atom.
+# . (period) : finalise the system. Calls the native `hos-finalise`
+# op (registered on SystemDef in af_hos_dsl:init/0) which converts
+# the SystemDef product to a HosBlueprint and runs the axiom checker.
+# Native dispatch is used rather than erlang-apply so axiom_violation
+# errors propagate unwrapped to the caller (escripts, tests, REPL).
 : . SystemDef -> ;
-    nil swap cons
-    "systemdef_finalise" to-atom
-    "af_hos_dsl"         to-atom
-    erlang-apply
-    drop .
+    hos-finalise .
 
 
 # =====================================================================

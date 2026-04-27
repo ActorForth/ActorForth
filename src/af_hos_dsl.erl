@@ -54,7 +54,28 @@ init() ->
         sig_out = ['HosBlueprint'],
         impl = fun op_find_system/1
     }),
-    register_trans_clauses().
+    register_trans_clauses(),
+    %% Direct SystemDef finaliser, registered on SystemDef so the
+    %% a4 `.` op can call it without erlang-apply (which would wrap
+    %% axiom_violation in af_error{ffi_error} and obscure the
+    %% rejection message). Native dispatch keeps the error shape
+    %% callers expect.
+    register_finalise_op().
+
+%% Registered on Any so it survives dsl.a4's `type SystemDef ...`
+%% re-registration (which wipes the SystemDef ops dict).
+register_finalise_op() ->
+    af_type:add_op('Any', #operation{
+        name = "hos-finalise",
+        sig_in = ['SystemDef'],
+        sig_out = [],
+        impl = fun op_hos_finalise/1
+    }).
+
+op_hos_finalise(Cont) ->
+    [SD | Rest] = Cont#continuation.data_stack,
+    systemdef_finalise(SD),
+    Cont#continuation{data_stack = Rest}.
 
 %% ---------------------------------------------------------------
 %% A4-native `trans` : multi-clause row-builder for lib/hos/dsl.a4.
@@ -65,11 +86,18 @@ init() ->
 register_trans_clauses() ->
     Trans = [
         %% Order: longer sigs first; within same arity the strictest
-        %% (all-Event) clause first so it wins when the cross-system
-        %% event has been declared as an Event pusher already.
+        %% (all-Event/Subsystem) clause first so it wins when the
+        %% cross-system event/target has been declared already.
+        %% The Atom variants accept undeclared names so the spec still
+        %% reaches the axiom checker (which then rejects out-of-scope
+        %% names with an axiom_1 violation message).
         {['Event', 'Subsystem', 'Event', 'State', 'State',
           'TransitionsBlock'], fun trans_subsystem/1},
         {['Atom',  'Subsystem', 'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_subsystem/1},
+        {['Event', 'Atom',      'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_subsystem/1},
+        {['Atom',  'Atom',      'Event', 'State', 'State',
           'TransitionsBlock'], fun trans_subsystem/1},
         {['Event', 'Timer', 'Event', 'State', 'State',
           'TransitionsBlock'], fun trans_timer/1},
@@ -93,14 +121,17 @@ trans_basic(Cont) ->
     NewTB = prepend_row(TB, Row),
     Cont#continuation{data_stack = [NewTB | Rest]}.
 
-%% TOS slot may be Event (target system declared its handler already)
-%% or Atom (cross-system reference whose handler hasn't been declared
-%% yet — the axiom checker validates at register time).
+%% Accepts Event or Atom in the effect-event slot, and Subsystem or
+%% Atom in the target slot. Atom slots correspond to names that
+%% haven't been declared yet — the axiom checker validates the
+%% resulting blueprint at register time and rejects with a clear
+%% scope (axiom_1) message if the name isn't in the system's scope.
 trans_subsystem(Cont) ->
-    [Top, {'Subsystem', TgtName}, {'Event', EvName1},
+    [Top, Tgt, {'Event', EvName1},
      {'State', ToName}, {'State', FromName}, TB | Rest] =
         Cont#continuation.data_stack,
     EvName2 = name_of(Top),
+    TgtName = name_of(Tgt),
     Row = {'Row', FromName, ToName, EvName1, TgtName, EvName2, 0},
     NewTB = prepend_row(TB, Row),
     Cont#continuation{data_stack = [NewTB | Rest]}.
@@ -114,8 +145,9 @@ trans_timer(Cont) ->
     NewTB = prepend_row(TB, Row),
     Cont#continuation{data_stack = [NewTB | Rest]}.
 
-name_of({'Event', N}) -> N;
-name_of({'Atom',  N}) -> N.
+name_of({'Event',     N}) -> N;
+name_of({'Atom',      N}) -> N;
+name_of({'Subsystem', N}) -> N.
 
 prepend_row(TB, Row) ->
     {'TransitionsBlock', Sys, Rows} = TB,
