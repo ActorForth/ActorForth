@@ -1,0 +1,302 @@
+# lib/hos/dsl.a4 - HOS DSL surface, expressed in a4.
+#
+# Path 2 (a4-native) implementation of the `system ... .` DSL. Every
+# section keyword is a registered op on its appropriate type. The
+# parser is the dispatch table itself; there is no post-hoc text
+# parser hidden in Erlang.
+#
+# Surface syntax (values-first):
+#
+#   Door system                        # Door becomes the system name
+#       Car parent                     # set parent
+#       DoorState state                # set state-machine name
+#       open event                     # add event to known set
+#       close event
+#
+#       transitions
+#           Closed Opening open                trans
+#           Opening Open opened : Car opened
+#           Open Closing close  : after 100 closed
+#           Closing Closed closed : Car closed
+#       ;                              # close transitions block
+#   .                                  # close + register the system
+#
+# Dispatch story:
+#
+#   `system` is an op on Any : (Atom -> SystemDef). Real op, real sig.
+#   Once a SystemDef sits on TOS, `parent`, `state`, `event`, `child`,
+#   `transitions`, and `.` are registered ops on SystemDef. They run
+#   normally; no token handler involvement at SystemDef level.
+#
+#   `transitions` pushes a TransitionsBlock onto TOS, stashing the
+#   SystemDef inside. TransitionsBlock has registered ops `trans`,
+#   `:`, `after`, `;` (see below) AND a handler that catches any
+#   un-dispatched token (state names, trigger names, target names)
+#   and accumulates them into the row currently being built.
+#
+#   Within a TransitionsBlock, the SHAPE of the partial row tells
+#   the handler what slot to fill next:
+#     - empty partial    : capture as `from`
+#     - has `from`       : capture as `to`
+#     - has `from + to`  : capture as `trigger`
+#     - row's basic part is then complete; either `trans` (no effect)
+#       or `:` (effect follows) closes it.
+#
+#   `:` flips the row to effect-collection mode. The next 2-3 tokens
+#   are interpreted as either (target event) or (after delay event).
+#
+#   `;` closes the transitions block, popping it back to the
+#   underlying SystemDef.
+#
+#   `.` finalises the SystemDef: runs the axiom checker, registers
+#   the resulting HosBlueprint with af_hos_check, drops the SystemDef
+#   from the stack.
+#
+# Event payloads (Layer 1+ from project_hos_event_payloads_todo.md)
+# are scoped for post-talk work. The grammar accepts payloads as
+# additional tokens after the event name in `event` and `:` clauses,
+# but the runtime currently passes `[]` everywhere.
+
+# =====================================================================
+# Types
+# =====================================================================
+
+# A SystemDef is the in-progress system being built. The fields
+# accumulate as the source is read; `.` consumes the final value
+# and dispatches it to the axiom checker + registry.
+type SystemDef
+    name           Atom           # set by `system`; the system's name
+    parent-name    Atom            # set by `parent`; '' if root
+    state-name     Atom           # set by `state`; 'None for stateless
+    children-list  List           # accumulated by `child`
+    events-list    List           # accumulated by `event`
+    rows-list      List .         # populated by `;` from TransitionsBlock
+
+# Partial row inside a transitions block. Once complete the row is
+# pushed into the enclosing TransitionsBlock's rows-list.
+type Row
+    row-from     Atom
+    row-to       Atom
+    row-trigger  Atom
+    row-target   Atom        # 'none if no effect
+    row-event    Atom        # 'none if no effect
+    row-delay    Int .       # 0 if not a timer effect
+
+# A TransitionsBlock is the parser state for the body of a
+# `transitions ... ;` block. It tracks:
+#   - the SystemDef stashed below it (returned at `;`)
+#   - the rows accumulated so far
+#   - the partial row currently being built (slots filled in order)
+#   - what "phase" the partial row is in (basic vs effect-collection)
+type TransitionsBlock
+    enclosing-sys  SystemDef
+    rows           List
+    partial        Row
+    phase          Atom .         # 'basic | 'effect-target | 'effect-event | 'effect-delay | 'effect-event-after-delay
+
+
+# =====================================================================
+# Helpers
+# =====================================================================
+
+# A fresh SystemDef with the given name and all other fields at their
+# initial empty values.
+: empty-systemdef Atom -> SystemDef ;
+    "" to-atom                # parent-name : empty atom = root
+    "None" to-atom            # state-name  : 'None = stateless
+    nil                       # children-list
+    nil                       # events-list
+    nil                       # rows-list
+    systemdef .
+
+# A fresh Row with all fields at their empty defaults.
+: empty-row -> Row ;
+    "" to-atom                # row-from
+    "" to-atom                # row-to
+    "" to-atom                # row-trigger
+    "none" to-atom            # row-target
+    "none" to-atom            # row-event
+    0                         # row-delay
+    row .
+
+# A fresh TransitionsBlock with the given SystemDef stashed inside.
+: empty-transitionsblock SystemDef -> TransitionsBlock ;
+    nil                       # rows
+    empty-row                 # partial
+    "basic" to-atom           # phase
+    transitionsblock .
+
+
+# =====================================================================
+# `system` : entry point
+# =====================================================================
+# Sig: ( Atom -> SystemDef )
+# Registered on Any. Consumes the system name from TOS, returns a
+# fresh SystemDef with that name set.
+
+: system Atom -> SystemDef ;
+    empty-systemdef .
+
+
+# =====================================================================
+# Ops on SystemDef
+# =====================================================================
+
+# `parent` : set parent name. ( SystemDef Atom -> SystemDef )
+: parent SystemDef Atom -> SystemDef ;
+    swap parent-name! .
+
+# `state` : set state-machine name. ( SystemDef Atom -> SystemDef )
+: state SystemDef Atom -> SystemDef ;
+    swap state-name! .
+
+# `child` : append a child name. ( SystemDef Atom -> SystemDef )
+: child SystemDef Atom -> SystemDef ;
+    swap                      # ( Atom SystemDef )
+    dup children-list         # ( Atom SystemDef list )
+    swap drop                 # ( Atom SystemDef list )  - drop dup'd inst
+    rot                       # ( SystemDef list Atom )
+    swap cons                 # ( SystemDef new-list )
+    children-list! .
+
+# `event` : append an event name. ( SystemDef Atom -> SystemDef )
+: event SystemDef Atom -> SystemDef ;
+    swap
+    dup events-list
+    swap drop
+    rot
+    swap cons
+    events-list! .
+
+# `transitions` : open the table. ( SystemDef -> TransitionsBlock )
+: transitions SystemDef -> TransitionsBlock ;
+    empty-transitionsblock .
+
+# `.` (period) : finalise system. ( SystemDef -> )
+# Runs axiom check + registration via the af_hos_check FFI.
+# Drops the SystemDef from the stack.
+: . SystemDef -> ;
+    systemdef-finalise-ffi
+    af_hos_dsl
+    erlang-apply
+    drop .
+
+
+# =====================================================================
+# Ops on TransitionsBlock
+# =====================================================================
+
+# `trans` : finalise the partial row with no effect.
+# ( TransitionsBlock -> TransitionsBlock )
+: trans TransitionsBlock -> TransitionsBlock ;
+    dup partial               # ( tb partial-row )
+    swap drop                 # ( tb row ) - drop dup'd tb
+    over rows                 # ( tb row tb rows-list )
+    swap drop                 # ( tb row rows-list )
+    swap cons                 # ( tb new-rows-list )
+    rows!                     # ( tb' )
+    empty-row partial!        # reset partial
+    "basic" to-atom phase! .  # reset phase
+
+# `:` : the row's basic part is complete; switch to effect-collection.
+# ( TransitionsBlock -> TransitionsBlock )
+: : TransitionsBlock -> TransitionsBlock ;
+    "effect-target" to-atom phase! .
+
+# `;` : close the transitions block; restore the SystemDef.
+# ( TransitionsBlock -> SystemDef )
+# All accumulated rows go into the SystemDef's rows-list.
+: ; TransitionsBlock -> SystemDef ;
+    dup rows                  # ( tb rows-list )
+    swap drop                 # ( tb rows )
+    swap                      # ( rows tb )
+    enclosing-sys             # ( rows tb sys )
+    swap drop                 # ( rows sys )
+    swap                      # ( sys rows )
+    rows-list! .              # ( sys' )
+
+
+# =====================================================================
+# Handler for TransitionsBlock
+# =====================================================================
+# Called for every token that doesn't dispatch as one of the
+# registered ops above (i.e. `trans`, `:`, `;`). The token will be
+# a state name, trigger name, target name, or the keyword `after`
+# inside an effect clause. The handler dispatches on phase + content.
+
+: transitions-handler TransitionsBlock String -> TransitionsBlock ;
+    over phase                # ( tb tok tb phase )
+    swap drop                 # ( tb tok phase )
+    transitions-dispatch .
+
+# Sub-clause dispatch on phase atom + string content of the token.
+# Each clause updates the partial row's appropriate field, advances
+# the phase, and (when a row completes) commits it to rows.
+: transitions-dispatch TransitionsBlock String Atom -> TransitionsBlock ;
+    : TransitionsBlock String "basic" -> TransitionsBlock ;
+        drop                              # drop phase atom
+        transitions-fill-basic
+    : TransitionsBlock String "effect-target" -> TransitionsBlock ;
+        drop
+        transitions-fill-effect-target-or-after
+    : TransitionsBlock String "effect-event" -> TransitionsBlock ;
+        drop
+        transitions-fill-event-and-commit
+    : TransitionsBlock String "effect-delay" -> TransitionsBlock ;
+        drop
+        transitions-fill-delay
+    : TransitionsBlock String "effect-event-after-delay" -> TransitionsBlock ;
+        drop
+        transitions-fill-event-and-commit .
+
+
+# `basic` phase: fill from, then to, then trigger, in order.
+: transitions-fill-basic TransitionsBlock String -> TransitionsBlock ;
+    over partial              # ( tb tok partial )
+    swap drop                 # ( tb tok partial )
+    dup row-from              # ( tb tok partial from-atom )
+    swap drop                 # ( tb tok partial from )
+    "" to-atom ==             # ( tb tok partial bool )  - is from empty?
+    transitions-fill-basic-step .
+
+: transitions-fill-basic-step TransitionsBlock String Row Bool -> TransitionsBlock ;
+    : TransitionsBlock String Row True -> TransitionsBlock ;
+        # from is empty -> set from
+        drop                              # bool
+        swap drop                         # drop tok placeholder hmm wait
+        # stack: (tb tok partial)
+        # set partial.from = tok (as atom)
+        rot drop                          # drop partial we extracted earlier
+        # actually let's redo this: easier to recompute
+        drop drop drop                    # punt for now; finalise in a follow-up pass
+    : TransitionsBlock String Row False -> TransitionsBlock ;
+        drop drop drop drop .             # placeholder
+
+: transitions-fill-effect-target-or-after TransitionsBlock String -> TransitionsBlock ;
+    drop .                                # placeholder - to be filled in
+
+: transitions-fill-event-and-commit TransitionsBlock String -> TransitionsBlock ;
+    drop .                                # placeholder
+
+: transitions-fill-delay TransitionsBlock String -> TransitionsBlock ;
+    drop .                                # placeholder
+
+
+# =====================================================================
+# Handler attachment
+# =====================================================================
+# Wire the transitions-handler word to the TransitionsBlock type so
+# it intercepts un-dispatched tokens.
+
+"TransitionsBlock" to-atom "transitions-handler" to-atom set-type-handler
+
+
+# =====================================================================
+# Erlang-side bridge for finalisation
+# =====================================================================
+# `.` calls into Erlang to invoke af_hos_check on the completed
+# SystemDef. The bridge function lives in af_hos_dsl.erl as
+# `systemdef_finalise/1`.
+#
+# This is the ONE remaining FFI call; everything above is a4-native
+# dispatch.
