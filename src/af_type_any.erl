@@ -195,6 +195,24 @@ init() ->
         impl = fun op_verify_all/1
     }),
 
+    %% set-type-handler : Atom Atom ->
+    %% Stack at entry: (TypeName-atom HandlerWordName-atom).
+    %%   TOS = HandlerWordName  - the a4 word that will be called for
+    %%                            every token that doesn't dispatch
+    %%                            against TypeName's own dictionary.
+    %%   Below = TypeName       - the type whose handler slot we update.
+    %% The named type must already be registered; this op rejects an
+    %% unknown TypeName loudly rather than auto-creating it.
+    %% Together with Ext-1 (a4-word handlers, see include/af_type.hrl)
+    %% this lets a DSL declare its own per-type interceptor entirely
+    %% from a4 source without having to drop into Erlang.
+    af_type:add_op('Any', #operation{
+        name = "set-type-handler",
+        sig_in = ['Atom', 'Atom'],
+        sig_out = [],
+        impl = fun op_set_type_handler/1
+    }),
+
     ok.
 
 get_ops(TypeName) ->
@@ -202,6 +220,52 @@ get_ops(TypeName) ->
     Ops.
 
 %%% Operations
+
+%% set-type-handler : Atom Atom ->
+op_set_type_handler(Cont) ->
+    [{'Atom', HandlerName}, {'Atom', TypeName} | Rest] =
+        Cont#continuation.data_stack,
+    HandlerAtom = atom_value_to_atom(HandlerName),
+    TypeAtom    = atom_value_to_atom(TypeName),
+    case af_type:get_type(TypeAtom) of
+        {ok, Type} ->
+            UpdatedType = Type#af_type{handler = HandlerAtom},
+            af_type:register_type(UpdatedType),
+            %% Mirror the ETS update into the continuation's local
+            %% dict so the next token in the same source can dispatch
+            %% through the new handler. Without this sync, a fresh
+            %% Cont (which hasn't observed the register_type call)
+            %% would still see the type's old handler slot until its
+            %% dict was rebuilt by something else.
+            NewDict = case Cont#continuation.dictionary of
+                undefined -> undefined;
+                Dict      -> maps:put(TypeAtom, UpdatedType, Dict)
+            end,
+            Cont#continuation{
+                data_stack = Rest,
+                dictionary = NewDict,
+                dispatch_cache = #{}
+            };
+        _ ->
+            Msg = lists:flatten(io_lib:format(
+                "set-type-handler: unknown type '~s'. Define it first "
+                "with `type ~s ... .` before attaching a handler.",
+                [atom_value_to_string(TypeName),
+                 atom_value_to_string(TypeName)])),
+            af_error:raise(set_type_handler_unknown_type, Msg, Cont)
+    end.
+
+%% Atom values arrive from a4 as either Erlang atoms (when the source
+%% literal was an atom-shape token after `to-atom`) or as strings
+%% (charlists). Normalise both to a real Erlang atom for use as a
+%% handler/type identifier.
+atom_value_to_atom(V) when is_atom(V)   -> V;
+atom_value_to_atom(V) when is_list(V)   -> list_to_atom(V);
+atom_value_to_atom(V) when is_binary(V) -> binary_to_atom(V, utf8).
+
+atom_value_to_string(V) when is_atom(V)   -> atom_to_list(V);
+atom_value_to_string(V) when is_list(V)   -> V;
+atom_value_to_string(V) when is_binary(V) -> binary_to_list(V).
 
 op_dup(Cont) ->
     [Top | _] = Cont#continuation.data_stack,
