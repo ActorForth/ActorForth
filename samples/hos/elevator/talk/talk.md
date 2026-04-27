@@ -3,7 +3,7 @@ title: ActorForth + HOS
 sub_title: Higher Order Software, structurally enforced at compile time
 author: ""
 theme:
-  name: light
+  name: terminal-light
 ---
 
 # Why HOS
@@ -60,12 +60,11 @@ the parser.
 This loads the DSL definitions: type declarations for `SystemDef`,
 `Row`, `TransitionsBlock`, `Timer`; multi-clause ops for `system`,
 `parent`, `fsm`, `state`, `event`, `child`, `transitions`, `trans`,
-`;`, `.`. About 220 lines of pure a4 plus three tiny Erlang
-primitives (`tag-name`, `register-pusher`, `nip`) and one finaliser
-hook (`hos-finalise`) that bridges to the axiom checker.
+`;`, `.`. About 220 lines of pure a4.
 
-There is no sectioning parser. There is no token buffer. Each token
-dispatches through the type registry the same way `dup` does.
+These are all normal ActorForth words dispatched as if they were a
+core part of the language. No special parser required. Type safe
+and classified defect safe.
 
 <!-- speaker_note: This is the whole point. The DSL is a4. The teaching slides that follow show this concretely. -->
 
@@ -116,7 +115,7 @@ when TOS is Atom does TWO things in one body:
 ```forth
 : parent SystemDef Atom -> SystemDef ;
     dup
-    "Any" to-atom swap "Subsystem" to-atom register-pusher
+    Any swap Subsystem register-pusher
     parent-name! .
 ```
 
@@ -176,7 +175,7 @@ Door system
 
 ```forth
 : state SystemDef Atom -> SystemDef ;
-    "Any" to-atom swap "State" to-atom register-pusher .
+    Any swap State register-pusher .
 ```
 
 Installs a no-arg op `Closed` on Any that pushes `{State, "Closed"}`.
@@ -210,7 +209,7 @@ SystemDef's `events-list` field:
 ```forth
 : event SystemDef Atom -> SystemDef ;
     dup
-    "Any" to-atom swap "Event" to-atom register-pusher
+    Any swap Event register-pusher
     events-list swap cons events-list! .
 ```
 
@@ -420,12 +419,22 @@ Car system
         DoorOpening      Loading           opened            300 after depart    trans
         Loading          DoorClosing       depart            Door close          trans
         DoorClosing      IdleAtFloor       closed                                trans
-        # plus 7 emergency rows and the clear-emergency path
+
+        IdleAtFloor      EmergencyStopped  trigger-emergency  Motor stop         trans
+        PreparingToMove  EmergencyStopped  trigger-emergency  Motor stop         trans
+        Moving           EmergencyStopped  trigger-emergency  Motor stop         trans
+        Arriving         EmergencyStopped  trigger-emergency  Motor stop         trans
+        DoorOpening      EmergencyStopped  trigger-emergency  Motor stop         trans
+        Loading          EmergencyStopped  trigger-emergency  Motor stop         trans
+        DoorClosing      EmergencyStopped  trigger-emergency  Motor stop         trans
+
+        EmergencyStopped   EmergencyDoorOpen  clear-emergency  Door open         trans
+        EmergencyDoorOpen  IdleAtFloor        opened                             trans
     ;
 .
 ```
 
-<!-- speaker_note: New decl `child`. Same multi-clause shape as `parent`: registers a Subsystem pusher AND appends to children-list. The hierarchy is now visible: Car owns Door and Motor, Car is owned by Dispatcher. -->
+<!-- speaker_note: New decl `child`. Same multi-clause shape as `parent`, registers a Subsystem pusher AND appends to children-list. The hierarchy is now visible. Car owns Door and Motor, Car is owned by Dispatcher. -->
 
 <!-- end_slide -->
 
@@ -465,7 +474,7 @@ Dispatcher system
 .
 ```
 
-<!-- speaker_note: The `Normal Normal request` row is an internal transition (Harel/UML terminology): state does not change, but the effect dispatches Car assign. -->
+<!-- speaker_note: The `Normal Normal request` row is an internal transition (Harel/UML terminology). State does not change, but the effect dispatches Car assign. -->
 
 <!-- end_slide -->
 
@@ -551,6 +560,7 @@ local behaviour stops working.
 The compiler refuses to register this system.
 
 ```bash +exec_replace
+cd /home/scherrey/projects/ActorForth
 samples/hos/elevator/comparison/exploits/a4_check.escript \
     samples/hos/elevator/comparison/exploits/flaw_5_bad.a4 2>&1 | head -5
 ```
@@ -622,6 +632,7 @@ The exhaustive-emergency check finds the missing row at compile
 time. The author sees the gap before the fire.
 
 ```bash +exec_replace
+cd /home/scherrey/projects/ActorForth
 samples/hos/elevator/comparison/exploits/a4_check.escript \
     samples/hos/elevator/comparison/exploits/flaw_3_bad.a4 2>&1 | head -5
 ```
@@ -657,6 +668,7 @@ The DSL itself is the proof.
 # The same checker, the valid spec, a live FAT
 
 ```bash +exec_replace
+cd /home/scherrey/projects/ActorForth
 rebar3 eunit --module=af_hos_elevator_tests 2>&1 \
     | sed -E 's/\x1b\[[0-9;]*m//g' \
     | grep -E "All [0-9]+ tests passed|Failed:" \
@@ -679,6 +691,7 @@ rejected or accepted is decided at compile time, not at runtime.
 # Same controller, four languages
 
 ```bash +exec_replace
+cd /home/scherrey/projects/ActorForth
 for f in samples/hos/elevator/elevator.a4 \
          samples/hos/elevator/comparison/elevator_naive.py \
          samples/hos/elevator/comparison/elevator_correct.py \

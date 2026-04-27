@@ -114,25 +114,25 @@ type TransitionsBlock
 # parent : set parent name AND register Subsystem pusher on Any.
 : parent SystemDef Atom -> SystemDef ;
     dup
-    "Any" to-atom swap "Subsystem" to-atom register-pusher
+    Any swap Subsystem register-pusher
     parent-name! .
 
 : parent SystemDef Subsystem -> SystemDef ;
     tag-name
     dup
-    "Any" to-atom swap "Subsystem" to-atom register-pusher
+    Any swap Subsystem register-pusher
     parent-name! .
 
 # child : append a child name AND register Subsystem pusher.
 : child SystemDef Atom -> SystemDef ;
     dup
-    "Any" to-atom swap "Subsystem" to-atom register-pusher
+    Any swap Subsystem register-pusher
     children-list swap cons children-list! .
 
 : child SystemDef Subsystem -> SystemDef ;
     tag-name
     dup
-    "Any" to-atom swap "Subsystem" to-atom register-pusher
+    Any swap Subsystem register-pusher
     children-list swap cons children-list! .
 
 # fsm : set the state-machine type name (no pusher needed).
@@ -141,21 +141,21 @@ type TransitionsBlock
 
 # state : register Atom-named pusher that pushes a tagged State value.
 : state SystemDef Atom -> SystemDef ;
-    "Any" to-atom swap "State" to-atom register-pusher .
+    Any swap State register-pusher .
 
 : state SystemDef State -> SystemDef ;
-    tag-name "Any" to-atom swap "State" to-atom register-pusher .
+    tag-name Any swap State register-pusher .
 
 # event : append event name to events-list AND register Event pusher.
 : event SystemDef Atom -> SystemDef ;
     dup
-    "Any" to-atom swap "Event" to-atom register-pusher
+    Any swap Event register-pusher
     events-list swap cons events-list! .
 
 : event SystemDef Event -> SystemDef ;
     tag-name
     dup
-    "Any" to-atom swap "Event" to-atom register-pusher
+    Any swap Event register-pusher
     events-list swap cons events-list! .
 
 # transitions : open the transitions table.
