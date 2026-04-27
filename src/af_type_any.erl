@@ -57,6 +57,15 @@ init() ->
         impl = fun op_over/1
     }),
 
+    %% nip : _a _b -> _a  (drops the under-element; convention: _a=TOS)
+    %% Standard concatenative primitive (Forth/Joy/Factor). Distinct from
+    %% `swap drop` because dispatch fires with TOS=_a (not the dropped _b),
+    %% which avoids triggering a TOS-type handler on _b when present.
+    af_type:add_op('Any', #operation{
+        name = "nip", sig_in = ['_a', '_b'], sig_out = ['_a'],
+        impl = fun op_nip/1
+    }),
+
     %% 2dup : _a _b -> _a _b _a _b
     af_type:add_op('Any', #operation{
         name = "2dup", sig_in = ['_a', '_b'], sig_out = ['_a', '_b', '_a', '_b'],
@@ -213,6 +222,19 @@ init() ->
         impl = fun op_set_type_handler/1
     }),
 
+    %% register-pusher : Atom-tag Atom-opname Atom-typename -> ()
+    %% Registers a no-arg op named OpName on TypeName whose impl pushes
+    %% the tagged value `{Tag, OpNameStr}`. Lets a DSL (e.g. lib/hos/dsl.a4)
+    %% dynamically install per-type dispatchers for open-set tokens
+    %% (state names, event names, etc.) without falling back to a greedy
+    %% type-handler. Source order: TypeName OpName Tag register-pusher.
+    af_type:add_op('Any', #operation{
+        name = "register-pusher",
+        sig_in = ['Atom', 'Atom', 'Atom'],
+        sig_out = [],
+        impl = fun op_register_pusher/1
+    }),
+
     ok.
 
 get_ops(TypeName) ->
@@ -263,6 +285,46 @@ atom_value_to_atom(V) when is_atom(V)   -> V;
 atom_value_to_atom(V) when is_list(V)   -> list_to_atom(V);
 atom_value_to_atom(V) when is_binary(V) -> binary_to_atom(V, utf8).
 
+%% register-pusher : Atom-tag Atom-opname Atom-typename ->
+op_register_pusher(Cont) ->
+    [{'Atom', TagV}, {'Atom', OpNameV}, {'Atom', TypeNameV} | Rest] =
+        Cont#continuation.data_stack,
+    TagAtom    = atom_value_to_atom(TagV),
+    OpNameStr  = atom_value_to_string(OpNameV),
+    TypeAtom   = atom_value_to_atom(TypeNameV),
+    PushValue  = {TagAtom, OpNameStr},
+    PushOp = #operation{
+        name = OpNameStr,
+        sig_in = [],
+        sig_out = [TagAtom],
+        impl = fun(C) ->
+            C#continuation{
+                data_stack = [PushValue | C#continuation.data_stack]
+            }
+        end
+    },
+    case af_type:get_type(TypeAtom) of
+        {ok, _} ->
+            af_type:add_op(TypeAtom, PushOp),
+            {ok, UpdatedType} = af_type:get_type(TypeAtom),
+            NewDict = case Cont#continuation.dictionary of
+                undefined -> undefined;
+                Dict      -> maps:put(TypeAtom, UpdatedType, Dict)
+            end,
+            Cont#continuation{
+                data_stack = Rest,
+                dictionary = NewDict,
+                dispatch_cache = #{}
+            };
+        _ ->
+            Msg = lists:flatten(io_lib:format(
+                "register-pusher: unknown type '~s'. Define it first "
+                "with `type ~s ... .` (or use 'Any').",
+                [atom_value_to_string(TypeNameV),
+                 atom_value_to_string(TypeNameV)])),
+            af_error:raise(register_pusher_unknown_type, Msg, Cont)
+    end.
+
 atom_value_to_string(V) when is_atom(V)   -> atom_to_list(V);
 atom_value_to_string(V) when is_list(V)   -> V;
 atom_value_to_string(V) when is_binary(V) -> binary_to_list(V).
@@ -286,6 +348,10 @@ op_rot(Cont) ->
 op_over(Cont) ->
     [A, B | Rest] = Cont#continuation.data_stack,
     Cont#continuation{data_stack = [B, A, B | Rest]}.
+
+op_nip(Cont) ->
+    [A, _B | Rest] = Cont#continuation.data_stack,
+    Cont#continuation{data_stack = [A | Rest]}.
 
 op_2dup(Cont) ->
     [A, B | _] = Cont#continuation.data_stack,
