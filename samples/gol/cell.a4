@@ -1,78 +1,89 @@
-# cell.a4 - one Game of Life cell, modelled as an actor.
+# cell.a4 - one Game of Life cell, modelled as an actor that talks
+# to its neighbours.
 #
-# Each cell holds its own alive/dead bit, a snapshot of its previous-tick
-# state, and the list of neighbour actor refs. The clock drives the world
-# by calling, in two phases:
+# Protocol — all push-based casts, no sync calls between cells, so
+# cycles in the neighbour graph never deadlock:
 #
-#   << snapshot >>   each cell copies alive into prev-alive.
-#   << compute >>    each cell calls each neighbour's <<prev>>, counts
-#                    alives in the snapshot, applies Conway's rule, and
-#                    updates its own alive state.
+#   << snapshot >>      - broadcast my own alive bit to every neighbour
+#                         via `<< accumulate Bool >>` casts.
+#   << accumulate b >>  - a neighbour told me its alive bit; bump my
+#                         received-count by 1 if b is true.
+#   << compute >>       - apply Conway's rule to (my alive,
+#                         received-count) and update self.
 #
-# Splitting the tick in two keeps neighbour reads race-free without any
-# explicit barrier word: phase 2 only reads the immutable prev-alive
-# fields written in phase 1. The renderer reads alive via <<state>> and
-# is allowed to lag a tick.
+# The clock between phases issues sync `<< state >>` calls as
+# barriers; those don't fan out, so they never close a cycle.
 
 type Cell
-    alive       Bool
-    prev-alive  Bool
-    neighbors   List .
+    alive          Bool
+    received-count Int
+    neighbors      List .
 
 # --- Conway's rule ---
-# A live cell with 2 or 3 live neighbours stays alive.
-# A dead cell with exactly 3 live neighbours becomes alive.
-# Everything else is dead. Encoded with sub-clause matching on
-# (alive, count) so there's no if/then/else.
+# Live with 2 or 3 alive neighbours stays alive; dead with exactly 3
+# becomes alive; everything else is dead. Sub-clauses, no if/then.
 
 : gol-rule Bool Int -> Bool ;
-: Bool 3    -> Bool ; drop drop true
-: true 2    -> Bool ; drop drop true
-: Bool Int  -> Bool ; drop drop false
+: Bool 3   -> Bool ; drop drop true
+: true 2   -> Bool ; drop drop true
+: Bool Int -> Bool ; drop drop false
 .
 
-# Convert a Bool into 0 / 1 so we can sum them with `+`.
+# Convert Bool to 0 / 1 so we can sum incoming bits with `+`.
 : bool-int Bool -> Int ;
 : true  -> Int ; drop 1
 : false -> Int ; drop 0
 .
 
-# Reducer: ask one neighbour for its prev-alive snapshot, accumulate.
-# Used as `0 count-add reduce` over the neighbours list.
-: count-add Int Actor -> Int ;
-    << prev >> bool-int + .
+# --- broadcast plumbing ---
+# Push wraps the bool we want to broadcast so reduce can carry it as
+# its accumulator while iterating over the neighbour list.
 
-# --- actor-facing words ---
+type Push
+    push-bool Bool .
 
-# Phase 1: freeze the current state into prev-alive.
-: snapshot Cell -> Cell ;
-    alive prev-alive! .
+# Reducer step: cast `accumulate <my-alive>` to one neighbour. The
+# actual cast is one FFI line because the language has no clean way to
+# push a runtime variable bool into a `<< >>` block's local stack.
+# Sig is `Push Actor` so that reduce — which calls notify(item, acc)
+# with item on TOS — lands actor on TOS and push under it.
+: notify Push Actor -> Push ;
+    over push-bool nip                          # ( push actor bool )
+    nil swap cons swap cons                      # ( push [actor, bool] )
+    notify_cast af_gol erlang-apply drop .
 
-# Phase 1 read: neighbour calls this to read our frozen snapshot.
-: prev Cell -> Cell Bool ;
-    prev-alive .
+# --- actor surface ---
 
-# Phase 2: read each neighbour's snapshot, count, apply Conway's rule,
-# update alive. (auto-bind: alive, prev-alive, neighbors are visible
-# as bare names within the body.)
-: compute Cell -> Cell ;
-    neighbors 0 count-add reduce      # ( cell count )
-    alive swap                         # ( cell alive count )
-    gol-rule                           # ( cell next-alive )
-    alive! .
-
-# Renderer query: current (post-compute) alive state.
+# Renderer query and clock barrier read.
 : state Cell -> Cell Bool ;
     alive .
 
-# Wiring: install the neighbours list (a list of cell Actors).
-: wire Cell List -> Cell ;
-    neighbors! .
-
-# Pattern placement: set the alive bit, leaving prev untouched.
+# Pattern placement and clock-side init.
 : set-alive Cell Bool -> Cell ;
     alive! .
 
-# Convenience: a fresh dead cell with no neighbours wired yet.
-: dead-cell -> Cell ;
-    false false nil cell .
+# Wire stores the neighbour actor list.
+: wire Cell List -> Cell ;
+    neighbors! .
+
+# Phase 1: zero my counter and broadcast my alive bit to every
+# neighbour. Each neighbour will bump its own received-count via
+# `accumulate`.
+: snapshot Cell -> Cell ;
+    0 received-count!
+    alive push                  # ( cell push )
+    neighbors swap              # ( cell list push )
+    notify reduce drop .
+
+# Cast handler: a neighbour reported its alive bit. Bump my count by
+# 0 or 1.
+: accumulate Cell Bool -> Cell ;
+    bool-int received-count + received-count! .
+
+# Phase 2: apply Conway's rule to the accumulated count plus my
+# current alive, and update self.
+: compute Cell -> Cell ;
+    received-count            # ( cell count )
+    alive swap                # ( cell alive count )
+    gol-rule                  # ( cell next-alive )
+    alive! .

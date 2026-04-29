@@ -9,6 +9,7 @@
 
 -export([wire_grid/3, place_pattern/4, snapshot_all/1, count_alive/1]).
 -export([spawn_grid/2, build_game/3, render/4, kill_grid/1]).
+-export([notify_cast/2]).
 
 %% ---------- spawn ----------
 
@@ -20,8 +21,8 @@ spawn_grid(W, H) ->
 
 spawn_cell() ->
     TypeName = 'Cell',
-    %% {Cell, alive=false, prev-alive=false, neighbours=[]}
-    Instance = {'Cell', false, false, []},
+    %% {Cell, alive=false, received-count=0, neighbours=[]}
+    Instance = {'Cell', false, 0, []},
     Vocab0 = af_type_actor:build_vocab(TypeName),
     Vocab = Vocab0#{"stop" => [#{args => [], returns => []}]},
     Cache = af_actor_worker:build_native_cache(TypeName),
@@ -147,6 +148,14 @@ kill_grid(Cells) ->
 
 cast(C, WordName, Args) ->
     pid_of(C) ! {cast, WordName, Args},
+    ok.
+
+%% notify_cast(Actor, Bool) - one-liner that casts {accumulate, Bool}.
+%% Used by Cell.notify so we don't have to inject a variable bool into
+%% an `<< accumulate >>` block (the language has no clean way to push
+%% a runtime value into the local stack of a send block).
+notify_cast(C, Bool) ->
+    pid_of(C) ! {cast, "accumulate", [{'Bool', Bool}]},
     ok.
 
 neighbours(Idx, W, H, Arr) ->

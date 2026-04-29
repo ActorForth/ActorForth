@@ -24,8 +24,17 @@ type Game
 : do-compute Actor -> Any ;
     << compute >> drop .
 
+# Synchronous probe used as a per-cell mailbox barrier. By the time
+# << state >> returns, the cell has processed every message that was
+# in its mailbox at the moment the barrier call landed — including
+# inter-cell broadcasts from the previous phase.
 : do-barrier Actor -> Any ;
-    << prev >> drop drop .
+    << state >> drop drop .
+
+# Tiny FFI wrapper for sleep, used to give cross-pair broadcast casts
+# a moment to settle into mailboxes between phases.
+: ms-sleep Int -> ;
+    nil swap cons sleep timer erlang-apply drop .
 
 # --- public surface ---
 
@@ -38,10 +47,10 @@ type Game
     build_game af_gol erlang-apply .
 
 # tick Game -> Game
-# Two phases. Each phase casts to all cells and then issues one barrier
-# call per cell to drain that cell's mailbox up to the just-cast message.
-# Phase 1 freezes prev-alive; phase 2 reads neighbours' frozen snapshots
-# and updates alive. Auto-bind exposes width/height/cells/gen.
+# Two phases of cell broadcasts, separated by a per-cell barrier and a
+# small drain sleep so cross-pair `<< accumulate >>` casts have time
+# to land in their target mailboxes before the second phase fires.
+# Auto-bind exposes width/height/cells/gen.
 : tick Game -> Game ;
     cells do-snapshot each
     cells do-barrier  each
