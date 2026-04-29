@@ -54,6 +54,7 @@ type Game
 : tick Game -> Game ;
     cells do-snapshot each
     cells do-barrier  each
+    cells do-barrier  each
     cells do-compute  each
     cells do-barrier  each
     gen 1 + gen! .

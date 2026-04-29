@@ -8,6 +8,11 @@ main([Pattern, Size]) ->
     W = list_to_integer(WStr),
     H = list_to_integer(HStr),
     af_repl:init_types(),
+    %% Native-compile every word as it's defined; the cell hot path needs
+    %% it for any decent frame rate. The native-word compiler now
+    %% sig-checks before inlining cross-module calls, so atom-pushes
+    %% land correctly.
+    persistent_term:put(af_auto_compile, true),
     af_compile_file:compile("samples/gol/terminal.a4"),
     af_compile_file:compile("samples/gol/patterns.a4"),
     af_compile_file:compile("samples/gol/cell.a4"),
