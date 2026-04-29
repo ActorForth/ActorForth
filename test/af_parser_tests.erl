@@ -83,6 +83,42 @@ string_test_() ->
         {"string among words", fun() ->
             Tokens = af_parser:parse("say \"hello world\" done", "test"),
             ?assertEqual(["say", "hello world", "done"], values(Tokens))
+        end},
+        {"escape: \\n is newline", fun() ->
+            [T] = af_parser:parse("\"a\\nb\"", "test"),
+            ?assertEqual([$a, $\n, $b], T#token.value)
+        end},
+        {"escape: \\t is tab", fun() ->
+            [T] = af_parser:parse("\"a\\tb\"", "test"),
+            ?assertEqual([$a, $\t, $b], T#token.value)
+        end},
+        {"escape: \\r is CR", fun() ->
+            [T] = af_parser:parse("\"a\\rb\"", "test"),
+            ?assertEqual([$a, $\r, $b], T#token.value)
+        end},
+        {"escape: \\e is ESC", fun() ->
+            [T] = af_parser:parse("\"\\e[2J\"", "test"),
+            ?assertEqual([27, $[, $2, $J], T#token.value)
+        end},
+        {"escape: \\\\ is backslash", fun() ->
+            [T] = af_parser:parse("\"a\\\\b\"", "test"),
+            ?assertEqual([$a, $\\, $b], T#token.value)
+        end},
+        {"escape: \\\" is quote", fun() ->
+            [T] = af_parser:parse("\"a\\\"b\"", "test"),
+            ?assertEqual([$a, $", $b], T#token.value)
+        end},
+        {"escape: \\0 is NUL", fun() ->
+            [T] = af_parser:parse("\"a\\0b\"", "test"),
+            ?assertEqual([$a, 0, $b], T#token.value)
+        end},
+        {"escape: \\xNN is hex byte", fun() ->
+            [T] = af_parser:parse("\"\\x1bX\\xff\"", "test"),
+            ?assertEqual([16#1b, $X, 16#ff], T#token.value)
+        end},
+        {"escape: unknown escape passes char through", fun() ->
+            [T] = af_parser:parse("\"a\\zb\"", "test"),
+            ?assertEqual([$a, $z, $b], T#token.value)
         end}
     ].
 

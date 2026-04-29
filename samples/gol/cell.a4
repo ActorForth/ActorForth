@@ -1,0 +1,78 @@
+# cell.a4 - one Game of Life cell, modelled as an actor.
+#
+# Each cell holds its own alive/dead bit, a snapshot of its previous-tick
+# state, and the list of neighbour actor refs. The clock drives the world
+# by calling, in two phases:
+#
+#   << snapshot >>   each cell copies alive into prev-alive.
+#   << compute >>    each cell calls each neighbour's <<prev>>, counts
+#                    alives in the snapshot, applies Conway's rule, and
+#                    updates its own alive state.
+#
+# Splitting the tick in two keeps neighbour reads race-free without any
+# explicit barrier word: phase 2 only reads the immutable prev-alive
+# fields written in phase 1. The renderer reads alive via <<state>> and
+# is allowed to lag a tick.
+
+type Cell
+    alive       Bool
+    prev-alive  Bool
+    neighbors   List .
+
+# --- Conway's rule ---
+# A live cell with 2 or 3 live neighbours stays alive.
+# A dead cell with exactly 3 live neighbours becomes alive.
+# Everything else is dead. Encoded with sub-clause matching on
+# (alive, count) so there's no if/then/else.
+
+: gol-rule Bool Int -> Bool ;
+: Bool 3    -> Bool ; drop drop true
+: true 2    -> Bool ; drop drop true
+: Bool Int  -> Bool ; drop drop false
+.
+
+# Convert a Bool into 0 / 1 so we can sum them with `+`.
+: bool-int Bool -> Int ;
+: true  -> Int ; drop 1
+: false -> Int ; drop 0
+.
+
+# Reducer: ask one neighbour for its prev-alive snapshot, accumulate.
+# Used as `0 count-add reduce` over the neighbours list.
+: count-add Int Actor -> Int ;
+    << prev >> bool-int + .
+
+# --- actor-facing words ---
+
+# Phase 1: freeze the current state into prev-alive.
+: snapshot Cell -> Cell ;
+    alive prev-alive! .
+
+# Phase 1 read: neighbour calls this to read our frozen snapshot.
+: prev Cell -> Cell Bool ;
+    prev-alive .
+
+# Phase 2: read each neighbour's snapshot, count, apply Conway's rule,
+# update alive. (auto-bind: alive, prev-alive, neighbors are visible
+# as bare names within the body.)
+: compute Cell -> Cell ;
+    neighbors 0 count-add reduce      # ( cell count )
+    alive swap                         # ( cell alive count )
+    gol-rule                           # ( cell next-alive )
+    alive! .
+
+# Renderer query: current (post-compute) alive state.
+: state Cell -> Cell Bool ;
+    alive .
+
+# Wiring: install the neighbours list (a list of cell Actors).
+: wire Cell List -> Cell ;
+    neighbors! .
+
+# Pattern placement: set the alive bit, leaving prev untouched.
+: set-alive Cell Bool -> Cell ;
+    alive! .
+
+# Convenience: a fresh dead cell with no neighbours wired yet.
+: dead-cell -> Cell ;
+    false false nil cell .

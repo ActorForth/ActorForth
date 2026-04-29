@@ -14,6 +14,7 @@
          separate_reply/2]). %% For compiled loop fallback
 -export([to_atom_key/1, to_string_key/1]). %% Key conversion helpers
 -export([actor_loop_module_name/1]). %% For testing
+-export([build_vocab/1, build_vocab/2]). %% For external spawners (e.g. af_gol)
 
 %% Actor model:
 %%   Any type instance can become an actor via 'server'.

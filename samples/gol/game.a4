@@ -1,0 +1,62 @@
+# game.a4 - one Game of Life world: a Game struct + tick + render.
+#
+# The boring graph math (toroidal neighbour wiring, pattern centring,
+# half-block painting) lives in af_gol.erl. Everything that's the
+# *demo* lives here in a4: the cell actor (cell.a4), and the tick
+# loop below — snapshot all cells, then compute all cells.
+
+type Game
+    width   Int
+    height  Int
+    cells   List
+    gen     Int .
+
+# --- per-cell helpers, used inside `each` ---
+#
+# Declared output is `Any` rather than empty because the type checker
+# doesn't yet model the stack effect of `<< >>` blocks (which run via
+# the ActorSend handler). At runtime each' ignores the body's stack
+# effect, so loosening the sig is harmless.
+
+: do-snapshot Actor -> Any ;
+    << snapshot >> drop .
+
+: do-compute Actor -> Any ;
+    << compute >> drop .
+
+: do-barrier Actor -> Any ;
+    << prev >> drop drop .
+
+# --- public surface ---
+
+# make-game W H Pattern -> Game
+# Spawns W*H cell actors, wires toroidal neighbours, places the pattern.
+# The build_game FFI returns a fully-formed Game flat-tuple, so its
+# cells field round-trips as a List of Actors with vocab intact.
+: make-game Int Int List -> Game ;
+    nil swap cons swap cons swap cons
+    build_game af_gol erlang-apply .
+
+# tick Game -> Game
+# Two phases. Each phase casts to all cells and then issues one barrier
+# call per cell to drain that cell's mailbox up to the just-cast message.
+# Phase 1 freezes prev-alive; phase 2 reads neighbours' frozen snapshots
+# and updates alive. Auto-bind exposes width/height/cells/gen.
+: tick Game -> Game ;
+    cells do-snapshot each
+    cells do-barrier  each
+    cells do-compute  each
+    cells do-barrier  each
+    gen 1 + gen! .
+
+# render Game -> Game
+# One FFI call paints the whole frame: cursor home, half-block grid,
+# stats line. Game is preserved on the stack via auto-bind.
+: render Game -> Game ;
+    nil gen cons cells cons height cons width cons
+    render af_gol erlang-apply drop .
+
+# kill Game -> ()
+# Stop all cell actors.
+: kill Game -> ;
+    nil cells cons kill_grid af_gol erlang-apply drop drop .

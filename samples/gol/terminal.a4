@@ -1,0 +1,61 @@
+# terminal.a4 - tiny ANSI helpers for the Game of Life demo.
+#
+# Everything is built on a single primitive bridge: io:put_chars/1 via FFI.
+# All the visual surface (cursor moves, color, clear, half-block paint)
+# is plain a4 from there.
+
+# Write a String to stdout with no trailing newline.
+# erlang-apply takes ( Args Fun Mod -- Result ) with Mod on TOS.
+: puts String -> ;
+    nil swap cons put_chars io erlang-apply drop .
+
+# Newline.
+: nl -> ;  "\n" puts .
+
+# --- screen state ---
+
+: cls          -> ;  "\e[2J\e[H" puts .
+: home         -> ;  "\e[H"      puts .
+: hide-cursor  -> ;  "\e[?25l"   puts .
+: show-cursor  -> ;  "\e[?25h"   puts .
+: clear-line   -> ;  "\e[2K"     puts .
+
+# --- cursor position ---
+# at row col   moves the cursor (1-based, row first like ANSI).
+
+: at Int Int -> ;
+    "\e[" puts
+    swap to-string puts
+    ";" puts
+    to-string puts
+    "H" puts .
+
+# --- color (256-color palette) ---
+# fg n / bg n   set foreground / background palette index 0..255.
+# reset clears all attributes.
+
+: fg Int -> ;
+    "\e[38;5;" puts to-string puts "m" puts .
+
+: bg Int -> ;
+    "\e[48;5;" puts to-string puts "m" puts .
+
+: reset -> ;  "\e[0m" puts .
+: bold  -> ;  "\e[1m" puts .
+
+# --- half-block paint ---
+# pix top-alive? bottom-alive?   prints one terminal cell representing
+# two stacked grid cells. Caller is responsible for color setup.
+#
+# Glyphs:
+#   █ U+2588  full block        (both alive)
+#   ▀ U+2580  upper half block  (top alive only)
+#   ▄ U+2584  lower half block  (bottom alive only)
+#   space                       (neither)
+
+: pix Bool Bool -> ;
+: true  true  -> ; drop drop "█" puts
+: true  false -> ; drop drop "▀" puts
+: false true  -> ; drop drop "▄" puts
+: false false -> ; drop drop " " puts
+.
