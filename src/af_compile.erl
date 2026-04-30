@@ -146,15 +146,34 @@ build_op_call(#operation{name = Name}, StackVar, L) ->
 %% TOS type with a handler — same rules the interpreter uses for its
 %% dispatch_cache).
 apply_impl(Name, Stack) ->
-    Key = cache_key(Name, Stack),
-    case erlang:get({af_native_cache, Key}) of
-        undefined ->
-            apply_impl_miss(Name, Stack, Key);
-        Impl when is_function(Impl) ->
-            Cont = new_apply_cont(Stack),
-            save_apply_cont_cache(Impl(Cont));
-        atom_fallback ->
-            [{'Atom', Name} | Stack]
+    %% Check caller-frame bindings first (#160). Native-compiled
+    %% words whose body references an auto-field-binding from an
+    %% outer word's HosSelf / HosInit / … arg would otherwise
+    %% atomize the name. wrap_with_locals_planned mirrors each
+    %% pushed frame to the process dict so apply_impl can see it.
+    case lookup_caller_binding(Name) of
+        {ok, Value} -> [Value | Stack];
+        false ->
+            Key = cache_key(Name, Stack),
+            case erlang:get({af_native_cache, Key}) of
+                undefined ->
+                    apply_impl_miss(Name, Stack, Key);
+                Impl when is_function(Impl) ->
+                    Cont = new_apply_cont(Stack),
+                    save_apply_cont_cache(Impl(Cont));
+                atom_fallback ->
+                    [{'Atom', Name} | Stack]
+            end
+    end.
+
+lookup_caller_binding(Name) ->
+    case erlang:get(af_locals_stack) of
+        [Frame | _] when is_map(Frame) ->
+            case maps:find(Name, Frame) of
+                {ok, Value} -> {ok, Value};
+                error -> false
+            end;
+        _ -> false
     end.
 
 apply_impl_miss(Name, Stack, Key) ->

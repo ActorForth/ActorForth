@@ -104,10 +104,17 @@ compile_hot_loop_words() ->
             "trans-key-pair",
             "make-hoscast",
             "log-event",
+            %% Effect dispatch — send-to-parent uses a caller-frame
+            %% binding (`parent` from the enclosing HosSelf frame).
+            %% Unblocked by #160 — apply_impl now checks
+            %% af_locals_stack in the process dict before falling
+            %% through to atom_fallback.
+            "send-to-parent",
             %% Map helpers.
             "map-lookup-flag-step", "map-lookup-flag",
             "map-get-or-not-found-step", "map-get-or-not-found",
-            %% Dispatch chain (stateful path still blocked by #161).
+            %% Dispatch chain.
+            "dispatch-stateful-apply",
             "dispatch-cast-step", "dispatch-cast",
             "handle-message",
             "hos-loop-step", "hos-loop"

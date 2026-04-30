@@ -1,0 +1,660 @@
+# src/bootstrap/hos/check.a4  -  HOS axiom checker in a4.
+#
+# Incremental rewrite of src/af_hos_check.erl. The Erlang checker is
+# still the authoritative path invoked by af_hos_dsl at `end`; this
+# file grows toward parity until the DSL can flip to calling
+# `check-blueprint` and the Erlang module can retire.
+#
+# Registry access: reuse the existing ETS-backed Erlang registry via
+# erlang-apply. The registry itself does not need to be re-implemented
+# in a4 - only the checking logic does.
+#
+# First cut: path-building helpers + the cheapest axiom
+# (stateful-body emptiness on a single handler). Later passes add
+# trigger scope, state reachability, exhaustive-emergency, and the
+# per-handler scope / transition walks.
+
+
+# ===================================================================
+# Helper: path-building for nested error messages.
+# ===================================================================
+
+# Prefix a child path with its parent. "" + name -> name;
+# prefix + name -> prefix ++ "." ++ name.  Sig: ( prefix name -> path ).
+: hos-path String String -> String ;
+  over                                 # ( prefix name prefix )
+  "" ==                                # ( prefix name is-root )
+  hos-path-step .
+
+: hos-path-step String String Bool -> String ;
+    : String String True -> String ;
+        drop                           # drop bool
+        swap drop                      # drop prefix, keep name
+    : String String False -> String ;
+        drop                           # drop bool
+        swap                           # ( name prefix )
+        "." concat                     # ( name prefix-dot )
+        swap concat .                  # ( path )
+
+
+# ===================================================================
+# Helper: atom -> String via erlang-apply.
+# ===================================================================
+
+: atom->string Atom -> String ;
+  # ( arg ). Build args list [arg, utf8] for erlang:atom_to_binary/2.
+  nil                                  # ( arg [] )
+  utf8 cons                            # ( arg [utf8] )
+  swap cons                            # ( [arg, utf8] )
+  atom_to_binary                       # TOS atom 'atom_to_binary'
+  erlang                               # TOS atom 'erlang'
+  erlang-apply .                       # ( <<"arg">> )
+
+
+# ===================================================================
+# Axiom 5: stateful handler body must be empty.
+# ===================================================================
+#
+# Stateful systems (state-type =/= 'None') are driven by their
+# transitions table. `on X -> ;` declarations are optional
+# documentation of received events, but their bodies must be EMPTY:
+# a stateful handler body cannot declare state markers, cannot
+# contain subsystem calls, and cannot contain arbitrary code.
+# One event fires at most one transition.
+#
+# Inputs: handler HandlerSpec, state-type Atom, path String.
+# Output: List (empty on success; singleton on violation).
+: check-stateful-body Any Atom String -> List ;
+  # ( handler state-type path )
+  over                                 # ( handler st path st )
+  None ==                              # ( handler st path stateless? )
+  check-stateful-body-step .
+
+: check-stateful-body-step Any Atom String Bool -> List ;
+    : Any Atom String True -> List ;
+        # stateless: no check.
+        drop drop drop drop
+        nil
+    : Any Atom String False -> List ;
+        # stateful: inspect handler.body for non-emptiness.
+        drop                           # drop bool
+        # ( handler st path )
+        swap drop                      # ( handler path )
+        over 5 elt                     # ( handler path body )
+        empty?                         # ( handler path empty? )
+        check-stateful-body-emit .
+
+# Emit the axiom_5 message iff the body was non-empty.
+: check-stateful-body-emit Any String Bool -> List ;
+    : Any String True -> List ;
+        # body empty; nothing to report.
+        drop drop drop
+        nil
+    : Any String False -> List ;
+        drop                           # drop bool
+        # ( handler path )
+        swap                           # ( path handler )
+        2 elt                          # ( path event-atom )
+        atom->string                   # ( path event-str )
+        stateful-body-msg              # ( violation-str )
+        nil swap cons .                # ( [violation-str] )
+
+# Build the axiom_5 violation message. Inputs: path event-str.
+: stateful-body-msg String String -> String ;
+  swap                                 # ( event path )
+  "axiom_5: system '" swap concat      # ( event prefix+path )
+  "' handler '" concat                 # ( event partial )
+  swap concat                          # ( concat )
+  "' has a non-empty body; stateful systems are driven by the transitions table (one event fires one transition). Delete the body and declare transitions for this trigger instead." concat .
+
+
+# ===================================================================
+# Axiom 1 (trigger scope): every transition's trigger must be a
+# declared handler on this system.
+# ===================================================================
+#
+# A transition's trigger names an event this system will receive.
+# The runtime's receive loop dispatches based on declared handlers;
+# a trigger not declared is silently input-rejected (Axiom 4 safety),
+# which the author finds hard to diagnose. Raising here surfaces the
+# typo at compile time.
+#
+# Inputs: transitions-list List, handlers-list List, path String.
+# Output: List of violation Strings.
+
+# Extract handler event-name Strings from a handlers-list. Each
+# HandlerSpec is a flat-tuple whose element(2) is the event Atom.
+# Returns a List of String event names.
+: handler-event-names List -> List ;
+  "handler-event-name" to-atom
+  map .                                # ( [String...] )
+
+: handler-event-name Any -> String ;
+  2 elt                                # ( event-atom )
+  atom->string .                       # ( event-str )
+
+# Extract trigger-event Strings from a transitions-list (element 4
+# of each TransitionSpec).
+: trigger-names List -> List ;
+  "trigger-name" to-atom
+  map .
+
+: trigger-name Any -> String ;
+  4 elt
+  atom->string .
+
+# Return True iff needle is in haystack (exact-equality per Erlang's
+# lists:member/2). Uses erlang-apply so the fold logic stays inside
+# BEAM; pure-a4 version can replace later once we have a fold that
+# short-circuits on True.
+: in-list? List String -> Bool ;
+  # ( list needle ). Build args list [needle, list] for
+  # lists:member(Elem, List). a4 cons signature is (List Any -> List)
+  # so we stage the deeper element first.
+  nil                                  # ( list needle [] )
+  rot                                  # ( needle [] list )
+  cons                                 # ( needle [list] )
+  swap                                 # ( [list] needle )
+  cons                                 # ( [needle, list] )
+  member
+  lists
+  erlang-apply .
+
+
+# ===================================================================
+# Axiom 1 (trigger scope): every transition's trigger must be a
+# declared handler on this system.
+# ===================================================================
+#
+# A transition's trigger names an event this system will receive.
+# The runtime's receive loop dispatches based on declared handlers;
+# a trigger not declared is silently input-rejected (Axiom 4),
+# which the author finds hard to diagnose. Raising here surfaces
+# the typo at compile time.
+
+type TriggersWalk
+  handler-names  List
+  path           String
+  violations     List .
+
+# Unused: violation message is built inline in reduce-trigger-check-step.
+# Kept as a signature hook for future expansion (from/to context
+# in the message) without breaking callers.
+: trigger-scope-msg String String String String -> String ;
+  drop drop drop
+  "axiom_1: trigger violation" concat .
+
+# One-transition trigger check. Builds a violation if the transition's
+# trigger is not in handler-names.
+: reduce-trigger-check TriggersWalk Any -> TriggersWalk ;
+  # ( acc trans )
+  dup                                   # ( acc trans trans )
+  4 elt                                 # ( acc trans trigger-atom )
+  atom->string                          # ( acc trans trigger-str )
+  handler-names                         # ( acc trans trigger-str handler-names )
+  over                                  # ( acc trans trigger-str handler-names trigger-str )
+  in-list?                              # ( acc trans trigger-str in? )
+  reduce-trigger-check-step .
+
+: reduce-trigger-check-step TriggersWalk Any String Bool -> TriggersWalk ;
+    : TriggersWalk Any String True -> TriggersWalk ;
+        # Trigger is declared; nothing to emit.
+        drop drop drop                  # drop bool, trigger-str, trans; keep acc
+    : TriggersWalk Any String False -> TriggersWalk ;
+        drop                            # drop bool
+        # ( acc trans trigger-str )
+        path                            # ( acc trans trigger-str path )
+        # Build minimal violation message via concat chain.
+        "axiom_1: system '" swap concat # ( acc trans trigger-str partial )
+        "' trigger '" concat            # ( acc trans trigger-str partial2 )
+        swap                            # ( acc trans partial2 trigger-str )
+        concat                          # ( acc trans partial3 )
+        "' is not a declared handler on this system" concat
+                                        # ( acc trans full-msg )
+        swap drop                       # drop trans; keep ( acc full-msg )
+        # Append full-msg to violations list:
+        violations                      # ( acc full-msg viols )
+        swap                            # ( acc viols full-msg )
+        nil swap cons                   # ( acc viols [full-msg] )
+        append                          # ( acc viols' )
+        violations! .                   # ( acc' )  - sig: (acc viols' TOS)
+
+# ===================================================================
+# Axiom 1 (transition-effect target scope): every transition's
+# effect_target (if present) must be in scope.
+# ===================================================================
+#
+# Three cases:
+#   ""       no effect; skip.
+#   "after"  timer; the scheduled effect_event must be a declared
+#            handler on this system.
+#   other    target must be the name of a direct child or the
+#            reserved builtin set (currently only children are
+#            recognised here; parent / state names are covered by
+#            the Erlang bridge until a full scope set lands in a4).
+
+type EffectWalk
+  handler-names  List
+  child-names    List
+  path           String
+  violations     List .
+
+: check-transition-effects List List List String -> List ;
+  # ( transitions handlers children path ) with path TOS.
+  # Build handler-names + child-names-as-strings, then the acc,
+  # then reduce.
+  swap                                   # ( transitions handlers path children )
+  child-names-of                         # ( transitions handlers path [child-names...] )
+  rot                                    # ( transitions path children-names handlers )
+  handler-event-names                    # ( transitions path children-names handler-names )
+  swap                                   # ( transitions path handler-names children-names )
+  rot                                    # ( transitions handler-names children-names path )
+  nil                                    # ( transitions handler-names children-names path [] )
+  effectwalk                             # ( transitions acc )
+  "reduce-effect-check" to-atom
+  reduce                                 # ( acc' )
+  violations
+  swap drop .                            # ( violations-list )
+
+# Extract the `name` field (element 2) from each child blueprint in
+# a List of HosBlueprint instances, returning a List of Strings.
+: child-names-of List -> List ;
+  "child-name-of" to-atom
+  map .
+
+: child-name-of Any -> String ;
+  2 elt .                                # name field is element 2; String binary
+
+# Per-transition step.
+: reduce-effect-check EffectWalk Any -> EffectWalk ;
+  # ( acc trans )
+  dup 5 elt                              # ( acc trans target )
+  "" ==                                  # ( acc trans is-empty? )
+  effect-empty-step .
+
+: effect-empty-step EffectWalk Any Bool -> EffectWalk ;
+    : EffectWalk Any True -> EffectWalk ;
+        # effect_target is empty: no violation; drop bool + trans,
+        # keep acc.
+        drop drop
+    : EffectWalk Any False -> EffectWalk ;
+        drop                             # drop bool
+        # ( acc trans )
+        dup 5 elt                        # ( acc trans target )
+        "after" ==                       # ( acc trans is-after? )
+        effect-after-step .              # last sub-clause — period ends word
+
+: effect-after-step EffectWalk Any Bool -> EffectWalk ;
+    : EffectWalk Any True -> EffectWalk ;
+        drop                             # drop bool
+        # Timer effect: check effect_event (element 6) is a handler.
+        dup 6 elt                        # ( acc trans event-atom )
+        atom->string                     # ( acc trans event-str )
+        handler-names                    # ( acc trans event-str [handlers] )
+        over                             # ( acc trans event-str [handlers] event-str )
+        in-list?                         # ( acc trans event-str in? )
+        effect-after-emit
+    : EffectWalk Any False -> EffectWalk ;
+        drop                             # drop bool
+        # Non-timer target: must be a child-name.
+        dup 5 elt                        # ( acc trans target-str )
+        child-names                      # ( acc trans target [child-names] )
+        over                             # ( acc trans target [children] target )
+        in-list?                         # ( acc trans target in? )
+        effect-child-emit .              # last sub-clause — period ends word
+
+: effect-after-emit EffectWalk Any String Bool -> EffectWalk ;
+    : EffectWalk Any String True -> EffectWalk ;
+        drop drop drop                   # bool, event-str, trans; keep acc
+    : EffectWalk Any String False -> EffectWalk ;
+        drop                             # drop bool; stack: (acc trans event-str)
+        dup                              # (acc trans event-str event-str) — spare copy
+        path                             # (acc trans event-str event-str path)
+        "axiom_1: system '" swap concat  # (acc trans event-str event-str prefix+path)
+        "' timer effect schedules event '" concat
+        swap concat                      # (acc trans event-str msg-with-path-event)
+        "' but '" concat                 # (acc trans event-str msg+"' but '")
+        swap concat                      # (acc trans full-after-event)
+        "' is not a declared handler on this system" concat
+                                         # (acc trans full-msg)
+        swap drop                        # (acc full-msg)
+        violations
+        swap
+        nil swap cons
+        append
+        violations! .
+
+: effect-child-emit EffectWalk Any String Bool -> EffectWalk ;
+    : EffectWalk Any String True -> EffectWalk ;
+        drop drop drop
+    : EffectWalk Any String False -> EffectWalk ;
+        drop
+        # ( acc trans target-str )
+        path                             # ( acc trans target path )
+        "axiom_1: system '" swap concat
+        "' transition effect target '" concat
+        swap concat
+        "' is not in scope" concat
+        swap drop                        # ( acc full-msg )
+        violations
+        swap
+        nil swap cons
+        append
+        violations! .
+
+
+# Drive the trigger-scope check across a transitions list.
+: check-transition-triggers List List String -> List ;
+  # ( transitions handlers path ) with path TOS.
+  # Build handler-names, then the TriggersWalk acc, then reduce.
+  swap                                  # ( transitions path handlers )
+  handler-event-names                   # ( transitions path handler-names )
+  swap                                  # ( transitions handler-names path )
+  nil                                   # ( transitions handler-names path nil )
+  triggerswalk                          # ( transitions acc )
+  "reduce-trigger-check" to-atom        # ( transitions acc atom )
+  reduce                                # ( acc' )
+  violations
+  swap drop .                           # ( violations-list )
+
+
+# ===================================================================
+# Axiom 5 (state reachability): every state named in the transitions
+# table must be reachable from the initial state.
+# ===================================================================
+#
+# Graph walk is delegated to Erlang helpers exported from
+# af_hos_check (a4_unreachable_states/1, a4_initial_state_str/1).
+# The a4 side formats the violation message and walks the returned
+# list of state names. Stateless systems (state-type = 'None') have
+# no state graph and are skipped.
+
+# FFI wrappers.
+: a4-unreachable-states List -> List ;
+  nil swap cons
+  a4_unreachable_states
+  af_hos_check
+  erlang-apply .
+
+: a4-initial-state-str List -> String ;
+  nil swap cons
+  a4_initial_state_str
+  af_hos_check
+  erlang-apply .
+
+# Pre-formatted emergency-coverage violations from the Erlang bridge.
+: a4-emergency-violations List String -> List ;
+  # ( transitions path )
+  nil swap cons                       # ( transitions [path] )
+  swap cons                           # ( [transitions path] )
+  a4_emergency_violations
+  af_hos_check
+  erlang-apply .
+
+# Pre-formatted axiom_1 body-scope violations for every handler in
+# a blueprint. Erlang side builds the full scope set and walks each
+# handler body.
+: a4-handler-scope-violations HosBlueprint String -> List ;
+  nil swap cons
+  swap cons
+  a4_handler_scope_violations
+  af_hos_check
+  erlang-apply .
+
+# Pre-formatted axiom_5 handler-transition violations.
+: a4-handler-transition-violations HosBlueprint String -> List ;
+  nil swap cons
+  swap cons
+  a4_handler_transition_violations
+  af_hos_check
+  erlang-apply .
+
+# Top-level wrappers that callers can invoke against a HosBlueprint +
+# path to get each per-handler axiom's violations.
+: check-handler-scope HosBlueprint String -> List ;
+  a4-handler-scope-violations .
+
+: check-handler-transitions HosBlueprint String -> List ;
+  a4-handler-transition-violations .
+
+# Parent/children 4-way consistency check (#177). Runs against the
+# current HOS-registry state. Returns violations as a List of
+# Strings.
+: check-parent-children HosBlueprint -> List ;
+  nil swap cons
+  a4_parent_children_violations
+  af_hos_check
+  erlang-apply .
+
+# Accumulator for the reduce over the unreachable-names list.
+type ReachabilityWalk
+  initial     String
+  path        String
+  violations  List .
+
+# One violation per unreachable name.
+: reduce-reachability ReachabilityWalk Any -> ReachabilityWalk ;
+  # ( acc name-str ). Use auto-field bindings (initial, path, violations).
+  dup                                  # ( acc name name )   - keep copy for "into '~s'" near end
+  path                                 # ( acc name name path )
+  "axiom_5: system '" swap concat      # ( acc name name prefix1 )
+  "' state '" concat                   # ( acc name name part2 )
+  swap concat                          # ( acc name part3 )
+  "' is unreachable from initial state '" concat
+                                       # ( acc name part4 )
+  initial concat                       # ( acc name part5 )
+  "'. Either declare a transition into '" concat
+                                       # ( acc name part6 )
+  swap concat                          # ( acc part7 )
+  "' or delete it." concat             # ( acc full-msg )
+  violations                           # ( acc msg viols )
+  swap                                 # ( acc viols msg )
+  nil swap cons                        # ( acc viols [msg] )
+  append                               # ( acc viols' )
+  violations! .                        # ( acc' )
+
+# ===================================================================
+# Axiom 5 (exhaustive emergency coverage): every live state must
+# declare a transition under an emergency trigger that converges on
+# a single target. Graph walk is delegated to the Erlang helper
+# a4_emergency_violations/2, which returns pre-formatted strings.
+# ===================================================================
+
+: check-emergency-coverage List Atom String -> List ;
+  # ( transitions state-type path )
+  over None ==
+  check-emergency-coverage-step .
+
+: check-emergency-coverage-step List Atom String Bool -> List ;
+    : List Atom String True -> List ;
+        drop drop drop drop
+        nil
+    : List Atom String False -> List ;
+        drop                           # drop bool
+        swap drop                      # drop state-type -> ( transitions path )
+        a4-emergency-violations .      # ( violations-list )
+
+
+# Top-level reachability check.
+: check-state-reachability List Atom String -> List ;
+  # ( transitions state-type path )
+  over None ==                         # ( transitions st path stateless? )
+  check-state-reachability-step .
+
+: check-state-reachability-step List Atom String Bool -> List ;
+    : List Atom String True -> List ;
+        # stateless: no check
+        drop drop drop drop
+        nil
+    : List Atom String False -> List ;
+        drop                           # drop bool
+        # ( transitions state-type path )
+        swap drop                      # drop state-type -> ( transitions path )
+        # Pull initial + unreachable names from Erlang.
+        over                           # ( transitions path transitions )
+        a4-initial-state-str           # ( transitions path initial )
+        rot                            # ( path initial transitions )
+        a4-unreachable-states          # ( path initial names )
+        # Rearrange to ( names initial path [] ) so the constructor's
+        # reverse mapping yields element(2)=initial, element(3)=path,
+        # element(4)=violations=[].
+        swap                           # ( path names initial )
+        rot                            # ( names initial path )
+        nil                            # ( names initial path [] )
+        reachabilitywalk               # ( names acc )
+        "reduce-reachability" to-atom
+        reduce                         # ( acc' )
+        violations
+        swap drop .                    # ( violations-list )
+
+
+# ===================================================================
+# Handler-walk accumulator.
+# ===================================================================
+#
+# Threaded across a reduce over a blueprint's handlers list. Captures
+# the (state-type, path) constants plus the growing violations list.
+
+type HandlersWalk
+  state-type  Atom
+  path        String
+  violations  List .
+
+
+# Reduce step for stateful-body axiom: given (acc, handler), run
+# check-stateful-body and append its result to acc.violations.
+# Returns updated acc.
+: reduce-stateful-body HandlersWalk Any -> HandlersWalk ;
+  # Stack: (acc, handler). Auto-field-bindings expose state-type,
+  # path, violations from acc.
+  dup                                  # ( acc handler handler )
+  state-type                           # ( acc handler handler st )
+  path                                 # ( acc handler handler st path )
+  check-stateful-body                  # ( acc handler viol-list-for-this-handler )
+  violations                           # ( acc handler new-viols cur-viols )
+  swap                                 # ( acc handler cur-viols new-viols )
+  append                               # ( acc handler combined )
+  # Stack: (acc, handler, combined). Need (handler, acc, combined)
+  # so that `violations!` ( new-val acc -> acc ) can fire - its
+  # sig_in TOS-first is [HandlersWalk, List] meaning TOS=acc, below=list.
+  rot                                  # ( handler combined acc )
+  swap                                 # ( handler acc combined )
+  violations!                          # ( handler acc' )
+  swap drop .                          # drop handler, keep acc'
+
+
+# Check all handlers for stateful-body-axiom violations. Takes
+# (handlers-list, state-type, path) and returns a List of violation
+# Strings. Uses the HandlersWalk accumulator through reduce.
+: check-handlers-stateful List Atom String -> List ;
+  # Entering stack (TOS-right): ( list st path ).
+  # handlerswalk constructor sig_in TOS-first is [List String Atom],
+  # so it expects TOS=List(violations), below=String(path),
+  # below=Atom(state-type). We already have (st path) in that order
+  # under path; just push the initial empty violations list as TOS.
+  nil                                  # ( list st path viol-init )
+  handlerswalk                         # ( list acc )
+  "reduce-stateful-body" to-atom       # ( list acc atom )
+  reduce                               # ( acc' )
+  violations                           # ( acc' viols )
+  swap drop .                          # ( viols )
+
+
+# ===================================================================
+# Top-level driver: check-blueprint-a4
+# ===================================================================
+#
+# For now runs only the stateful-body axiom. Other axiom checks are
+# stubbed and return empty. Later passes wire the full set.
+#
+# Inputs: HosBlueprint.
+# Output: List of violation Strings.
+: check-blueprint-a4 HosBlueprint -> List ;
+  # Relies on HosBlueprint being a registered product type so that
+  # the auto-field-bindings (name, parent-name, state-type, children,
+  # handlers, transitions) are live inside the body. Bindings are
+  # captured at word entry and survive subsequent stack ops, so we
+  # leave the original bp on the stack for the final FFI call to
+  # the Erlang extra-violations bridge.
+  "" name hos-path                     # ( bp path )
+
+  # --- Axiom 5: stateful-body ---
+  dup                                  # ( bp path path )
+  handlers                             # ( bp path path handlers )
+  state-type                           # ( bp path path handlers st )
+  rot                                  # ( bp path handlers st path )
+  check-handlers-stateful              # ( bp path v1 )
+
+  # --- Axiom 1: trigger scope ---
+  over                                 # ( bp path v1 path )
+  transitions                          # ( bp path v1 path transitions )
+  handlers                             # ( bp path v1 path transitions handlers )
+  rot                                  # ( bp path v1 transitions handlers path )
+  check-transition-triggers            # ( bp path v1 v2 )
+  append                               # ( bp path v1v2 )
+
+  # --- Axiom 5: state reachability ---
+  over                                 # ( bp path v1v2 path )
+  state-type                           # ( bp path v1v2 path st )
+  transitions                          # ( bp path v1v2 path st transitions )
+  swap rot                             # ( bp path v1v2 transitions st path )
+  check-state-reachability             # ( bp path v1v2 v3 )
+  append                               # ( bp path v-a4 )
+
+  # Pure-a4 wiring of check-transition-effects exists as a
+  # standalone word below but isn't yet called from this top-level
+  # driver — the stack shuffle to feed it (transitions handlers
+  # children path) is fiddly without a helper that marshals fields
+  # from bindings. The Erlang bridge (a4_extra_violations) currently
+  # covers the axiom; the a4 word is exercised by its own eunit test.
+
+  # --- Remaining axioms via Erlang bridge ---
+  # Transition-effect scope, exhaustive emergencies, per-handler
+  # scope / transition walks, and the children tree walk are still
+  # on the Erlang side. a4_extra_violations/1 filters out the
+  # axioms the a4 checker already owns, so no duplicates.
+  rot                                  # ( path v-a4 bp )
+  blueprint-extra-violations           # ( path v-a4 v-extra )
+  append                               # ( path all-viols )
+  swap drop .                          # ( violations )
+
+# FFI wrapper: call af_hos_check:a4_extra_violations/1 on a HosBlueprint
+# and get the violations the a4-side has not itself produced.
+: blueprint-extra-violations HosBlueprint -> List ;
+  nil swap cons
+  a4_extra_violations
+  af_hos_check
+  erlang-apply .
+
+
+# ===================================================================
+# Recursive tree walk (#178): run check-blueprint-a4 on each child
+# in a blueprint's children list and append the violations.
+# ===================================================================
+#
+# Children in a DSL-built blueprint are name-stub blueprints
+# (parent=me, state=None, no handlers/transitions/nested children),
+# so their own axiom outputs are typically empty. The walk becomes
+# meaningful when callers pass a full tree (e.g. the Erlang bridge
+# supplies the registered version for each named child). Keeping the
+# walk as a standalone word gives callers that choice.
+
+type ChildWalk
+  violations  List .
+
+: walk-child-step ChildWalk Any -> ChildWalk ;
+  # ( acc child-bp )
+  check-blueprint-a4                     # ( acc child-viols )
+  violations                             # ( acc child-viols acc-viols )
+  swap                                   # ( acc acc-viols child-viols )
+  append                                 # ( acc combined )
+  violations! .                          # ( acc' )
+
+: walk-children List -> List ;
+  # ( children )
+  nil                                    # ( children viol-init )
+  childwalk                              # ( children acc )
+  "walk-child-step" to-atom              # ( children acc atom )
+  reduce                                 # ( acc' )
+  violations
+  swap drop .                            # ( violations )

@@ -948,12 +948,25 @@ wrap_with_locals_planned(BaseImpl, Plan) ->
         Frame = build_frame_flat(FlatEntries,
                                  Cont#continuation.data_stack, #{}),
         Cont1 = Cont#continuation{locals = [Frame | Cont#continuation.locals]},
+        %% Mirror the locals stack into the process dict so native-
+        %% compiled callees can do caller-frame binding lookups through
+        %% af_compile:apply_impl/2 (which doesn't see Cont.locals
+        %% directly). Fixes #160 — send-to-parent style words whose
+        %% body references a binding from an enclosing HosSelf frame
+        %% can now native-compile without atomizing the binding name.
+        OldProc = case erlang:get(af_locals_stack) of
+            undefined -> [];
+            LS -> LS
+        end,
+        erlang:put(af_locals_stack, [Frame | OldProc]),
         try
             Cont2 = BaseImpl(Cont1),
             [_PoppedFrame | LocalsRest] = Cont2#continuation.locals,
+            erlang:put(af_locals_stack, OldProc),
             Cont2#continuation{locals = LocalsRest}
         catch
             Class:Reason:CallStack ->
+                erlang:put(af_locals_stack, OldProc),
                 erlang:raise(Class, Reason, CallStack)
         end
     end.

@@ -8,6 +8,20 @@
 -export([check_system/1, check_system_raise/1, init/0]).
 -export([register_system/1, lookup_system/1, clear_registry/0,
          registered_child_events/1]).
+%% Helpers exposed so the in-progress a4 checker
+%% (src/bootstrap/hos/check.a4) can delegate complex graph walks
+%% back to BEAM while its own implementation catches up.
+-export([a4_unreachable_states/1, a4_initial_state_str/1,
+         a4_extra_violations/1,
+         a4_emergency_violations/2,
+         a4_handler_scope_violations/2,
+         a4_handler_transition_violations/2,
+         a4_parent_children_violations/1]).
+%% Flip of #179: the DSL now calls check_via_a4/1 in place of
+%% check_system_raise/1 so a4-side `check-blueprint-a4` owns the
+%% axiom checking. The Erlang-side axiom functions remain available
+%% as an FFI service to the a4 checker.
+-export([check_via_a4/1, ensure_a4_loaded/0]).
 
 -define(REG_KEY, hos_system_registry).
 -define(REG_ETS, hos_system_registry_ets).
@@ -201,6 +215,340 @@ registered_child_events(ChildName) ->
         {'HosBlueprint', _, _, _, _, Handlers, _} ->
             [atom_to_list(element(2, H)) || H <- Handlers]
     end.
+
+%% a4-checker bridge: given a transitions list, return the list of
+%% state names that are NOT reachable from the initial state (= From
+%% of the first transition). Result is a list of binaries so it
+%% round-trips through the a4 String type.
+a4_unreachable_states([]) -> [];
+a4_unreachable_states(Transitions) when is_list(Transitions) ->
+    [First | _] = Transitions,
+    Initial = atom_to_list(element(2, First)),
+    All = all_declared_states(Transitions),
+    Reachable = reachable_from(Initial, Transitions, [Initial]),
+    [list_to_binary(S) || S <- All, not lists:member(S, Reachable)].
+
+%% a4-checker bridge: initial state of a transitions list, as a
+%% binary; returns <<>> when transitions is empty.
+a4_initial_state_str([]) -> <<>>;
+a4_initial_state_str([First | _]) ->
+    list_to_binary(atom_to_list(element(2, First))).
+
+%% Run check-blueprint-a4 through the a4 interpreter and raise if
+%% any violation string comes back. Drop-in replacement for
+%% check_system_raise/1.
+check_via_a4(HosBlueprint) ->
+    ensure_a4_loaded(),
+    C0 = (af_interpreter:new_continuation())#continuation{
+        data_stack = [HosBlueprint]
+    },
+    C1 = af_interpreter:interpret_token(
+        #token{value = "check-blueprint-a4"}, C0),
+    case C1#continuation.data_stack of
+        [{'List', []}] -> ok;
+        [{'List', Items}] ->
+            Msgs = [binary_to_list(S) || {'String', S} <- Items],
+            case Msgs of
+                [] -> ok;
+                _ ->
+                    Msg = "HOS axiom violations:\n  " ++
+                          lists:flatten(lists:join("\n  ", Msgs)),
+                    error({axiom_violation, Msg})
+            end;
+        Other ->
+            error({hos_a4_check_unexpected, Other})
+    end.
+
+%% Idempotent loader for the two a4 source files the checker needs.
+%% runtime.a4 registers HosBlueprint + friends; check.a4 defines
+%% check-blueprint-a4. Called at first check_via_a4/1 entry.
+%%
+%% The load-status probe checks for hos-path on the STOCK 'String'
+%% dict. Stock types (Int, String, List, etc.) get their ops table
+%% wiped on every af_repl:init_types/0 call (each af_type_*:init
+%% re-registers with a fresh ops map), so an op that check.a4 added
+%% to the String dict is a reliable signal that the a4 sources were
+%% loaded AFTER the most recent init_types. Checking the custom
+%% HosBlueprint dict misses this because custom types survive
+%% init_types intact and their ops appear "loaded" even after the
+%% stock-dict ops they depend on are gone.
+ensure_a4_loaded() ->
+    case af_type:find_op_by_name("hos-path", 'String') of
+        {ok, _} -> ok;
+        _ ->
+            case persistent_term:get(af_hos_a4_cache, undefined) of
+                undefined ->
+                    %% First load in this VM: interpret the sources,
+                    %% then snapshot the types they touched so future
+                    %% reloads can skip the interpreter.
+                    load_a4_source("src/bootstrap/hos/runtime.a4"),
+                    load_a4_source("src/bootstrap/hos/check.a4"),
+                    cache_a4_types();
+                Cached ->
+                    %% Stock-dict wipe after init_types. Replay the
+                    %% cached type snapshots directly — no interpreter,
+                    %% no deferred-check queue.
+                    replay_a4_cache(Cached)
+            end,
+            ok
+    end.
+
+load_a4_source(Path) ->
+    case file:read_file(Path) of
+        {ok, Content} ->
+            Tokens = af_parser:parse(binary_to_list(Content), Path),
+            af_interpreter:interpret_tokens(
+                Tokens, af_interpreter:new_continuation()),
+            ok;
+        {error, _} ->
+            error({a4_source_missing, Path})
+    end.
+
+%% Capture the ops on every type the a4 sources registered against.
+%% Stored as [{TypeName, #af_type{}}] in a persistent_term entry so
+%% subsequent ensure_a4_loaded/0 calls can replay without going back
+%% through the interpreter.
+cache_a4_types() ->
+    Types = ['Any', 'String', 'List', 'Map', 'Atom', 'Bool', 'Int',
+             'Actor', 'HosBlueprint', 'HosSelf', 'HosInit', 'HosCast',
+             'HosStop', 'HosCall', 'HosGetLog', 'HosIntrospectChild',
+             'HosGetState', 'HandlersWalk', 'TriggersWalk',
+             'ReachabilityWalk', 'EffectWalk', 'ChildWalk'],
+    Snapshot = [{T, snapshot_type(T)} || T <- Types],
+    persistent_term:put(af_hos_a4_cache, Snapshot).
+
+snapshot_type(Name) ->
+    case af_type:get_type(Name) of
+        {ok, Type} -> Type;
+        _ -> undefined
+    end.
+
+%% Replay a cached snapshot into ETS. For stock types we only
+%% re-add the ops the a4 sources contributed, not the type record
+%% itself (init_types already re-registered the type with built-in
+%% ops; we'd clobber those if we replaced the whole record).
+replay_a4_cache(Cached) ->
+    lists:foreach(fun({Name, Type}) -> replay_one(Name, Type) end, Cached).
+
+replay_one(_Name, undefined) -> ok;
+replay_one(Name, CachedType) ->
+    case af_type:get_type(Name) of
+        {ok, CurrentType} ->
+            CurrentOps = CurrentType#af_type.ops,
+            CachedOps = CachedType#af_type.ops,
+            %% Merge: cached ops that aren't in current go into current.
+            %% A cached op present in current means the built-in
+            %% already re-registered it — leave current alone.
+            maps:foreach(fun(OpName, OpList) ->
+                case maps:is_key(OpName, CurrentOps) of
+                    true -> ok;
+                    false ->
+                        [af_type:add_op(Name, Op) || Op <- OpList]
+                end
+            end, CachedOps);
+        _ ->
+            %% Type isn't registered (custom type wiped); register
+            %% the cached record wholesale.
+            af_type:register_type(CachedType)
+    end.
+
+%% a4-checker bridge: pre-formatted axiom_5 exhaustive-emergency
+%% violations for a given transitions list + path. Returns a list of
+%% binaries that the a4 checker can wrap as Strings and return.
+a4_emergency_violations([], _Path) -> [];
+a4_emergency_violations(Transitions, Path)
+  when is_list(Transitions), is_binary(Path) ->
+    PathStr = binary_to_list(Path),
+    ByTrigger = group_by_trigger(Transitions),
+    Emerges = [
+        {Trigger, SingleTarget}
+        || {Trigger, Trans} <- maps:to_list(ByTrigger),
+           length(Trans) >= 2,
+           [SingleTarget] <- [lists:usort([element(3, T) || T <- Trans])]
+    ],
+    lists:flatmap(fun({Trigger, Target}) ->
+        Msgs = check_one_emergency(Trigger, Target, Transitions, PathStr),
+        [list_to_binary(M) || M <- Msgs]
+    end, Emerges);
+a4_emergency_violations(_, _) -> [].
+
+%% Pre-formatted axiom_1 body-scope violations for every handler
+%% in a HosBlueprint. Returns binaries. Accepts the blueprint in
+%% either raw-tuple form or in the field-map form af_term produces
+%% when a product-type value is passed through erlang-apply.
+a4_handler_scope_violations({'HosBlueprint', _, _, _, _, _, _} = BP,
+                            Path) when is_binary(Path) ->
+    a4_handler_scope_violations_tuple(BP, Path);
+a4_handler_scope_violations(#{type := 'HosBlueprint'} = M, Path)
+  when is_binary(Path) ->
+    a4_handler_scope_violations_tuple(a4_bp_map_to_tuple(M), Path);
+a4_handler_scope_violations(_, _) -> [].
+
+a4_handler_scope_violations_tuple({'HosBlueprint', _, ParentRaw,
+                                   StateType, Children, Handlers,
+                                   Transitions},
+                                  Path) ->
+    PathStr = binary_to_list(Path),
+    Scope = build_scope(PathStr, ParentRaw, StateType, Children,
+                        Handlers, Transitions),
+    Msgs = lists:flatmap(
+             fun(H) -> check_handler(H, Scope, PathStr) end, Handlers),
+    [list_to_binary(M) || M <- Msgs].
+
+%% Pre-formatted axiom_5 handler-transition violations.
+a4_handler_transition_violations({'HosBlueprint', _, _, _, _, _, _} = BP,
+                                 Path) when is_binary(Path) ->
+    a4_handler_transition_violations_tuple(BP, Path);
+a4_handler_transition_violations(#{type := 'HosBlueprint'} = M, Path)
+  when is_binary(Path) ->
+    a4_handler_transition_violations_tuple(a4_bp_map_to_tuple(M), Path);
+a4_handler_transition_violations(_, _) -> [].
+
+a4_handler_transition_violations_tuple({'HosBlueprint', _, _, _, _,
+                                        Handlers, Transitions},
+                                       Path) ->
+    PathStr = binary_to_list(Path),
+    Msgs = lists:flatmap(
+             fun(H) -> check_handler_transitions(H, Transitions, PathStr) end,
+             Handlers),
+    [list_to_binary(M) || M <- Msgs].
+
+%% Undo the field-map conversion af_term:from_stack_item does on
+%% product types so our tuple-pattern clauses can match.
+a4_bp_map_to_tuple(M) ->
+    {'HosBlueprint',
+     maps:get(name, M, <<>>),
+     maps:get('parent-name', M, <<>>),
+     maps:get('state-type', M, 'None'),
+     maps:get(children, M, []),
+     maps:get(handlers, M, []),
+     maps:get(transitions, M, [])}.
+
+%% Pre-formatted parent/children 4-way symmetry violations. Runs the
+%% same check_parent_children_consistency logic but returns binaries
+%% instead of raising, so the a4 caller can collect and report.
+a4_parent_children_violations({'HosBlueprint', _, _, _, _, _, _} = BP) ->
+    a4_parent_children_violations_tuple(BP);
+a4_parent_children_violations(#{type := 'HosBlueprint'} = M) ->
+    a4_parent_children_violations_tuple(a4_bp_map_to_tuple(M));
+a4_parent_children_violations(_) -> [].
+
+a4_parent_children_violations_tuple({'HosBlueprint', NameBin, ParentNameBin,
+                                     _, Children, _, _}) ->
+    Name = binary_to_list(NameBin),
+    Parent = binary_to_list(ParentNameBin),
+    MyChildNames = [binary_to_list(element(2, C)) || C <- Children],
+    Reg = maps:from_list(reg_all_entries()),
+    V1 = children_i_declare_check(Name, MyChildNames, Reg),
+    V2 = my_parent_check(Name, Parent, Reg),
+    V3 = others_who_list_me_check(Name, Parent, Reg),
+    V4 = others_who_claim_me_as_parent_check(Name, MyChildNames, Reg),
+    [list_to_binary(V) || V <- V1 ++ V2 ++ V3 ++ V4].
+
+%% a4-checker bridge: run every axiom check that the pure-a4 checker
+%% has NOT yet re-implemented locally. Takes the same HosBlueprint
+%% the a4 checker was handed, returns a list of violation binaries.
+%%
+%% This covers:
+%%   - transition-effect scope (axiom 1 for declared effects)
+%%   - exhaustive emergency coverage (axiom 5)
+%%   - per-handler body scope walk (axiom 1 for body tokens)
+%%   - per-handler transition walk (axiom 5 for -> markers)
+%%   - recursive tree walk into children
+%%
+%% The a4-owned axioms (stateful-body, trigger-scope, state-
+%% reachability) are EXCLUDED here so check-blueprint-a4 does not
+%% double-count them.
+a4_extra_violations({'HosBlueprint', _, _, _, _, _, _} = Sys) ->
+    a4_extra_violations_tuple(Sys);
+a4_extra_violations(#{type := 'HosBlueprint'} = M) ->
+    a4_extra_violations_tuple(a4_bp_map_to_tuple(M));
+a4_extra_violations(_) -> [].
+
+a4_extra_violations_tuple(Sys) ->
+    All = violations(Sys),
+    Owned = a4_owned_violation_prefixes(),
+    Remaining = [V || V <- All, not starts_with_any(V, Owned)],
+    [list_to_binary(V) || V <- Remaining].
+
+a4_owned_violation_prefixes() ->
+    %% Violations produced by the pure-a4 checker. Used to filter
+    %% them out of the Erlang side's output so the two don't double
+    %% up when check-blueprint-a4 appends both.
+    %%
+    %% Match by the structural shape of the message, not by its
+    %% exact text, so wording changes on either side don't create
+    %% accidental duplicates. Each predicate returns true iff the
+    %% violation belongs to an a4-owned axiom.
+    %% Only the axioms check-blueprint-a4 actually runs inside its
+    %% own body are filtered out here. Other a4-wrapper words
+    %% (check-transition-effects, check-emergency-coverage,
+    %% check-handler-scope, check-handler-transitions) exist as
+    %% callable wrappers but aren't wired into the top driver, so
+    %% the Erlang bridge must still produce those violations for
+    %% parity with the old path.
+    [fun stateful_body_violation/1,
+     fun trigger_scope_violation/1,
+     fun state_reachability_violation/1].
+
+stateful_body_violation(Msg) ->
+    %% "axiom_5: system '...' handler '...' has a non-empty body; ..."
+    has_substring(Msg, "has a non-empty body").
+
+trigger_scope_violation(Msg) ->
+    %% "axiom_1: system '...' transition X -> Y uses trigger '...'
+    %%  but '...' is not a declared handler..."
+    %% Tightened so it doesn't swallow the timer-effect violation
+    %% (which also says "is not a declared handler..." but starts
+    %% with "declares timer effect").
+    has_substring(Msg, "axiom_1")
+        andalso has_substring(Msg, "uses trigger")
+        andalso has_substring(Msg, "is not a declared handler on this system").
+
+state_reachability_violation(Msg) ->
+    %% "axiom_5: system '...' state '...' is unreachable from initial
+    %% state '...'. Either declare a transition into '...' or delete it."
+    has_substring(Msg, "is unreachable from initial state").
+
+transition_effect_violation(Msg) ->
+    %% Two shapes from check.a4 for axiom_1 transition-effect target:
+    %%  - timer: "...timer effect schedules event '...' but '...' is
+    %%    not a declared handler..."
+    %%  - non-timer: "...transition effect target '...' is not in scope"
+    has_substring(Msg, "axiom_1")
+        andalso (has_substring(Msg, "timer effect schedules event")
+                 orelse has_substring(Msg, "transition effect target")
+                 orelse has_substring(Msg, "with effect on")).
+
+exhaustive_emergency_violation(Msg) ->
+    %% "axiom_5: system '...' has emergency trigger '...' converging
+    %% on state '...', but state '...' has no declared transition
+    %% under '...'."
+    has_substring(Msg, "has emergency trigger").
+
+handler_scope_violation(Msg) ->
+    %% "axiom_1: system '<path>' handler '<event>' references '<token>'
+    %% -- not a parent / child / local / state / transition name or a4
+    %% builtin"
+    has_substring(Msg, "axiom_1")
+        andalso has_substring(Msg, "handler")
+        andalso has_substring(Msg, "references").
+
+handler_transition_violation(Msg) ->
+    %% Two shapes from check_handler_transitions:
+    %%  - entry: "handler '<event>' starts with transition to '<target>'
+    %%    but no declared entry state ..."
+    %%  - step:  "handler '<event>' attempts undeclared transition
+    %%    <from> -> <to>"
+    has_substring(Msg, "axiom_5")
+        andalso (has_substring(Msg, "starts with transition")
+                 orelse has_substring(Msg, "attempts undeclared transition")).
+
+starts_with_any(Msg, Preds) ->
+    lists:any(fun(P) -> P(Msg) end, Preds).
+
+has_substring(String, Needle) ->
+    string:find(String, Needle) =/= nomatch.
 
 op_check_system(Cont) ->
     [Instance | Rest] = Cont#continuation.data_stack,
