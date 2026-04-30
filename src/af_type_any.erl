@@ -96,6 +96,18 @@ init() ->
         impl = fun op_types/1
     }),
 
+    %% .reset : ->  (clear the stack)
+    af_type:add_op('Any', #operation{
+        name = ".reset", sig_in = [], sig_out = [],
+        impl = fun op_reset/1
+    }),
+
+    %% words-for : Atom ->  (display words and signatures for a type)
+    af_type:add_op('Any', #operation{
+        name = "words-for", sig_in = ['Atom'], sig_out = [],
+        impl = fun op_words_for/1
+    }),
+
     %% see : Atom ->  (display source/definition of a word)
     af_type:add_op('Any', #operation{
         name = "see", sig_in = ['Atom'], sig_out = [],
@@ -459,6 +471,27 @@ op_types(Cont) ->
     Types = [T#af_type.name || T <- af_type:all_types()],
     io:format("Types: ~p~n", [lists:sort(Types)]),
     Cont.
+
+op_reset(Cont) ->
+    Cont#continuation{data_stack = []}.
+
+op_words_for(Cont) ->
+    [{'Atom', TypeNameV} | Rest] = Cont#continuation.data_stack,
+    TypeAtom = atom_value_to_atom(TypeNameV),
+    case af_type:get_type(TypeAtom) of
+        {ok, #af_type{ops = Ops}} ->
+            io:format("~p:~n", [TypeAtom]),
+            lists:foreach(fun({Name, OpList}) ->
+                lists:foreach(fun(Op) ->
+                    SigInStr = format_sig(Op#operation.sig_in),
+                    SigOutStr = format_sig(Op#operation.sig_out),
+                    io:format("  : ~s ~s -> ~s ;~n", [Name, SigInStr, SigOutStr])
+                end, OpList)
+            end, lists:sort(maps:to_list(Ops)));
+        _ ->
+            io:format("Unknown type: ~s~n", [atom_value_to_string(TypeNameV)])
+    end,
+    Cont#continuation{data_stack = Rest}.
 
 %%% See
 
