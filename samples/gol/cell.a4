@@ -28,14 +28,14 @@ type Cell
 # --- Conway's rule ---
 
 : gol-rule Bool Int -> Bool ;
-: Bool 3   -> Bool ; drop drop true
-: true 2   -> Bool ; drop drop true
-: Bool Int -> Bool ; drop drop false
+    : Bool 3   -> Bool ; drop drop true
+    : true 2   -> Bool ; drop drop true
+    : Bool Int -> Bool ; drop drop false
 .
 
 : bool-int Bool -> Int ;
-: true  -> Int ; drop 1
-: false -> Int ; drop 0
+    : true  -> Int ; drop 1
+    : false -> Int ; drop 0
 .
 
 # --- broadcast plumbing ---

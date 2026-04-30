@@ -54,8 +54,8 @@
 #   space                       (neither)
 
 : pix Bool Bool -> ;
-: true  true  -> ; drop drop "█" puts
-: true  false -> ; drop drop "▀" puts
-: false true  -> ; drop drop "▄" puts
-: false false -> ; drop drop " " puts
+    : true  true  -> ; drop drop "█" puts
+    : true  false -> ; drop drop "▀" puts
+    : false true  -> ; drop drop "▄" puts
+    : false false -> ; drop drop " " puts
 .
