@@ -1,0 +1,77 @@
+# patterns.a4 - canonical Game of Life starting patterns.
+#
+# Each pattern is a no-arg word that pushes a List of Pos values
+# representing the live cells, expressed in pattern-local coordinates
+# with origin at the top-left. The game centers the pattern in the grid
+# at launch time.
+
+type Pos
+    px Int
+    py Int .
+
+# --- glider: classic period-4 spaceship, moves diagonally SE ---
+: glider -> List ;
+    [ 1 0 pos
+      2 1 pos
+      0 2 pos  1 2 pos  2 2 pos ] .
+
+# --- blinker: period-2 oscillator ---
+: blinker -> List ;
+    [ 0 0 pos  1 0 pos  2 0 pos ] .
+
+# --- toad: period-2 oscillator (two-blinker companion) ---
+: toad -> List ;
+    [ 1 0 pos  2 0 pos  3 0 pos
+      0 1 pos  1 1 pos  2 1 pos ] .
+
+# --- beacon: period-2 oscillator ---
+: beacon -> List ;
+    [ 0 0 pos  1 0 pos
+      0 1 pos  1 1 pos
+      2 2 pos  3 2 pos
+      2 3 pos  3 3 pos ] .
+
+# --- pulsar: period-3 oscillator (stunning visual) ---
+: pulsar -> List ;
+    [ 2 0 pos  3 0 pos  4 0 pos    8 0 pos  9 0 pos  10 0 pos
+      0 2 pos  5 2 pos  7 2 pos    12 2 pos
+      0 3 pos  5 3 pos  7 3 pos    12 3 pos
+      0 4 pos  5 4 pos  7 4 pos    12 4 pos
+      2 5 pos  3 5 pos  4 5 pos    8 5 pos  9 5 pos  10 5 pos
+      2 7 pos  3 7 pos  4 7 pos    8 7 pos  9 7 pos  10 7 pos
+      0 8 pos  5 8 pos  7 8 pos    12 8 pos
+      0 9 pos  5 9 pos  7 9 pos    12 9 pos
+      0 10 pos 5 10 pos 7 10 pos   12 10 pos
+      2 12 pos 3 12 pos 4 12 pos   8 12 pos 9 12 pos 10 12 pos ] .
+
+# --- LWSS: lightweight spaceship, moves rightward at c/2 ---
+: lwss -> List ;
+    [ 1 0 pos  4 0 pos
+      0 1 pos
+      0 2 pos  4 2 pos
+      0 3 pos  1 3 pos  2 3 pos  3 3 pos ] .
+
+# --- R-pentomino: methuselah, evolves chaotically for 1103 generations ---
+: r-pentomino -> List ;
+    [ 1 0 pos  2 0 pos
+      0 1 pos  1 1 pos
+      1 2 pos ] .
+
+# --- acorn: methuselah, 5206 generations to stabilize as 633 cells ---
+: acorn -> List ;
+    [ 1 0 pos
+      3 1 pos
+      0 2 pos  1 2 pos
+      4 2 pos  5 2 pos  6 2 pos ] .
+
+# --- Gosper glider gun: emits one glider every 30 generations forever ---
+: gun -> List ;
+    [ 24 0 pos
+      22 1 pos  24 1 pos
+      12 2 pos  13 2 pos  20 2 pos  21 2 pos  34 2 pos  35 2 pos
+      11 3 pos  15 3 pos  20 3 pos  21 3 pos  34 3 pos  35 3 pos
+      0  4 pos  1  4 pos  10 4 pos  16 4 pos  20 4 pos  21 4 pos
+      0  5 pos  1  5 pos  10 5 pos  14 5 pos  16 5 pos  17 5 pos  22 5 pos  24 5 pos
+      10 6 pos  16 6 pos  24 6 pos
+      11 7 pos  15 7 pos
+      12 8 pos  13 8 pos ] .

@@ -1,0 +1,27 @@
+# standalone.a4 - one-game entry point.
+#
+# Invocation: the escript runner pushes  W H <pattern> on the stack,
+# then this file's words take over.  Example:
+#     60 30 glider game-loop
+# launches a 60x30 grid initialised with a glider and runs forever.
+# Ctrl+C exits.
+
+# Sleep N milliseconds.
+: sleep Int -> ;
+    nil swap cons sleep timer erlang-apply drop .
+
+# game-tick-loop: render, sleep, tick, recurse.
+# Sleep is short — the per-tick BEAM message round-trips already pace
+# the loop on anything bigger than a 12x12 grid.
+: game-tick-loop Game -> ;
+    render
+    50 sleep
+    tick
+    game-tick-loop .
+
+# game-loop: set up the terminal, build the game, run the tick loop.
+# Takes  W H pattern-cells  on the stack.
+: game-loop Int Int List -> ;
+    cls hide-cursor
+    make-game
+    game-tick-loop .

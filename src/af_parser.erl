@@ -2,6 +2,11 @@
 
 -include("token.hrl").
 
+-define(IS_HEX(C),
+    ((C >= $0 andalso C =< $9)
+     orelse (C >= $a andalso C =< $f)
+     orelse (C >= $A andalso C =< $F))).
+
 -export([parse/2]).
 
 -spec parse(string(), string()) -> [#token{}].
@@ -142,11 +147,31 @@ skip_comment([$\n | Rest]) -> Rest;
 skip_comment([_ | Rest]) -> skip_comment(Rest).
 
 read_string([], _File, Line, Col, Acc) ->
-    %% Unterminated string — return what we have
+    %% Unterminated string - return what we have
     {lists:reverse(Acc), [], Line, Col};
 read_string([$" | Rest], _File, Line, Col, Acc) ->
     {lists:reverse(Acc), Rest, Line, Col + 1};
+read_string([$\\, $x, H1, H2 | Rest], File, Line, Col, Acc)
+        when ?IS_HEX(H1), ?IS_HEX(H2) ->
+    Byte = hex_val(H1) * 16 + hex_val(H2),
+    read_string(Rest, File, Line, Col + 4, [Byte | Acc]);
+read_string([$\\, C | Rest], File, Line, Col, Acc) ->
+    Decoded = case C of
+        $n  -> $\n;
+        $r  -> $\r;
+        $t  -> $\t;
+        $e  -> 27;
+        $0  -> 0;
+        $\\ -> $\\;
+        $"  -> $";
+        Other -> Other
+    end,
+    read_string(Rest, File, Line, Col + 2, [Decoded | Acc]);
 read_string([$\n | Rest], File, Line, _Col, Acc) ->
     read_string(Rest, File, Line + 1, 1, [$\n | Acc]);
 read_string([C | Rest], File, Line, Col, Acc) ->
     read_string(Rest, File, Line, Col + 1, [C | Acc]).
+
+hex_val(C) when C >= $0, C =< $9 -> C - $0;
+hex_val(C) when C >= $a, C =< $f -> C - $a + 10;
+hex_val(C) when C >= $A, C =< $F -> C - $A + 10.

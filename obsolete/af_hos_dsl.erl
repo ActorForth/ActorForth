@@ -5,7 +5,7 @@
 -include("continuation.hrl").
 -include("af_type.hrl").
 
--export([init/0]).
+-export([init/0, systemdef_finalise/1]).
 %% Exposed for src/bootstrap/hos/dsl.a4's parse-system-tokens word,
 %% which wraps this function via erlang-apply.
 -export([parse_system_tokens_a4/1]).
@@ -56,7 +56,105 @@ init() ->
         sig_in = ['String'],
         sig_out = ['HosBlueprint'],
         impl = fun op_find_system/1
+    }),
+    register_trans_clauses(),
+    %% Direct SystemDef finaliser, registered on SystemDef so the
+    %% a4 `.` op can call it without erlang-apply (which would wrap
+    %% axiom_violation in af_error{ffi_error} and obscure the
+    %% rejection message). Native dispatch keeps the error shape
+    %% callers expect.
+    register_finalise_op().
+
+%% Registered on Any so it survives dsl.a4's `type SystemDef ...`
+%% re-registration (which wipes the SystemDef ops dict).
+register_finalise_op() ->
+    af_type:add_op('Any', #operation{
+        name = "hos-finalise",
+        sig_in = ['SystemDef'],
+        sig_out = [],
+        impl = fun op_hos_finalise/1
     }).
+
+op_hos_finalise(Cont) ->
+    [SD | Rest] = Cont#continuation.data_stack,
+    systemdef_finalise(SD),
+    Cont#continuation{data_stack = Rest}.
+
+%% ---------------------------------------------------------------
+%% A4-native `trans` : multi-clause row-builder for lib/hos/dsl.a4.
+%% Registered on Any (sig matches pick the right clause). Each impl
+%% pops the row's stack pattern, builds a flat-tuple Row, prepends
+%% it to TB.rows, and returns the updated TB.
+%% ---------------------------------------------------------------
+register_trans_clauses() ->
+    Trans = [
+        %% Order: longer sigs first; within same arity the strictest
+        %% (all-Event/Subsystem) clause first so it wins when the
+        %% cross-system event/target has been declared already.
+        %% The Atom variants accept undeclared names so the spec still
+        %% reaches the axiom checker (which then rejects out-of-scope
+        %% names with an axiom_1 violation message).
+        {['Event', 'Subsystem', 'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_subsystem/1},
+        {['Atom',  'Subsystem', 'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_subsystem/1},
+        {['Event', 'Atom',      'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_subsystem/1},
+        {['Atom',  'Atom',      'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_subsystem/1},
+        {['Event', 'Timer', 'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_timer/1},
+        {['Atom',  'Timer', 'Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_timer/1},
+        {['Event', 'State', 'State',
+          'TransitionsBlock'], fun trans_basic/1}
+    ],
+    [af_type:add_op('Any', #operation{
+        name = "trans",
+        sig_in = SigIn,
+        sig_out = ['TransitionsBlock'],
+        impl = Impl
+    }) || {SigIn, Impl} <- Trans],
+    ok.
+
+trans_basic(Cont) ->
+    [{'Event', EvName}, {'State', ToName}, {'State', FromName}, TB | Rest] =
+        Cont#continuation.data_stack,
+    Row = {'Row', FromName, ToName, EvName, "none", "none", 0},
+    NewTB = prepend_row(TB, Row),
+    Cont#continuation{data_stack = [NewTB | Rest]}.
+
+%% Accepts Event or Atom in the effect-event slot, and Subsystem or
+%% Atom in the target slot. Atom slots correspond to names that
+%% haven't been declared yet — the axiom checker validates the
+%% resulting blueprint at register time and rejects with a clear
+%% scope (axiom_1) message if the name isn't in the system's scope.
+trans_subsystem(Cont) ->
+    [Top, Tgt, {'Event', EvName1},
+     {'State', ToName}, {'State', FromName}, TB | Rest] =
+        Cont#continuation.data_stack,
+    EvName2 = name_of(Top),
+    TgtName = name_of(Tgt),
+    Row = {'Row', FromName, ToName, EvName1, TgtName, EvName2, 0},
+    NewTB = prepend_row(TB, Row),
+    Cont#continuation{data_stack = [NewTB | Rest]}.
+
+trans_timer(Cont) ->
+    [Top, {'Timer', DelayMs}, {'Event', EvName1},
+     {'State', ToName}, {'State', FromName}, TB | Rest] =
+        Cont#continuation.data_stack,
+    EvName2 = name_of(Top),
+    Row = {'Row', FromName, ToName, EvName1, "after", EvName2, DelayMs},
+    NewTB = prepend_row(TB, Row),
+    Cont#continuation{data_stack = [NewTB | Rest]}.
+
+name_of({'Event',     N}) -> N;
+name_of({'Atom',      N}) -> N;
+name_of({'Subsystem', N}) -> N.
+
+prepend_row(TB, Row) ->
+    {'TransitionsBlock', Sys, Rows} = TB,
+    {'TransitionsBlock', Sys, [Row | Rows]}.
 
 
 %% ---------------------------------------------------------------
@@ -322,3 +420,87 @@ build_system_node(Acc) ->
      Children,
      Handlers,
      Transitions}.
+
+
+%% ---------------------------------------------------------------
+%% A4-native DSL bridge: convert a SystemDef product instance
+%% (built up by lib/hos/dsl.a4) into a HosBlueprint, run the axiom
+%% checker, and register it.
+%%
+%% The SystemDef arrives via erlang-apply, which converts product-
+%% type instances to map form (per af_term:from_stack_item). Atom
+%% fields in the map are raw strings; List fields hold either
+%% tagged stack items (for atom-typed lists like children-list and
+%% events-list) or raw flat-tuple Row instances (for rows-list).
+%% ---------------------------------------------------------------
+
+systemdef_finalise(SystemDef) when is_map(SystemDef) ->
+    NameStr   = atom_field(maps:get(name,            SystemDef)),
+    ParentStr = atom_field(maps:get('parent-name',   SystemDef)),
+    StateStr  = atom_field(maps:get('state-name',    SystemDef)),
+    Children  = maps:get('children-list', SystemDef, []),
+    Events    = maps:get('events-list',   SystemDef, []),
+    Rows      = maps:get('rows-list',     SystemDef, []),
+    do_systemdef_finalise(NameStr, ParentStr, StateStr,
+                          Children, Events, Rows);
+systemdef_finalise({'SystemDef', NameStr, ParentStr, StateStr,
+                    Children, Events, Rows}) ->
+    do_systemdef_finalise(atom_field(NameStr),
+                          atom_field(ParentStr),
+                          atom_field(StateStr),
+                          Children, Events, Rows).
+
+do_systemdef_finalise(NameStr, ParentStr, StateStr,
+                      Children, Events, Rows) ->
+    NameBin   = list_to_binary(NameStr),
+    ParentBin = list_to_binary(ParentStr),
+
+    StateAtom = case StateStr of
+        ""     -> 'None';
+        "None" -> 'None';
+        _      -> list_to_atom(StateStr)
+    end,
+
+    ChildrenStubs = [
+        {'HosBlueprint', list_to_binary(atom_field(C)),
+         NameBin, 'None', [], [], []}
+        || C <- lists:reverse(Children)
+    ],
+
+    Handlers = [
+        {'HandlerSpec', list_to_atom(atom_field(E)), [], [], []}
+        || E <- lists:reverse(Events)
+    ],
+
+    Transitions = [row_to_transition_spec(R) || R <- lists:reverse(Rows)],
+
+    Sys = {'HosBlueprint', NameBin, ParentBin, StateAtom,
+           ChildrenStubs, Handlers, Transitions},
+    af_hos_check:check_system_raise(Sys),
+    af_hos_check:register_system(Sys),
+    ok.
+
+%% atom_field accepts either a tagged {'Atom', String} stack item or
+%% a raw string and returns the underlying string.
+atom_field({'Atom', S}) when is_list(S)  -> S;
+atom_field({'Atom', B}) when is_binary(B) -> binary_to_list(B);
+atom_field(A) when is_atom(A) -> atom_to_list(A);
+atom_field(S) when is_list(S) -> S.
+
+row_to_transition_spec({'Row', FromStr, ToStr, TriggerStr,
+                        TargetStr, EventStr, Delay}) ->
+    From    = list_to_atom(FromStr),
+    To      = list_to_atom(ToStr),
+    Trigger = list_to_atom(TriggerStr),
+    {EffectTargetBin, EffectEvent, EffectDelay} =
+        case {TargetStr, EventStr, Delay} of
+            {"none", "none", 0} ->
+                {<<>>, 'none', 0};
+            {"after", _, _} ->
+                {<<"after">>, list_to_atom(EventStr), Delay};
+            _ ->
+                {list_to_binary(TargetStr),
+                 list_to_atom(EventStr), 0}
+        end,
+    {'TransitionSpec', From, To, Trigger,
+     EffectTargetBin, EffectEvent, EffectDelay}.

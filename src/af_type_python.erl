@@ -175,7 +175,7 @@ op_py_register(Cont) ->
     WordAtom = list_to_atom(WordName),
     %% Look up the word in the type registry to find its native module
     case af_word_compiler:find_native_word(WordName) of
-        {ok, NativeMod, _Arity, _NumOut} ->
+        {ok, NativeMod, _SigIn, _SigOut} ->
             %% Register the native BEAM function as callable from Python.
             %% Native functions now take/return tagged stack lists,
             %% so we convert raw Python args to tagged items and unwrap the result.

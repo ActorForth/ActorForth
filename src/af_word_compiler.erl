@@ -54,7 +54,9 @@ compile_words_to_binary(ModuleName, WordDefs0) when is_atom(ModuleName) ->
     L = 1,
     %% Normalise to 5-tuple form so internal code paths don't branch on shape.
     WordDefs = [normalise_def(D) || D <- WordDefs0],
-    Ctx = #{module => ModuleName, words => build_word_index(WordDefs)},
+    Ctx = #{module => ModuleName,
+            words => build_word_index(WordDefs),
+            word_defs => WordDefs},
     Groups = group_by_name(WordDefs),
     FunForms = lists:filtermap(fun({Name, Defs}) ->
         case compile_word_group(Name, Defs, L, Ctx) of
@@ -670,27 +672,26 @@ simulate_body([#operation{name = OpName} | Rest], [{StackExpr, stack}], L, Ctx, 
             Words = maps:get(words, Ctx, #{}),
             NewExpr = case maps:get(OpName, Words, undefined) of
                 {_Arity, _NumOut} ->
-                    %% Same-module word: call locally
+                    %% Same-module word: call locally. The same-module
+                    %% sig is known to us; if we got here in opaque mode
+                    %% the call shape is whatever the runtime stack is,
+                    %% which the function-head pattern checks.
                     {call, L, {atom, L, list_to_atom(OpName)}, [StackExpr]};
                 undefined ->
-                    case find_native_word(OpName) of
-                        {ok, NativeMod, _Arity, _NumOut} ->
-                            %% Already-compiled cross-module word: direct remote call
+                    %% Cross-module: in opaque mode we have no static
+                    %% type info to confirm the call would dispatch the
+                    %% way the interpreter would. apply_impl runs the
+                    %% same find_op + sig_match the interpreter does, so
+                    %% the runtime falls back to atom-push exactly when
+                    %% it should.
+                    case af_compile:primitive_fast_fun(OpName) of
+                        {ok, FunAtom} ->
                             {call, L,
-                             {remote, L, {atom, L, NativeMod},
-                                         {atom, L, list_to_atom(OpName)}},
+                             {remote, L, {atom, L, af_compile},
+                                         {atom, L, FunAtom}},
                              [StackExpr]};
                         not_found ->
-                            case af_compile:primitive_fast_fun(OpName) of
-                                {ok, FunAtom} ->
-                                    %% Primitive fast path: call af_compile:prim_*/1
-                                    {call, L,
-                                     {remote, L, {atom, L, af_compile},
-                                                 {atom, L, FunAtom}},
-                                     [StackExpr]};
-                                not_found ->
-                                    opaque_literal_or_apply(OpName, StackExpr, L)
-                            end
+                            opaque_literal_or_apply(OpName, StackExpr, L)
                     end
             end,
             simulate_body(Rest, [{NewExpr, stack}], L, Ctx, SideEffects)
@@ -1225,16 +1226,47 @@ runtime_dispatch(Name, Stack, L, Ctx) ->
         {ok, NumIn, 0, _OutTypes} when is_integer(NumIn),
                                        NumIn >= 0,
                                        length(Stack) >= NumIn ->
-            %% Side-effect op consumes NumIn items and produces none.
-            %% Drop NumIn items from the compile-time stack picture so
-            %% later ops' stack references (and final return shape)
-            %% line up with the runtime stack after apply_impl consumes.
-            {_Consumed, Remaining} = lists:split(NumIn, Stack),
-            {side_effect, CallExpr, Remaining};
+            %% Side-effect optimization: assume the op consumed NumIn
+            %% items and produced none, so we keep tracking the rest
+            %% of the typed stack. ONLY safe when the static stack
+            %% types satisfy the op's sig — otherwise the runtime
+            %% atom-pushes the name and consumes nothing, leaving the
+            %% real stack out of sync with our compile-time tracking.
+            case sig_matches_static(Name, Stack) of
+                true ->
+                    {_Consumed, Remaining} = lists:split(NumIn, Stack),
+                    {side_effect, CallExpr, Remaining};
+                false ->
+                    {ok, [{CallExpr, stack}]}
+            end;
         _ ->
             %% Op has outputs, or we can't determine its arity: go
             %% opaque. The typed stack can't be reconstructed.
             {ok, [{CallExpr, stack}]}
+    end.
+
+%% True iff some registered clause of `Name` has a sig_in that the
+%% current static stack types satisfy. Returns false if no clause
+%% matches the static types (so the runtime would atom-push).
+sig_matches_static(Name, Stack) ->
+    case any_sig_for(Name) of
+        {ok, SigList} ->
+            lists:any(fun(SigIn) -> sig_matches_stack(SigIn, Stack) end, SigList);
+        not_found ->
+            false
+    end.
+
+any_sig_for(Name) ->
+    AllTypes = af_type:all_types(),
+    SigIns = lists:flatmap(fun(#af_type{ops = Ops}) ->
+        case maps:get(Name, Ops, []) of
+            [] -> [];
+            OpList -> [SigIn || #operation{sig_in = SigIn} <- OpList]
+        end
+    end, AllTypes),
+    case SigIns of
+        [] -> not_found;
+        _  -> {ok, SigIns}
     end.
 
 %% Try to compile a product type getter or setter.
@@ -1430,25 +1462,76 @@ lookup_op_in_types(Name, [#af_type{ops = Ops} | Rest]) ->
     end.
 
 %% Resolve a word call: same-module or cross-module native.
+%% A native or local call is only emitted when the called word's
+%% sig_in is statically satisfied by the current typed stack. If the
+%% types don't line up (e.g. an Atom-push fall-through is what would
+%% happen at runtime), return `not_found` so the caller falls through
+%% to runtime_dispatch / atom-push, matching the interpreter's
+%% behaviour.
 resolve_word_call(Name, Stack, L, #{module := _Mod, words := Words} = Ctx) ->
     case maps:get(Name, Words, undefined) of
-        {_Arity, _NumOut} ->
-            generate_local_call(Name, Stack, L, Ctx);
-        undefined ->
-            case find_native_word(Name) of
-                {ok, NativeMod, _Arity, _NumOut} ->
-                    generate_remote_call(Name, NativeMod, Stack, L, Ctx);
-                not_found ->
-                    not_found
-            end
+        {Arity, _NumOut} when length(Stack) >= Arity ->
+            case local_word_sig(Name, Ctx) of
+                {ok, SigIn} ->
+                    case sig_matches_stack(SigIn, Stack) of
+                        true  -> generate_local_call(Name, Stack, L, Ctx);
+                        false -> resolve_native_or_fail(Name, Stack, L, Ctx)
+                    end;
+                not_found -> resolve_native_or_fail(Name, Stack, L, Ctx)
+            end;
+        _ ->
+            resolve_native_or_fail(Name, Stack, L, Ctx)
     end;
 resolve_word_call(Name, Stack, L, Ctx) ->
+    resolve_native_or_fail(Name, Stack, L, Ctx).
+
+resolve_native_or_fail(Name, Stack, L, Ctx) ->
     case find_native_word(Name) of
-        {ok, NativeMod, _Arity, _NumOut} ->
-            generate_remote_call(Name, NativeMod, Stack, L, Ctx);
-        not_found ->
-            not_found
+        {ok, NativeMod, SigIn, _SigOut} ->
+            case sig_matches_stack(SigIn, Stack) of
+                true  -> generate_remote_call(Name, NativeMod, Stack, L, Ctx);
+                false -> not_found
+            end;
+        not_found -> not_found
     end.
+
+%% Look up a same-module word's sig_in from the compile-context word
+%% definitions. Returns {ok, SigInTosFirst} | not_found.
+local_word_sig(Name, #{word_defs := Defs}) ->
+    case lists:keyfind(Name, 1, Defs) of
+        {_, SigIn, _SigOut, _Body, _Guard} -> {ok, SigIn};
+        false -> not_found
+    end;
+local_word_sig(_, _) -> not_found.
+
+%% Compile-time sig match: each sig_in element (TOS-first) must be
+%% compatible with the corresponding typed stack expression. A type
+%% variable or 'Any' matches anything; the `stack` opaque marker is
+%% conservatively treated as a non-match so we fall back to runtime
+%% dispatch rather than risk an incorrect inlining.
+sig_matches_stack(SigIn, Stack) when length(Stack) >= length(SigIn) ->
+    sig_match_pairs(SigIn, Stack);
+sig_matches_stack(_, _) -> false.
+
+sig_match_pairs([], _) -> true;
+sig_match_pairs([SigT | SR], [{_Expr, StackT} | StR]) ->
+    case sig_type_matches(SigT, StackT) of
+        true  -> sig_match_pairs(SR, StR);
+        false -> false
+    end;
+sig_match_pairs(_, _) -> false.
+
+sig_type_matches(_, stack) -> false;
+sig_type_matches('Any', _) -> true;
+sig_type_matches('_', _) -> true;
+sig_type_matches({Type, _Value}, Type) -> true;
+sig_type_matches(Type, Type) -> true;
+sig_type_matches(SigT, _) when is_atom(SigT) ->
+    case af_type_check:is_type_variable(SigT) of
+        true  -> true;
+        false -> false
+    end;
+sig_type_matches(_, _) -> false.
 
 %% Generate a local function call (same module).
 %% The function takes a tagged stack list and returns a tagged stack list.
@@ -1533,7 +1616,9 @@ find_compiled_word_defs(Name) ->
     end, AllTypes).
 
 %% Look up a word that has been compiled to a native BEAM module.
-%% Returns {ok, Module, Arity, NumOutputs} | not_found.
+%% Returns {ok, Module, SigIn, SigOut} | not_found. Caller compares
+%% SigIn against the typed compile-time stack to decide whether
+%% inlining is safe.
 find_native_word(Name) ->
     AllTypes = af_type:all_types(),
     find_native_in_types(Name, AllTypes).
@@ -1544,13 +1629,13 @@ find_native_in_types(Name, [#af_type{ops = Ops} | Rest]) ->
         [] -> find_native_in_types(Name, Rest);
         OpList ->
             case find_native_op(OpList) of
-                {ok, Mod, Arity, NumOut} -> {ok, Mod, Arity, NumOut};
+                {ok, Mod, SigIn, SigOut} -> {ok, Mod, SigIn, SigOut};
                 not_found -> find_native_in_types(Name, Rest)
             end
     end.
 
 find_native_op([]) -> not_found;
 find_native_op([#operation{source = {native, Mod}, sig_in = SigIn, sig_out = SigOut} | _]) ->
-    {ok, Mod, length(SigIn), length(SigOut)};
+    {ok, Mod, SigIn, SigOut};
 find_native_op([_ | Rest]) ->
     find_native_op(Rest).

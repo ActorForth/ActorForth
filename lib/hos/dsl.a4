@@ -1,0 +1,204 @@
+# lib/hos/dsl.a4 - HOS DSL surface, expressed in a4.
+#
+# Path 2 (a4-native) implementation. All non-trivial dispatch happens
+# via the type registry and multi-clause sig matching. There is no
+# greedy type-handler intercepting open-set tokens; instead, the
+# DSL's declaration words (state, event, parent, child) dynamically
+# register a no-arg pusher op for each declared name, so the names
+# dispatch normally through the dictionary inside the transitions
+# block.
+#
+# Surface syntax (values-first):
+#
+#   Door system
+#       Car parent                          # parent + register Car as Subsystem
+#       DoorState fsm                       # set FSM type name
+#       Closed state  Opening state         # declare states
+#       Open state    Closing state
+#       open event    opened event          # declare events
+#       close event   closed event
+#
+#       transitions
+#           Closed  Opening  open                          trans
+#           Opening Open     opened   Car opened           trans
+#           Open    Closing  close    100 after closed     trans
+#           Closing Closed   closed   Car closed           trans
+#       ;                              # close transitions block
+#   .                                  # close + register the system
+#
+# Multi-clause `trans` is dispatched on the row's stack pattern:
+#   ( TB State State Event           -> TB )    basic row
+#   ( TB State State Event Subsystem Event -> TB )    subsystem effect
+#   ( TB State State Event Timer     Event -> TB )    timer effect
+#
+# A single FFI hop at `.` invokes af_hos_dsl:systemdef_finalise/1
+# which converts the SystemDef to a HosBlueprint and registers it
+# with af_hos_check.
+
+# =====================================================================
+# Marker product types: tag stack values so multi-clause `trans`
+# can pattern-match on row shape.
+# =====================================================================
+
+type Timer
+    delay-ms Int .
+
+
+# =====================================================================
+# In-progress system being built.
+# =====================================================================
+
+type SystemDef
+    name           Atom
+    parent-name    Atom
+    state-name     Atom
+    children-list  List
+    events-list    List
+    rows-list      List .
+
+# A row inside the transitions table. row-target / row-event default
+# to the empty atom; row-delay defaults to 0. The shape distinguishes
+# basic / subsystem-effect / timer.
+type Row
+    row-from     Atom
+    row-to       Atom
+    row-trigger  Atom
+    row-target   Atom
+    row-event    Atom
+    row-delay    Int .
+
+# Parser state for the body of a `transitions ... ;` block.
+type TransitionsBlock
+    enclosing-sys  SystemDef
+    rows           List .
+
+
+# =====================================================================
+# Helpers
+# =====================================================================
+
+: empty-atom -> Atom ;
+    "" to-atom .
+
+: empty-systemdef Atom -> SystemDef ;
+    empty-atom
+    "None" to-atom
+    nil
+    nil
+    nil
+    systemdef .
+
+
+# =====================================================================
+# `system` : entry point. Multi-clause to handle the case where the
+# system name is already registered as a Subsystem pusher (because a
+# previously-loaded system declared it as a parent / child).
+# =====================================================================
+
+: system Atom -> SystemDef ;
+    empty-systemdef .
+
+: system Subsystem -> SystemDef ;
+    tag-name empty-systemdef .
+
+
+# =====================================================================
+# Ops on SystemDef : declarations
+# =====================================================================
+# Each declaration word is multi-clause so it can accept either a raw
+# Atom (first time the name is declared in this interpreter) or the
+# already-tagged form (the name is a registered pusher from a previous
+# system loaded earlier in this same VM). The tagged-form clause uses
+# `tag-name` to recover the atom and then proceeds identically.
+
+# parent : set parent name AND register Subsystem pusher on Any.
+: parent SystemDef Atom -> SystemDef ;
+    dup
+    Any swap Subsystem register-pusher
+    parent-name! .
+
+: parent SystemDef Subsystem -> SystemDef ;
+    tag-name
+    dup
+    Any swap Subsystem register-pusher
+    parent-name! .
+
+# child : append a child name AND register Subsystem pusher.
+: child SystemDef Atom -> SystemDef ;
+    dup
+    Any swap Subsystem register-pusher
+    children-list swap cons children-list! .
+
+: child SystemDef Subsystem -> SystemDef ;
+    tag-name
+    dup
+    Any swap Subsystem register-pusher
+    children-list swap cons children-list! .
+
+# fsm : set the state-machine type name (no pusher needed).
+: fsm SystemDef Atom -> SystemDef ;
+    state-name! .
+
+# state : register Atom-named pusher that pushes a tagged State value.
+: state SystemDef Atom -> SystemDef ;
+    Any swap State register-pusher .
+
+: state SystemDef State -> SystemDef ;
+    tag-name Any swap State register-pusher .
+
+# event : append event name to events-list AND register Event pusher.
+: event SystemDef Atom -> SystemDef ;
+    dup
+    Any swap Event register-pusher
+    events-list swap cons events-list! .
+
+: event SystemDef Event -> SystemDef ;
+    tag-name
+    dup
+    Any swap Event register-pusher
+    events-list swap cons events-list! .
+
+# transitions : open the transitions table.
+# ( SystemDef -> TransitionsBlock )
+: transitions SystemDef -> TransitionsBlock ;
+    nil
+    transitionsblock .
+
+# . (period) : finalise the system. Calls the native `hos-finalise`
+# op (registered on SystemDef in af_hos_dsl:init/0) which converts
+# the SystemDef product to a HosBlueprint and runs the axiom checker.
+# Native dispatch is used rather than erlang-apply so axiom_violation
+# errors propagate unwrapped to the caller (escripts, tests, REPL).
+: . SystemDef -> ;
+    hos-finalise .
+
+
+# =====================================================================
+# `after` : convert an Int delay into a Timer marker.
+# =====================================================================
+
+: after Int -> Timer ;
+    timer .
+
+
+# =====================================================================
+# Multi-clause `trans` : commit a row to the transitions list.
+# =====================================================================
+# The three clauses are registered in Erlang (af_hos_dsl:init/0) on
+# the Any dictionary because they need to construct flat-tuple Row
+# instances and prepend them to TB.rows without going through the
+# FFI's product->map conversion. Each clause matches a different
+# row shape via sig_in:
+#
+#   trans : TB State State Event                       -> TB    basic
+#   trans : TB State State Event Subsystem Event       -> TB    subsystem effect
+#   trans : TB State State Event Timer     Event       -> TB    timer effect
+
+
+# =====================================================================
+# `;` : close transitions block; restore SystemDef with rows attached.
+# =====================================================================
+# Body uses `nip` so the final pop happens with SystemDef on TOS
+# (no handler), avoiding any handler-greediness on TB.
+: ; TransitionsBlock -> SystemDef ;
+    enclosing-sys rows rows-list! nip .

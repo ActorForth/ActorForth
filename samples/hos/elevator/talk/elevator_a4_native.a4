@@ -1,0 +1,144 @@
+# samples/hos/elevator/talk/elevator_a4_native.a4
+#
+# Same elevator spec as ../elevator.a4, expressed in the values-first
+# a4-native HOS DSL (lib/hos/dsl.a4). For the talk demo: shows how the
+# DSL surface is pure a4 with type-driven dispatch (no host-language
+# parser hidden behind a section keyword).
+#
+# Differences from the keyword DSL:
+#
+#   keyword:   system Door parent Car state DoorState ...
+#              transitions
+#                  Closed -> Opening open : after 100 opened
+#              end
+#
+#   a4-native: Door system  Car parent  DoorState fsm
+#              Closed state Opening state ...
+#              open event ...
+#              transitions
+#                  Closed Opening open  100 after opened  trans
+#              ;
+#              .
+#
+# See lib/hos/dsl.a4 for the dispatch story:
+#   - `system`, `parent`, `fsm`, `state`, `event`, `child` are ops on
+#     SystemDef (or the appropriate type after a tag is pushed).
+#   - `transitions` returns a TransitionsBlock; ops on it accumulate
+#     rows; `;` closes the block and restores the SystemDef.
+#   - `trans` is multi-clause on row shape (basic / subsystem / timer).
+#   - `.` finalises: FFIs to af_hos_dsl:systemdef_finalise/1, which
+#     converts the SystemDef product into a HosBlueprint and calls
+#     af_hos_check.
+#
+# The semantics is identical to the keyword DSL — same axioms, same
+# HosBlueprint, same runtime behaviour. Only the surface changes.
+
+"../../../../lib/hos/dsl.a4" load
+
+
+Door system
+    Car parent
+    DoorState fsm
+    Closed state  Opening state  Open state  Closing state
+    open event    close event    opened event  closed event
+    transitions
+        Closed   Opening  open      100 after opened   trans
+        Opening  Open     opened    Car opened         trans
+        Open     Closing  close     100 after closed   trans
+        Closing  Closed   closed    Car closed         trans
+        Closed   Closed   close     Car closed         trans
+        Open     Open     open      Car opened         trans
+    ;
+.
+
+
+Motor system
+    Car parent
+    MotorState fsm
+    Stopped state  Moving state
+    move-to event  arrived event  stop event
+    transitions
+        Stopped  Moving   move-to   500 after arrived  trans
+        Moving   Stopped  arrived   Car arrived        trans
+        Moving   Stopped  stop                         trans
+    ;
+.
+
+
+Car system
+    Dispatcher parent
+    CarState fsm
+    Door child  Motor child
+    IdleAtFloor state    PreparingToMove state
+    Moving state         Arriving state
+    DoorOpening state    Loading state
+    DoorClosing state    EmergencyStopped state
+    EmergencyDoorOpen state
+    assign event   closed event   opened event   arrived event
+    settled event  depart event
+    trigger-emergency event  clear-emergency event
+    transitions
+        IdleAtFloor      PreparingToMove   assign            Door close          trans
+        PreparingToMove  Moving            closed            Motor move-to       trans
+        Moving           Arriving          arrived           200 after settled   trans
+        Arriving         DoorOpening       settled           Door open           trans
+        DoorOpening      Loading           opened            300 after depart    trans
+        Loading          DoorClosing       depart            Door close          trans
+        DoorClosing      IdleAtFloor       closed                                trans
+
+        IdleAtFloor      EmergencyStopped  trigger-emergency  Motor stop         trans
+        PreparingToMove  EmergencyStopped  trigger-emergency  Motor stop         trans
+        Moving           EmergencyStopped  trigger-emergency  Motor stop         trans
+        Arriving         EmergencyStopped  trigger-emergency  Motor stop         trans
+        DoorOpening      EmergencyStopped  trigger-emergency  Motor stop         trans
+        Loading          EmergencyStopped  trigger-emergency  Motor stop         trans
+        DoorClosing      EmergencyStopped  trigger-emergency  Motor stop         trans
+
+        EmergencyStopped   EmergencyDoorOpen  clear-emergency  Door open         trans
+        EmergencyDoorOpen  IdleAtFloor        opened                             trans
+    ;
+.
+
+
+EmergencySource system
+    BuildingSystem parent
+    EmergencyState fsm
+    Idle state  Active state
+    trigger event  clear event
+    transitions
+        Idle    Active  trigger  BuildingSystem set-emergency   trans
+        Active  Idle    clear    BuildingSystem clear-emergency trans
+    ;
+.
+
+
+Dispatcher system
+    BuildingSystem parent
+    DispatcherState fsm
+    Car child
+    Normal state  Emergency state
+    request event  set-emergency event  clear-emergency event
+    transitions
+        Normal     Normal     request          Car assign              trans
+        Normal     Emergency  set-emergency    Car trigger-emergency   trans
+        Emergency  Normal     clear-emergency  Car clear-emergency     trans
+    ;
+.
+
+
+BuildingSystem system
+    BuildingState fsm
+    Dispatcher child  EmergencySource child
+    Normal state  Emergency state
+    floor-button-press event  fire-alarm event  fire-clear event
+    set-emergency event       clear-emergency event
+    transitions
+        Normal     Normal     floor-button-press  Dispatcher request           trans
+        Normal     Normal     fire-alarm          EmergencySource trigger      trans
+        Normal     Emergency  set-emergency       Dispatcher set-emergency     trans
+        Emergency  Normal     clear-emergency     Dispatcher clear-emergency   trans
+        Emergency  Emergency  fire-clear          EmergencySource clear        trans
+    ;
+.
+
+"=== Elevator spec compiled (a4-native DSL). All axioms satisfied. ===" print
