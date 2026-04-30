@@ -18,23 +18,20 @@ type Game
 # the ActorSend handler). At runtime each' ignores the body's stack
 # effect, so loosening the sig is harmless.
 
+# Snapshot is now a sync call (Cell -> Cell Bool) so the clock blocks
+# until each cell has finished broadcasting to every neighbour. Iterated
+# serially via `each`, this means at most one cell is mid-broadcast at
+# any moment — no two adjacent cells can sync-call into each other.
 : do-snapshot Actor -> Any ;
-    << snapshot >> drop .
+    << snapshot >> drop drop .
 
 : do-compute Actor -> Any ;
     << compute >> drop .
 
-# Synchronous probe used as a per-cell mailbox barrier. By the time
-# << state >> returns, the cell has processed every message that was
-# in its mailbox at the moment the barrier call landed — including
-# inter-cell broadcasts from the previous phase.
+# Synchronous probe used as a per-cell mailbox barrier after the
+# parallel compute cast.
 : do-barrier Actor -> Any ;
     << state >> drop drop .
-
-# Tiny FFI wrapper for sleep, used to give cross-pair broadcast casts
-# a moment to settle into mailboxes between phases.
-: ms-sleep Int -> ;
-    nil swap cons sleep timer erlang-apply drop .
 
 # --- public surface ---
 
@@ -47,14 +44,12 @@ type Game
     build_game af_gol erlang-apply .
 
 # tick Game -> Game
-# Two phases of cell broadcasts, separated by a per-cell barrier and a
-# small drain sleep so cross-pair `<< accumulate >>` casts have time
-# to land in their target mailboxes before the second phase fires.
-# Auto-bind exposes width/height/cells/gen.
+# Two phases. Snapshot is serialised across cells via sync calls — by
+# the time the snapshot loop completes, every accumulate cast has
+# been processed. Compute is then a parallel cast (no race), barriered
+# at the end so the renderer sees a fully-applied generation.
 : tick Game -> Game ;
     cells do-snapshot each
-    cells do-barrier  each
-    cells do-barrier  each
     cells do-compute  each
     cells do-barrier  each
     gen 1 + gen! .

@@ -9,7 +9,7 @@
 
 -export([wire_grid/3, place_pattern/4, snapshot_all/1, count_alive/1]).
 -export([spawn_grid/2, build_game/3, render/4, kill_grid/1]).
--export([notify_cast/2]).
+-export([notify_cast/2, notify_sync/2]).
 
 %% ---------- spawn ----------
 
@@ -21,7 +21,7 @@ spawn_grid(W, H) ->
 
 spawn_cell() ->
     TypeName = 'Cell',
-    %% {Cell, alive=false, received-count=0, neighbours=[]}
+    %% {Cell, alive, alive-count, neighbours}
     Instance = {'Cell', false, 0, []},
     Vocab0 = af_type_actor:build_vocab(TypeName),
     Vocab = Vocab0#{"stop" => [#{args => [], returns => []}]},
@@ -157,6 +157,20 @@ cast(C, WordName, Args) ->
 notify_cast(C, Bool) ->
     pid_of(C) ! {cast, "accumulate", [{'Bool', Bool}]},
     ok.
+
+%% notify_sync(Actor, Bool) - cast accumulate(Bool) then sync-call
+%% state as a per-cell barrier. By the time this returns, the target
+%% cell has processed our accumulate. Used by Cell.notify together
+%% with clock-side serialisation so every broadcast lands before any
+%% cell's compute runs — no cross-pair message-ordering races.
+notify_sync(C, Bool) ->
+    Pid = pid_of(C),
+    Pid ! {cast, "accumulate", [{'Bool', Bool}]},
+    Ref = make_ref(),
+    Pid ! {call, "state", [], self(), Ref},
+    receive {reply, Ref, _} -> ok
+    after 5000 -> error({notify_sync_timeout, Ref})
+    end.
 
 neighbours(Idx, W, H, Arr) ->
     Y = Idx div W,
